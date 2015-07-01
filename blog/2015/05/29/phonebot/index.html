@@ -1,0 +1,674 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Phonebot - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Last month, a colleague was explaining he was not looking forward to an afternoon of long-distance conference
+calls. Having recently started using &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jthomas.github.com/jthomas/blog/2015/05/29/phonebot/">
+  <link href="/jthomas/favicon.png" rel="icon">
+  <link href="/jthomas/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/jthomas/javascripts/modernizr-2.0.js"></script>
+  <script src="/jthomas/javascripts/ender.js"></script>
+  <script src="/jthomas/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/jthomas/">James Thomas</a></h1>
+  
+    <h2>Notes on JavaScript</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jthomas.github.com/jthomas" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/jthomas/">Blog</a></li>
+  <li><a href="/jthomas/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Phonebot</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-05-29T09:37:00+01:00" pubdate data-updated="true">May 29<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><img src="/jthomas/images/Phonebot.png"></p>
+
+<p>Last month, a colleague was explaining he was not looking forward to an afternoon of long-distance conference
+calls. Having recently started using Slack for collaboration with their remote team, they lamented&#8230;</p>
+
+<blockquote><p>I wish I could do my conference calls using Slack!</p></blockquote>
+
+
+<p></p>
+
+<p>&#8230;which got us thinking.</p>
+
+<p><a href="jamesthom.as/blog/2015/02/27/doctor-watson/">Recent experiments</a> with IBM Watson Speech To Text and Twilio on IBM Bluemix had shown how easy it was
+to create telephony applications. Slack publishes multiple APIs to help developers build custom &#8220;bots&#8221; that respond to channel content.</p>
+
+<p><strong>Could we create a new Slackbot that let users make phone calls using channel messages?</strong></p>
+
+<p>One month later, <a href="https://github.com/IBM-Bluemix/phonebot">Phonebot</a> was born!</p>
+
+<blockquote><p>Slackbot that lets users make phone calls within a Slack channel. <br/>Users can dial a phone number, with the phone call audio converted to text and sent to the channel. <br/>Channel message replies are converted to speech and sent over the phone call.</p><footer><strong>Phonebot</strong> <cite><a href='https://github.com/IBM-Bluemix/phonebot'>github.com/IBM-Bluemix/phonebot/&hellip;</a></cite></footer></blockquote>
+
+
+<p></p>
+
+<p><strong>tl;dr</strong> Full source code for the project is available <a href="https://github.com/IBM-Bluemix/phonebot">here</a>.
+Follow the <a href="https://github.com/IBM-Bluemix/phonebot#deployment-instructions">deployment instructions</a> to run your own version.</p>
+
+<p>Read on to find out how we put IBM Watson, Twilio and IBM Bluemix to develop our custom Slackbot&#8230;</p>
+
+<h2>Custom Slackbots</h2>
+
+<p>Slack publishes <a href="https://api.slack.com/">numerous APIs</a> for integrating custom services. These APIs provide everything from
+<a href="https://api.slack.com/slackbot">sending simple messages as Slackbot</a> to creating a <a href="https://api.slack.com/rtm">real-time messaging service</a>.</p>
+
+<p>Phonebot will listen to messages starting with <em>@phonebot</em> and which contain user commands e.g. dial, hangup. It will create new
+channel messages with the translated speech results along with status messages. Users can issue the following commands to control
+Phonebot.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>@phonebot call PHONE_NUMBER &lt;-- Dials the phone number
+</span><span class='line'>@phonebot say TEXT &lt;-- Sends text as speech to the call 
+</span><span class='line'>@phonebot hangup &lt;-- Ends the active call
+</span><span class='line'>@phonebot verbose {on|off}&lt;-- Toggle verbose mode
+</span><span class='line'>@phonebot duration NUMBER &lt;-- Set recording duration
+</span><span class='line'>@phonebot help &lt;-- Show all commands usage information </span></code></pre></td></tr></table></div></figure>
+
+
+<p>We use the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhooks API</a> to
+post new channel messages and the <a href="https://api.slack.com/outgoing-webhooks">Outgoing Webhook API</a>
+to notify the application about custom channel commands.</p>
+
+<h3>Listening for custom commands</h3>
+
+<p>Creating a new <a href="https://my.slack.com/services/new/outgoing-webhook">Outgoing Webhook</a>,
+messages from the registered channels which begin with the &#8220;@phonebot&#8221; prefix
+will be posted to HTTP URL for the IBM Bluemix application handling the incoming messages.</p>
+
+<p>We can create Outgoing Webhooks for every channel we want to register Phonebot in.</p>
+
+<p>For each registered channel, we need to allow Phonebot to post new messages.</p>
+
+<p><img src="/jthomas/images/outgoing_wh.png"></p>
+
+<h3>Sending new channel messages</h3>
+
+<p><a href="https://my.slack.com/services/new/incoming-webhook">Incoming Webhooks</a> provide an obfuscated HTTP URL that allows unauthenticated HTTP requests to create new channel messages.
+Creating a new Incoming obfuscated for each channel we are listening to will allow Phonebot to post responses.</p>
+
+<p>Each Incoming Webhook URL will be passed to Phonebot application using configuration via environment variables.</p>
+
+<p><img src="/jthomas/images/incoming_wh.png"></p>
+
+<h2>Making Phone Calls</h2>
+
+<p><a href="https://www.twilio.com/">Twilio</a> provides &#8220;telephony-as-a-service&#8221;, allowing applications to make telephone calls using a REST API.</p>
+
+<p>Twilio has been made available on the IBM Bluemix platform. Binding this service to your application will provide the authentication credentials to use with the Twilio <a href="http://twilio.github.io/twilio-node/">client library</a>.</p>
+
+<p>When users issue the &#8220;call&#8221; command with a phone number, the channel bot listening to user commands emits a custom event.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">bot</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;call&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">number</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">phone</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">phone</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">phone</span><span class="p">.</span><span class="nx">call_active</span><span class="p">())</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;The line is busy, you have to hang up first...!&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">phone</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">number</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">base_url</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="nx">channel</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Within the &#8220;phone&#8221; object, the &#8220;call&#8221; method triggers the following code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="k">this</span><span class="p">.</span><span class="nx">client</span><span class="p">.</span><span class="nx">makeCall</span><span class="p">({</span>
+</span><span class='line'>  <span class="nx">to</span><span class="o">:</span> <span class="nx">number</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">from</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">from</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">url</span><span class="o">:</span> <span class="nx">route</span>
+</span><span class='line'><span class="p">},</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">responseData</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">that</span><span class="p">.</span><span class="nx">request_fail</span><span class="p">(</span><span class="s1">&#39;Failed To Start Call: &#39;</span> <span class="o">+</span> <span class="nx">number</span> <span class="o">+</span> <span class="s1">&#39;(&#39;</span> <span class="o">+</span> <span class="nx">route</span> <span class="o">+</span> <span class="s1">&#39;) &#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">that</span><span class="p">.</span><span class="nx">request_success</span><span class="p">(</span><span class="s1">&#39;New Call Started: &#39;</span> <span class="o">+</span> <span class="nx">number</span> <span class="o">+</span> <span class="s1">&#39; (&#39;</span> <span class="o">+</span> <span class="nx">route</span> <span class="o">+</span> <span class="s1">&#39;): &#39;</span> <span class="o">+</span> <span class="nx">responseData</span><span class="p">.</span><span class="nx">sid</span><span class="p">,</span> <span class="nx">responseData</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The URL parameter provides a HTTP URL which Twilio will use to POST updated <a href="https://www.twilio.com/docs/api/twiml/twilio_request">call status information</a>.
+HTTP responses from this location will tell Twilio how to handle the ongoing call, e.g. play an audio message, press the following digits, record phone line audio.</p>
+
+<p>If the phone call connects successfully, we need the phone line audio stream to translate the speech into text.
+<em>Unfortunately, Twilio does not support directly accessing the real-time audio stream. However, can record a batch
+of audio, i.e five seconds, and download the resulting file.</em></p>
+
+<p>Therefore, we will tell Twilio to record a short section of audio and post the results back to our application. When this message is received,
+our response will contain the request to record another five seconds. This approach will provide a semi-realtime stream of phone call audio for processing.</p>
+
+<p>Here is the code snippet to construct the TwiML response to record the audio snippet. Any channel messages that are queued for
+sending as speech will be added to the outgoing response.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Do we have text to send down the active call?</span>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">user_speech</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>    <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="nx">user_speech</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">twiml</span><span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">playBeep</span><span class="o">:</span> <span class="kc">false</span><span class="p">,</span> <span class="nx">trim</span><span class="o">:</span> <span class="s1">&#39;do-not-trim&#39;</span><span class="p">,</span> <span class="nx">maxLength</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">duration</span><span class="p">,</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When we have the audio files containing the phone call audio, we can schedule these for translation with the IBM Watson Speech To Text service.</p>
+
+<h2>Translating Speech To Text</h2>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/speech-to-text.html">IBM Watson Speech To Text</a>
+service, we can simply transcribe phone calls by posting the audio file to the REST API. Using the <a href="">client library</a>
+handles making the actual API requests behind a simple JavaScript interface.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">audio</span><span class="o">:</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">createReadStream</span><span class="p">(</span><span class="nx">file_name</span><span class="p">),</span>
+</span><span class='line'>  <span class="nx">content_type</span><span class="o">:</span> <span class="s1">&#39;audio/l16; rate=16000&#39;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">this</span><span class="p">.</span><span class="nx">speech_to_text</span><span class="p">.</span><span class="nx">recognize</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">results</span><span class="p">[</span><span class="nx">res</span><span class="p">.</span><span class="nx">result_index</span><span class="p">]</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">transcript</span> <span class="o">=</span> <span class="nx">result</span><span class="p">.</span><span class="nx">alternatives</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">transcript</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;available&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;Missing speech recognition result.&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having <a href="http://jamesthom.as/blog/2015/02/27/doctor-watson/">previously</a> handling converting the audio
+file from the format created by Twilio to that needed by the Watson API, we were able to reuse
+the <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/lib/translate.js">translate.js</a> class
+between projects.</p>
+
+<p>This module relies on the SOX library being installed in the native runtime. We used a
+<a href="http://jamesthom.as/blog/2015/03/04/cloud-foundry-custom-buildpacks/">custom buildpack</a> to support this.</p>
+
+<h3>Managing Translation Tasks</h3>
+
+<p>When a new Twilio message with audio recording details is received, we schedule a translation request. As this background task returns, the results are
+posted into the corresponding Slack channel.</p>
+
+<p>If a translation request takes longer than expected, additional requests may be scheduled before the first has finished. We still want to maintain the order
+when posting new channel messages, even if later requests finishing translating first.</p>
+
+<p>Using the <a href="https://github.com/caolan/async">async</a> library, a single-worker <a href="https://github.com/caolan/async#queue">queue</a>
+is created to schedule the translation tasks.</p>
+
+<p>Each time the phone object for a channel emits a &#8216;recording&#8217; event, we start the translation
+request and post the worker to the channel queue.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">phone</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;recording&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">location</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">phone</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">verbose</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;:speech_balloon: _waiting for translation_&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">req</span> <span class="o">=</span> <span class="nx">translate</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">watson</span><span class="p">,</span> <span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">req</span><span class="p">.</span><span class="nx">start</span><span class="p">()</span>
+</span><span class='line'>  <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">queue</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When a task reaches the front of the queue, the worker function is called to process the result.</p>
+
+<p>If translation task has finished, we signal to the queue this task
+has completed. Otherwise, we wait for completion events being emitted.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">queue</span> <span class="o">=</span> <span class="nx">async</span><span class="p">.</span><span class="nx">queue</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">task</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">done</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;:speech_balloon: &#39;</span> <span class="o">+</span> <span class="nx">message</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">callback</span><span class="p">()</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">true</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">process</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">done</span><span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">transcript</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">failed</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">done</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">phone</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">verbose</span> <span class="o">?</span> <span class="s1">&#39;_unable to recognise speech_&#39;</span> <span class="o">:</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">transcript</span> <span class="o">&amp;&amp;</span> <span class="nx">process</span><span class="p">())</span> <span class="k">return</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">failed</span> <span class="o">&amp;&amp;</span> <span class="nx">failed</span><span class="p">())</span> <span class="k">return</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">task</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;available&#39;</span><span class="p">,</span> <span class="nx">process</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">task</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="nx">failed</span><span class="p">)</span>
+</span><span class='line'><span class="p">},</span> <span class="mi">1</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Deploying Phonebot</h2>
+
+<p>Now we&#8217;ve finished the code, we can configure the application to deploy on the IBM Bluemix cloud platform.</p>
+
+<h3>Configuring Webhooks</h3>
+
+<p>Phonebot must be passed the configured incoming webhooks URLs, allowing it to send
+channel messages. Following the <a href="http://12factor.net/config">standard Platform-as-a-Service convention</a> for passing configuration, we store the channel webhooks as environment variables.</p>
+
+<p>Using the CF CLI, we run the following command to set up the local environment parameters.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf cups slack_webhooks -p <span class="s1">&#39;{&quot;channel_name&quot;:&quot;incoming_webhook_url&quot;,...}&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Application Manifest</h3>
+
+<p>Application manifests configure deployment parameters for Cloud Foundry applications.
+Phonebot will need to be bound to Twilio, IBM watson and custom services, along with configuring the runtime environment.</p>
+
+<pre>
+---
+applications:
+- name: phonebot 
+  memory: 256M 
+  command: node app.js
+  buildpack: https://github.com/jthomas/nodejs-buildpack.git
+  services:
+  - twilio
+  - speech_to_text
+  - slack_webhooks
+declared-services:
+  twilio:
+    label: Twilio
+    plan: 'user-provided'
+  twilio:
+    label: slack_webhooks
+    plan: 'user-provided'
+  speech_to_text:
+    label: speech_to_text
+    plan: free
+</pre>
+
+
+<p><em>&#8230;with this manifest, we can just use the <em>cf push</em> command to deploy our application!</em></p>
+
+<h2>Using Phonebot</h2>
+
+<p>Phonebot will post the following message to each channel successfully registered on startup.</p>
+
+<p><img src="/jthomas/images/phonebot_is_here.png"></p>
+
+<p>Users can issue <strong>@phonebot COMMAND</strong> messages to control phone calls directly from the slack channel.</p>
+
+<p>For further information about the project, follow the <a href="https://github.com/IBM-Bluemix/phonebot">project on Github</a>.
+Upcoming features are listed in the <a href="https://github.com/IBM-Bluemix/phonebot/issues">issues page</a>.
+<strong>Please feel free to ask for new features, report bugs and leave feedback on Github.</strong></p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-05-29T09:37:00+01:00" pubdate data-updated="true">May 29<span>th</span>, 2015</time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jthomas.github.com/jthomas/blog/2015/05/29/phonebot/" data-via="thomasj" data-counturl="http://jthomas.github.com/jthomas/blog/2015/05/29/phonebot/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/jthomas/blog/2015/04/22/ibm-watson-nodes-for-nodered/" title="Previous Post: IBM Watson Nodes For Node-RED">&laquo; IBM Watson Nodes For Node-RED</a>
+      
+      
+        <a class="basic-alignment right" href="/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/" title="Next Post: Continuous Delivery for Phonebot">Continuous Delivery for Phonebot &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/">Continuous Delivery for Phonebot</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/05/29/phonebot/">Phonebot</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/04/22/ibm-watson-nodes-for-nodered/">IBM Watson Nodes For Node-RED</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/04/16/creating-cf-cli-plugins/">Creating CF CLI Plugins</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/03/04/cloud-foundry-custom-buildpacks/">Cloud Foundry Custom Buildpacks</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/jthomas/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jthomas.github.com/jthomas/blog/2015/05/29/phonebot/';
+        var disqus_url = 'http://jthomas.github.com/jthomas/blog/2015/05/29/phonebot/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

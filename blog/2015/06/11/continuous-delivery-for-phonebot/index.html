@@ -1,0 +1,520 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Continuous Delivery for Phonebot - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Creating a Continuous Delivery Pipeline with IBM Bluemix and DevOps Services">
+  <meta name="keywords" content="cloudfoundry bluemix devops phonebot">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/">
+  <link href="/jthomas/favicon.png" rel="icon">
+  <link href="/jthomas/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/jthomas/javascripts/modernizr-2.0.js"></script>
+  <script src="/jthomas/javascripts/ender.js"></script>
+  <script src="/jthomas/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/jthomas/">James Thomas</a></h1>
+  
+    <h2>Notes on JavaScript</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jthomas.github.com/jthomas" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/jthomas/">Blog</a></li>
+  <li><a href="/jthomas/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Continuous Delivery for Phonebot</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-06-11T16:08:00+01:00" pubdate data-updated="true">Jun 11<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><img src="/jthomas/images/Phonebot_Pipeline.png"></p>
+
+<p>Since creating <a href="http://jamesthom.as/blog/2015/05/29/phonebot/">Phonebot</a> last month,
+I&#8217;ve been working on setting up a fully-automated build and deploy for the project.
+Using <a href="http://hub.jazz.net">IBM DevOps Services</a>, Phonebot now has
+&#8221;<a href="http://en.wikipedia.org/wiki/Continuous_delivery">Continuous Delivery</a>&#8221; enabled.</p>
+
+<p><strong>When new code is commited to the <a href="https://github.com/IBM-Bluemix/phonebot">external Github repository</a>,
+the build service will perform the following tasks.</strong></p>
+
+<ul>
+<li><em>Run Unit Tests and Code Lint Tools</em></li>
+<li><em>Deploy To Test Server</em></li>
+<li><em>Run Integration Tests Against Test Server</em></li>
+<li><em>Deploy To Production</em></li>
+</ul>
+
+
+<p>Each stage will only be executed if the following stage passes.</p>
+
+<p>In the following post, I&#8217;ll explain how to set up each stage and share tips making it easy to
+replicate this setup for your projects&#8230;</p>
+
+<h2>Writing Tests for Phonebot</h2>
+
+<p>Phonebot comes with a comprehensive <a href="https://github.com/IBM-Bluemix/phonebot/tree/master/test">test suite</a>.
+I&#8217;ve used the <a href="http://mochajs.org">Mocha</a> test framework for creating unit and integration tests. Test
+assertions use NodeJS&#8217; <a href="https://nodejs.org/api/assert.html">built-in library</a>. The <a href="https://github.com/mfncooper/mockery">mockery</a>
+library is used to replace module dependencies with mock objects.</p>
+
+<p>Setting up the <a href="https://docs.npmjs.com/misc/scripts"><em>scripts</em></a> field in
+<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/package.json"><em>package.json</em></a> allows us to use NPM to run our tests.</p>
+
+<p>NPM will look into the &#8221;<em>node_modules/.bin</em>&#8221; directory for binaries when running scripts. This means we don&#8217;t need Mocha installed
+on the deployment host to run tests. The &#8221;<em>devDependencies</em>&#8221; field includes modules we rely on during development
+but not production.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>"devDependencies": {
+</span><span class='line'>    "mocha": "^2.2.5",
+</span><span class='line'>    "mocha-eslint": "^0.1.7",
+</span><span class='line'>    "mockery": "^1.4.0"
+</span><span class='line'>},
+</span><span class='line'>"scripts": {
+</span><span class='line'>    "test": "mocha test/unit",
+</span><span class='line'>    "integration-test": "mocha test/integration",
+</span><span class='line'>    "start": "node app.js"
+</span><span class='line'>  },</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running the following commands will run the unit and integration tests.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ npm test  // defaults to 'run test'
+</span><span class='line'>$ npm run integration-test</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Running Code Linters</h3>
+
+<p>Along with unit tests, we want to run &#8216;code linters&#8217; to catch any errors in our JavaScript code.
+We&#8217;re using the <a href="https://github.com/eslint/eslint">eslint</a> tool with the following
+<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/.eslintrc">configuration</a>. Using this <a href="https://www.npmjs.com/package/mocha-eslint">module</a>,
+we&#8217;re setting up the eslint tool as a <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/test/unit/eslint.js">test case</a>.</p>
+
+<p>This test will
+be automatically run in the unit test phase and errors incorporated into the test report.</p>
+
+<h3>Mocking Services In Integration Tests</h3>
+
+<p>When the unit tests have passed, we&#8217;re going to deploy a test instance of the application.
+Integration tests will make HTTP requests to simulate user activity, capture the responses
+and then verify the application is behaving as expected.</p>
+
+<p>Phonebot uses external services, provisioned through IBM Bluemix, to make phone calls, translate
+speech to text and communicate with Slack channels. Services configuration parameters, e.g. username, password, host,
+are passed into the application using <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">environment variables</a>.</p>
+
+<p><strong><em>During integration tests, we want to capture all requests to external services and provide hardcoded HTTP responses to be returned.
+With service parameters coming from environment properties, rather than hardcoded in the application, we can simply replace
+the bound services configuration with our own values. This application will pick up these new values, pointing to our stub server, at runtime
+without any changes needed to the code.</em></strong></p>
+
+<p>This <a href="https://gist.github.com/jthomas/f573cb94de20b0e95940">stub server</a> has
+been created to capture all incoming HTTP requests and make them available at a
+custom HTTP endpoint. We&#8217;re also configured HTTP routes to simulate each of the
+external services and return hardcoded responses.</p>
+
+<p>Deploying our test server in a different <a href="http://docs.cloudfoundry.org/concepts/roles.html#spaces">space</a> to production means we can have custom
+credentials set up without having to modify the service configuration in the production environment.</p>
+
+<p>The following commands will show the existing configuration values that we can replicate in the test environment.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cf env phonebot
+</span><span class='line'>$ cf create-space test
+</span><span class='line'>$ cf target -s test
+</span><span class='line'>$ cf cups twilio -p "accountSID, authToken, url"
+</span><span class='line'>$ cf cups speech_to_text -p "username, password, url"
+</span><span class='line'>$ cf cups slack_webhooks -p "slackbot-testing"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>With the test credentials created, we can deploy the application to the &#8220;test&#8221; space without modifications.</p>
+
+<h2>Setting up Build and Deploy Pipeline</h2>
+
+<p>We&#8217;re going to use <a href="http://hub.jazz.net">IBM DevOps Services</a> to build and manage the &#8220;Continuous Delivery&#8221; pipeline.
+From the home page, click the <em>&#8220;Create Project&#8221;</em> button to import our existing Github project into the workspace.</p>
+
+<p><img src="/jthomas/images/create_project.png"></p>
+
+<p>The <em>&#8220;Create Project&#8221;</em> page allows us to link an existing project from Github to the new project.
+Changes to the external repository will be automatically pushed through to our project.</p>
+
+<p><img src="/jthomas/images/create_phonebot.png"></p>
+
+<p>Selecting the <em>&#8220;Make a Bluemix project&#8221;</em> option will automatically configure deploying to the Bluemix platform.</p>
+
+<p><img src="/jthomas/images/import_phonebot_bm.png"></p>
+
+<p>When the project has finished importing, we can access the &#8220;Build and Deploy&#8221; pipeline&#8230;</p>
+
+<p><img src="/jthomas/images/build_and_deploy.png"></p>
+
+<p>&#8230; which will currently be empty. Clicking the <em>&#8220;Add Stage&#8221;</em> button will allow
+us to start configuring the build, test and deploy jobs for our pipeline.</p>
+
+<p><img src="/jthomas/images/add_stage.png"></p>
+
+<h3>Running Unit Tests and Code Lint Tools</h3>
+
+<p>The first stage in our pipeline will run the unit tests when a new commit is published
+to the Phonebot repository on Github.</p>
+
+<p>Using the <em>&#8220;Input&#8221;</em> tab, we&#8217;re configuring the stage to pick up all changes in the <em>&#8220;master&#8221;</em> branch
+of the <a href="https://github.com/jthomas/phonebot.git">https://github.com/jthomas/phonebot.git</a> repository.
+The input for a stage can also be the build artifacts from a previous stage.</p>
+
+<p><img src="/jthomas/images/unit_test_input.png"></p>
+
+<p>On the <em>&#8220;Jobs&#8221;</em> tab, we can configure multiple tasks to be executed when triggered by the stage input.
+For the unit tests, we&#8217;re using a simple shell script to install the project dependencies and run
+the NPM task.</p>
+
+<p><img src="/jthomas/images/unit_tests.png"></p>
+
+<h3>Deploy Test Server</h3>
+
+<p>Adding a second stage to the pipeline after the unit tests, we will use it to deploy our test server.
+This stage will only be executed if the first stage completes successfully.</p>
+
+<p>Using the <em>&#8220;Deploy&#8221;</em> rather than <em>&#8220;Test&#8221;</em> job, presents us with a configuration
+panel to set up the deployment parameters. The <em>&#8220;test&#8221;</em> space which contains our
+test configuration for our mock services. Choosing a different application name
+means our test server won&#8217;t clash with the existing production host already
+deployed.</p>
+
+<p><img src="/jthomas/images/deploy_test.png"></p>
+
+<h3>Running Integration Tests Against Test Server</h3>
+
+<p>Once the test server has been deployed, we can trigger the pipeline stage to run
+integration tests against this host.</p>
+
+<p>Using Mocha to run out integration tests means we can follow the setup
+as the unit test stage. Defining a &#8220;test&#8221; job, we install the project dependencies
+and then run the test harness.</p>
+
+<p><img src="/jthomas/images/integration_tests.png"></p>
+
+<p>Phonebot&#8217;s integration tests use environment variables to define the test
+and stub server locations. We can define these through the stage setup page, as
+shown below.</p>
+
+<p><img src="/jthomas/images/environment_props.png"></p>
+
+<h3>Deploy To Production</h3>
+
+<p>Finally, provided all the previous stages were successfully, the last stage will
+deploy our application into production.</p>
+
+<p>Configuring a <em>&#8220;Deploy&#8221;</em> task, this time we use the production space <em>&#8220;dev&#8221;</em> and use the
+proper application name.</p>
+
+<p><img src="/jthomas/images/deploy_production.png"></p>
+
+<h2>&#8230;and that&#8217;s it!</h2>
+
+<p>With our &#8220;Continuous Delivery&#8221; pipeline now configured, new versions of
+Phonebot will be automatically deployed to production without any manual work.</p>
+
+<p><img src="/jthomas/images/deploy_success.png"></p>
+
+<p>For testing, each stage can be triggered manually. Logs are available in to diagnose any issues that may occur.</p>
+
+<p><strong>Using IBM DevOps Services, we rapidly created a build and deploy pipeline linked to a project on Github without having to manually
+configure build systems, test servers or anything else you would expect.</strong></p>
+
+<p>Our example was relatively simple, the service can be configured for far more complicated build and deploy tasks. The <a href="https://hub.jazz.net/docs">documentation</a>
+gives full details on the capabilities of that platform. If you have any issues, please use the <a href="https://developer.ibm.com/answers/smartspace/devops-services/">IBM Answers support forum</a> to post questions and get answers from the development team.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-06-11T16:08:00+01:00" pubdate data-updated="true">Jun 11<span>th</span>, 2015</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/jthomas/blog/categories/bluemix/'>bluemix</a>, <a class='category' href='/jthomas/blog/categories/cloud-foundry/'>cloud foundry</a>, <a class='category' href='/jthomas/blog/categories/continuous-delivery/'>continuous delivery</a>, <a class='category' href='/jthomas/blog/categories/devops/'>devops</a>, <a class='category' href='/jthomas/blog/categories/devops-services/'>devops services</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/" data-via="thomasj" data-counturl="http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/jthomas/blog/2015/05/29/phonebot/" title="Previous Post: Phonebot">&laquo; Phonebot</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/">Continuous Delivery for Phonebot</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/05/29/phonebot/">Phonebot</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/04/22/ibm-watson-nodes-for-nodered/">IBM Watson Nodes For Node-RED</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/04/16/creating-cf-cli-plugins/">Creating CF CLI Plugins</a>
+      </li>
+    
+      <li class="post">
+        <a href="/jthomas/blog/2015/03/04/cloud-foundry-custom-buildpacks/">Cloud Foundry Custom Buildpacks</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/jthomas/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/';
+        var disqus_url = 'http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
