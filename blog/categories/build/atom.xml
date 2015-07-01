@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: build | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/build/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2015-07-01T16:51:26+01:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Finding Nano - Getting Dojo under 4KB]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/08/03/finding-nano/"/>
+    <updated>2012-08-03T10:33:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/08/03/finding-nano</id>
+    <content type="html"><![CDATA[<p>There was a bold claim in the release notes for the 1.7 version of The Dojo Toolkit...</p>
+
+<p><blockquote><p>Dojo Nano: Less than 4KB gzipped!</p></blockquote></p>
+
+<p>With the move to the AMD module format, the new fully-compliant asynchronous module loader could be reduced to
+less than four thousands bytes!</p>
+
+<p>Loading unnecessary code was a common complaint against previous versions of The Dojo Toolkit but now we
+could have complete control over loaded modules using this tiny AMD loader.</p>
+
+<p><em>Was this true?</em></p>
+
+<p><em>Running a standard build to generate a single dojo layer results in a minfied
+and gzipped file over 45,000 bytes.</em></p>
+
+<p><strong>How can we generate this nano
+loader in less than 10% of that size?</strong></p>
+
+<p>Until now, the instructions were spread over mailing
+<a href="http://comments.gmane.org/gmane.comp.web.dojo.devel/15941">list</a> <a href="http://mail.dojotoolkit.org/pipermail/dojo-interest/2011-December/060665.html">posts</a>,
+the <a href="http://livedocs.dojotoolkit.org/build/buildSystem">reference guide</a> and <a href="http://bugs.dojotoolkit.org/ticket/14381">bug tickets</a>,
+making it possible but not very easy!</p>
+
+<p>There already was an <a href="http://bugs.dojotoolkit.org/ticket/14392">open ticket</a> for the project to ship a complete nano-profile within the sample profiles.
+Taking up the challenge, I started investigating how to produce a profile that would generate a fully-functional AMD loader in under 4,000 bytes.</p>
+
+<h2>Nano-Build Profile</h2>
+
+<p>After much experimenting, tweaking and reviewing the toolkit's source (along
+with help and advice from other contributors), the smallest usable AMD loader
+can be produced by running the following build profile.</p>
+
+<p><div><script src='https://gist.github.com/3163114.js'></script>
+<noscript><pre><code>var profile = (function(){
+    return {
+        layerOptimize: &quot;closure&quot;,
+        releaseDir: &quot;../../../release&quot;,
+
+        packages:[{
+            name:&quot;dojo&quot;,
+            location:&quot;../../../dojo&quot;
+        }],
+
+        defaultConfig:{
+            hasCache:{
+                &#39;dojo-built&#39;: 1,
+                &#39;dojo-loader&#39;: 1,
+                &#39;dom&#39;: 1,
+                &#39;host-browser&#39;: 1,
+                &quot;config-selectorEngine&quot;: &quot;lite&quot;
+            },
+            async:1
+        },
+
+        dojoBootText:&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;,
+
+        staticHasFeatures:{
+            &#39;config-dojo-loader-catches&#39;: 0,
+            &#39;config-tlmSiblingOfDojo&#39;: 0,
+            &#39;dojo-log-api&#39;: 0,
+            &#39;dojo-sync-loader&#39;: 0,
+            &#39;dojo-timeout-api&#39;: 0,
+            &#39;dojo-sniff&#39;: 0,
+            &#39;dojo-cdn&#39;: 0,
+            &#39;dojo-loader-eval-hint-url&#39;: 1,
+            &#39;config-stripStrict&#39;: 0,
+            &#39;ie-event-behavior&#39;: 0,
+            &#39;dojo-config-api&#39;: 0
+        },
+
+        layers: {
+            &quot;dojo/dojo&quot;: {
+                include: [],
+                customBase: 1
+            }
+        }
+    };
+})();</code></pre></noscript></div>
+</p>
+
+<p>Once minified and gzipped, the entire loader is only <strong>3652</strong> bytes! Compared
+to the full loader with base modules, which came in a 45705 bytes, this
+represents <strong>more than a 92% reduction in file size</strong>.</p>
+
+<p>So, how does the build profile above squeeze so much space out? Let's take a
+closer look at the parameters and explain how they contribute to the reduced
+size...</p>
+
+<h3>Custom Base Layer</h3>
+
+<p>Unless specified otherwise, the Dojo build system will always generate a <em>base</em> layer containing
+the dojo.js source file combined with all the base modules (those defined under the <em>dojo/_base</em> directory).</p>
+
+<p>Generating just the AMD loader, without all those additional modules, needs the profile to
+contain an explicit definition for the dojo base layer, allowing us to override configuration properties.</p>
+
+<p>Manually defining the base dojo layer is achieved by adding
+a new configuration object to the layers map, identified with the name <em>dojo/dojo</em>, as shown below.</p>
+
+<p>``` javascript Base-less loader configuration
+layers: {</p>
+
+<pre><code>"dojo/dojo": {
+    include: [],
+    customBase: 1
+}
+</code></pre>
+
+<p>}</p>
+
+<p>```</p>
+
+<p>Setting the <em>customBase</em> property to true will ensure the build system won't automatically roll up all the base modules
+into the nano AMD loader. We've left the <em>include</em> property empty as we don't want to add any extra modules.</p>
+
+<p>This first step in producing a nano loader <strong>reduces the minified and gzipped layer by almost 30KB</strong>!</p>
+
+<h3>Using the Closure Compiler</h3>
+
+<p>Dojo's build system supports the use of different JavaScript minifiers, which
+perform tricks such as renaming variables and stripping whitespace in order to
+reduce the size of a JavaScript file.</p>
+
+<p>Shrinksafe is the default minifier, but in our profile we've chosen to use Google's Closure compiler.</p>
+
+<p><code>javascript Using closure compiler
+layerOptimize: "closure"
+</code></p>
+
+<p>Experimenting with the different minifiers, it was apparent that Closure was
+more effective at reducing the layer file sizes by the greatest amount.</p>
+
+<p>Closure
+produces a <strong>minified layer file in 35,770 bytes, nearly 10KB less</strong> than the
+original version using Shrinksafe.</p>
+
+<p>More importantly, <em>the Closure compiler supports dead code elimination</em>. Running static analysis
+over the source files, those code branches which are unreachable will be stripped from the output.
+This feature is crucial in allowing us to tune the produced loader's features, squeezing even more space out.</p>
+
+<h3>Static Features Configuration</h3>
+
+<p>As the Dojo Toolkit moves towards the 2.0 release, one of the major
+improvements within the code base is the use of dynamic detection for
+determining which features an environment supports, rather than relying on
+brittle user-agent sniffing.</p>
+
+<p>Using feature tests, alternative code paths can be executed to provide shim-functionality for missing platform features, using native libraries otherwise.
+Tests are executed only once, the cached result is returned for each subsequent test.</p>
+
+<p>The build system allows a pre-specified list of feature test results to be provided in the build profile. These parameters will replace
+the feature test calls within the generated layer files with the static boolean result values.</p>
+
+<p>As this happens before minification, <em>any feature test paths that can't be
+executed will be automatically stripped by the Closure compiler</em>. This provides a huge benefit in hand-tuning
+the loader size to be as compact as possible.</p>
+
+<p>The sample below shows the static feature test results we provide to produce the minimal AMD loader.</p>
+
+<p>``` javascript Static feature test results
+staticHasFeatures: {</p>
+
+<pre><code>'config-dojo-loader-catches': 0,
+'config-tlmSiblingOfDojo': 0,
+'dojo-log-api': 0,
+'dojo-sync-loader': 0,
+'dojo-timeout-api': 0,
+'dojo-sniff': 0,
+'dojo-cdn': 0,
+'dojo-loader-eval-hint-url': 1,
+'config-stripStrict': 0,
+'ie-event-behavior': 0,
+'dojo-config-api': 0
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Using static features configuration allows us to remove all non-essential
+code needing for loading AMD modules. This includes the synchronous module
+loader code used to load non-AMD modules (<em>dojo-sync-loader</em>), the debugging methods for module loading (<em>dojo-timeout-api</em> and <em>dojo-log-api</em>), backwards
+compatibility for non-standard DOM event behaviours (<em>ie-event-behaviour</em>) and others.</p>
+
+<p>Full details on each of the feature tests defined in the toolkit will be available in the 1.8 reference guide, see
+<a href="http://livedocs.dojotoolkit.org/dojo/has#feature-names">here</a> for
+a sneak preview.</p>
+
+<p><strong>Hand tuning the static feature test results allowed the build to remove an extra 2,000 bytes from the nano loader.</strong></p>
+
+<h3>Baking in Default Configuration</h3>
+
+<p>Making the smallest AMD loader possible relies on a series of assumptions about the environment we'll be running in
+and supported features. Rather than have the user set these values manually, we can hard code
+this configuration into the loader, allowing us to remove the code for parsing configuration values from the
+environment.</p>
+
+<p>The following configuration is provided within the nano profile.</p>
+
+<p>``` javascript Default loader configuration
+defaultConfig:{</p>
+
+<pre><code>hasCache:{
+    'dojo-built': 1,
+    'dojo-loader': 1,
+    'dom': 1,
+    'host-browser': 1,
+    'config-selectorEngine': 'lite'
+},
+async:1
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Along with configuration for the environment (modern-ish browser engine), we've set the <em>async</em> property to true, ensuring the
+loader is running in AMD-mode as we've removed all code for handling the legacy Dojo module format.</p>
+
+<h3>Squeezing Out Those Final Bytes</h3>
+
+<p><em>So, what's left?</em></p>
+
+<p><em>How can we squeeze a few more bytes out?</em></p>
+
+<p>Reviewing the source code for the build system, when the dojo layer is generated, the following boot sequence is appended to the source.</p>
+
+<p><code>javascript Dojo boot text
+// must use this.require to make this work in node.js
+var require = this.require;
+// consume the cached dojo layer
+require({cache:{}});
+!require.async &amp;&amp; require(["dojo"]);
+require.boot &amp;&amp; require.apply(null, require.boot);
+</code></p>
+
+<p>This code ensures the loader will work on the NodeJS platform and ensures that all base modules are always
+requested when running in legacy mode.</p>
+
+<p>Our minimal loader doesn't need to run outside the browser and we definitely won't be running in legacy mode! Therefore,
+we can overwrite the layer boot text with custom code to trim the last few bytes from the nano loader, shown below.</p>
+
+<p><code>javascript Custom boot text
+dojoBootText:"require.boot &amp;&amp; require.apply(null, require.boot);",
+</code></p>
+
+<p><strong>...and that's it! Combining all of the options above results in a fully-functioning AMD loader in less than 4 kilobytes.</strong></p>
+
+<p>For further details on the exact size reductions achieved by each of the profile parameters,
+see this <a href="https://docs.google.com/spreadsheet/ccc?key=0An1xGHsgw2ledE94RW9KcGtISHQ5SnNGV3hYaDRPM2c#gid=0">link</a> for the data.</p>
+
+<h2>Differences between nano-profile and profile included with toolkit</h2>
+
+<p>The profile defined above will produce the smallest functional AMD loader
+possible, sacrificing support for certain common features to reduce the file size even
+further. When producing the <em>nano</em> profile that will be shipped with the toolkit, there's a
+slightly less aggressive approach when balancing feature completeness against file size.</p>
+
+<p>Reviewing the feature tests, we decided that <strong>two optional features should be
+included, backwards compatibility for older Internet Explorer browsers (<em>ie-event-behaviour</em>) and the
+ability for manual loader configuration (<em>dojo-config-api</em>)</strong>. These changes only produce an additional
+900 bytes and will make the minimal loader much more consumable.</p>
+
+<p>The <em>nano</em> build profile shipped with the toolkit also contains all configurable feature values, rather
+than just the minimal set needed to produce the smallest build, to demonstrate the full set of parameters
+that can be modified.</p>
+
+<p>More information about the investigations into producing this profile can be found in the contributors mailing list
+thread <a href="http://grokbase.com/t/dojo/dojo-contributors/127q9sm80w/nano-build-profile-ticket-14392">here</a>.</p>
+
+<h2>Finally...</h2>
+
+<p>This investigation was founded upon previous work by other dojo contributors.
+Thanks to <a href="https://twitter.com/blowery">Ben Lowery</a>, <a href="https://twitter.com/kitsonk">Kitson Kelly</a> and <a href="https://github.com/rcgill/">Rawld Gill</a> for their
+initial efforts and helping me out with questions.</p>
+]]></content>
+  </entry>
+  
+</feed>

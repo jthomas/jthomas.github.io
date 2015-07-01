@@ -1,0 +1,1090 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: dojo | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/dojo/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2015-07-01T16:51:26+01:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Server Side Dijit]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2013/01/15/server-side-dijit/"/>
+    <updated>2013-01-15T10:08:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2013/01/15/server-side-dijit</id>
+    <content type="html"><![CDATA[<p>Modern Dojo applications often use declarative programming, annotating HTML
+elements with custom attributes containing module identifiers, to declare widgets
+and use client-side rendering with HTML templates to convert web pages into
+JavaScript applications.</p>
+
+<p><strong>Client-side rendering often comes with a major complaint, the dreaded
+"pop-up effect".</strong></p>
+
+<p><img src="/images/white_screen.png"></p>
+
+<p>This happens because the HTML initially displayed
+does not contain widget templates until after client-side rendering has
+finished. Essentially, the application has to load twice, once to download all
+the JS, CSS and HTML resources, then again, to render widgets client-side.</p>
+
+<p>Usually this is hidden behind an overlay screen, which becomes especially
+annoying in multi-page applications.</p>
+
+<p><strong>So, what can we do?</strong></p>
+
+<p>Templated widgets provide a good pattern for building re-usable application modules but client-side rendering can
+provide a less ideal user experience.</p>
+
+<p>Reading an article about the <a href="http://anyasq.com/79-im-a-technical-lead-on-the-google+-team">technology stack behind Google+</a>, Google
+were using page widgets with templates supported by the <a href="https://developers.google.com/closure/library/">Closure framework</a>. However, they had
+an interesting idea to overcome the client-side rendering issue...</p>
+
+<p><blockquote><p>We often render our Closure templates server-side<br/>so the page renders before any JavaScript is loaded, then the JavaScript finds<br/>the right DOM nodes and hooks up event handlers, etc. to make it responsive.</p><footer><strong>Joseph Smarr</strong> <cite><a href='http://anyasq.com/79-im-a-technical-lead-on-the-google+-team'>anyasq.com/&hellip;</a></cite></footer></blockquote></p>
+
+<p><strong>Could we use the same server-side rendering technique in Dojo applications?</strong></p>
+
+<p>Doing a little investigation, Dojo's abstractions around widget rendering made it perfect
+for server-side rendering.</p>
+
+<p><strong>Tl;DR? Project source code is available on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.</strong></p>
+
+<h2>Dijit Widget Lifecycle</h2>
+
+<p>Dojo widgets inherit from the following base class,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetBase.html">dijit/_WidgetBase</a>,
+which provides the widget lifecycle, which can be extended with custom implementations.</p>
+
+<ul>
+<li><strong>constructor</strong></li>
+<li><strong>parameters</strong> are mixed into the widget instance</li>
+<li><strong>postMixInProperties</strong> - Invoked before rendering occurs, and before any DOM nodes are created.</li>
+<li><strong>buildRendering</strong> - Used to define the widget's DOM nodes</li>
+<li><strong>setters are called</strong> - Custom attribute setters are called</li>
+<li><strong>postCreate</strong> - Widget has been rendered.</li>
+<li><strong>startup</strong> - Parsing and creation of any child widgets completed.</li>
+</ul>
+
+
+<p>All lifecycle methods are executed in linear order for each new widget instance.
+Having clear abstractions around where and when the widget rendering
+occurs in the lifecycle (buildRendering) makes extending simple.</p>
+
+<p>Rendering widget templates is provided by an additional mixin,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_TemplatedMixin.html">dijit/_TemplatedMixin</a>.</p>
+
+<p>There's also a further extension, <a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetsInTemplateMixin.html">dijit/_WidgetsInTemplateMixin</a>,
+for ensuring child widgets within the template are instantiated correctly during rendering.</p>
+
+<p>If we provide a pre-rendered template within the page, the client-side
+renderer will hook up that DOM node as the widget's DOM node, using a
+custom lifecycle extension, rather than attempting to construct the HTML
+template client-side.</p>
+
+<p>We only need to modify the <em>buildRendering</em> phase, every
+other lifecycle phase will run normally.</p>
+
+<h2>Rendering Templates Server-Side</h2>
+
+<p>Now we know where to hook up a pre-rendered template, how would we render the templates server-side?</p>
+
+<p>We want to support server-side rendering with only minimal changes to an application.</p>
+
+<h3> Running Dojo on NodeJS</h3>
+
+<p>With the recent popularity of NodeJS, we have an excellent server-side
+JavaScript environment. If we configure Dojo to run within this platform, we
+should be able to construct page widgets server-side, delegating template
+rendering to the same lifecycle used client-side.</p>
+
+<p>This code below shows how to configure Dojo on NodeJS.</p>
+
+<p>``` javascript Loading Dojo on NodeJS</p>
+
+<pre><code>dojoConfig = {
+    packages: [
+        {name: "dojo", location: "./lib/dojo"},
+        {name: "dijit", location: "./lib/dijit"}
+    ],
+};
+
+require("./lib/dojo/dojo.js");
+</code></pre>
+
+<p>```</p>
+
+<p>Once we've evaluated the dojo.js file within NodeJS, the AMD loader (<em>require/define</em>) is available through properties on the
+<em>global</em> object. We can use these functions to load additional DTK or custom AMD modules. Accessing
+page widgets using the AMD loader, we can execute the lifecycle methods to trigger template rendering, read the
+rendered template and include the output within the application's HTML pages.</p>
+
+<p><strong>Unfortunately, there's one thing missing... access to the DOM!</strong></p>
+
+<h3>Simulating a Browser </h3>
+
+<p>Dojo widgets need access to the <a href="http://en.wikipedia.org/wiki/Document_Object_Model">DOM</a> when rendering the static HTML template into live DOM nodes.
+Running inside a NodeJS instance, rather than a browser, this API is missing.</p>
+
+<p>Luckily, there's a pure-JavaScript implementation of a DOM, which can be executed within NodeJS, called <a href="https://github.com/tmpvar/jsdom">JSDOM</a>.</p>
+
+<p>Importing this package within our application simulates those APIs, allowing page widgets to render normally and, more importantly, letting
+us access the live DOM nodes which result from widget rendering.</p>
+
+<p>Finally, creating Dojo widgets within our fake browser environment triggered a
+few issues, due to the configuration used with the NodeJS loader.</p>
+
+<p>The code snippet below shows how we initialise a server-side DOM and fix those configuration issues.</p>
+
+<p>``` javascript Server-Side DOM with Dojo
+var jsdom = require("jsdom").jsdom,</p>
+
+<pre><code>document = jsdom("&lt;html&gt;&lt;/html&gt;"),
+window = document.createWindow();
+</code></pre>
+
+<p>var has = global.require("dojo/has"),</p>
+
+<pre><code>win = global.require("dojo/_base/window"),
+</code></pre>
+
+<p>// Manually add event listener test as this was only included in
+// the "host-browser" profile.
+has.add("dom-addeventlistener", !!document.addEventListener);
+has.add("dom-attributes-explicit", true);</p>
+
+<p>// Fix global property to point to "window"
+win.global = window;
+```</p>
+
+<p><em>Now we can successfully create widgets on the server-side, how do we know which
+widgets to create for an application?</em></p>
+
+<h3>Declarative Dojo Applications</h3>
+
+<p>Dojo provides a mechanism to convert HTML elements, annotated with module identifiers, into page widgets at runtime.</p>
+
+<p>Using the <a href="http://dojotoolkit.org/reference-guide/1.8/dojo/parser.html">dojo/parser</a>
+module, once the page has loaded, it will automatically instantiate the widgets, passing in
+parameters and other attributes defined in the markup.</p>
+
+<p>An example of declarative widget declaration is shown below.</p>
+
+<p>``` html Declarative widgets
+<select name="state" data-dojo-type="dijit/form/Select"></p>
+
+<pre><code>&lt;option value="TN"&gt;Tennessee&lt;/option&gt;
+&lt;option value="VA" selected="selected"&gt;Virginia&lt;/option&gt;
+&lt;option value="WA"&gt;Washington&lt;/option&gt;
+&lt;option value="FL"&gt;Florida&lt;/option&gt;
+&lt;option value="CA"&gt;California&lt;/option&gt;
+</code></pre>
+
+<p></select>
+```</p>
+
+<p>Application pages using declarative markup can easily be scanned to find application widgets that are needed. As we're able to
+run AMD modules server-side, we can simply use the existing Dojo parser with our server-side DOM to do the hard work for us!</p>
+
+<h3>Server-side Parsing</h3>
+
+<p>For a sample page we want to pre-render, we inject the HTML source into our DOM and run the parser over the current instance. Once the parser
+has finished, the server-side DOM will contain the rendered templates for each widget.</p>
+
+<p>``` javascript Using dojo/parser with JSDOM
+var parser = global.require("dojo/parser"),</p>
+
+<pre><code>source = "... page html goes here ...";
+</code></pre>
+
+<p>// Overwrite finished document contents
+// with new source and run parser over the DOM.
+document.write(source);
+parser.parse(document);</p>
+
+<p>source = document.innerHTML;
+```</p>
+
+<p>Using JSDOM like this, script tags within the page aren't evaluated, letting us handle the module loading
+and parsing externally in NodeJS.</p>
+
+<p>However, this presented a challenge as module dependencies declared in these
+script tags were ignored, leaving the parser to instantiate declarative widgets from modules which hadn't been loaded.</p>
+
+<p><em>Luckily, in the Dojo 1.8 release, the parser was enhanced to automatically load any missing module dependencies during the parsing phase.
+Phew...</em></p>
+
+<p>Finally, once a widget's template has been rendered, any other operations
+performed by the parser are unnecessary.  Creating a "lite" parser which
+removed these code paths, which also provided a place for the extensions
+described later, was started from a copy of the existing parser.</p>
+
+<p>Using the AMD "aliases" configuration, this module transparently replaced the existing parser during server-side rendering.</p>
+
+<h3>Mixins For Pre-Rendering</h3>
+
+<p>Rendering widgets server-side, using NodeJS and JSDOM, works for simple widgets but what happens when you use
+layout widgets, which rely on accessing the browser's layout properties? What if you have separate code paths for different browsers
+which affect the template string?</p>
+
+<p>There are numerous scenarios where we rely on data that's impractical to simulate
+within our fake browser.</p>
+
+<p><em>So, how do we pre-render these widgets? We don't!</em></p>
+
+<p>Ignoring these widgets, which leaves them to render normally client-side.</p>
+
+<p>Identifying widgets to render server-side takes advantage of a new declarative
+parameter used by the parser since 1.8, <em>data-dojo-mixins</em>. This parameter
+allows additional modules to be mixed into the declarative class instance by
+the parser.</p>
+
+<p>Using this parameter with a custom module,
+<em>server_side/_TemplatedMixin</em>, on widgets to be pre-rendered, as shown below,
+make identification easy. Additionally, this class
+will contain the lifecycle extensions that modifies client-side rendering.</p>
+
+<p>``` html Custom Declarative Mixins</p>
+
+<div data-dojo-type="dijit/CalendarLite" data-dojo-mixins="server_side/_TemplatedMixin"></div>
+
+
+<p>```</p>
+
+<h3>Automating Rendering</h3>
+
+<p><strong>Now we've identified the mechanism for server-side rendering, how can we automate this process
+for all application pages?</strong></p>
+
+<p><a href="https://github.com/senchalabs/connect">Connect</a> is <em>"an extensible HTTP server framework for
+node, providing high performance plugins known as middleware"</em>.</p>
+
+<p>Using this framework as our HTTP server means we can write a custom middleware plugin
+that will automatically parse, pre-render and serve all our application pages.</p>
+
+<p>Connect plugins are functions that accept three parameters, the request and
+response objects, along with a callback to signal this plugin's work has
+finished. Each registered plugin will be executed for each request.</p>
+
+<p>We've decomposed the library into two files, server_side.js, which exposes a
+valid express plugin, and render.js, which provides a simple interface for the
+server-side rendering, described above. The complete version of the code for both modules is included below.</p>
+
+<p>``` javascript server_side.js
+var render = require('./render.js');</p>
+
+<p>module.exports = function (config) {</p>
+
+<pre><code>// Create AMD packages from module configuration.
+var page = render({
+    dojo: config.dojo + "/dojo",
+    dijit: config.dojo + "/dijit",
+    server_side: __dirname + "/../public/js/server_side"
+});
+
+return function (req, res, next) {
+    var ignore = function (accept) {
+        return accept.indexOf("text/html") === -1;
+    };
+
+    // Only hook into text/html requests....
+    if (ignore(req.headers.accept)) {
+        return next();
+    }
+
+    var write = res.write,
+        end = res.end,
+        buffer = "";
+
+    // We need entire page contents, not just the chunks.
+    // Proxy original methods while we're buffering.
+    res.write = function (chunk, encoding) {
+        buffer = buffer.concat(chunk);
+        return true;
+    };
+
+    res.end = function (chunk, encoding) {
+        if (chunk) {
+            res.write(chunk);
+        }
+
+        // Fix content-length, we now have more data to send.
+        var rendered = page(buffer);
+        res.setHeader("Content-Length", rendered.length);
+
+        return end.call(res, rendered, encoding);
+    };
+
+    next();
+};
+</code></pre>
+
+<p>};
+```</p>
+
+<p>``` javascript render.js
+var jsdom = require("jsdom").jsdom,</p>
+
+<pre><code>document = jsdom("&lt;html&gt;&lt;/html&gt;"),
+window = document.createWindow();
+</code></pre>
+
+<p>module.exports = function (packages) {</p>
+
+<pre><code>// Fix window objects in global scope.
+global.document = document;
+global.navigator = window.navigator;
+global.window = window;
+
+var amd_packages = Object.keys(packages).map(function (key) {
+    return { name: key, location: packages[key] };
+});
+
+// Deliberately create global "dojoConfig" variable.
+dojoConfig = {
+    packages: amd_packages,
+    // _WidgetsInTemplateMixin call parser directly to instantiate children. 
+    // We need it to use our custom parser so use AMD-remapping magic!
+    aliases: [["dojo/parser", "server_side/parser"]],
+    deps: ["server_side/parser", "dojo/has", "dojo/_base/window", "server_side/registry"]
+};
+
+require(packages.dojo + "/dojo.js");
+
+// Once Dojo has been evalulated, require &amp; define methods 
+// from AMD API as exposed as properties on "global" object.
+
+var has = global.require("dojo/has"),
+    win = global.require("dojo/_base/window"),
+    registry = global.require("server_side/registry"),
+    parser = global.require("server_side/parser");
+
+// Now we need to manually fix a few things to make Dojo 
+// simulate running in a browser.
+
+// Manually add event listener test as this was only included in 
+// the "host-browser" profile.
+has.add("dom-addeventlistener", !!document.addEventListener);
+has.add("dom-attributes-explicit", true);
+
+// Fix global property to point to "window" 
+win.global = window;
+
+return function (source) {
+    // Clear any previously rendered widgets from registry,
+    // simulate fresh page load.
+    registry.reset();
+
+    // Overwrite finished document contents
+    // with new source and run parser over the DOM.
+    document.write(source);
+    parser.parse(document);
+
+    return document.innerHTML;
+};
+</code></pre>
+
+<p>};
+```</p>
+
+<p>Using this new plugin in an application is demonstrated in the code below, which
+serves the "public" directory as the application's source root.</p>
+
+<p>``` javascript Server-side Rendering Application
+var connect = require('connect'),</p>
+
+<pre><code>server_side = require('../lib/server_side');
+</code></pre>
+
+<p>var app = connect()
+  .use(connect.directory(<strong>dirname + '/public', { icons: true }))
+  .use(server_side({dojo: process.env.DOJO_SOURCE}))
+  .use("/dojo", connect.static(process.env.DOJO_SOURCE))
+  .use("/server_side", connect.static(</strong>dirname + '/../public/js/server_side'))
+  .use(connect.static(__dirname + '/public'))
+  .listen(3000);
+```</p>
+
+<h2>Using Server-Side Rendered Templates</h2>
+
+<p>Once the pre-rendered page has been returned to the browser, the normal client-side
+parsing will take place to instantiate the page widgets. For widgets whose templates are
+included within the page, we need to ensure the normal client-side rendering is bypassed.</p>
+
+<p>In this scenario, we connect the widget's <em>domNode</em> property to the DOM node that the
+declarative widget was instantiated from.</p>
+
+<h3>Extending buildRendering</h3>
+
+<p>Adding a HTML template to your widget is achieved by inheriting from
+<em>dijit/_TemplatedMixin</em>, which provides the "buildRendering" implementation to
+convert a HTML string stored under "templateString" into live DOM nodes.</p>
+
+<p>Although we want to skip creating DOM nodes from the template, there are other steps, e.g. attaching event handlers, which must be ran normally.
+Using a custom mixin to identify declarative widgets for server-side rendering, <em>server_side/_TemplatedMixin</em>, also provides
+the extension point to modify the rendering process.</p>
+
+<p>Overwriting the default implementation of "buildRendering" through this mixin led
+to unresolvable issues.</p>
+
+<p>We're forced to call any super-class "buildRendering" implementations, through
+"this.inherited(arguments)", to ensure any custom code paths that also extend this method are executed.
+However, this will reach the original <em>dijit/_TemplatedMixin</em> module, which we need to skip.</p>
+
+<p>Monkey-patching the _TemplatedMixin prototype became the easiest solution.</p>
+
+<p>Once our custom mixin is loaded,
+we overwrite "buildRendering" which a new implementation. Using a custom flag, provided by our mixin, we check
+whether to continue with the normal code path for client-side rendering, otherwise we run our stripped down version.</p>
+
+<p>``` javascript Monkey-patching _TemplatedMixin</p>
+
+<pre><code>var br = _TemplatedMixin.prototype.buildRendering,
+    fc = _TemplatedMixin.prototype._fillContent;
+
+// Stripped down of the original function source below.
+_TemplatedMixin.prototype.buildRendering = function () {
+    if (!this.serverSide) {
+        return br.call(this);
+    }
+
+    // Source DOM node already the pre-rendered template nodes.
+    var node = this.srcNodeRef;
+
+    node.removeAttribute("data-dojo-type");
+
+    // Call down to _Widget.buildRendering() to get base classes assigned
+    _WidgetBase.prototype.buildRendering.call(this);
+
+    this._attachTemplateNodes(node, function(n,p){ return n.getAttribute(p); });
+
+    this._beforeFillContent();      // hook for _WidgetsInTemplateMixin
+
+    // Don't pass srcRefNode reference as it doesn't exist.
+    this._fillContent();
+};
+
+// Override to turn into a no-op, we don't want to attach source
+// ref nodes client side as it's been done on the server.
+_TemplatedMixin.prototype._fillContent = function () {
+    if (!this.serverSide) {
+        return fc.apply(this, arguments);
+    }
+};
+</code></pre>
+
+<p>```</p>
+
+<p>We performed the same trick for the <em>fillContent</em> method due to similar issues, along with a new implementation
+of <em>attachTemplateNodes</em> in the mixin.</p>
+
+<p>With this minimal change to the client-side rendering process, widgets pick up their templates from the existing page and are
+instantiated normally. Hooking up template nodes as properties on the parent, attaching event handlers and setting data bindings
+behaves as expected.</p>
+
+<h3>Putting It Together</h3>
+
+<p><strong>Using our custom middleware for server-side rendering, along with our client-side rendering modifications,
+users accessing pages will see the templated widgets straight away, removing the "double-rendering" effect
+and the need for loading screens.</strong></p>
+
+<p><img src="/images/pre_rendered.png"></p>
+
+<p><em>This image above the same widgets rendered client-side and server-side when the page loads, but before
+client-side rendering has finished.</em></p>
+
+<p>Server-side rendering also comes with client-side performance benefits,
+reducing the number of costly DOM operations performed during application loading.
+This may be especially useful for low-power devices with mobile browsers.</p>
+
+<p>Extending, rather than replacing, the normal Dojo rendering lifecycle allows us to transparently delegate rendering
+to the client-side for unsupported widgets. Excellent abstractions already provided for the lifecycle in the toolkit make
+the extension conceptually simple.</p>
+
+<p>There are restrictions that come with this implementation, discussed below, but working within these
+constraints it is possible for the majority of templated widgets to be rendered server-side.</p>
+
+<h2>Source Code</h2>
+
+<p>All source code for the project lives on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.
+Feel free to file issues, patches and comments at the project home page.</p>
+
+<p>Once you have checked out the project code, run the following command to
+start a test application comparing client-side and server-side rendering side
+by side.</p>
+
+<p><code>sh
+$ export DOJO_SOURCE=/path/to/dojo-release-1.8.0-src
+$ npm start
+</code></p>
+
+<p>Once the server has started, visit <a href="http://localhost:3000">http://localhost:3000</a>.</p>
+
+<p>You can also install the module as an NPM package, <a href="https://npmjs.org/package/server_side_dijit">server_side_dijit</a>,
+and use the plugin within your existing Connect application.</p>
+
+<h2>Issues</h2>
+
+<p>We've already mentioned potential pitfalls which restrict server-side
+rendering. These include widgets that use browser dimensions to dynamically
+calculate sizing e.g. layout managers, use client-side resources to construct
+templates e.g. reading cookie data, expect access to remote resources e.g
+XHR'ing session details, and many, many more.</p>
+
+<p>Letting those widgets default to client-side template rendering provides a safe fallback.</p>
+
+<p>Discovering which existing Dojo widgets can support server-side rendering requires manual
+testing. Within the project directory, under the "/test/public" location, we've started
+collecting test pages which demonstrate those widgets which are known to work. Looking at those
+pages should provide a good indication of the current level of support.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Finding Nano - Getting Dojo under 4KB]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/08/03/finding-nano/"/>
+    <updated>2012-08-03T10:33:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/08/03/finding-nano</id>
+    <content type="html"><![CDATA[<p>There was a bold claim in the release notes for the 1.7 version of The Dojo Toolkit...</p>
+
+<p><blockquote><p>Dojo Nano: Less than 4KB gzipped!</p></blockquote></p>
+
+<p>With the move to the AMD module format, the new fully-compliant asynchronous module loader could be reduced to
+less than four thousands bytes!</p>
+
+<p>Loading unnecessary code was a common complaint against previous versions of The Dojo Toolkit but now we
+could have complete control over loaded modules using this tiny AMD loader.</p>
+
+<p><em>Was this true?</em></p>
+
+<p><em>Running a standard build to generate a single dojo layer results in a minfied
+and gzipped file over 45,000 bytes.</em></p>
+
+<p><strong>How can we generate this nano
+loader in less than 10% of that size?</strong></p>
+
+<p>Until now, the instructions were spread over mailing
+<a href="http://comments.gmane.org/gmane.comp.web.dojo.devel/15941">list</a> <a href="http://mail.dojotoolkit.org/pipermail/dojo-interest/2011-December/060665.html">posts</a>,
+the <a href="http://livedocs.dojotoolkit.org/build/buildSystem">reference guide</a> and <a href="http://bugs.dojotoolkit.org/ticket/14381">bug tickets</a>,
+making it possible but not very easy!</p>
+
+<p>There already was an <a href="http://bugs.dojotoolkit.org/ticket/14392">open ticket</a> for the project to ship a complete nano-profile within the sample profiles.
+Taking up the challenge, I started investigating how to produce a profile that would generate a fully-functional AMD loader in under 4,000 bytes.</p>
+
+<h2>Nano-Build Profile</h2>
+
+<p>After much experimenting, tweaking and reviewing the toolkit's source (along
+with help and advice from other contributors), the smallest usable AMD loader
+can be produced by running the following build profile.</p>
+
+<p><div><script src='https://gist.github.com/3163114.js'></script>
+<noscript><pre><code>var profile = (function(){
+    return {
+        layerOptimize: &quot;closure&quot;,
+        releaseDir: &quot;../../../release&quot;,
+
+        packages:[{
+            name:&quot;dojo&quot;,
+            location:&quot;../../../dojo&quot;
+        }],
+
+        defaultConfig:{
+            hasCache:{
+                &#39;dojo-built&#39;: 1,
+                &#39;dojo-loader&#39;: 1,
+                &#39;dom&#39;: 1,
+                &#39;host-browser&#39;: 1,
+                &quot;config-selectorEngine&quot;: &quot;lite&quot;
+            },
+            async:1
+        },
+
+        dojoBootText:&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;,
+
+        staticHasFeatures:{
+            &#39;config-dojo-loader-catches&#39;: 0,
+            &#39;config-tlmSiblingOfDojo&#39;: 0,
+            &#39;dojo-log-api&#39;: 0,
+            &#39;dojo-sync-loader&#39;: 0,
+            &#39;dojo-timeout-api&#39;: 0,
+            &#39;dojo-sniff&#39;: 0,
+            &#39;dojo-cdn&#39;: 0,
+            &#39;dojo-loader-eval-hint-url&#39;: 1,
+            &#39;config-stripStrict&#39;: 0,
+            &#39;ie-event-behavior&#39;: 0,
+            &#39;dojo-config-api&#39;: 0
+        },
+
+        layers: {
+            &quot;dojo/dojo&quot;: {
+                include: [],
+                customBase: 1
+            }
+        }
+    };
+})();</code></pre></noscript></div>
+</p>
+
+<p>Once minified and gzipped, the entire loader is only <strong>3652</strong> bytes! Compared
+to the full loader with base modules, which came in a 45705 bytes, this
+represents <strong>more than a 92% reduction in file size</strong>.</p>
+
+<p>So, how does the build profile above squeeze so much space out? Let's take a
+closer look at the parameters and explain how they contribute to the reduced
+size...</p>
+
+<h3>Custom Base Layer</h3>
+
+<p>Unless specified otherwise, the Dojo build system will always generate a <em>base</em> layer containing
+the dojo.js source file combined with all the base modules (those defined under the <em>dojo/_base</em> directory).</p>
+
+<p>Generating just the AMD loader, without all those additional modules, needs the profile to
+contain an explicit definition for the dojo base layer, allowing us to override configuration properties.</p>
+
+<p>Manually defining the base dojo layer is achieved by adding
+a new configuration object to the layers map, identified with the name <em>dojo/dojo</em>, as shown below.</p>
+
+<p>``` javascript Base-less loader configuration
+layers: {</p>
+
+<pre><code>"dojo/dojo": {
+    include: [],
+    customBase: 1
+}
+</code></pre>
+
+<p>}</p>
+
+<p>```</p>
+
+<p>Setting the <em>customBase</em> property to true will ensure the build system won't automatically roll up all the base modules
+into the nano AMD loader. We've left the <em>include</em> property empty as we don't want to add any extra modules.</p>
+
+<p>This first step in producing a nano loader <strong>reduces the minified and gzipped layer by almost 30KB</strong>!</p>
+
+<h3>Using the Closure Compiler</h3>
+
+<p>Dojo's build system supports the use of different JavaScript minifiers, which
+perform tricks such as renaming variables and stripping whitespace in order to
+reduce the size of a JavaScript file.</p>
+
+<p>Shrinksafe is the default minifier, but in our profile we've chosen to use Google's Closure compiler.</p>
+
+<p><code>javascript Using closure compiler
+layerOptimize: "closure"
+</code></p>
+
+<p>Experimenting with the different minifiers, it was apparent that Closure was
+more effective at reducing the layer file sizes by the greatest amount.</p>
+
+<p>Closure
+produces a <strong>minified layer file in 35,770 bytes, nearly 10KB less</strong> than the
+original version using Shrinksafe.</p>
+
+<p>More importantly, <em>the Closure compiler supports dead code elimination</em>. Running static analysis
+over the source files, those code branches which are unreachable will be stripped from the output.
+This feature is crucial in allowing us to tune the produced loader's features, squeezing even more space out.</p>
+
+<h3>Static Features Configuration</h3>
+
+<p>As the Dojo Toolkit moves towards the 2.0 release, one of the major
+improvements within the code base is the use of dynamic detection for
+determining which features an environment supports, rather than relying on
+brittle user-agent sniffing.</p>
+
+<p>Using feature tests, alternative code paths can be executed to provide shim-functionality for missing platform features, using native libraries otherwise.
+Tests are executed only once, the cached result is returned for each subsequent test.</p>
+
+<p>The build system allows a pre-specified list of feature test results to be provided in the build profile. These parameters will replace
+the feature test calls within the generated layer files with the static boolean result values.</p>
+
+<p>As this happens before minification, <em>any feature test paths that can't be
+executed will be automatically stripped by the Closure compiler</em>. This provides a huge benefit in hand-tuning
+the loader size to be as compact as possible.</p>
+
+<p>The sample below shows the static feature test results we provide to produce the minimal AMD loader.</p>
+
+<p>``` javascript Static feature test results
+staticHasFeatures: {</p>
+
+<pre><code>'config-dojo-loader-catches': 0,
+'config-tlmSiblingOfDojo': 0,
+'dojo-log-api': 0,
+'dojo-sync-loader': 0,
+'dojo-timeout-api': 0,
+'dojo-sniff': 0,
+'dojo-cdn': 0,
+'dojo-loader-eval-hint-url': 1,
+'config-stripStrict': 0,
+'ie-event-behavior': 0,
+'dojo-config-api': 0
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Using static features configuration allows us to remove all non-essential
+code needing for loading AMD modules. This includes the synchronous module
+loader code used to load non-AMD modules (<em>dojo-sync-loader</em>), the debugging methods for module loading (<em>dojo-timeout-api</em> and <em>dojo-log-api</em>), backwards
+compatibility for non-standard DOM event behaviours (<em>ie-event-behaviour</em>) and others.</p>
+
+<p>Full details on each of the feature tests defined in the toolkit will be available in the 1.8 reference guide, see
+<a href="http://livedocs.dojotoolkit.org/dojo/has#feature-names">here</a> for
+a sneak preview.</p>
+
+<p><strong>Hand tuning the static feature test results allowed the build to remove an extra 2,000 bytes from the nano loader.</strong></p>
+
+<h3>Baking in Default Configuration</h3>
+
+<p>Making the smallest AMD loader possible relies on a series of assumptions about the environment we'll be running in
+and supported features. Rather than have the user set these values manually, we can hard code
+this configuration into the loader, allowing us to remove the code for parsing configuration values from the
+environment.</p>
+
+<p>The following configuration is provided within the nano profile.</p>
+
+<p>``` javascript Default loader configuration
+defaultConfig:{</p>
+
+<pre><code>hasCache:{
+    'dojo-built': 1,
+    'dojo-loader': 1,
+    'dom': 1,
+    'host-browser': 1,
+    'config-selectorEngine': 'lite'
+},
+async:1
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Along with configuration for the environment (modern-ish browser engine), we've set the <em>async</em> property to true, ensuring the
+loader is running in AMD-mode as we've removed all code for handling the legacy Dojo module format.</p>
+
+<h3>Squeezing Out Those Final Bytes</h3>
+
+<p><em>So, what's left?</em></p>
+
+<p><em>How can we squeeze a few more bytes out?</em></p>
+
+<p>Reviewing the source code for the build system, when the dojo layer is generated, the following boot sequence is appended to the source.</p>
+
+<p><code>javascript Dojo boot text
+// must use this.require to make this work in node.js
+var require = this.require;
+// consume the cached dojo layer
+require({cache:{}});
+!require.async &amp;&amp; require(["dojo"]);
+require.boot &amp;&amp; require.apply(null, require.boot);
+</code></p>
+
+<p>This code ensures the loader will work on the NodeJS platform and ensures that all base modules are always
+requested when running in legacy mode.</p>
+
+<p>Our minimal loader doesn't need to run outside the browser and we definitely won't be running in legacy mode! Therefore,
+we can overwrite the layer boot text with custom code to trim the last few bytes from the nano loader, shown below.</p>
+
+<p><code>javascript Custom boot text
+dojoBootText:"require.boot &amp;&amp; require.apply(null, require.boot);",
+</code></p>
+
+<p><strong>...and that's it! Combining all of the options above results in a fully-functioning AMD loader in less than 4 kilobytes.</strong></p>
+
+<p>For further details on the exact size reductions achieved by each of the profile parameters,
+see this <a href="https://docs.google.com/spreadsheet/ccc?key=0An1xGHsgw2ledE94RW9KcGtISHQ5SnNGV3hYaDRPM2c#gid=0">link</a> for the data.</p>
+
+<h2>Differences between nano-profile and profile included with toolkit</h2>
+
+<p>The profile defined above will produce the smallest functional AMD loader
+possible, sacrificing support for certain common features to reduce the file size even
+further. When producing the <em>nano</em> profile that will be shipped with the toolkit, there's a
+slightly less aggressive approach when balancing feature completeness against file size.</p>
+
+<p>Reviewing the feature tests, we decided that <strong>two optional features should be
+included, backwards compatibility for older Internet Explorer browsers (<em>ie-event-behaviour</em>) and the
+ability for manual loader configuration (<em>dojo-config-api</em>)</strong>. These changes only produce an additional
+900 bytes and will make the minimal loader much more consumable.</p>
+
+<p>The <em>nano</em> build profile shipped with the toolkit also contains all configurable feature values, rather
+than just the minimal set needed to produce the smallest build, to demonstrate the full set of parameters
+that can be modified.</p>
+
+<p>More information about the investigations into producing this profile can be found in the contributors mailing list
+thread <a href="http://grokbase.com/t/dojo/dojo-contributors/127q9sm80w/nano-build-profile-ticket-14392">here</a>.</p>
+
+<h2>Finally...</h2>
+
+<p>This investigation was founded upon previous work by other dojo contributors.
+Thanks to <a href="https://twitter.com/blowery">Ben Lowery</a>, <a href="https://twitter.com/kitsonk">Kitson Kelly</a> and <a href="https://github.com/rcgill/">Rawld Gill</a> for their
+initial efforts and helping me out with questions.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Part 3: Controllers]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/05/26/dojomvc-controllers/"/>
+    <updated>2012-05-26T00:00:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/05/26/dojomvc-controllers</id>
+    <content type="html"><![CDATA[<p>In the final article of this series, we'll be looking at creating an MVC Controller for our sample todo
+application.</p>
+
+<p>We've already shown how to <a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">define our application model</a>,
+creating a domain-specific todo model
+backed by localStorage, along with <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">our view template</a>,
+using widget templating to render our tasks into the page.</p>
+
+<p><blockquote><p>The controller translates user input into operations on the model.</p><footer><strong>Model View Controller Pattern</strong> <cite><a href='http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller'>Wikipedia</a></cite></footer></blockquote></p>
+
+<p>For our application, we need to handle the user actions to allow adding, removing and completing tasks. We already have a binding between a task's completed state
+and our View, using the <a href="https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/form/CheckBox.js">todo.form.CheckBox</a>, allowing changes to flow back to the model without explicitly needing logic in the controller.</p>
+
+<p>Let's look more closely at the remaining tasks...</p>
+
+<h2>Adding Tasks</h2>
+
+<p>The View template, discussed in the <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">second article</a>,
+renders the HTML elements needed to allow the user to any new tasks. Once a user has finished
+typing in their new task, signalled by pressing the enter key, we need to retrieve their text and add it to the model.</p>
+
+<p>Using Dojo's <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html#dijit-templatedmixin">declarative programming model</a>,
+the View template includes the custom element attribute needed to connect the "onkeypress" DOM event to an event handler within our controller. When our
+widget is rendered in the page, by the Dojo parser, those connections are created automatically.</p>
+
+<p><code>html Declarative event handling https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.html#L4 Source Link
+&lt;input id="new-todo" data-dojo-attach-event="onkeypress:onKeyPress"
+ placeholder="What needs to be done?" type="text" autofocus&gt;
+</code></p>
+
+<p>Inside our controller, each time an event is fired, the following function is executed:</p>
+
+<p>``` javascript Controller event handler https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150 Source Link
+onKeyPress: function (event) {</p>
+
+<pre><code>if (event.keyCode !== keys.ENTER) return;
+
+this.addToModel(event.target.value, false);
+event.target.value = "";
+dojo_event.stop(event);
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Unless the user has pressed the enter key, we ignore the normal user input event. Once this happens, we extract the new
+task text from the event argument and call the following convenience function to create the new task in the model.</p>
+
+<p>``` javascript New model task https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150 Source Link
+addToModel: function (content, isDone) {</p>
+
+<pre><code>var insert = mvc.newStatefulModel({
+    data: {todo_text: content, isDone: isDone}
+});
+
+this.model.todos.add(this.model.todos.length, insert);
+</code></pre>
+
+<p>}
+```</p>
+
+<p>This function creates a new Model node, containing the task text and its
+completed state, adding the result to the list of tasks. When inserting new
+entries into the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/StatefulModel.html">DojoX MVC Model</a> array, the insertion position must be
+specified explicitly. By using the current length of the list as the position,
+we always add new items at the end.</p>
+
+<p>Once the model has been modified, the View will automatically update to display the new item. We don't need to manually
+update the rendered HTML template or even trigger re-loading of the View. By using widgets from the DojoX MVC package, changes to
+the Model are always reflected in our View in real-time.</p>
+
+<h2>Removing Tasks</h2>
+
+<p>Removing tasks begins with the user clicking the destroy icon, displayed on the right-hand side of each task. Once this happens, the Controller
+needs to trap the event, figure out which task to remove and update the Model. As the tasks' list
+can be updated during the application, having an individual event connection for each task would require handling the setting up and tearing down
+every time the list changed.</p>
+
+<p>Instead, we can use "Event Delegation", introduced by the new Dojo event module, <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/on.html">dojo/on</a>,
+to listen for any remove events with a single connection.</p>
+
+<p>Once the widget has been rendered, signalled by the <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html#lifecycle">"postCreate"</a>
+function being called, we start listening for all click events on the destroy icons. Any events captured are passed through to our event hander, "onRemove", to delete the associated task from the Model.</p>
+
+<p>``` javascript Event Delegation https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L61-64 Source Link
+postCreate: function () {</p>
+
+<pre><code>on(this.domNode, ".destroy:click", lang.hitch(this, "onRemove"));
+this.onItemStatusUpdate();
+</code></pre>
+
+<p>},</p>
+
+<p>onRemove: function (event) {</p>
+
+<pre><code>this.model.todos.remove(domAttr.get(event.target, "data-model-id"));
+</code></pre>
+
+<p>}
+```</p>
+
+<p>With one event handler for all the remove events, the Controller won't directly know which task within the Model the user
+has chosen to remove. To overcome this, the repeating View template for the task uses a HTML5 data attribute to store the unique task index
+on the rendered DOM element for the remove icon.</p>
+
+<p>During rendering of a <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">DojoX MVC Repeat widget</a>,
+the "index" attribute on the instance refers to the current
+position within the bound list. This index value can then easily be retrieved from the event generated and used to remove the correct task from the Model.</p>
+
+<p><code>html
+&lt;button class="destroy" data-model-id="#{this.index}"&gt;
+&lt;/button&gt;
+</code></p>
+
+<p>Once again, when the Model is changed, the View automatically updates. There's no action needed from the Controller in modifying the rendering HTML template.</p>
+
+<h2>Clearing Completed Tasks</h2>
+
+<p>Once a user has completed a series of tasks, they will eventually want to remove them. Rather than having to
+remove each task individually, the application provides the ability to clear all completed tasks from the list.</p>
+
+<p>Again, we've used declarative programming in the View template to connect our event hander, removeCompletedItems, to the DOM event
+triggered when the user clicks the "Clear Completed" button.</p>
+
+<p><code>html
+&lt;button id="clear-completed" data-dojo-attach-event="onclick:removeCompletedItems"&gt;
+&lt;/button&gt;
+</code></p>
+
+<p>When our handler is fired, we need to iterate over the existing tasks'
+list, removing any with the correct completed state. Removing items from the Model will left-shift the remaining items, so we need to
+take care to iterate correctly over the remaining items.</p>
+
+<p>``` javascript Clearing Completed Items https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L80-97 Source Link
+removeCompletedItems: function () {</p>
+
+<pre><code>var len = this.model.todos.length, idx = 0;
+
+while (idx &lt; len) {
+    if (this.model.todos[idx].isDone.value) {
+        this.model.todos.remove(idx);
+        len--;
+        continue;
+    }
+    idx++;
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>When the event handler has finished executing, the View will be updated to clear out those completed tasks.</p>
+
+<h2>Conclusion</h2>
+
+<p>In the final part of this series, we've looked at how to define an MVC
+Controller, responsible for mediating between user actions and model
+operations. Using declarative Dojo programming in our View template, we set up
+bindings between DOM events and event handlers in our Controller.</p>
+
+<p>When user
+actions triggered those events, our handlers were responsible for adding and
+removing todo tasks from the MVC Model class, StatefulModel, we've been using
+to store our application data. These changes then flowed back to the View,
+which automatically re-renders when it detects an updated Model.</p>
+
+<p>Dojo's new MVC package, dojox.mvc, offers great capabilities for building dynamic
+JavaScript applications using the MVC programming pattern. Although it's still maturing, hopefully this series
+has been able to demonstrate that for most applications it's more than capable of providing the features
+developers expect in a modern JavaScript MVC library.</p>
+
+<p>If you have any further questions, feel free to leave comments below, send me an email or a tweet. The source
+code for the application is available on Github, allowing you to run the examples above and compare it against other frameworks.</p>
+
+<h3>What's Next?</h3>
+
+<p>This series of articles was based upon the version of DojoX MVC present in the 1.7.0 release of The Dojo Toolkit. My experiences, good and bad,
+building this application were <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-January/026434.html">fed back into the community</a> to
+help improve the package in the future. With the upcoming 1.8 release of The Dojo Toolkit,
+there has been some <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-February/026811.html">major improvements</a> to the MVC package, resolving many of the issues I raised.</p>
+
+<p>When that version of the toolkit is available, I'll re-visit the application and show how those changes would make writing this application even simpler.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[IBM IMPACT 2012 - Session Materials Available]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/05/08/impact-slides-available/"/>
+    <updated>2012-05-08T15:28:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/05/08/impact-slides-available</id>
+    <content type="html"><![CDATA[<p>Last week was IBM IMPACT 2012, IBM's premier conference for our customers in Las Vegas. I was fortunate enough to
+be there for the duration, presentating four sessions on The Dojo Toolkit. The whole event was a fantastic showcase
+for our company, the capabilities and unique values we provide. Session materials from my talks are now available
+<a href="http://speakerdeck.com/u/jthomas">externally</a>, see below for individual links.</p>
+
+<h3>IBM IMPACT Sessions</h3>
+
+<ul>
+<li><a href="http://speakerdeck.com/u/jthomas/p/optimising-your-dojo-application-using-the-dojo-build-system">Optimizing Your Dojo Application Using The Dojo Build System</a></li>
+<li><a href="http://speakerdeck.com/u/jthomas/p/moving-to-dojo-17-and-the-path-to-20">Moving to Dojo 1.7 and the Path to 2.0</a></li>
+<li><a href="http://speakerdeck.com/u/jthomas/p/beyond-dojo-the-rise-of-asynchronous-module-definition-amd">Beyond Dojo: The Rise of Advanced Micro Devices (AMD)</a></li>
+<li><a href="http://speakerdeck.com/u/jthomas/p/javascript-anti-patterns-moving-from-java-to-javascript">Unconference Session: JavaScript Anti-Patterns (Moving from Java to JavaScript)</a></li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Debugging Optimised Dojo Applications]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/04/22/debugging-optimised-dojo-apps/"/>
+    <updated>2012-04-22T15:49:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/04/22/debugging-optimised-dojo-apps</id>
+    <content type="html"><![CDATA[<p>What happens when you've got an error occurring only in the minified version of
+your Dojo application?</p>
+
+<p>No matter how fantastic your debugging tool, there's
+not much it can do with an optimised JavaScript source file with all the code
+on a single line. Usually, you resort to the frustrating experience of "black
+boxing" the issue, interrogating objects in the console and trying to reverse
+engineer the meaning of their renamed variables.</p>
+
+<p>Luckily, there's a better way to debug minified JavaScript files... <strong>Source Maps</strong>.</p>
+
+<h2>Introducing Source Maps</h2>
+
+<p><blockquote><p></p></p><p><p>Source maps provide a way to map a combined/minified file back to an unbuilt<br/>state. When you build for production, along with minifying and combining your<br/>JavaScript files, you generate a source map which holds information about your<br/>original files.  When you query a certain line and column number in your<br/>generated JavaScript you can do a lookup in the source map which returns the<br/>original location.  Developer tools can parse the source map automatically and<br/>make it appear as though you're running unminified and uncombined files.</p></p><p><p></p></blockquote></p>
+
+<p>There's an fantastic overview of the technology <a href="http://www.html5rocks.com/en/tutorials/developertools/sourcemaps/">here</a>,
+showing you how to enable support in your browser and generate the necessary files using Google's Closure compiler.</p>
+
+<h2>Generating Source Maps For Dojo</h2>
+
+<p>The Dojo Toolkit's build system supports using the Closure compiler for
+minification, making it an obvious next step to enable automatic generation of
+source mappings. Working on this over the weekend, I've been able to enhance
+the build system to generate source maps for each layer file when using the
+following command line parameter.</p>
+
+<p><code>sh
+$ sh build.sh bin=node action=release profile=my_profile layerOptimize=closure
+</code></p>
+
+<p>For more details on the implementation, along with the patch, see the
+associated <a href="http://bugs.dojotoolkit.org/ticket/15232">ticket</a> that's been
+opened to track adding this feature into Dojo.</p>
+
+<p>When you've enabled source maps in your browser, switching to the scripts tab
+in Chrome's Developer Tools now displays the unminified versions of any built layer
+files. This can be seen in action on the following
+<a href="http://public.jamesthom.as/source_maps/">page</a>.</p>
+
+<p><em>Please note, this feature is only enabled when using NodeJS
+as the build runtime and requires an upgrade of the Closure compiler
+to the latest version.</em></p>
+]]></content>
+  </entry>
+  
+</feed>
