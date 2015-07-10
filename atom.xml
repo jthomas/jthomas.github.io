@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-07-08T12:46:20+01:00</updated>
+  <updated>2015-07-10T17:19:48+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,130 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Debugging Cloud Foundry Stack Issues]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues/"/>
+    <updated>2015-07-10T15:27:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues</id>
+    <content type="html"><![CDATA[<p>Recent <a href="https://groups.google.com/a/cloudfoundry.org/forum/#!topic/vcap-dev/gU7rpD8MSC4">changes</a> to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of <a href="http://stackoverflow.com/questions/31057357/static-buildpack-deploy-now-failing-due-to-unsupported-stack">issues</a> <a href="http://stackoverflow.com/questions/31085626/fail-to-push-static-site-to-bluemix-using-third-party-buildpack/31089127#31089127">for</a> <a href="http://stackoverflow.com/questions/31268155/bluemix-libstdc-so-6-version-glibcxx-3-4-20-not-found/31288182#31288182">users</a>. I&#8217;ve helped users diagnose and fix issues
+that have occurred due to a mistmatches between the platform stack, applications and the buildpack. Learning a number of techniques for helping to discover and resolve these
+issues and I wanted to share them with everyone else.</p>
+
+<p>Running on Cloud Foundry&#8217;s <em>Platform-as-a-Service</em> solution, we take for granted that low-level concepts like operating systems are abstracted away from the developer.</p>
+
+<p>However, when we
+run into issues it can be necessary to jump into the weeds and find out what&#8217;s going on under the hood&#8230;</p>
+
+<h2>What are Cloud Foundry &#8220;stacks&#8221;?</h2>
+
+<p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>&#8230;</p>
+
+<blockquote><p>A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.</p><footer><strong>Cloud Foundry Concepts</strong> <cite><a href='https://docs.cloudfoundry.org/concepts/stacks.html'>docs.cloudfoundry.org/concepts/&hellip;</a></cite></footer></blockquote>
+
+
+<p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
+environment.</p>
+
+<p>Most users don&#8217;t have to care which <em>stack</em> they are running on.</p>
+
+<p>However, if your application needs a specific version of a system library or you want to verify a specific command line application is installed, you
+may need to dig deeper&#8230;</p>
+
+<h2>What &#8220;stacks&#8221; does my platform support?</h2>
+
+<p>Using the Cloud Foundry CLI, issue the following command to see what <em>stacks</em> are available on the platform.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>16:27:30 ~<span class="o">]</span><span class="nv">$ </span>cf stacks
+</span><span class='line'>Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>name         description
+</span><span class='line'>lucid64      Ubuntu 10.04
+</span><span class='line'>seDEA        private
+</span><span class='line'>cflinuxfs2   Ubuntu 14.04.2 trusty
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Stack information contains the unique name for each stack and the underlying operating system version.</p>
+
+<h2>Which &#8220;stack&#8221; is my application running on?</h2>
+
+<p>Since <a href="https://github.com/cloudfoundry/cli/releases/tag/v6.11.0">v6.11.0</a>, the <em>stack</em> for an application has been shown in the CLI application info output.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>16:34:39 ~<span class="o">]</span><span class="nv">$ </span>cf app debug-testing
+</span><span class='line'>Showing health and status <span class="k">for </span>app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>requested state: started
+</span><span class='line'>instances: 1/1
+</span><span class='line'>usage: 512M x 1 instances
+</span><span class='line'>urls: debug-testing.mybluemix.net
+</span><span class='line'>last uploaded: Tue Jun 16 15:47:21 UTC 2015
+</span><span class='line'>stack: lucid64
+</span><span class='line'>buildpack: SDK <span class="k">for </span>Node.js<span class="o">(</span>TM<span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'>     state     since                    cpu    memory           disk           details
+</span><span class='line'><span class="c">#0   running   2015-06-30 08:53:57 PM   0.0%   242.5M of 512M   196.8M of 1G</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How can I choose the &#8220;stack&#8221; my application runs on?</h2>
+
+<p>Users can set the <em>stack</em> for an application using the <em>-s</em> command-line parameter during deployment.
+The stack identifier should match one of the names shown in the output from the <em>cf stacks</em> command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -s stack_identifier
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How are the &#8220;stacks&#8221; defined?</h2>
+
+<p>This <a href="https://github.com/cloudfoundry/stacks">Github repository</a> contains the source files for building the <em>stacks</em>. There&#8217;s a
+<a href="https://docs.docker.com/reference/builder/">Dockerfile</a> for the current <a href="https://github.com/cloudfoundry/stacks/blob/master/cflinuxfs2/Dockerfile">cflinuxfs2</a> stack
+to build the image used in Cloud Foundry.</p>
+
+<h2>How can I poke around inside a &#8220;stack&#8221; locally?</h2>
+
+<p>Using Docker, we can easily pull down the same &#8220;base&#8221; operating system used for a specifc &#8220;stack&#8221; and run locally.</p>
+
+<p>For the <em>cflinuxfs2</em> stack, we can pull down the <a href="http://releases.ubuntu.com/14.04/">Ubuntu Trusty</a> image and run a terminal inside it.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull ubuntu:trusty
+</span><span class='line'><span class="nv">$ </span>docker run -i -t ubuntu:trusty /bin/bash
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How can I easily migrate existing applications to a new stack?</h2>
+
+<p>Rather than having to re-deploy each application separately, there&#8217;s a great <a href="http://releases.ubuntu.com/14.04/">CF CLI plugin</a> to automatically migrate all your applications from <em>lucid64</em> to <em>cflinuxfs2</em>.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Making Logs Awesome - Elasticsearch in the Cloud using Docker]]></title>
@@ -4676,84 +4800,6 @@ class.</p>
 <p>Next time, we&#8217;ll be looking at another component of the MVC pattern, Views. Using the TodoMVC application
 as our example, we&#8217;ll show how to define View templates, bind our Model with the View to generate the application&#8217;s HTML and
 ensure user interactions with the todo tasks automatically update the Model.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Overview]]></title>
-    <link href="http://jamesthom.as/blog/2012/01/28/dojomvc_overview/"/>
-    <updated>2012-01-28T21:10:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2012/01/28/dojomvc_overview</id>
-    <content type="html"><![CDATA[<p>Before Christmas, <a href="http://addyosmani.com/blog/">Addy Osmani</a>
-sent out the following
-tweet asking for a Dojo-version of the TodoMVC application.</p>
-
-<blockquote class="twitter-tweet"><p>
-Quick updates: Added ExtJS and MVC-less Todo apps to the current dev version of TodoMVC. Want to get a Dojo version in there before 0.3.
-</p>&mdash; Addy Osmani (@addy_osmani) <a
-href="https://twitter.com/addy_osmani/status/134641372367032321"
-data-datetime="2011-11-10T20:21:07+00:00">November10, 2011</a></blockquote>
-
-
-<script src="http://jamesthom.as//platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p></p>
-
-<p>Reviewing their <a href="https://github.com/addyosmani/todomvc">Github page</a>, the
-project aims to allow developers to compare MVC frameworks by providing
-implementations of a sample Todo application using different toolkit&#8217;s MVC
-support. They currently have over a <a href="http://addyosmani.github.com/todomvc/">dozen entries</a> for toolkits, including
-Backbone, JavascriptMVC and Spine with more coming soon but, unfortunately, no
-entry for The Dojo Toolkit.</p>
-
-<h2>Introducing DojoX MVC</h2>
-
-<p>With the 1.6 release, The Dojo Toolkit introduced a new DojoX module that
-experimented with <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">better MVC support</a>, utilising
-recent features that provide automatic
-<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">widget property</a>
-<a href="http://dojotoolkit.org/features/1.6/widget-watch">monitoring</a>.
-The module goes beyond simple data binding between models and views, including <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Generate.html#dojox-mvc-generate">mapping model attributes to appropriate UI controls</a>, <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">model data validation</a>,
-<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">data store integration</a>
-and others. Further improvements were introduced in the recent 1.7 release of
-The Dojo Toolkit and it is still under active development. For full details on DojoX MVC, see the <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">reference guide</a>.</p>
-
-<p>I&#8217;ve been wanting to play with this module for a while and taking up Addy&#8217;s
-challenge provided an ideal opportunity. With help from <a href="https://github.com/edchat">Ed Chatelain</a> and others,
-we created and refined our entry over the past two months, ready in time for
-the 0.3 release of the project.</p>
-
-<p>Being a new part of the toolkit, there weren&#8217;t many examples of using the module for building
-non-trivial applications. Dojo&#8217;s TodoMVC entry should provide a good starting point for developers who
-want to explore DojoX MVC and compare its approach to other toolkits.</p>
-
-<h2>Walk-through series</h2>
-
-<p>Over the coming weeks, I&#8217;m going to walk-through building of the TodoMVC
-application using DojoX MVC in a series of articles. It will cover defining a
-model with composite attributes, generating views from the model, binding user
-actions to model attributes and using local storage for persisting items
-offline. I&#8217;ll also cover some common issues that developers might encounter
-when using the module.</p>
-
-<p><del>Check back soon for the first part&#8230;.</del></p>
-
-<h3><em>Update (26/05/12)</em></h3>
-
-<p><em>All articles are now available and the links are below&#8230;</em></p>
-
-<ul>
-<li><a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">Part One: Models</a></li>
-<li><a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">Part Two: Views</a></li>
-<li><a href="http://jamesthom.as/blog/2012/05/26/dojomvc-controllers/">Part Three: Controllers</a></li>
-</ul>
-
-
-<h2>Can&#8217;t wait?</h2>
-
-<p>If you want to dive straight in, the finished application is in my <a href="https://github.com/jthomas/todomvc">fork of the TodoMVC project</a>, under the &#8220;todo-example/dojo&#8221; directory.
-The entry&#8217;s <a href="https://github.com/addyosmani/todomvc/pull/54">pull request</a> has a good discussion about issues encountered, re-factoring, enhancements, etc.</p>
 ]]></content>
   </entry>
   

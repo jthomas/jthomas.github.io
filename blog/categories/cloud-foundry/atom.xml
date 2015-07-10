@@ -4,7 +4,7 @@
   <title><![CDATA[Category: cloud foundry | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/cloud-foundry/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-07-08T12:46:26+01:00</updated>
+  <updated>2015-07-10T17:19:48+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,11 +14,112 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Debugging Cloud Foundry Stack Issues]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues/"/>
+    <updated>2015-07-10T15:27:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues</id>
+    <content type="html"><![CDATA[<p>Recent <a href="https://groups.google.com/a/cloudfoundry.org/forum/#!topic/vcap-dev/gU7rpD8MSC4">changes</a> to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of <a href="http://stackoverflow.com/questions/31057357/static-buildpack-deploy-now-failing-due-to-unsupported-stack">issues</a> <a href="http://stackoverflow.com/questions/31085626/fail-to-push-static-site-to-bluemix-using-third-party-buildpack/31089127#31089127">for</a> <a href="http://stackoverflow.com/questions/31268155/bluemix-libstdc-so-6-version-glibcxx-3-4-20-not-found/31288182#31288182">users</a>. I've helped users diagnose and fix issues
+that have occurred due to a mistmatches between the platform stack, applications and the buildpack. Learning a number of techniques for helping to discover and resolve these
+issues and I wanted to share them with everyone else.</p>
+
+<p>Running on Cloud Foundry's <em>Platform-as-a-Service</em> solution, we take for granted that low-level concepts like operating systems are abstracted away from the developer.</p>
+
+<p>However, when we
+run into issues it can be necessary to jump into the weeds and find out what's going on under the hood...</p>
+
+<h2>What are Cloud Foundry "stacks"?</h2>
+
+<p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>...</p>
+
+<p><blockquote><p>A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.</p><footer><strong>Cloud Foundry Concepts</strong> <cite><a href='https://docs.cloudfoundry.org/concepts/stacks.html'>docs.cloudfoundry.org/concepts/&hellip;</a></cite></footer></blockquote></p>
+
+<p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
+environment.</p>
+
+<p>Most users don't have to care which <em>stack</em> they are running on.</p>
+
+<p>However, if your application needs a specific version of a system library or you want to verify a specific command line application is installed, you
+may need to dig deeper...</p>
+
+<h2>What "stacks" does my platform support?</h2>
+
+<p>Using the Cloud Foundry CLI, issue the following command to see what <em>stacks</em> are available on the platform.</p>
+
+<p>``` sh
+[16:27:30 ~]$ cf stacks
+Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>name         description
+lucid64      Ubuntu 10.04
+seDEA        private
+cflinuxfs2   Ubuntu 14.04.2 trusty
+```</p>
+
+<p>Stack information contains the unique name for each stack and the underlying operating system version.</p>
+
+<h2>Which "stack" is my application running on?</h2>
+
+<p>Since <a href="https://github.com/cloudfoundry/cli/releases/tag/v6.11.0">v6.11.0</a>, the <em>stack</em> for an application has been shown in the CLI application info output.</p>
+
+<p>``` sh
+[16:34:39 ~]$ cf app debug-testing
+Showing health and status for app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 512M x 1 instances
+urls: debug-testing.mybluemix.net
+last uploaded: Tue Jun 16 15:47:21 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM)</p>
+
+<pre><code> state     since                    cpu    memory           disk           details
+</code></pre>
+
+<h1>0   running   2015-06-30 08:53:57 PM   0.0%   242.5M of 512M   196.8M of 1G</h1>
+
+<p>```</p>
+
+<h2>How can I choose the "stack" my application runs on?</h2>
+
+<p>Users can set the <em>stack</em> for an application using the <em>-s</em> command-line parameter during deployment.
+The stack identifier should match one of the names shown in the output from the <em>cf stacks</em> command.</p>
+
+<p><code>sh
+$ cf push -s stack_identifier
+</code></p>
+
+<h2>How are the "stacks" defined?</h2>
+
+<p>This <a href="https://github.com/cloudfoundry/stacks">Github repository</a> contains the source files for building the <em>stacks</em>. There's a
+<a href="https://docs.docker.com/reference/builder/">Dockerfile</a> for the current <a href="https://github.com/cloudfoundry/stacks/blob/master/cflinuxfs2/Dockerfile">cflinuxfs2</a> stack
+to build the image used in Cloud Foundry.</p>
+
+<h2>How can I poke around inside a "stack" locally?</h2>
+
+<p>Using Docker, we can easily pull down the same "base" operating system used for a specifc "stack" and run locally.</p>
+
+<p>For the <em>cflinuxfs2</em> stack, we can pull down the <a href="http://releases.ubuntu.com/14.04/">Ubuntu Trusty</a> image and run a terminal inside it.</p>
+
+<p><code>sh
+$ docker pull ubuntu:trusty
+$ docker run -i -t ubuntu:trusty /bin/bash
+</code></p>
+
+<h2>How can I easily migrate existing applications to a new stack?</h2>
+
+<p>Rather than having to re-deploy each application separately, there's a great <a href="http://releases.ubuntu.com/14.04/">CF CLI plugin</a> to automatically migrate all your applications from <em>lucid64</em> to <em>cflinuxfs2</em>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[Making Logs Awesome - Elasticsearch in the Cloud using Docker]]></title>
     <link href="http://jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/"/>
     <updated>2015-07-08T10:34:00+01:00</updated>
     <id>http://jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker</id>
-    <content type="html"><![CDATA[<p>{% img /images/Logs.png %}</p>
+    <content type="html"><![CDATA[<p><img src="/images/Logs.png"></p>
 
 <h3><strong>Logs are boring.</strong></h3>
 
@@ -42,7 +143,7 @@
 
 <h2>Introducing the ELK (Elasticsearch, Logstash, Kibaba) stack...</h2>
 
-<p>{% img https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png %}</p>
+<p><img src="https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png"></p>
 
 <p>Five years ago, <a href="https://www.elastic.co/products/elasticsearch">Elasticsearch</a>, an open-source full-text search engine, was
 released. It's now the second most popular enterprise search engine.
@@ -54,9 +155,7 @@ turning those logs into actionable insights.</p>
 
 <p>These tools were commonly used together, now known as the ELK stack, to deliver...</p>
 
-<p>{% blockquote %}
-"an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source."
-{% endblockquote %}</p>
+<p><blockquote><p>"an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source."</p></blockquote></p>
 
 <h4><strong>ELK, making logs awesome!</strong></h4>
 
@@ -66,17 +165,15 @@ turning those logs into actionable insights.</p>
 
 <h2>Docker </h2>
 
-<p>{%img https://upload.wikimedia.org/wikipedia/commons/7/79/Docker<em>(container_engine)</em>logo.png %}</p>
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/7/79/Docker<em>(container_engine)</em>logo.png"></p>
 
-<p>{% blockquote %}
-"Docker allows you to pack, ship and run any application as a lightweight container".
-{% endblockquote %}</p>
+<p><blockquote><p>"Docker allows you to pack, ship and run any application as a lightweight container".</p></blockquote></p>
 
 <p><a href="https://www.docker.com/">Docker</a> <em>images</em> define pre-configured environments that containers
 are started from.  <a href="https://hub.docker.com/">Docker Hub</a> is the public image registry, where anyone can
 publish, search and retrieve new images.</p>
 
-<p>{%img /images/Docker%20Hub.png %}</p>
+<p><img src="/images/Docker%20Hub.png"></p>
 
 <p>Rather than having to install and configure individual software packages, we
 can pull down one of the many existing Docker images for the <a href="https://registry.hub.docker.com/search?q=elk">ELK stack</a>.</p>
@@ -226,10 +323,7 @@ modifications on top and then generates a brand new image.</p>
 
 <p><strong>So, how do we build our own Docker images? Using a Dockerfile.</strong></p>
 
-<p>{% blockquote %}
-A Dockerfile is a text document that contains all the commands you would
-normally execute manually in order to build a Docker image.<br/>
-{% endblockquote %}</p>
+<p><blockquote><p>A Dockerfile is a text document that contains all the commands you would<br/>normally execute manually in order to build a Docker image.<br/></p></blockquote></p>
 
 <p>Reviewing the <a href="https://registry.hub.docker.com/u/sebp/elk/dockerfile/">Dockerfile</a> for the <em>sebp/elk</em> image, configuration for logstash is
 stored in the <em>/etc/logstash/conf.d/</em> directory. All we need to do is replace these files with our custom configuration.</p>
@@ -400,14 +494,14 @@ In this example, we'll be using the IBM Bluemix UI to start and configure a new 
 <p>Logging into the IBM Bluemix, the <em>Catalogue</em> page shows the list of available images used to create new containers. We have both the official
 images from IBM Containers and our custom ELK service.</p>
 
-<p>{% img /images/Container%20Images.png %}</p>
+<p><img src="/images/Container%20Images.png"></p>
 
 <p>Selecting the <em>ELK</em> image, we can configure and run a new container from this
 image. Setting up a new container with a public IP address,
 memory limit to 1GB and expose the same ports as running locally (5000, 5601
 and 9200).</p>
 
-<p>{% img /images/Create%20Container.png %}</p>
+<p><img src="/images/Create%20Container.png"></p>
 
 <p>Clicking the <em>Create</em> button, IBM Bluemix will provision and start our
 new container.</p>
@@ -415,8 +509,8 @@ new container.</p>
 <p>Once the container has started, we can view the <em>Dashboard</em> page for this instance. Here we can view
 details about the container instance, modify the running state and access monitoring and logs tools.</p>
 
-<p>{% img /images/Container%20Overview.png %}
-{% img /images/Container%20Monitoring.png %}</p>
+<p><img src="/images/Container%20Overview.png">
+<img src="/images/Container%20Monitoring.png"></p>
 
 <p><em>...and that's it! We now have our ELK service running using IBM Containers
 ready to start processing logs from our applications.</em></p>
@@ -445,7 +539,7 @@ $ cf restart [app-name]
 <p>Testing this out is as simple as visiting our application to generate sample logs and then looking at the Kibana page to see they are showing up.
 Here is a screenshot of the expected output when our ELK container is successfully processing logs from a Cloud Foundry application.</p>
 
-<p>{% img /images/Kibana.png %}</p>
+<p><img src="/images/Kibana.png"></p>
 
 <h2>Conclusion</h2>
 
@@ -455,9 +549,7 @@ installing and configuring a multitude of different software packages. Pushing
 this image to the IBM Containers platform means we can spin up new ELK
 containers on-demand within minutes!</p>
 
-<p>{% blockquote %}
-Elasticsearch, Docker and IBM Containers... Making Logs Awesome.
-{% endblockquote %}</p>
+<p><blockquote><p>Elasticsearch, Docker and IBM Containers... Making Logs Awesome.</p></blockquote></p>
 ]]></content>
   </entry>
   
@@ -466,7 +558,7 @@ Elasticsearch, Docker and IBM Containers... Making Logs Awesome.
     <link href="http://jamesthom.as/blog/2015/06/11/continuous-delivery-for-phonebot/"/>
     <updated>2015-06-11T16:08:00+01:00</updated>
     <id>http://jamesthom.as/blog/2015/06/11/continuous-delivery-for-phonebot</id>
-    <content type="html"><![CDATA[<p>{% img /images/Phonebot_Pipeline.png %}</p>
+    <content type="html"><![CDATA[<p><img src="/images/Phonebot_Pipeline.png"></p>
 
 <p>Since creating <a href="http://jamesthom.as/blog/2015/05/29/phonebot/">Phonebot</a> last month,
 I've been working on setting up a fully-automated build and deploy for the project.
@@ -580,25 +672,25 @@ $ cf cups slack_webhooks -p "slackbot-testing"
 <p>We're going to use <a href="http://hub.jazz.net">IBM DevOps Services</a> to build and manage the "Continuous Delivery" pipeline.
 From the home page, click the <em>"Create Project"</em> button to import our existing Github project into the workspace.</p>
 
-<p>{% img /images/create_project.png %}</p>
+<p><img src="/images/create_project.png"></p>
 
 <p>The <em>"Create Project"</em> page allows us to link an existing project from Github to the new project.
 Changes to the external repository will be automatically pushed through to our project.</p>
 
-<p>{% img /images/create_phonebot.png %}</p>
+<p><img src="/images/create_phonebot.png"></p>
 
 <p>Selecting the <em>"Make a Bluemix project"</em> option will automatically configure deploying to the Bluemix platform.</p>
 
-<p>{% img /images/import_phonebot_bm.png %}</p>
+<p><img src="/images/import_phonebot_bm.png"></p>
 
 <p>When the project has finished importing, we can access the "Build and Deploy" pipeline...</p>
 
-<p>{% img /images/build_and_deploy.png %}</p>
+<p><img src="/images/build_and_deploy.png"></p>
 
 <p>... which will currently be empty. Clicking the <em>"Add Stage"</em> button will allow
 us to start configuring the build, test and deploy jobs for our pipeline.</p>
 
-<p>{% img /images/add_stage.png %}</p>
+<p><img src="/images/add_stage.png"></p>
 
 <h3>Running Unit Tests and Code Lint Tools</h3>
 
@@ -609,13 +701,13 @@ to the Phonebot repository on Github.</p>
 of the <a href="https://github.com/jthomas/phonebot.git">https://github.com/jthomas/phonebot.git</a> repository.
 The input for a stage can also be the build artifacts from a previous stage.</p>
 
-<p>{% img /images/unit_test_input.png %}</p>
+<p><img src="/images/unit_test_input.png"></p>
 
 <p>On the <em>"Jobs"</em> tab, we can configure multiple tasks to be executed when triggered by the stage input.
 For the unit tests, we're using a simple shell script to install the project dependencies and run
 the NPM task.</p>
 
-<p>{% img /images/unit_tests.png %}</p>
+<p><img src="/images/unit_tests.png"></p>
 
 <h3>Deploy Test Server</h3>
 
@@ -628,7 +720,7 @@ test configuration for our mock services. Choosing a different application name
 means our test server won't clash with the existing production host already
 deployed.</p>
 
-<p>{% img /images/deploy_test.png %}</p>
+<p><img src="/images/deploy_test.png"></p>
 
 <h3>Running Integration Tests Against Test Server</h3>
 
@@ -639,13 +731,13 @@ integration tests against this host.</p>
 as the unit test stage. Defining a "test" job, we install the project dependencies
 and then run the test harness.</p>
 
-<p>{% img /images/integration_tests.png %}</p>
+<p><img src="/images/integration_tests.png"></p>
 
 <p>Phonebot's integration tests use environment variables to define the test
 and stub server locations. We can define these through the stage setup page, as
 shown below.</p>
 
-<p>{% img /images/environment_props.png %}</p>
+<p><img src="/images/environment_props.png"></p>
 
 <h3>Deploy To Production</h3>
 
@@ -655,14 +747,14 @@ deploy our application into production.</p>
 <p>Configuring a <em>"Deploy"</em> task, this time we use the production space <em>"dev"</em> and use the
 proper application name.</p>
 
-<p>{% img /images/deploy_production.png %}</p>
+<p><img src="/images/deploy_production.png"></p>
 
 <h2>...and that's it!</h2>
 
 <p>With our "Continuous Delivery" pipeline now configured, new versions of
 Phonebot will be automatically deployed to production without any manual work.</p>
 
-<p>{% img /images/deploy_success.png %}</p>
+<p><img src="/images/deploy_success.png"></p>
 
 <p>For testing, each stage can be triggered manually. Logs are available in to diagnose any issues that may occur.</p>
 
@@ -838,9 +930,7 @@ func main() {
 
 <h2>CopyEnv Plugin</h2>
 
-<p>{% blockquote %}
-Cloud Foundry CLI plugin to export application VCAP_SERVICES onto the local machine.
-{% endblockquote %}</p>
+<p><blockquote><p>Cloud Foundry CLI plugin to export application VCAP_SERVICES onto the local machine.</p></blockquote></p>
 
 <p>Applications running on Cloud Foundry rely on the VCAP_SERVICES environment
 variable to provide service credentials.</p>
@@ -965,7 +1055,7 @@ I'm looking forward to seeing what plugins the community comes up with!</strong>
 
 <p>You can see the plugin in action below...</p>
 
-<p>{% img https://dl.dropboxusercontent.com/u/10404736/copyenv.gif %}</p>
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/copyenv.gif"></p>
 ]]></content>
   </entry>
   
@@ -1151,53 +1241,6 @@ applications:
 <p>If you want more information on customising buildpacks, check out the Cloud Foundary <a href="http://docs.cloudfoundry.org/buildpacks/custom.html">documentation</a>.</p>
 
 <p>Source code for the custom buildpack we created is available <a href="https://github.com/jthomas/nodejs-buildpack">here</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Zero Downtime Deployments Using IBM Bluemix]]></title>
-    <link href="http://jamesthom.as/blog/2014/07/22/zero-downtime-deployments-using-bluemix/"/>
-    <updated>2014-07-22T14:42:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2014/07/22/zero-downtime-deployments-using-bluemix</id>
-    <content type="html"><![CDATA[<p>Here's a video I've made showing you how to deploy new versions of an
-application on IBM Bluemix without the end-user having to suffer any down time:</p>
-
-<iframe width="420" height="315" src="http://jamesthom.as//www.youtube.com/embed/yfLi2hLfgSU" frameborder="0" allowfullscreen></iframe>
-
-
-<p>Utilising the <a href="http://martinfowler.com/bliki/BlueGreenDeployment.html">Blue Green deployment pattern</a>, we deploy the
-new version to a separate host within the production environment, rather than
-taking down and updating the existing application. The HTTP router in front of
-the applications controls tunnelling application requests between the different
-versions. Once we verified the new version is working correctly, we can turn
-off the previous version and transfer all traffic to the new instance.</p>
-
-<p><strong>This complex deployment pattern is automatically supported by the Cloud Foundry
-technology underpinning IBM Bluemix</strong>.</p>
-
-<p><em>Staging multiple versions of an application, bound to the same external address, with automatic load balancing is handled transparently by the platform.</em></p>
-
-<p><em>This works for any language or
-runtime without any modifications to your application.</em></p>
-
-<p>There are a few <a href="https://www.ng.%20bluemix.net/docs/#manageapps/index-gentopic3.html#d2e1">different ways</a>
-to achieve this deployment approach using the
-platform. The example in the video only uses three commands
-with the ‘cf’ tool.</p>
-
-<p>```sh
-// Rename the existing application to allow staging a new instance without
-// overwriting existing version.<br/>
-$ cf rename app old_app</p>
-
-<p>// Deploy the updated application, which will be bound to the same external
-// address. HTTP traffic is load balanced between the two versions automatically.
-$ cf push</p>
-
-<p>// Verify the new application is working and then turn off the old instance.
-$ cf stop old_app
-```
-<strong>Amazing!</strong></p>
 ]]></content>
   </entry>
   

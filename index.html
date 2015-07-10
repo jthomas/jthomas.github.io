@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Logs are boring. It used to be the only time you&#8217;d be looking at your application logs was when something went wrong. Logs filled up disk &hellip;">
+  <meta name="description" content="Recent changes to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of issues for users. I&#8217;ve helped users diagnose and &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,157 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/10/debugging-cloud-foundry-stack-issues/">Debugging Cloud Foundry Stack Issues</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-10T15:27:00+01:00" pubdate data-updated="true">Jul 10<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Recent <a href="https://groups.google.com/a/cloudfoundry.org/forum/#!topic/vcap-dev/gU7rpD8MSC4">changes</a> to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of <a href="http://stackoverflow.com/questions/31057357/static-buildpack-deploy-now-failing-due-to-unsupported-stack">issues</a> <a href="http://stackoverflow.com/questions/31085626/fail-to-push-static-site-to-bluemix-using-third-party-buildpack/31089127#31089127">for</a> <a href="http://stackoverflow.com/questions/31268155/bluemix-libstdc-so-6-version-glibcxx-3-4-20-not-found/31288182#31288182">users</a>. I&#8217;ve helped users diagnose and fix issues
+that have occurred due to a mistmatches between the platform stack, applications and the buildpack. Learning a number of techniques for helping to discover and resolve these
+issues and I wanted to share them with everyone else.</p>
+
+<p>Running on Cloud Foundry&#8217;s <em>Platform-as-a-Service</em> solution, we take for granted that low-level concepts like operating systems are abstracted away from the developer.</p>
+
+<p>However, when we
+run into issues it can be necessary to jump into the weeds and find out what&#8217;s going on under the hood&#8230;</p>
+
+<h2>What are Cloud Foundry &#8220;stacks&#8221;?</h2>
+
+<p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>&#8230;</p>
+
+<blockquote><p>A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.</p><footer><strong>Cloud Foundry Concepts</strong> <cite><a href='https://docs.cloudfoundry.org/concepts/stacks.html'>docs.cloudfoundry.org/concepts/&hellip;</a></cite></footer></blockquote>
+
+
+<p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
+environment.</p>
+
+<p>Most users don&#8217;t have to care which <em>stack</em> they are running on.</p>
+
+<p>However, if your application needs a specific version of a system library or you want to verify a specific command line application is installed, you
+may need to dig deeper&#8230;</p>
+
+<h2>What &#8220;stacks&#8221; does my platform support?</h2>
+
+<p>Using the Cloud Foundry CLI, issue the following command to see what <em>stacks</em> are available on the platform.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>16:27:30 ~<span class="o">]</span><span class="nv">$ </span>cf stacks
+</span><span class='line'>Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>name         description
+</span><span class='line'>lucid64      Ubuntu 10.04
+</span><span class='line'>seDEA        private
+</span><span class='line'>cflinuxfs2   Ubuntu 14.04.2 trusty
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Stack information contains the unique name for each stack and the underlying operating system version.</p>
+
+<h2>Which &#8220;stack&#8221; is my application running on?</h2>
+
+<p>Since <a href="https://github.com/cloudfoundry/cli/releases/tag/v6.11.0">v6.11.0</a>, the <em>stack</em> for an application has been shown in the CLI application info output.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>16:34:39 ~<span class="o">]</span><span class="nv">$ </span>cf app debug-testing
+</span><span class='line'>Showing health and status <span class="k">for </span>app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>requested state: started
+</span><span class='line'>instances: 1/1
+</span><span class='line'>usage: 512M x 1 instances
+</span><span class='line'>urls: debug-testing.mybluemix.net
+</span><span class='line'>last uploaded: Tue Jun 16 15:47:21 UTC 2015
+</span><span class='line'>stack: lucid64
+</span><span class='line'>buildpack: SDK <span class="k">for </span>Node.js<span class="o">(</span>TM<span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'>     state     since                    cpu    memory           disk           details
+</span><span class='line'><span class="c">#0   running   2015-06-30 08:53:57 PM   0.0%   242.5M of 512M   196.8M of 1G</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How can I choose the &#8220;stack&#8221; my application runs on?</h2>
+
+<p>Users can set the <em>stack</em> for an application using the <em>-s</em> command-line parameter during deployment.
+The stack identifier should match one of the names shown in the output from the <em>cf stacks</em> command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -s stack_identifier
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How are the &#8220;stacks&#8221; defined?</h2>
+
+<p>This <a href="https://github.com/cloudfoundry/stacks">Github repository</a> contains the source files for building the <em>stacks</em>. There&#8217;s a
+<a href="https://docs.docker.com/reference/builder/">Dockerfile</a> for the current <a href="https://github.com/cloudfoundry/stacks/blob/master/cflinuxfs2/Dockerfile">cflinuxfs2</a> stack
+to build the image used in Cloud Foundry.</p>
+
+<h2>How can I poke around inside a &#8220;stack&#8221; locally?</h2>
+
+<p>Using Docker, we can easily pull down the same &#8220;base&#8221; operating system used for a specifc &#8220;stack&#8221; and run locally.</p>
+
+<p>For the <em>cflinuxfs2</em> stack, we can pull down the <a href="http://releases.ubuntu.com/14.04/">Ubuntu Trusty</a> image and run a terminal inside it.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull ubuntu:trusty
+</span><span class='line'><span class="nv">$ </span>docker run -i -t ubuntu:trusty /bin/bash
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How can I easily migrate existing applications to a new stack?</h2>
+
+<p>Rather than having to re-deploy each application separately, there&#8217;s a great <a href="http://releases.ubuntu.com/14.04/">CF CLI plugin</a> to automatically migrate all your applications from <em>lucid64</em> to <em>cflinuxfs2</em>.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2733,727 +2884,6 @@ It must have taken an enormous amount of effort to pull off a high-quality event
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2013/01/15/server-side-dijit/">Server Side Dijit</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2013-01-15T10:08:00+00:00" pubdate data-updated="true">Jan 15<span>th</span>, 2013</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Modern Dojo applications often use declarative programming, annotating HTML
-elements with custom attributes containing module identifiers, to declare widgets
-and use client-side rendering with HTML templates to convert web pages into
-JavaScript applications.</p>
-
-<p><strong>Client-side rendering often comes with a major complaint, the dreaded
-&#8220;pop-up effect&#8221;.</strong></p>
-
-<p><img src="/images/white_screen.png"></p>
-
-<p>This happens because the HTML initially displayed
-does not contain widget templates until after client-side rendering has
-finished. Essentially, the application has to load twice, once to download all
-the JS, CSS and HTML resources, then again, to render widgets client-side.</p>
-
-<p>Usually this is hidden behind an overlay screen, which becomes especially
-annoying in multi-page applications.</p>
-
-<p><strong>So, what can we do?</strong></p>
-
-<p>Templated widgets provide a good pattern for building re-usable application modules but client-side rendering can
-provide a less ideal user experience.</p>
-
-<p>Reading an article about the <a href="http://anyasq.com/79-im-a-technical-lead-on-the-google+-team">technology stack behind Google+</a>, Google
-were using page widgets with templates supported by the <a href="https://developers.google.com/closure/library/">Closure framework</a>. However, they had
-an interesting idea to overcome the client-side rendering issue&#8230;</p>
-
-<blockquote><p>We often render our Closure templates server-side<br/>so the page renders before any JavaScript is loaded, then the JavaScript finds<br/>the right DOM nodes and hooks up event handlers, etc. to make it responsive.</p><footer><strong>Joseph Smarr</strong> <cite><a href='http://anyasq.com/79-im-a-technical-lead-on-the-google+-team'>anyasq.com/&hellip;</a></cite></footer></blockquote>
-
-
-<p><strong>Could we use the same server-side rendering technique in Dojo applications?</strong></p>
-
-<p>Doing a little investigation, Dojo&#8217;s abstractions around widget rendering made it perfect
-for server-side rendering.</p>
-
-<p><strong>Tl;DR? Project source code is available on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.</strong></p>
-
-<h2>Dijit Widget Lifecycle</h2>
-
-<p>Dojo widgets inherit from the following base class,
-<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetBase.html">dijit/_WidgetBase</a>,
-which provides the widget lifecycle, which can be extended with custom implementations.</p>
-
-<ul>
-<li><strong>constructor</strong></li>
-<li><strong>parameters</strong> are mixed into the widget instance</li>
-<li><strong>postMixInProperties</strong> - Invoked before rendering occurs, and before any DOM nodes are created.</li>
-<li><strong>buildRendering</strong> - Used to define the widget&#8217;s DOM nodes</li>
-<li><strong>setters are called</strong> - Custom attribute setters are called</li>
-<li><strong>postCreate</strong> - Widget has been rendered.</li>
-<li><strong>startup</strong> - Parsing and creation of any child widgets completed.</li>
-</ul>
-
-
-<p>All lifecycle methods are executed in linear order for each new widget instance.
-Having clear abstractions around where and when the widget rendering
-occurs in the lifecycle (buildRendering) makes extending simple.</p>
-
-<p>Rendering widget templates is provided by an additional mixin,
-<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_TemplatedMixin.html">dijit/_TemplatedMixin</a>.</p>
-
-<p>There&#8217;s also a further extension, <a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetsInTemplateMixin.html">dijit/_WidgetsInTemplateMixin</a>,
-for ensuring child widgets within the template are instantiated correctly during rendering.</p>
-
-<p>If we provide a pre-rendered template within the page, the client-side
-renderer will hook up that DOM node as the widget&#8217;s DOM node, using a
-custom lifecycle extension, rather than attempting to construct the HTML
-template client-side.</p>
-
-<p>We only need to modify the <em>buildRendering</em> phase, every
-other lifecycle phase will run normally.</p>
-
-<h2>Rendering Templates Server-Side</h2>
-
-<p>Now we know where to hook up a pre-rendered template, how would we render the templates server-side?</p>
-
-<p>We want to support server-side rendering with only minimal changes to an application.</p>
-
-<h3> Running Dojo on NodeJS</h3>
-
-<p>With the recent popularity of NodeJS, we have an excellent server-side
-JavaScript environment. If we configure Dojo to run within this platform, we
-should be able to construct page widgets server-side, delegating template
-rendering to the same lifecycle used client-side.</p>
-
-<p>This code below shows how to configure Dojo on NodeJS.</p>
-
-<figure class='code'><figcaption><span>Loading Dojo on NodeJS</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">dojoConfig</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">packages</span><span class="o">:</span> <span class="p">[</span>
-</span><span class='line'>        <span class="p">{</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;dojo&quot;</span><span class="p">,</span> <span class="nx">location</span><span class="o">:</span> <span class="s2">&quot;./lib/dojo&quot;</span><span class="p">},</span>
-</span><span class='line'>        <span class="p">{</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;dijit&quot;</span><span class="p">,</span> <span class="nx">location</span><span class="o">:</span> <span class="s2">&quot;./lib/dijit&quot;</span><span class="p">}</span>
-</span><span class='line'>    <span class="p">],</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;./lib/dojo/dojo.js&quot;</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once we&#8217;ve evaluated the dojo.js file within NodeJS, the AMD loader (<em>require/define</em>) is available through properties on the
-<em>global</em> object. We can use these functions to load additional DTK or custom AMD modules. Accessing
-page widgets using the AMD loader, we can execute the lifecycle methods to trigger template rendering, read the
-rendered template and include the output within the application&#8217;s HTML pages.</p>
-
-<p><strong>Unfortunately, there&#8217;s one thing missing&#8230; access to the DOM!</strong></p>
-
-<h3>Simulating a Browser </h3>
-
-<p>Dojo widgets need access to the <a href="http://en.wikipedia.org/wiki/Document_Object_Model">DOM</a> when rendering the static HTML template into live DOM nodes.
-Running inside a NodeJS instance, rather than a browser, this API is missing.</p>
-
-<p>Luckily, there&#8217;s a pure-JavaScript implementation of a DOM, which can be executed within NodeJS, called <a href="https://github.com/tmpvar/jsdom">JSDOM</a>.</p>
-
-<p>Importing this package within our application simulates those APIs, allowing page widgets to render normally and, more importantly, letting
-us access the live DOM nodes which result from widget rendering.</p>
-
-<p>Finally, creating Dojo widgets within our fake browser environment triggered a
-few issues, due to the configuration used with the NodeJS loader.</p>
-
-<p>The code snippet below shows how we initialise a server-side DOM and fix those configuration issues.</p>
-
-<figure class='code'><figcaption><span>Server-Side DOM with Dojo</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">jsdom</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;jsdom&quot;</span><span class="p">).</span><span class="nx">jsdom</span><span class="p">,</span>
-</span><span class='line'>    <span class="nb">document</span> <span class="o">=</span> <span class="nx">jsdom</span><span class="p">(</span><span class="s2">&quot;&lt;html&gt;&lt;/html&gt;&quot;</span><span class="p">),</span>
-</span><span class='line'>    <span class="nb">window</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createWindow</span><span class="p">();</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">var</span> <span class="nx">has</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/has&quot;</span><span class="p">),</span>
-</span><span class='line'>    <span class="nx">win</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/_base/window&quot;</span><span class="p">),</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Manually add event listener test as this was only included in </span>
-</span><span class='line'><span class="c1">// the &quot;host-browser&quot; profile.</span>
-</span><span class='line'><span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-addeventlistener&quot;</span><span class="p">,</span> <span class="o">!!</span><span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">);</span>
-</span><span class='line'><span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-attributes-explicit&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Fix global property to point to &quot;window&quot; </span>
-</span><span class='line'><span class="nx">win</span><span class="p">.</span><span class="nx">global</span> <span class="o">=</span> <span class="nb">window</span><span class="p">;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Now we can successfully create widgets on the server-side, how do we know which
-widgets to create for an application?</em></p>
-
-<h3>Declarative Dojo Applications</h3>
-
-<p>Dojo provides a mechanism to convert HTML elements, annotated with module identifiers, into page widgets at runtime.</p>
-
-<p>Using the <a href="http://dojotoolkit.org/reference-guide/1.8/dojo/parser.html">dojo/parser</a>
-module, once the page has loaded, it will automatically instantiate the widgets, passing in
-parameters and other attributes defined in the markup.</p>
-
-<p>An example of declarative widget declaration is shown below.</p>
-
-<figure class='code'><figcaption><span>Declarative widgets</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;select</span> <span class="na">name=</span><span class="s">&quot;state&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit/form/Select&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;TN&quot;</span><span class="nt">&gt;</span>Tennessee<span class="nt">&lt;/option&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;VA&quot;</span> <span class="na">selected=</span><span class="s">&quot;selected&quot;</span><span class="nt">&gt;</span>Virginia<span class="nt">&lt;/option&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;WA&quot;</span><span class="nt">&gt;</span>Washington<span class="nt">&lt;/option&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;FL&quot;</span><span class="nt">&gt;</span>Florida<span class="nt">&lt;/option&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;CA&quot;</span><span class="nt">&gt;</span>California<span class="nt">&lt;/option&gt;</span>
-</span><span class='line'><span class="nt">&lt;/select&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Application pages using declarative markup can easily be scanned to find application widgets that are needed. As we&#8217;re able to
-run AMD modules server-side, we can simply use the existing Dojo parser with our server-side DOM to do the hard work for us!</p>
-
-<h3>Server-side Parsing</h3>
-
-<p>For a sample page we want to pre-render, we inject the HTML source into our DOM and run the parser over the current instance. Once the parser
-has finished, the server-side DOM will contain the rendered templates for each widget.</p>
-
-<figure class='code'><figcaption><span>Using dojo/parser with JSDOM</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">parser</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/parser&quot;</span><span class="p">),</span>
-</span><span class='line'>    <span class="nx">source</span> <span class="o">=</span> <span class="s2">&quot;... page html goes here ...&quot;</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Overwrite finished document contents</span>
-</span><span class='line'><span class="c1">// with new source and run parser over the DOM.</span>
-</span><span class='line'><span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">source</span><span class="p">);</span>
-</span><span class='line'><span class="nx">parser</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nb">document</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">source</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">innerHTML</span><span class="p">;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using JSDOM like this, script tags within the page aren&#8217;t evaluated, letting us handle the module loading
-and parsing externally in NodeJS.</p>
-
-<p>However, this presented a challenge as module dependencies declared in these
-script tags were ignored, leaving the parser to instantiate declarative widgets from modules which hadn&#8217;t been loaded.</p>
-
-<p><em>Luckily, in the Dojo 1.8 release, the parser was enhanced to automatically load any missing module dependencies during the parsing phase.
-Phew&#8230;</em></p>
-
-<p>Finally, once a widget&#8217;s template has been rendered, any other operations
-performed by the parser are unnecessary.  Creating a &#8220;lite&#8221; parser which
-removed these code paths, which also provided a place for the extensions
-described later, was started from a copy of the existing parser.</p>
-
-<p>Using the AMD &#8220;aliases&#8221; configuration, this module transparently replaced the existing parser during server-side rendering.</p>
-
-<h3>Mixins For Pre-Rendering</h3>
-
-<p>Rendering widgets server-side, using NodeJS and JSDOM, works for simple widgets but what happens when you use
-layout widgets, which rely on accessing the browser&#8217;s layout properties? What if you have separate code paths for different browsers
-which affect the template string?</p>
-
-<p>There are numerous scenarios where we rely on data that&#8217;s impractical to simulate
-within our fake browser.</p>
-
-<p><em>So, how do we pre-render these widgets? We don&#8217;t!</em></p>
-
-<p>Ignoring these widgets, which leaves them to render normally client-side.</p>
-
-<p>Identifying widgets to render server-side takes advantage of a new declarative
-parameter used by the parser since 1.8, <em>data-dojo-mixins</em>. This parameter
-allows additional modules to be mixed into the declarative class instance by
-the parser.</p>
-
-<p>Using this parameter with a custom module,
-<em>server_side/_TemplatedMixin</em>, on widgets to be pre-rendered, as shown below,
-make identification easy. Additionally, this class
-will contain the lifecycle extensions that modifies client-side rendering.</p>
-
-<figure class='code'><figcaption><span>Custom Declarative Mixins </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit/CalendarLite&quot;</span> <span class="na">data-dojo-mixins=</span><span class="s">&quot;server_side/_TemplatedMixin&quot;</span><span class="nt">&gt;&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Automating Rendering</h3>
-
-<p><strong>Now we&#8217;ve identified the mechanism for server-side rendering, how can we automate this process
-for all application pages?</strong></p>
-
-<p><a href="https://github.com/senchalabs/connect">Connect</a> is <em>&#8220;an extensible HTTP server framework for
-node, providing high performance plugins known as middleware&#8221;</em>.</p>
-
-<p>Using this framework as our HTTP server means we can write a custom middleware plugin
-that will automatically parse, pre-render and serve all our application pages.</p>
-
-<p>Connect plugins are functions that accept three parameters, the request and
-response objects, along with a callback to signal this plugin&#8217;s work has
-finished. Each registered plugin will be executed for each request.</p>
-
-<p>We&#8217;ve decomposed the library into two files, server_side.js, which exposes a
-valid express plugin, and render.js, which provides a simple interface for the
-server-side rendering, described above. The complete version of the code for both modules is included below.</p>
-
-<figure class='code'><figcaption><span>server_side.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">render</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;./render.js&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">config</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="c1">// Create AMD packages from module configuration.</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">page</span> <span class="o">=</span> <span class="nx">render</span><span class="p">({</span>
-</span><span class='line'>        <span class="nx">dojo</span><span class="o">:</span> <span class="nx">config</span><span class="p">.</span><span class="nx">dojo</span> <span class="o">+</span> <span class="s2">&quot;/dojo&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nx">dijit</span><span class="o">:</span> <span class="nx">config</span><span class="p">.</span><span class="nx">dojo</span> <span class="o">+</span> <span class="s2">&quot;/dijit&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nx">server_side</span><span class="o">:</span> <span class="nx">__dirname</span> <span class="o">+</span> <span class="s2">&quot;/../public/js/server_side&quot;</span>
-</span><span class='line'>    <span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">return</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="kd">var</span> <span class="nx">ignore</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">accept</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>            <span class="k">return</span> <span class="nx">accept</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">(</span><span class="s2">&quot;text/html&quot;</span><span class="p">)</span> <span class="o">===</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
-</span><span class='line'>        <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="c1">// Only hook into text/html requests....</span>
-</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="nx">ignore</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">headers</span><span class="p">.</span><span class="nx">accept</span><span class="p">))</span> <span class="p">{</span>
-</span><span class='line'>            <span class="k">return</span> <span class="nx">next</span><span class="p">();</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="kd">var</span> <span class="nx">write</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">write</span><span class="p">,</span>
-</span><span class='line'>            <span class="nx">end</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">end</span><span class="p">,</span>
-</span><span class='line'>            <span class="nx">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="c1">// We need entire page contents, not just the chunks.</span>
-</span><span class='line'>        <span class="c1">// Proxy original methods while we&#39;re buffering.</span>
-</span><span class='line'>        <span class="nx">res</span><span class="p">.</span><span class="nx">write</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">chunk</span><span class="p">,</span> <span class="nx">encoding</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>            <span class="nx">buffer</span> <span class="o">=</span> <span class="nx">buffer</span><span class="p">.</span><span class="nx">concat</span><span class="p">(</span><span class="nx">chunk</span><span class="p">);</span>
-</span><span class='line'>            <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
-</span><span class='line'>        <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="nx">res</span><span class="p">.</span><span class="nx">end</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">chunk</span><span class="p">,</span> <span class="nx">encoding</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>            <span class="k">if</span> <span class="p">(</span><span class="nx">chunk</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>                <span class="nx">res</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">chunk</span><span class="p">);</span>
-</span><span class='line'>            <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>            <span class="c1">// Fix content-length, we now have more data to send.</span>
-</span><span class='line'>            <span class="kd">var</span> <span class="nx">rendered</span> <span class="o">=</span> <span class="nx">page</span><span class="p">(</span><span class="nx">buffer</span><span class="p">);</span>
-</span><span class='line'>            <span class="nx">res</span><span class="p">.</span><span class="nx">setHeader</span><span class="p">(</span><span class="s2">&quot;Content-Length&quot;</span><span class="p">,</span> <span class="nx">rendered</span><span class="p">.</span><span class="nx">length</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>            <span class="k">return</span> <span class="nx">end</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">res</span><span class="p">,</span> <span class="nx">rendered</span><span class="p">,</span> <span class="nx">encoding</span><span class="p">);</span>
-</span><span class='line'>        <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="nx">next</span><span class="p">();</span>
-</span><span class='line'>    <span class="p">};</span>
-</span><span class='line'><span class="p">};</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><figcaption><span>render.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-<span class='line-number'>49</span>
-<span class='line-number'>50</span>
-<span class='line-number'>51</span>
-<span class='line-number'>52</span>
-<span class='line-number'>53</span>
-<span class='line-number'>54</span>
-<span class='line-number'>55</span>
-<span class='line-number'>56</span>
-<span class='line-number'>57</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">jsdom</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;jsdom&quot;</span><span class="p">).</span><span class="nx">jsdom</span><span class="p">,</span>
-</span><span class='line'>    <span class="nb">document</span> <span class="o">=</span> <span class="nx">jsdom</span><span class="p">(</span><span class="s2">&quot;&lt;html&gt;&lt;/html&gt;&quot;</span><span class="p">),</span>
-</span><span class='line'>    <span class="nb">window</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createWindow</span><span class="p">();</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">packages</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="c1">// Fix window objects in global scope.</span>
-</span><span class='line'>    <span class="nx">global</span><span class="p">.</span><span class="nb">document</span> <span class="o">=</span> <span class="nb">document</span><span class="p">;</span>
-</span><span class='line'>    <span class="nx">global</span><span class="p">.</span><span class="nx">navigator</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nx">navigator</span><span class="p">;</span>
-</span><span class='line'>    <span class="nx">global</span><span class="p">.</span><span class="nb">window</span> <span class="o">=</span> <span class="nb">window</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">amd_packages</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">packages</span><span class="p">).</span><span class="nx">map</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">return</span> <span class="p">{</span> <span class="nx">name</span><span class="o">:</span> <span class="nx">key</span><span class="p">,</span> <span class="nx">location</span><span class="o">:</span> <span class="nx">packages</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="p">};</span>
-</span><span class='line'>    <span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Deliberately create global &quot;dojoConfig&quot; variable.</span>
-</span><span class='line'>    <span class="nx">dojoConfig</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nx">packages</span><span class="o">:</span> <span class="nx">amd_packages</span><span class="p">,</span>
-</span><span class='line'>        <span class="c1">// _WidgetsInTemplateMixin call parser directly to instantiate children. </span>
-</span><span class='line'>        <span class="c1">// We need it to use our custom parser so use AMD-remapping magic!</span>
-</span><span class='line'>        <span class="nx">aliases</span><span class="o">:</span> <span class="p">[[</span><span class="s2">&quot;dojo/parser&quot;</span><span class="p">,</span> <span class="s2">&quot;server_side/parser&quot;</span><span class="p">]],</span>
-</span><span class='line'>        <span class="nx">deps</span><span class="o">:</span> <span class="p">[</span><span class="s2">&quot;server_side/parser&quot;</span><span class="p">,</span> <span class="s2">&quot;dojo/has&quot;</span><span class="p">,</span> <span class="s2">&quot;dojo/_base/window&quot;</span><span class="p">,</span> <span class="s2">&quot;server_side/registry&quot;</span><span class="p">]</span>
-</span><span class='line'>    <span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">require</span><span class="p">(</span><span class="nx">packages</span><span class="p">.</span><span class="nx">dojo</span> <span class="o">+</span> <span class="s2">&quot;/dojo.js&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Once Dojo has been evalulated, require &amp; define methods </span>
-</span><span class='line'>    <span class="c1">// from AMD API as exposed as properties on &quot;global&quot; object.</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">has</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/has&quot;</span><span class="p">),</span>
-</span><span class='line'>        <span class="nx">win</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/_base/window&quot;</span><span class="p">),</span>
-</span><span class='line'>        <span class="nx">registry</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;server_side/registry&quot;</span><span class="p">),</span>
-</span><span class='line'>        <span class="nx">parser</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;server_side/parser&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Now we need to manually fix a few things to make Dojo </span>
-</span><span class='line'>    <span class="c1">// simulate running in a browser.</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Manually add event listener test as this was only included in </span>
-</span><span class='line'>    <span class="c1">// the &quot;host-browser&quot; profile.</span>
-</span><span class='line'>    <span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-addeventlistener&quot;</span><span class="p">,</span> <span class="o">!!</span><span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">);</span>
-</span><span class='line'>    <span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-attributes-explicit&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Fix global property to point to &quot;window&quot; </span>
-</span><span class='line'>    <span class="nx">win</span><span class="p">.</span><span class="nx">global</span> <span class="o">=</span> <span class="nb">window</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">return</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">source</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="c1">// Clear any previously rendered widgets from registry,</span>
-</span><span class='line'>        <span class="c1">// simulate fresh page load.</span>
-</span><span class='line'>        <span class="nx">registry</span><span class="p">.</span><span class="nx">reset</span><span class="p">();</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="c1">// Overwrite finished document contents</span>
-</span><span class='line'>        <span class="c1">// with new source and run parser over the DOM.</span>
-</span><span class='line'>        <span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">source</span><span class="p">);</span>
-</span><span class='line'>        <span class="nx">parser</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nb">document</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="k">return</span> <span class="nb">document</span><span class="p">.</span><span class="nx">innerHTML</span><span class="p">;</span>
-</span><span class='line'>    <span class="p">};</span>
-</span><span class='line'><span class="p">};</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using this new plugin in an application is demonstrated in the code below, which
-serves the &#8220;public&#8221; directory as the application&#8217;s source root.</p>
-
-<figure class='code'><figcaption><span>Server-side Rendering Application </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">connect</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">),</span>
-</span><span class='line'>    <span class="nx">server_side</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;../lib/server_side&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">var</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">connect</span><span class="p">()</span>
-</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">connect</span><span class="p">.</span><span class="nx">directory</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s1">&#39;/public&#39;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">icons</span><span class="o">:</span> <span class="kc">true</span> <span class="p">}))</span>
-</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">server_side</span><span class="p">({</span><span class="nx">dojo</span><span class="o">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">DOJO_SOURCE</span><span class="p">}))</span>
-</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s2">&quot;/dojo&quot;</span><span class="p">,</span> <span class="nx">connect</span><span class="p">.</span><span class="kr">static</span><span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">DOJO_SOURCE</span><span class="p">))</span>
-</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s2">&quot;/server_side&quot;</span><span class="p">,</span> <span class="nx">connect</span><span class="p">.</span><span class="kr">static</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s1">&#39;/../public/js/server_side&#39;</span><span class="p">))</span>
-</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">connect</span><span class="p">.</span><span class="kr">static</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s1">&#39;/public&#39;</span><span class="p">))</span>
-</span><span class='line'>  <span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="mi">3000</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<h2>Using Server-Side Rendered Templates</h2>
-
-<p>Once the pre-rendered page has been returned to the browser, the normal client-side
-parsing will take place to instantiate the page widgets. For widgets whose templates are
-included within the page, we need to ensure the normal client-side rendering is bypassed.</p>
-
-<p>In this scenario, we connect the widget&#8217;s <em>domNode</em> property to the DOM node that the
-declarative widget was instantiated from.</p>
-
-<h3>Extending buildRendering</h3>
-
-<p>Adding a HTML template to your widget is achieved by inheriting from
-<em>dijit/_TemplatedMixin</em>, which provides the &#8220;buildRendering&#8221; implementation to
-convert a HTML string stored under &#8220;templateString&#8221; into live DOM nodes.</p>
-
-<p>Although we want to skip creating DOM nodes from the template, there are other steps, e.g. attaching event handlers, which must be ran normally.
-Using a custom mixin to identify declarative widgets for server-side rendering, <em>server_side/_TemplatedMixin</em>, also provides
-the extension point to modify the rendering process.</p>
-
-<p>Overwriting the default implementation of &#8220;buildRendering&#8221; through this mixin led
-to unresolvable issues.</p>
-
-<p>We&#8217;re forced to call any super-class &#8220;buildRendering&#8221; implementations, through
-&#8220;this.inherited(arguments)&#8221;, to ensure any custom code paths that also extend this method are executed.
-However, this will reach the original <em>dijit/_TemplatedMixin</em> module, which we need to skip.</p>
-
-<p>Monkey-patching the _TemplatedMixin prototype became the easiest solution.</p>
-
-<p>Once our custom mixin is loaded,
-we overwrite &#8220;buildRendering&#8221; which a new implementation. Using a custom flag, provided by our mixin, we check
-whether to continue with the normal code path for client-side rendering, otherwise we run our stripped down version.</p>
-
-<figure class='code'><figcaption><span>Monkey-patching _TemplatedMixin</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">br</span> <span class="o">=</span> <span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">buildRendering</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">fc</span> <span class="o">=</span> <span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">_fillContent</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Stripped down of the original function source below.</span>
-</span><span class='line'><span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">buildRendering</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">serverSide</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">return</span> <span class="nx">br</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="k">this</span><span class="p">);</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Source DOM node already the pre-rendered template nodes.</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">node</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">srcNodeRef</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">node</span><span class="p">.</span><span class="nx">removeAttribute</span><span class="p">(</span><span class="s2">&quot;data-dojo-type&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Call down to _Widget.buildRendering() to get base classes assigned</span>
-</span><span class='line'>    <span class="nx">_WidgetBase</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">buildRendering</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="k">this</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">_attachTemplateNodes</span><span class="p">(</span><span class="nx">node</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">n</span><span class="p">,</span><span class="nx">p</span><span class="p">){</span> <span class="k">return</span> <span class="nx">n</span><span class="p">.</span><span class="nx">getAttribute</span><span class="p">(</span><span class="nx">p</span><span class="p">);</span> <span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">_beforeFillContent</span><span class="p">();</span>       <span class="c1">// hook for _WidgetsInTemplateMixin</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="c1">// Don&#39;t pass srcRefNode reference as it doesn&#39;t exist.</span>
-</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">_fillContent</span><span class="p">();</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// Override to turn into a no-op, we don&#39;t want to attach source</span>
-</span><span class='line'><span class="c1">// ref nodes client side as it&#39;s been done on the server.</span>
-</span><span class='line'><span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">_fillContent</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">serverSide</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">return</span> <span class="nx">fc</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'><span class="p">};</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We performed the same trick for the <em>fillContent</em> method due to similar issues, along with a new implementation
-of <em>attachTemplateNodes</em> in the mixin.</p>
-
-<p>With this minimal change to the client-side rendering process, widgets pick up their templates from the existing page and are
-instantiated normally. Hooking up template nodes as properties on the parent, attaching event handlers and setting data bindings
-behaves as expected.</p>
-
-<h3>Putting It Together</h3>
-
-<p><strong>Using our custom middleware for server-side rendering, along with our client-side rendering modifications,
-users accessing pages will see the templated widgets straight away, removing the &#8220;double-rendering&#8221; effect
-and the need for loading screens.</strong></p>
-
-<p><img src="/images/pre_rendered.png"></p>
-
-<p><em>This image above the same widgets rendered client-side and server-side when the page loads, but before
-client-side rendering has finished.</em></p>
-
-<p>Server-side rendering also comes with client-side performance benefits,
-reducing the number of costly DOM operations performed during application loading.
-This may be especially useful for low-power devices with mobile browsers.</p>
-
-<p>Extending, rather than replacing, the normal Dojo rendering lifecycle allows us to transparently delegate rendering
-to the client-side for unsupported widgets. Excellent abstractions already provided for the lifecycle in the toolkit make
-the extension conceptually simple.</p>
-
-<p>There are restrictions that come with this implementation, discussed below, but working within these
-constraints it is possible for the majority of templated widgets to be rendered server-side.</p>
-
-<h2>Source Code</h2>
-
-<p>All source code for the project lives on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.
-Feel free to file issues, patches and comments at the project home page.</p>
-
-<p>Once you have checked out the project code, run the following command to
-start a test application comparing client-side and server-side rendering side
-by side.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">export </span><span class="nv">DOJO_SOURCE</span><span class="o">=</span>/path/to/dojo-release-1.8.0-src
-</span><span class='line'><span class="nv">$ </span>npm start
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once the server has started, visit <a href="http://localhost:3000">http://localhost:3000</a>.</p>
-
-<p>You can also install the module as an NPM package, <a href="https://npmjs.org/package/server_side_dijit">server_side_dijit</a>,
-and use the plugin within your existing Connect application.</p>
-
-<h2>Issues</h2>
-
-<p>We&#8217;ve already mentioned potential pitfalls which restrict server-side
-rendering. These include widgets that use browser dimensions to dynamically
-calculate sizing e.g. layout managers, use client-side resources to construct
-templates e.g. reading cookie data, expect access to remote resources e.g
-XHR&#8217;ing session details, and many, many more.</p>
-
-<p>Letting those widgets default to client-side template rendering provides a safe fallback.</p>
-
-<p>Discovering which existing Dojo widgets can support server-side rendering requires manual
-testing. Within the project directory, under the &#8220;/test/public&#8221; location, we&#8217;ve started
-collecting test pages which demonstrate those widgets which are known to work. Looking at those
-pages should provide a good indication of the current level of support.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -3469,6 +2899,10 @@ pages should provide a good indication of the current level of support.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2015/07/10/debugging-cloud-foundry-stack-issues/">Debugging Cloud Foundry Stack Issues</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">Making Logs Awesome - Elasticsearch in the Cloud using Docker</a>
       </li>
     
@@ -3482,10 +2916,6 @@ pages should provide a good indication of the current level of support.</p>
     
       <li class="post">
         <a href="/blog/2015/04/22/ibm-watson-nodes-for-nodered/">IBM Watson Nodes For Node-RED</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/04/16/creating-cf-cli-plugins/">Creating CF CLI Plugins</a>
       </li>
     
   </ul>
