@@ -4,7 +4,7 @@
   <title><![CDATA[Category: javascript | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/javascript/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-07-15T16:41:08+01:00</updated>
+  <updated>2015-07-16T16:03:45+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,163 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[GeoPix Live Photos]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/16/geopix-live-photos/"/>
+    <updated>2015-07-16T13:26:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/16/geopix-live-photos</id>
+    <content type="html"><![CDATA[<p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+<p><blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.</p></p><p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote></p>
+
+<p>I've been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement...</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features...</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: "now"</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<p>``` javascript
+Cloudant({account:credentials.username, password:credentials.password}, function(err, cloudant) {</p>
+
+<pre><code>var geopix = cloudant.use(database);
+var feed = geopix.follow({include_docs: true, since: "now"});
+
+feed.on('change', function (change) {
+  // ....we can now send this data to the web pages
+});
+
+feed.follow();
+</code></pre>
+
+<p>})
+```</p>
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>...</p>
+
+<p><blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote></p>
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<p>``` javascript
+var express = require('express');
+var app = express();
+var server = require('http').Server(app);
+var io = require('socket.io')(server);</p>
+
+<p>// ...snipped out the app routes for express</p>
+
+<p>io.on('connection', function (socket) {</p>
+
+<pre><code>console.log('New Client WSS Connection.')
+</code></pre>
+
+<p>});</p>
+
+<p>var port = (process.env.VCAP_APP_PORT || 3000);
+server.listen(port);
+```</p>
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<p>``` javascript
+feed.on('change', function (change) {</p>
+
+<pre><code>io.sockets.emit('image', change);
+</code></pre>
+
+<p>});
+```</p>
+
+<p><strong>Now we're sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we've included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We're sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<p>``` javascript
+var socket = io(); // TIP: io() with no args does auto-discovery
+socket.on('connect', function () {</p>
+
+<pre><code>console.log('WSS Connected');
+
+socket.on('image', function (image) { // TIP: you can avoid listening on `connect` and listen on events directly too!
+    var attachment = Object.keys(image.doc._attachments)[0]
+    var url = "/image/" + image.doc._id + "/" + attachment;
+    add_new_image(url, image.doc.clientDate, 'latitude: '
+        + image.doc.latitude + ', longitude: '
+        + image.doc.longitude + ', altitude: '
+        + image.doc.altitude);
+});
+</code></pre>
+
+<p>});
+```</p>
+
+<p>...and that's it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB's <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Server Side Dijit]]></title>
@@ -1125,196 +1282,6 @@ thread <a href="http://grokbase.com/t/dojo/dojo-contributors/127q9sm80w/nano-bui
 <p>This investigation was founded upon previous work by other dojo contributors.
 Thanks to <a href="https://twitter.com/blowery">Ben Lowery</a>, <a href="https://twitter.com/kitsonk">Kitson Kelly</a> and <a href="https://github.com/rcgill/">Rawld Gill</a> for their
 initial efforts and helping me out with questions.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Part 3: Controllers]]></title>
-    <link href="http://jamesthom.as/blog/2012/05/26/dojomvc-controllers/"/>
-    <updated>2012-05-26T00:00:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2012/05/26/dojomvc-controllers</id>
-    <content type="html"><![CDATA[<p>In the final article of this series, we'll be looking at creating an MVC Controller for our sample todo
-application.</p>
-
-<p>We've already shown how to <a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">define our application model</a>,
-creating a domain-specific todo model
-backed by localStorage, along with <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">our view template</a>,
-using widget templating to render our tasks into the page.</p>
-
-<p><blockquote><p>The controller translates user input into operations on the model.</p><footer><strong>Model View Controller Pattern</strong> <cite><a href='http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller'>Wikipedia</a></cite></footer></blockquote></p>
-
-<p>For our application, we need to handle the user actions to allow adding, removing and completing tasks. We already have a binding between a task's completed state
-and our View, using the <a href="https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/form/CheckBox.js">todo.form.CheckBox</a>, allowing changes to flow back to the model without explicitly needing logic in the controller.</p>
-
-<p>Let's look more closely at the remaining tasks...</p>
-
-<h2>Adding Tasks</h2>
-
-<p>The View template, discussed in the <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">second article</a>,
-renders the HTML elements needed to allow the user to any new tasks. Once a user has finished
-typing in their new task, signalled by pressing the enter key, we need to retrieve their text and add it to the model.</p>
-
-<p>Using Dojo's <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html#dijit-templatedmixin">declarative programming model</a>,
-the View template includes the custom element attribute needed to connect the "onkeypress" DOM event to an event handler within our controller. When our
-widget is rendered in the page, by the Dojo parser, those connections are created automatically.</p>
-
-<p><code>html Declarative event handling https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.html#L4 Source Link
-&lt;input id="new-todo" data-dojo-attach-event="onkeypress:onKeyPress"
- placeholder="What needs to be done?" type="text" autofocus&gt;
-</code></p>
-
-<p>Inside our controller, each time an event is fired, the following function is executed:</p>
-
-<p>``` javascript Controller event handler https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150 Source Link
-onKeyPress: function (event) {</p>
-
-<pre><code>if (event.keyCode !== keys.ENTER) return;
-
-this.addToModel(event.target.value, false);
-event.target.value = "";
-dojo_event.stop(event);
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Unless the user has pressed the enter key, we ignore the normal user input event. Once this happens, we extract the new
-task text from the event argument and call the following convenience function to create the new task in the model.</p>
-
-<p>``` javascript New model task https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150 Source Link
-addToModel: function (content, isDone) {</p>
-
-<pre><code>var insert = mvc.newStatefulModel({
-    data: {todo_text: content, isDone: isDone}
-});
-
-this.model.todos.add(this.model.todos.length, insert);
-</code></pre>
-
-<p>}
-```</p>
-
-<p>This function creates a new Model node, containing the task text and its
-completed state, adding the result to the list of tasks. When inserting new
-entries into the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/StatefulModel.html">DojoX MVC Model</a> array, the insertion position must be
-specified explicitly. By using the current length of the list as the position,
-we always add new items at the end.</p>
-
-<p>Once the model has been modified, the View will automatically update to display the new item. We don't need to manually
-update the rendered HTML template or even trigger re-loading of the View. By using widgets from the DojoX MVC package, changes to
-the Model are always reflected in our View in real-time.</p>
-
-<h2>Removing Tasks</h2>
-
-<p>Removing tasks begins with the user clicking the destroy icon, displayed on the right-hand side of each task. Once this happens, the Controller
-needs to trap the event, figure out which task to remove and update the Model. As the tasks' list
-can be updated during the application, having an individual event connection for each task would require handling the setting up and tearing down
-every time the list changed.</p>
-
-<p>Instead, we can use "Event Delegation", introduced by the new Dojo event module, <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/on.html">dojo/on</a>,
-to listen for any remove events with a single connection.</p>
-
-<p>Once the widget has been rendered, signalled by the <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html#lifecycle">"postCreate"</a>
-function being called, we start listening for all click events on the destroy icons. Any events captured are passed through to our event hander, "onRemove", to delete the associated task from the Model.</p>
-
-<p>``` javascript Event Delegation https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L61-64 Source Link
-postCreate: function () {</p>
-
-<pre><code>on(this.domNode, ".destroy:click", lang.hitch(this, "onRemove"));
-this.onItemStatusUpdate();
-</code></pre>
-
-<p>},</p>
-
-<p>onRemove: function (event) {</p>
-
-<pre><code>this.model.todos.remove(domAttr.get(event.target, "data-model-id"));
-</code></pre>
-
-<p>}
-```</p>
-
-<p>With one event handler for all the remove events, the Controller won't directly know which task within the Model the user
-has chosen to remove. To overcome this, the repeating View template for the task uses a HTML5 data attribute to store the unique task index
-on the rendered DOM element for the remove icon.</p>
-
-<p>During rendering of a <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">DojoX MVC Repeat widget</a>,
-the "index" attribute on the instance refers to the current
-position within the bound list. This index value can then easily be retrieved from the event generated and used to remove the correct task from the Model.</p>
-
-<p><code>html
-&lt;button class="destroy" data-model-id="#{this.index}"&gt;
-&lt;/button&gt;
-</code></p>
-
-<p>Once again, when the Model is changed, the View automatically updates. There's no action needed from the Controller in modifying the rendering HTML template.</p>
-
-<h2>Clearing Completed Tasks</h2>
-
-<p>Once a user has completed a series of tasks, they will eventually want to remove them. Rather than having to
-remove each task individually, the application provides the ability to clear all completed tasks from the list.</p>
-
-<p>Again, we've used declarative programming in the View template to connect our event hander, removeCompletedItems, to the DOM event
-triggered when the user clicks the "Clear Completed" button.</p>
-
-<p><code>html
-&lt;button id="clear-completed" data-dojo-attach-event="onclick:removeCompletedItems"&gt;
-&lt;/button&gt;
-</code></p>
-
-<p>When our handler is fired, we need to iterate over the existing tasks'
-list, removing any with the correct completed state. Removing items from the Model will left-shift the remaining items, so we need to
-take care to iterate correctly over the remaining items.</p>
-
-<p>``` javascript Clearing Completed Items https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L80-97 Source Link
-removeCompletedItems: function () {</p>
-
-<pre><code>var len = this.model.todos.length, idx = 0;
-
-while (idx &lt; len) {
-    if (this.model.todos[idx].isDone.value) {
-        this.model.todos.remove(idx);
-        len--;
-        continue;
-    }
-    idx++;
-}
-</code></pre>
-
-<p>}
-```</p>
-
-<p>When the event handler has finished executing, the View will be updated to clear out those completed tasks.</p>
-
-<h2>Conclusion</h2>
-
-<p>In the final part of this series, we've looked at how to define an MVC
-Controller, responsible for mediating between user actions and model
-operations. Using declarative Dojo programming in our View template, we set up
-bindings between DOM events and event handlers in our Controller.</p>
-
-<p>When user
-actions triggered those events, our handlers were responsible for adding and
-removing todo tasks from the MVC Model class, StatefulModel, we've been using
-to store our application data. These changes then flowed back to the View,
-which automatically re-renders when it detects an updated Model.</p>
-
-<p>Dojo's new MVC package, dojox.mvc, offers great capabilities for building dynamic
-JavaScript applications using the MVC programming pattern. Although it's still maturing, hopefully this series
-has been able to demonstrate that for most applications it's more than capable of providing the features
-developers expect in a modern JavaScript MVC library.</p>
-
-<p>If you have any further questions, feel free to leave comments below, send me an email or a tweet. The source
-code for the application is available on Github, allowing you to run the examples above and compare it against other frameworks.</p>
-
-<h3>What's Next?</h3>
-
-<p>This series of articles was based upon the version of DojoX MVC present in the 1.7.0 release of The Dojo Toolkit. My experiences, good and bad,
-building this application were <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-January/026434.html">fed back into the community</a> to
-help improve the package in the future. With the upcoming 1.8 release of The Dojo Toolkit,
-there has been some <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-February/026811.html">major improvements</a> to the MVC package, resolving many of the issues I raised.</p>
-
-<p>When that version of the toolkit is available, I'll re-visit the application and show how those changes would make writing this application even simpler.</p>
 ]]></content>
   </entry>
   

@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-07-15T16:41:08+01:00</updated>
+  <updated>2015-07-16T16:03:45+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,196 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[GeoPix Live Photos]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/16/geopix-live-photos/"/>
+    <updated>2015-07-16T13:26:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/16/geopix-live-photos</id>
+    <content type="html"><![CDATA[<p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+
+
+<blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online. </p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote>
+
+
+<p>I&#8217;ve been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement&#8230;</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features&#8230;</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: &#8220;now&#8221;</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">Cloudant</span><span class="p">({</span><span class="nx">account</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">username</span><span class="p">,</span> <span class="nx">password</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">password</span><span class="p">},</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">cloudant</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">geopix</span> <span class="o">=</span> <span class="nx">cloudant</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">database</span><span class="p">);</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">feed</span> <span class="o">=</span> <span class="nx">geopix</span><span class="p">.</span><span class="nx">follow</span><span class="p">({</span><span class="nx">include_docs</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="nx">since</span><span class="o">:</span> <span class="s2">&quot;now&quot;</span><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="c1">// ....we can now send this data to the web pages</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">follow</span><span class="p">();</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>&#8230;</p>
+
+<blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote>
+
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">express</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;express&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">express</span><span class="p">();</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">server</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;http&#39;</span><span class="p">).</span><span class="nx">Server</span><span class="p">(</span><span class="nx">app</span><span class="p">);</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">io</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;socket.io&#39;</span><span class="p">)(</span><span class="nx">server</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ...snipped out the app routes for express</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">io</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connection&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">socket</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;New Client WSS Connection.&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">port</span> <span class="o">=</span> <span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">VCAP_APP_PORT</span> <span class="o">||</span> <span class="mi">3000</span><span class="p">);</span>
+</span><span class='line'><span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="nx">port</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">io</span><span class="p">.</span><span class="nx">sockets</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="nx">change</span><span class="p">);</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Now we&#8217;re sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we&#8217;ve included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We&#8217;re sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">socket</span> <span class="o">=</span> <span class="nx">io</span><span class="p">();</span> <span class="c1">// TIP: io() with no args does auto-discovery</span>
+</span><span class='line'><span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;WSS Connected&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">image</span><span class="p">)</span> <span class="p">{</span> <span class="c1">// TIP: you can avoid listening on `connect` and listen on events directly too!</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">attachment</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_attachments</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s2">&quot;/image/&quot;</span> <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_id</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="nx">attachment</span><span class="p">;</span>
+</span><span class='line'>        <span class="nx">add_new_image</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">clientDate</span><span class="p">,</span> <span class="s1">&#39;latitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">latitude</span> <span class="o">+</span> <span class="s1">&#39;, longitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">longitude</span> <span class="o">+</span> <span class="s1">&#39;, altitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">altitude</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>&#8230;and that&#8217;s it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB&#8217;s <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[AlchemyAPI &amp; Updated Watson Nodes for Node-RED]]></title>
@@ -4300,258 +4490,6 @@ the link and vote for the idea.</p>
 </li>
 </ul>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Part 2: Views]]></title>
-    <link href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/"/>
-    <updated>2012-04-13T00:00:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2012/04/13/dojomvc-views</id>
-    <content type="html"><![CDATA[<p>In the previous article, we looked at defining our application Model using the
-<a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">Dojo MVC</a> package. The
-model contained a list of todo tasks, each with a description and finished
-state, along with composite values representing the total completed and
-remaining task counts.</p>
-
-<p>Dojo&#8217;s MVC package provides a series of widgets (<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">Group</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">Output</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">Repeat</a>,
-<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Generate.html">Generate</a>) that assist the rendering of model attributes in our View, which
-automatically update when model values change. We&#8217;re going to look at using
-these widgets to build our TodoMVC Application View&#8230;</p>
-
-<h2>Defining a View template</h2>
-
-<p>For a long time, Dojo has had excellent support for creating widgets with HTML
-templates using modules from the Dijit package. Defining a new widget simply
-requires inheriting from a base class (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html">_WidgetBase</a>), adding in mixins for
-template support (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html">_TemplatedMixin</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetsInTemplateMixin.html">_WidgetsInTemplateMixin</a>) and providing
-a HTML template file that will be automatically rendered in the page by the Dojo
-parser. In our application, we&#8217;ve created a new templated widget <a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo">todo.app</a>,
-present in <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js">app.js</a> along with a template file <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html">app.html</a>.</p>
-
-<p>The basic outline of this module is shown below.</p>
-
-<figure class='code'><figcaption><span>Templated TodoMVC Widget</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js'>Source Link </a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">define</span><span class="p">([</span><span class="s2">&quot;dojo/_base/declare&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="c1">// Parent classes</span>
-</span><span class='line'>        <span class="s2">&quot;dijit/_WidgetBase&quot;</span><span class="p">,</span> <span class="s2">&quot;dijit/_TemplatedMixin&quot;</span><span class="p">,</span> <span class="s2">&quot;dijit/_WidgetsInTemplateMixin&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="c1">// Widget template</span>
-</span><span class='line'>        <span class="s2">&quot;dojo/text!./app.html&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">...</span>
-</span><span class='line'>    <span class="kd">function</span><span class="p">(</span><span class="nx">declare</span><span class="p">,</span> <span class="nx">_WidgetBase</span><span class="p">,</span> <span class="nx">_TemplatedMixin</span><span class="p">,</span> <span class="nx">_WidgetsInTemplateMixin</span><span class="p">,</span> <span class="nx">template</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">return</span> <span class="nx">declare</span><span class="p">(</span><span class="s2">&quot;todo.app&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nx">_WidgetBase</span><span class="p">,</span> <span class="nx">_TemplatedMixin</span><span class="p">,</span> <span class="nx">_WidgetsInTemplateMixin</span><span class="p">],</span> <span class="p">{</span>
-</span><span class='line'>            <span class="nx">templateString</span><span class="o">:</span> <span class="nx">template</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">});</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Defining our application as a templated widget lets us annotate HTML elements,
-using the data-dojo-type attribute, in the application page to be automatically
-instantiated into corresponding widgets at runtime by the <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/parser.html">Dojo parser</a>. When this
-occurs, the view template will replace the annotated HTML element in the page
-and any child widgets in the view will be recursively created.</p>
-
-<p>The HTML snippet below shows how we load Dojo, the parser, our application and turn on the automatic parsing on load to render
-our Todo widget within the page.</p>
-
-<figure class='code'><figcaption><span>Loading TodoMVC App Within The Page</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/index.html'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;script </span><span class="na">data-dojo-config=</span><span class="s">&quot;async:true, parseOnLoad:true, paths:{&#39;todo&#39;:&#39;../../todo&#39;}, </span>
-</span><span class='line'><span class="s">    deps:[&#39;dojo/parser&#39;, &#39;todo/app&#39;]&quot;</span> <span class="na">src=</span><span class="s">&quot;./js/dtk/dojo/dojo.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
-</span><span class='line'>
-</span><span class='line'>...
-</span><span class='line'>
-</span><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;content&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;todo.app&quot;</span><span class="nt">&gt;&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This templated widget is rendered within the page and represents our view. The view has three main
-tasks:</p>
-
-<p>** Display the list of todo items
-* Allow a user to enter more tasks
-* Show statistics for the number of completed and remaining tasks.</p>
-
-<p>We&#8217;ll look at each individually to see how we implemented those features using
-the Dojo MVC package.</p>
-
-<h2>Displaying Todo Tasks</h2>
-
-<p>We&#8217;ve used the &lt;ul&gt; element to represent the container for our todo tasks, each task being an &lt;li&gt; element
-with the same HTML template populated with different values. The content for each task and the number of tasks
-needs to be dynamically generated based upon the values in the model.</p>
-
-<p>Dojo MVC provides a widget for this pattern, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>,
-letting the user specify an array in the model for binding to with a HTML
-template to be repeated for each element.</p>
-
-<p>The HTML template for the repeating todo tasks is shown below.</p>
-
-<figure class='code'><figcaption><span>Rendering Todo Tasks</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L7-20'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;ul</span> <span class="na">class=</span><span class="s">&quot;todo-list&quot;</span> <span class="na">data-dojo-attach-point=</span><span class="s">&quot;todo_list&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Repeat&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.todos, exprchar: &#39;#&#39;&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;li</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Group&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: &#39;#{this.index}&#39;&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;input</span> <span class="na">class=</span><span class="s">&quot;check&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;todo.form.CheckBox&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&#39;ref: &quot;isDone&quot;&#39;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo-content dijitInline&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit.InlineEditBox&quot;</span>
-</span><span class='line'>                <span class="na">data-dojo-props=</span><span class="s">&#39;ref: &quot;todo_text&quot;, editor:&quot;dijit.form.TextBox&quot;, autosave:true, width:&quot;420px&quot;, style:&quot;width:420px;&quot;&#39;</span><span class="nt">&gt;&lt;/div&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-destroy&quot;</span> <span class="na">data-model-id=</span><span class="s">&quot;#{this.index}&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;/span&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;/div&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/li&gt;</span>
-</span><span class='line'><span class="nt">&lt;/ul&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<h3>Repeating View Templates</h3>
-
-<p>In the template, the containing &lt;ul&gt; element is registered as the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>
-widget using the data-dojo-type attribute. Using the data-dojo-props
-attribute, we can pass widget parameters to the newly created widget when it&#8217;s instantiated by the parser.</p>
-
-<p>The first parameter, ref, provides a variable name
-for the model attribute to bind to. We&#8217;re using the model available on the widget instance, &#8220;this.model&#8221;, with the &#8220;todos&#8221; attribute, which contains
-an array of task objects. The second parameter, exprchar, is the character to use for substitution expressions in declarative child widget attributes. By default,
-this value is the &#8216;$&#8217; character. As we&#8217;re using the declarative programming style, these expressions would be confused with normal template value substitutions and we
-use the &#8216;#&#8217; character instead.</p>
-
-<p>Under the &lt;ul&gt; element, we have the HTML template for each todo task, represented by the &lt;li&gt; element. Here we are using the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">dojox.mvc.Group</a> widget, which provides
-the parent model context for any child widgets which use substituion expressions and references to access model values. Registering the parent context as an individual
-item within the model &#8220;todos&#8221; array is achieved by using the &#8220;#{this.index}&#8221; reference, this will be automatically incremented by the parent Repeat widget as it iterates
-through the model array.</p>
-
-<h3>Binding UI Controls</h3>
-
-<p>Each todo task has three UI controls, the task text (either as a read-only
-value or an inline edit box for modification), a checkbox representing the
-completed state of the widget and an icon to allow the removal of the task. Our
-chosen UI controls (<a href="http://dojotoolkit.org/reference-guide/dijit/InlineEditBox.html">InlineEditBox</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/form/CheckBox.html">CheckBox</a>) are bound to model values by
-providing a &#8220;ref&#8221; attribute with the attribute name. These widgets will
-automatically be populated with the current model values during rendering.</p>
-
-<p>This binding between the view and the model is bi-directional, changes to the
-model will automatically propagate to the view widgets and changes to the view
-widgets will flow back to the model.</p>
-
-<p>When a user wants to remove a task, the &#8220;click&#8221; event generated by the icon in the view
-will be intercepted by the Controller. Allowing the controller to determine which todo task
-to remove from the model is provided by setting the current item index as a custom parameter on the HTML
-element. We will be looking at the code to perform the removal in a later article.</p>
-
-<h2>Showing Completed &amp; Remaining Counts</h2>
-
-<p>Along with the todo tasks, we need to display stats for the number of completed
-and remaining tasks. These attributes are composite model values, being
-automatically calculated from other model attributes. The displayed values need
-to be updated live as the other model attributes change but won&#8217;t be directly
-modifable by the user. The code snippet below shows the HTML template in the
-view for this component.</p>
-
-<figure class='code'><figcaption><span>Showing Task Stats</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L22-33'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo-stats&quot;</span> <span class="na">data-dojo-attach-point=</span><span class="s">&quot;todo_stats&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-count&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;span</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Output&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.incomplete&quot;</span> <span class="na">class=</span><span class="s">&quot;number&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;word&quot;</span><span class="nt">&gt;</span>items<span class="nt">&lt;/span&gt;</span> left.
-</span><span class='line'>    <span class="nt">&lt;/span&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-clear&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;#&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onclick:removeCompletedItems&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            Clear
-</span><span class='line'>            <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;number-done&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Output&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.complete&quot;</span> <span class="nt">&gt;&lt;/span&gt;</span>
-</span><span class='line'>            completed items
-</span><span class='line'>        <span class="nt">&lt;/a&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/span&gt;</span>
-</span><span class='line'><span class="nt">&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We&#8217;ve used simple HTML elements to display the values, rather than Dijit widgets, due to the
-lack of user interaction needed. Binding a HTML element to a Model property can be achieved using the
-<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">dojox.mvc.Output</a> widget.
-Again, we use the &#8220;ref&#8221; attribute to specify which model property the &#8220;innerHTML&#8221;
-value on the HTML element should be linked with.</p>
-
-<h2>Adding New Tasks</h2>
-
-<p>Finally, we need to let the user add new tasks. Using a normal HTML input
-field, we connect the &#8220;onkeypress&#8221; event to an internal event handler to allow
-the app to access the new tasks.</p>
-
-<figure class='code'><figcaption><span>Adding New Tasks</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L2-5'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;create-todo&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;input</span> <span class="na">class=</span><span class="s">&quot;new-todo&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onkeypress:onKeyPress&quot;</span> <span class="na">placeholder=</span><span class="s">&quot;What needs to be done?&quot;</span> <span class="na">type=</span><span class="s">&quot;text&quot;</span><span class="nt">/&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;ui-tooltip-top&quot;</span> <span class="na">style=</span><span class="s">&quot;display:none;&quot;</span><span class="nt">&gt;</span>Press Enter to save this task<span class="nt">&lt;/span&gt;</span>
-</span><span class='line'><span class="nt">&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>The application controller is responsible for
-handling the generated events, retrieving the new tasks and adding them into
-the model. We&#8217;ll be looking at exactly how this works in the next article. When
-new tasks are added, the task list in the view will be automatically
-re-rendered.</p>
-
-<h2>Conclusion</h2>
-
-<p>Following on from the first article, we&#8217;ve now looked at how the View component
-of our MVC application works. Using Dojo MVC widgets, we&#8217;ve been able to
-bind simple HTML elements and full Dijit widgets to show model values. This
-dynamic binding allows Model updates to automatically flow through to the View controls.
-Secondly, any user modified values automatically update the Model.</p>
-
-<p>The dojox.mvc.Output widget was used to display Model attributes are
-read-only values in normal HTML elements. We also used the dojox.mvc.Repeat
-and dojox.mvc.Group widgets to generate a repeated view template for the
-todo tasks. Connecting user events from the view to the Controller used Dojo&#8217;s
-templated widget mixins.</p>
-
-<p>In the final article, we&#8217;ll look at the last component the MVC pattern,
-Controllers. This includes adding new tasks to the Model, removing individual
-and completed tasks along with controlling the view components being displayed.</p>
 ]]></content>
   </entry>
   

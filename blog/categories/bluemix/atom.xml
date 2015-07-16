@@ -4,7 +4,7 @@
   <title><![CDATA[Category: bluemix | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/bluemix/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-07-15T16:41:08+01:00</updated>
+  <updated>2015-07-16T16:03:45+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,208 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[GeoPix Live Photos]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/16/geopix-live-photos/"/>
+    <updated>2015-07-16T13:26:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/16/geopix-live-photos</id>
+    <content type="html"><![CDATA[<p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+<p><blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.</p></p><p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote></p>
+
+<p>I've been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement...</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features...</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: "now"</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<p>``` javascript
+Cloudant({account:credentials.username, password:credentials.password}, function(err, cloudant) {</p>
+
+<pre><code>var geopix = cloudant.use(database);
+var feed = geopix.follow({include_docs: true, since: "now"});
+
+feed.on('change', function (change) {
+  // ....we can now send this data to the web pages
+});
+
+feed.follow();
+</code></pre>
+
+<p>})
+```</p>
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>...</p>
+
+<p><blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote></p>
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<p>``` javascript
+var express = require('express');
+var app = express();
+var server = require('http').Server(app);
+var io = require('socket.io')(server);</p>
+
+<p>// ...snipped out the app routes for express</p>
+
+<p>io.on('connection', function (socket) {</p>
+
+<pre><code>console.log('New Client WSS Connection.')
+</code></pre>
+
+<p>});</p>
+
+<p>var port = (process.env.VCAP_APP_PORT || 3000);
+server.listen(port);
+```</p>
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<p>``` javascript
+feed.on('change', function (change) {</p>
+
+<pre><code>io.sockets.emit('image', change);
+</code></pre>
+
+<p>});
+```</p>
+
+<p><strong>Now we're sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we've included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We're sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<p>``` javascript
+var socket = io(); // TIP: io() with no args does auto-discovery
+socket.on('connect', function () {</p>
+
+<pre><code>console.log('WSS Connected');
+
+socket.on('image', function (image) { // TIP: you can avoid listening on `connect` and listen on events directly too!
+    var attachment = Object.keys(image.doc._attachments)[0]
+    var url = "/image/" + image.doc._id + "/" + attachment;
+    add_new_image(url, image.doc.clientDate, 'latitude: '
+        + image.doc.latitude + ', longitude: '
+        + image.doc.longitude + ', altitude: '
+        + image.doc.altitude);
+});
+</code></pre>
+
+<p>});
+```</p>
+
+<p>...and that's it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB's <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[AlchemyAPI &amp; Updated Watson Nodes for Node-RED]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/15/alchemyapi-and-updated-watson-nodes-for-node-red/"/>
+    <updated>2015-07-15T16:07:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/15/alchemyapi-and-updated-watson-nodes-for-node-red</id>
+    <content type="html"><![CDATA[<p><img src="/images/node-red-updates.png"></p>
+
+<p>I've recently been working on a <a href="https://github.com/node-red/node-red-bluemix-nodes/commit/56007e60d3414da3eb5c1dac766b23bdd96dd149">number</a> of <a href="https://github.com/node-red/node-red-bluemix-nodes/commit/4d0bcfe34f5e107e3b9e0684cd26ae701f913253">updates</a> to the Node-RED <a href="https://github.com/node-red/node-red-bluemix-nodes">nodes</a> for the IBM Bluemix platform...</p>
+
+<p>Highlights below:</p>
+
+<h2>New AlchemyAPI Nodes</h2>
+
+<p>There are two new nodes (Feature Extract and Image Extract) in the package, allowing users to call services from the AlchemyAPI platform.</p>
+
+<ul>
+<li><p><em>Feature Extract.</em> This node will analyse external URLs, HTML or text content with features for text-based analysis
+from the AlchemyAPI service, e.g. keywords, sentiment, relationships, etc.</p></li>
+<li><p><em>Image Analysis.</em> This node will analyse images, passed in as external URLs or raw image bytes, to extract faces, content and URLs.</p></li>
+</ul>
+
+
+<p>Configuration for each node is available through the node editor panel.</p>
+
+<p>For full details on all the capabilities of the AlchemyAPI platform, please see their <a href="http://www.alchemyapi.com/api">documentation</a>.</p>
+
+<h2>Updated IBM Watson Nodes</h2>
+
+<p>With the <a href="https://developer.ibm.com/watson/blog/2015/07/06/ibm-watson-language-translation-and-speech-services-general-availability/">recent changes</a>
+to the IBM Watson services, there were a number of changes needed to support the API changes. All the IBM Watson nodes now work with the GA versions
+of the services.</p>
+
+<p><strong>Users must ensure they are using GA versions of the service with the nodes. Details on migration steps are available on the IBM Watson
+<a href="https://developer.ibm.com/watson/blog/2015/07/06/ibm-watson-language-translation-and-speech-services-general-availability/">blog post</a> about the updates.</strong></p>
+
+<h2>Running Locally</h2>
+
+<p>When running Node-RED on IBM Bluemix, credentials for the services bound to the application are automatically registered. Previously, running the nodes
+outside of IBM Bluemix required complex configuration to register service credentials. With this release, users will
+be prompted to input the service credentials in the node editor panel if the application isn't running on IBM Bluemix. Much easier!</p>
+
+<p><strong>If you have questions or encounter issues, please ask over on <a href="http://stackoverflow.com/questions/tagged/node-red">Stackoverflow</a> or raise <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issues</a> in Github</strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Debugging Cloud Foundry Stack Issues]]></title>
@@ -763,342 +965,6 @@ configure build systems, test servers or anything else you would expect.</strong
 
 <p>Our example was relatively simple, the service can be configured for far more complicated build and deploy tasks. The <a href="https://hub.jazz.net/docs">documentation</a>
 gives full details on the capabilities of that platform. If you have any issues, please use the <a href="https://developer.ibm.com/answers/smartspace/devops-services/">IBM Answers support forum</a> to post questions and get answers from the development team.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[IBM Watson Nodes For Node-RED]]></title>
-    <link href="http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered/"/>
-    <updated>2015-04-22T11:15:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered</id>
-    <content type="html"><![CDATA[<p><img src="/images/node-red.png"></p>
-
-<p>I've updated the IBM Watson Nodes for Node-RED to include seven extra services.</p>
-
-<p>Previously, the package only provided support for the following services:</p>
-
-<ul>
-<li>Language Identification.</li>
-<li>Machine Translation.</li>
-<li>Question &amp; Answers.</li>
-</ul>
-
-
-<p>With the recent <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/10">code changes</a>,
-users now have access to the additional services:</p>
-
-<ul>
-<li>Message Resonance.</li>
-<li>Personality Insights.</li>
-<li>Relationship Extraction.</li>
-<li>Speech to Text.</li>
-<li>Text to Speech.</li>
-<li>Tradeoff Analytics.</li>
-<li>Visual Recognition.</li>
-</ul>
-
-
-<p><strong>Using Node-RED through the <a href="https://bluemix.net">IBM Bluemix</a> boilerplate will
-automatically include the IBM Watson modules in the palette.</strong></p>
-
-<p>It is possible to use the IBM Watson nodes with Node-RED outside of IBM Bluemix
-provided you have the <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">local environment variables</a>
-configured to provide the service credentials.</p>
-
-<p>For information about the individual services, please see the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">IBM Watson Developer Cloud</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Creating CF CLI Plugins]]></title>
-    <link href="http://jamesthom.as/blog/2015/04/16/creating-cf-cli-plugins/"/>
-    <updated>2015-04-16T09:53:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/04/16/creating-cf-cli-plugins</id>
-    <content type="html"><![CDATA[<p>Since the v.6.7 release of the Cloud Foundry Command Line Interface (CF CLI), users have been to create and install plugins to provide custom commands.</p>
-
-<p>There's now a whole community of <a href="http://plugins.cloudfoundry.org/ui/">third-party plugins</a> to help make you more productive developing Cloud Foundry applications.</p>
-
-<h2>Installing Plugins</h2>
-
-<p>Plugins can be installed directly from the platform binary.</p>
-
-<p><code>
-$ go get github.com/sample_user/sample_plugin
-$ cf install-plugin $GOPATH/bin/sample_plugin
-</code></p>
-
-<p>...or discovered and installed directly from plugin repositories.</p>
-
-<p>```
-$ cf add-plugin-repo cf-plugins http://plugins.cloudfoundry.org/
-$ cf list-plugin-repos
-OK</p>
-
-<p>Repo Name    Url
-cf-plugins   http://plugins.cloudfoundry.org/</p>
-
-<p>$ cf repo-plugins
-Getting plugins from all repositories ...</p>
-
-<p>Repository: cf-plugins
-name                   version   description
-CLI-Recorder           1.0.1     Records and playbacks CLI commands.
-Live Stats             1.0.0     Monitor CPU and Memory usage on an app via the browser.
-Console                1.0.0     Start a tmate session on an application container
-Diego-Beta             1.3.0     Enables Diego-specific commands and functionality
-Open                   1.1.0     Open app url in browser
-autopilot              0.0.1     zero downtime deploy plugin for cf applications
-Brooklyn               0.1.1     Interact with Service Broker for Apache Brooklyn
-kibana-me-logs         0.3.0     Launches the Kibana UI (from kibana-me-logs) for an application.
-Buildpack Usage        1.0.0     View all buildpacks used in the current CLI target context.
-CF App Stack Changer   1.0.0     Allows admins to list and update applications with outdated lucid64 stacks.
-```</p>
-
-<p>Once a repository has been registered, we can search and install the available plugins.</p>
-
-<p>```
-$ cf install-plugin open -r cf-plugins
-Looking up 'open' from repository 'cf-plugins'
-  7998292 bytes downloaded...
-Installing plugin /var/folders/db/9y12sh3n0kdg4v3zxnn8dbg80000gn/T/ filename=cf-plugin-open_darwin_amd64...
-OK
-Plugin open v1.1.0 successfully installed.</p>
-
-<p>$ cf plugins
-Listing Installed Plugins...
-OK</p>
-
-<p>Plugin Name   Version   Command Name   Command Help
-open          1.1.0     open           open app url in browser</p>
-
-<p>$ cf open
-NAME:
-   open - open app url in browser</p>
-
-<p>USAGE:
-   open <appname>
-```</p>
-
-<p><strong>How about creating your own plugins? Here I'll show you how by walking through the steps used to create my first plugin, <a href="https://github.com/jthomas/copyenv">copyenv</a>.</strong></p>
-
-<h2>Creating New Plugins</h2>
-
-<p>Plugins are <a href="http://golang.org">Go</a> binaries, implenting a <a href="https://github.com/cloudfoundry/cli/blob/master/plugin/plugin.go">common interface</a>
-defined by the CF CLI project.</p>
-
-<p>There's a Run() function to implement that acts as a callback when the user issues the plugin command along
-with a GetMetadata() function to provide the metadata for the new command.</p>
-
-<p>There's a list of <a href="https://github.com/cloudfoundry/cli/tree/master/plugin_examples">example plugins</a>
-to start with in the CF CLI repository.</p>
-
-<p>For our plugin, we're starting with the
-<a href="https://github.com/cloudfoundry/cli/blob/master/plugin_examples/basic_plugin.go">basic_plugin</a>
-code. This file contains a skeleton outline for a basic plugin implementation
-that you can modify.</p>
-
-<h3>Plugin Structure</h3>
-
-<p>Reviewing the basic_plugin example, plugins follow a simple structure.</p>
-
-<p>First, we declare the Go package "main" as this code will be compiled into an executable command.
-Application dependencies are registered with the "import" definition. We link to the CF
-CLI Plugin package to access the common interface that defines a runnable plugin. BasicPlugin is the
-name of our struct that will implement the Plugin Interface.
-``` go
-package main</p>
-
-<p>import (
-  "fmt"
-  "github.com/cloudfoundry/cli/plugin"
-)</p>
-
-<p>type BasicPlugin struct{}
-```</p>
-
-<p>The "Run" function will be executed each time a user calls our custom plugin command. We are passed
-a reference to the CF CLI, for running additional commands, along with the command line arguments.</p>
-
-<p>``` go
-func (c *BasicPlugin) Run(cliConnection plugin.CliConnection, args []string) {
-  // Ensure that we called the command basic-plugin-command
-  if args[0] == "basic-plugin-command" {</p>
-
-<pre><code>fmt.Println("Running the basic-plugin-command")
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p>Returning metadata to install the plugin is implemented via the "GetMetadata" function. We can specify the
-plugin version number, help documentation and command identifiers.</p>
-
-<p>``` go
-func (c *BasicPlugin) GetMetadata() plugin.PluginMetadata {
-  return plugin.PluginMetadata{</p>
-
-<pre><code>Name: "MyBasicPlugin",
-Version: plugin.VersionType{
-  Major: 1,
-  Minor: 0,
-  Build: 0,
-},
-Commands: []plugin.Command{
-  plugin.Command{
-    Name:     "basic-plugin-command",
-    HelpText: "Basic plugin command's help text",
-
-    // UsageDetails is optional
-    // It is used to show help of usage of each command
-    UsageDetails: plugin.Usage{
-      Usage: "basic-plugin-command\n   cf basic-plugin-command",
-    },
-  },
-},
-</code></pre>
-
-<p>  }
-}
-```
-Finally, the "main" function will the entry point when executing the compiled binary.
-Calling "plugin.Start" with a pointer to the struct implementing the Plugin interace will
-register our plugin.</p>
-
-<p><code>go
-func main() {
-  plugin.Start(new(BasicPlugin))
-}
-</code></p>
-
-<h2>CopyEnv Plugin</h2>
-
-<p><blockquote><p>Cloud Foundry CLI plugin to export application VCAP_SERVICES onto the local machine.</p></blockquote></p>
-
-<p>Applications running on Cloud Foundry rely on the VCAP_SERVICES environment
-variable to provide service credentials.</p>
-
-<p>When running applications locally for development and testing, it's useful to
-have the same VCAP_SERVICES values available in the local environment to
-simulate running on the host platform.</p>
-
-<p>This plugin will export the remote application environment variables, available
-using cf env, into a format that makes it simple to expose those same values
-locally.</p>
-
-<h3>Modifying the Sample Plugin</h3>
-
-<p>For the new plugin, we will need to get an application name from the user,
-access the remote VCAP_SERVICES environment variable and then export this into
-the user's local environment.</p>
-
-<p>Accessing an application's environment variables can be retrieved using the existing cf env command.
-The "plugin.CliConnection" reference passed into the Run function has <a href="https://github.com/cloudfoundry/cli/blob/master/plugin/plugin.go#L14-L17">methods for executing CLI commands</a> from within the plugin.</p>
-
-<p>We're following the convention of the "cf env" command by having the application name as a command line argument.
-This means we can modify the existing "args" value to set up the CLI command to retrieve the VCAP_SERVICES value.</p>
-
-<p>``` go
-func (c *CopyEnv) Run(cliConnection plugin.CliConnection, args []string) {
-  if len(args) &lt; 2 {</p>
-
-<pre><code>fmt.Println("ERROR: Missing application name")
- os.Exit(1)
-</code></pre>
-
-<p>  }</p>
-
-<p>  args[0] = "env"
-  output, err := cliConnection.CliCommandWithoutTerminalOutput(args...)
-```</p>
-
-<p>Now we have an array of strings, output, containing the text output from cf env APP_NAME command.
-Iterating through this list, we search for the line which contains the VCAP_SERVICES definition.
-This value will be a JSON object with a VCAP_SERVICES attribute defining the service credentials.</p>
-
-<p>Exporting this JSON object to the local environment, we need to convert the VCAP_SERVICES object
-into a shell environment variable definition. Go has built in support for the JSON language. We
-decode the parent JSON to a Map interface and then export the VCAP_SERVICES attribute as JSON. This
-text is then wrapped within a shell variable definition.</p>
-
-<p>``` go
-for _, val := range output {
-  if (strings.Contains(val, "VCAP_SERVICES")) {</p>
-
-<pre><code>var f interface{}
-err := json.Unmarshal([]byte(val), &amp;f)
-if err != nil {
-  fmt.Println(err)
-  os.Exit(1)
-}
-
-m := f.(map[string]interface{})
-b, err := json.Marshal(m["VCAP_SERVICES"])
-if err != nil {
-  fmt.Println(err)
-  os.Exit(1)
-}
-
-vcap_services := "export VCAP_SERVICES='" + string(b[:]) + "';"
-fmt.Println(vcap_services)
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p>Once we've finished the code, install the compiled binary using the CF CLI.</p>
-
-<p><code>
-$ go build copyenv.go
-$ cf install-plugin copyenv
-</code></p>
-
-<h3>Making plugin available for other users</h3>
-
-<p>Exporting out plugin into an external Git repository will allow users to use the Go package manager
-to retrieve and compile the plugin for installation with the CF CLI.</p>
-
-<p><code>
-$ go get github.com/sample_user/sample_plugin
-$ cf install-plugin $GOPATH/bin/sample_plugin
-</code></p>
-
-<p>We can also include the plugin in the official Cloud Foundry <a href="plugins.cloudfoundry.org">Plugin Repository</a>
-by forking the <a href="https://github.com/cloudfoundry-incubator/cli-plugin-repo">source project</a>,
-adding their plugin definition to the <a href="https://github.com/cloudfoundry-incubator/cli-plugin-repo/blob/master/repo-index.yml">repo-index.yml</a>
-file and submitting a pull request.</p>
-
-<p>For maximum compatibility, plugin authors are encouraged to include <a href="https://github.com/jthomas/copyenv/tree/master/bin">platform binaries</a>
-for their plugins.</p>
-
-<p>Go makes it extremely easy to cross-compile your source code for different platforms.</p>
-
-<p>On Mac OS X, if you used Brew to install Go, you can set up cross-compilation with the following commands:</p>
-
-<p><code>
-$ brew reinstall go --with-cc-common
-$ GOOS=windows GOARCH=386 go build appname.go
-</code></p>
-
-<p>For the full list of supported platforms, see the <a href="https://golang.org/doc/install/source#environment">Go documentation</a></p>
-
-<h2>Using the Plugin</h2>
-
-<p>With the CopyEnv plugin installed, we can now run the following command to export an application's VCAP_SERVICES into our local environment.</p>
-
-<p><code>sh
-$ cf copyenv APP_NAME
-export VCAP_SERVICES='{...}';
-</code></p>
-
-<p><strong>Writing a new plugin for the CF CLI was extremely straightforward. It's a
-great feature to that enables people to contribute new plugins with minimal effort.
-I'm looking forward to seeing what plugins the community comes up with!</strong></p>
-
-<p>You can see the plugin in action below...</p>
-
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/copyenv.gif"></p>
 ]]></content>
   </entry>
   
