@@ -4,7 +4,7 @@
   <title><![CDATA[Category: bluemix | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/bluemix/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-07-16T16:03:45+01:00</updated>
+  <updated>2015-09-03T16:38:42+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,267 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[running one-off tasks in cloud foundry]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry/"/>
+    <updated>2015-09-01T16:07:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry</id>
+    <content type="html"><![CDATA[<p>Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often administrative
+tasks that needed to be carried out for an application to run correctly.</p>
+
+<p>These tasks usually need finishing before starting the application and should not be
+executed more than once.</p>
+
+<p>Previously, the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> provided commands, <em>tunnel</em> and <em>console</em>, to help running
+one-off tasks manually. These commands were
+<a href="http://stackoverflow.com/questions/32332319/exposing-ports-502-and-1002-from-nodejs-using-bluemix/32333386#32333386">deprecated</a>
+with the upgrade from <em>v5</em> to <em>v6</em>
+to discourage <a href="http://martinfowler.com/bliki/SnowflakeServer.html">snowflake environments</a>.</p>
+
+<p>It is still possible, with a bit of hacking, to run one-off tasks manually from the application
+container.</p>
+
+<p>A better way is to describe <em>tasks as code</em> and run them automatically during normal
+deployments. This results in applications that can be recreated without
+manual intervention.</p>
+
+<p>We'll look at both options before introducing a new library, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a>, that automates
+running administration tasks for Node.js applications.</p>
+
+<h2>Running Tasks Manually</h2>
+
+<h2>Local Environment</h2>
+
+<p>Rather than running administrative tasks from the application console, we can
+run them from a local development environment by remotely connecting to
+the bound services.</p>
+
+<p>This will be dependent on the provisioned services allowing remote access.
+Many "built-in" platform services, e.g. MySQL, Redis, do not allow this.</p>
+
+<p>Third-party services generally do.</p>
+
+<p>Using the <em>cf env</em> command we can list service credentials for an application.
+These authentication details can often be used locally by connecting through a client
+library running in a local development environment.</p>
+
+<p>For example, to access a provisioned Cloudant instance locally, we can grab the credentials
+and use with a Node.js client library.</p>
+
+<p>``` sh
+[15:48:22 ~/code/sample]$ cf env sample-demo-app
+Getting env variables for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>System-Provided:
+{
+ "VCAP_SERVICES": {
+  "cloudantNoSQLDB": [
+   {</p>
+
+<pre><code>"credentials": {
+ "host": "1234-bluemix.cloudant.com",
+ "password": "sample_password",
+ "port": 443,
+ "url": "https://1234-bluemix:sample_password@1234-bluemix.cloudant.com",
+ "username": "1234-bluemix"
+}
+</code></pre>
+
+<p>....</p>
+
+<p>[15:48:22 ~/code/sample]$ cat connect.js
+var Cloudant = require('cloudant');</p>
+
+<p>var me = '1234-bluemix';
+var password = 'sample_password';</p>
+
+<p>// Initialize the library with my account.
+var cloudant = Cloudant({account:me, password:password});</p>
+
+<p>cloudant.db.list(function(err, allDbs) {
+  console.log('All my databases: %s', allDbs.join(', '))
+  // Run administrative tasks
+});
+[15:48:22 ~/code/sample]$ node connect.js
+All my databases: example_db, jasons_stuff, scores
+```</p>
+
+<h2>Remote Environment</h2>
+
+<p>When provisioned services don't allow external access, the
+<a href="https://github.com/cloudfoundry-community/cf-ssh">cf-ssh</a> project creates SSH
+access to application containers running within Cloud Foundry.</p>
+
+<p><strong>How does this work?!</strong></p>
+
+<p><blockquote><p>cf-ssh deploys a new Cloud Foundry application, containing the same bits as your target application, with the same bound services.<br/>This new application's container does not start your web application as per normal. Instead, it starts an outbound reverse SSH tunnel to a public proxy.<br/>The local cf-ssh client then launches an interactive ssh connect to the public proxy, which tunnels through to the application container.</p><footer><strong>Dr. Nic</strong> <cite><a href='https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/'>blog.starkandwayne.com/2014/10/&hellip;</a></cite></footer></blockquote></p>
+
+<p>See the explanation <a href="https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/">here</a> for full details.</p>
+
+<p>This approach will let you connect to services from within the Cloud Foundry platform environment.</p>
+
+<p>This video from <a href="https://starkandwayne.com/">Stark &amp; Wayne's</a> <a href="http://drnicwilliams.com/">Dr. Nic</a> shows the command in action...</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/eWJCfAa1_x8" frameborder="0" allowfullscreen></iframe>
+
+
+<h2>IBM Bluemix Console (Java and Node.js)</h2>
+
+<p><em>This technique is only for the IBM Bluemix platform.</em></p>
+
+<p>If you are deploying Node.js and Java applications on <a href="https://bluemix.net">IBM Bluemix</a>, the platform provides
+the following tools to assist with <a href="https://www.ng.bluemix.net/docs/#manageapps/app_management.html#appmanagement">application management</a>.</p>
+
+<ul>
+<li><em>proxy</em>: Minimal application management that serves as a proxy between your application and Bluemix.</li>
+<li><em>devconsole</em>: Enables the development console utility.</li>
+<li><em>shell</em>: Enables a web-based shell.</li>
+<li><em>trace</em>: (Node.js only) Dynamically set trace levels if your application is using log4js, ibmbluemix, or bunyan logging modules.</li>
+<li><em>inspector</em>: (Node.js only) Enables node inspector debugger.</li>
+<li><em>debug</em>: (Liberty only) Enables clients to establish a remote debugging session with the application.</li>
+<li><em>jmx</em>: (Liberty only) Enables the JMX REST Connector to allow connections from remote JMX clients</li>
+</ul>
+
+
+<p>The tools are enabled by setting the environment variable (<em>BLUEMIX_APP_MGMT_ENABLE</em>) with the
+desired utilities.</p>
+
+<p><code>sh
+$ cf set-env myApp BLUEMIX_APP_MGMT_ENABLE devconsole+shell+trace
+</code></p>
+
+<p>Applications must be restarted for the changes to take effect.</p>
+
+<p>If we enable the <em>shell</em> utility, the following web-based console will be available at https://your-app-name.mybluemix.net/bluemix-debug/shell.</p>
+
+<p><img src="https://developer.ibm.com/bluemix/wp-content/uploads/sites/20/2015/06/shell.jpg"></p>
+
+<h2>Cloud Foundry Diego Runtime</h2>
+
+<p><a href="http://www.activestate.com/blog/2014/09/cloud-foundry-diego-explained-onsi-fakhouri">Diego</a> is the next-generation
+runtime that will power upcoming versions of Cloud Foundry. Diego will provide many benefits
+over the existing runtime, e.g. Docker support, including enabling SSH access to containers without the workarounds needed above.</p>
+
+<p><strong>Yay!</strong></p>
+
+<p>Follow the instructions <a href="https://github.com/cloudfoundry-incubator/diego-design-notes/blob/master/ssh-access-and-policy.md">here</a>
+for details on SSH access to applications running on the new runtime.</p>
+
+<p><em>Access to this feature will be dependent on your Cloud Foundry provider migrating to the new runtime.</em></p>
+
+<h2>Running Tasks Automatically </h2>
+
+<p>Manually running one-off administrative tasks for Cloud Foundry applications is a <a href="http://martinfowler.com/bliki/SnowflakeServer.html">bad idea</a>.</p>
+
+<p>It affects your ability to do continuous delivery and encourages snowflake environments.</p>
+
+<p>Alternatively, defining <em>tasks as code</em> means they can run automatically during normal deployments.
+No more manual steps are required to deploy applications.</p>
+
+<p>There are <a href="http://flywaydb.org/">many</a> <a href="https://github.com/ruby/rake">different</a> <a href="https://github.com/seomoz/shovel">libraries</a>
+for <a href="https://phinx.org/">every</a> <a href="https://github.com/mattes/migrate">language</a> to help you programmatically define, manage and run tasks.</p>
+
+<p>With <em>tasks defined as code</em>, you need to configure your <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html">application manifest</a>
+to run these automatically during deployments.</p>
+
+<p>Cloud Foundry uses the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#start-commands"><em>command</em> parameter</a>,
+set in the manifest or through the
+command-line, to allow applications to specify a custom start command. We can
+use this parameter to execute the task library command during deployment.</p>
+
+<p>The Cloud Foundry documentation also details these approaches, with slightly different
+implementations <a href="https://docs.cloudfoundry.org/devguide/services/migrate-db.html">here</a>
+and specifically for Ruby developers <a href="https://docs.cloudfoundry.org/buildpacks/ruby/ruby-tips.html#rake">here</a>.</p>
+
+<h2>Temporary Task Deploy</h2>
+
+<p>For applications which only need occasional administrative tasks, it's often
+easier to push a temporary deploy with a custom start command. This deploy
+runs your tasks without then starting your application. Once the tasks have
+completed, redeploy your application normally, destroying the task instance.</p>
+
+<p>The following command will deploy a temporary instance for this purpose:</p>
+
+<p><code>sh
+$ cf push -c 'YOUR_TASK_LIB_COMMAND &amp;&amp; sleep infinity' -i 1 --no-route
+</code></p>
+
+<p>We're overriding the default start command, setting it to run the command for
+our task library, e.g. rake db:migrate.</p>
+
+<p>The <em>sleep infinity</em> command stops the application exiting once the task runner
+has finished. If this happens, the platform will assume that application has
+crashed and restart it.</p>
+
+<p>Also, the task runner will not be binding to a port so
+we need to use the <em>--no-route</em> argument to stop the platform assuming the
+deploy has timed out.</p>
+
+<p>Setting the deploy to a single instance stops the command being executed more than once.</p>
+
+<p>Checking the logs to verify the task runner has finished correctly, we can now
+redeploy our application. Using the <em>null</em> start command will force the platform to use the buildpack default
+rather than our previous option.</p>
+
+<p><code>sh
+$ cf push -c 'null'
+</code></p>
+
+<h2>Running Tasks Before Startup</h2>
+
+<p>If we're regularly running administrative tasks, we should incorporate the
+task execution into our normal application startup. Once the
+task command has finished successfully, we start the application as normal.</p>
+
+<p>Applications may have multiple instances running, we need to ensure
+the tasks are only executed by one instance.</p>
+
+<p>The following custom start command will execute tasks during startup,
+using the CF_INSTANCE_ID environment variable to enforce execution at most-once.</p>
+
+<pre>
+[ $CF_INSTANCE_INDEX -eq 0 ]] && node lib/tasks/runner.js; node app.js
+</pre>
+
+
+<p>With this approach, tasks will be automatically executed during regular deployments
+without any manual intervention.</p>
+
+<p><strong>Hurrah!</strong></p>
+
+<h2>Managing tasks for Node.js applications</h2>
+
+<p>If you're running Node.js applications on Cloud Foundry, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a> is a task library that helps
+you define <em>tasks as code</em> and integrates with the Cloud Foundry runtime. The module handles
+all the complexities with automating tasks during deployments across multi-instance applications.</p>
+
+<p><blockquote><p>oneoff provides the following features...</p></p><p><ul><br/><li>ensure tasks are completed before application startup</li><br/><li>coordinating app instances to ensure at-most once task execution</li><br/><li>automagically discovering tasks from the task directory</li><br/><li>dependency ordering, ensure task a completes before task b starts</li><br/><li>parallel task execution</li><br/><li>ignore completed tasks in future deployments</p></blockquote></li>
+</ul>
+
+
+<p>Check it out to help make writing <em>tasks as code</em> for Node.js applications much easier!</p>
+
+<p>Full details on usage are available in the <a href="https://github.com/IBM-Bluemix/oneoff/blob/master/README.md">README</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>Running one-off tasks for application configuration is a normal part of any development project.</p>
+
+<p>Carrying out these tasks manually used to be the norm, but with the devops movement we now prefer
+automated configuration rather manual intervention. Relying on manual configuration steps to deploy applications restricts
+our ability to implement continuous delivery.</p>
+
+<p>Cloud Foundry is an opinionated platform, actively discouraging the creation of snowflake environments.</p>
+
+<p>Whilst it is still possible to manually run administrative tasks, either by connecting to bound services locally or using
+a remote console, it's preferable to describe our tasks as code and let the platform handle it.</p>
+
+<p>Using custom start commands, we can deploy applications which run tasks automatically during their normal startup procedure.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[GeoPix Live Photos]]></title>
@@ -752,219 +1013,6 @@ this image to the IBM Containers platform means we can spin up new ELK
 containers on-demand within minutes!</p>
 
 <p><blockquote><p>Elasticsearch, Docker and IBM Containers... Making Logs Awesome.</p></blockquote></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Continuous Delivery for Phonebot]]></title>
-    <link href="http://jamesthom.as/blog/2015/06/11/continuous-delivery-for-phonebot/"/>
-    <updated>2015-06-11T16:08:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/06/11/continuous-delivery-for-phonebot</id>
-    <content type="html"><![CDATA[<p><img src="/images/Phonebot_Pipeline.png"></p>
-
-<p>Since creating <a href="http://jamesthom.as/blog/2015/05/29/phonebot/">Phonebot</a> last month,
-I've been working on setting up a fully-automated build and deploy for the project.
-Using <a href="http://hub.jazz.net">IBM DevOps Services</a>, Phonebot now has
-"<a href="http://en.wikipedia.org/wiki/Continuous_delivery">Continuous Delivery</a>" enabled.</p>
-
-<p><strong>When new code is commited to the <a href="https://github.com/IBM-Bluemix/phonebot">external Github repository</a>,
-the build service will perform the following tasks.</strong></p>
-
-<ul>
-<li><em>Run Unit Tests and Code Lint Tools</em></li>
-<li><em>Deploy To Test Server</em></li>
-<li><em>Run Integration Tests Against Test Server</em></li>
-<li><em>Deploy To Production</em></li>
-</ul>
-
-
-<p>Each stage will only be executed if the following stage passes.</p>
-
-<p>In the following post, I'll explain how to set up each stage and share tips making it easy to
-replicate this setup for your projects...</p>
-
-<h2>Writing Tests for Phonebot</h2>
-
-<p>Phonebot comes with a comprehensive <a href="https://github.com/IBM-Bluemix/phonebot/tree/master/test">test suite</a>.
-I've used the <a href="http://mochajs.org">Mocha</a> test framework for creating unit and integration tests. Test
-assertions use NodeJS' <a href="https://nodejs.org/api/assert.html">built-in library</a>. The <a href="https://github.com/mfncooper/mockery">mockery</a>
-library is used to replace module dependencies with mock objects.</p>
-
-<p>Setting up the <a href="https://docs.npmjs.com/misc/scripts"><em>scripts</em></a> field in
-<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/package.json"><em>package.json</em></a> allows us to use NPM to run our tests.</p>
-
-<p>NPM will look into the "<em>node_modules/.bin</em>" directory for binaries when running scripts. This means we don't need Mocha installed
-on the deployment host to run tests. The "<em>devDependencies</em>" field includes modules we rely on during development
-but not production.</p>
-
-<p>```
-"devDependencies": {</p>
-
-<pre><code>"mocha": "^2.2.5",
-"mocha-eslint": "^0.1.7",
-"mockery": "^1.4.0"
-</code></pre>
-
-<p>},
-"scripts": {</p>
-
-<pre><code>"test": "mocha test/unit",
-"integration-test": "mocha test/integration",
-"start": "node app.js"
-</code></pre>
-
-<p>  },
-```</p>
-
-<p>Running the following commands will run the unit and integration tests.</p>
-
-<p><code>
-$ npm test  // defaults to 'run test'
-$ npm run integration-test
-</code></p>
-
-<h3>Running Code Linters</h3>
-
-<p>Along with unit tests, we want to run 'code linters' to catch any errors in our JavaScript code.
-We're using the <a href="https://github.com/eslint/eslint">eslint</a> tool with the following
-<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/.eslintrc">configuration</a>. Using this <a href="https://www.npmjs.com/package/mocha-eslint">module</a>,
-we're setting up the eslint tool as a <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/test/unit/eslint.js">test case</a>.</p>
-
-<p>This test will
-be automatically run in the unit test phase and errors incorporated into the test report.</p>
-
-<h3>Mocking Services In Integration Tests</h3>
-
-<p>When the unit tests have passed, we're going to deploy a test instance of the application.
-Integration tests will make HTTP requests to simulate user activity, capture the responses
-and then verify the application is behaving as expected.</p>
-
-<p>Phonebot uses external services, provisioned through IBM Bluemix, to make phone calls, translate
-speech to text and communicate with Slack channels. Services configuration parameters, e.g. username, password, host,
-are passed into the application using <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">environment variables</a>.</p>
-
-<p><strong><em>During integration tests, we want to capture all requests to external services and provide hardcoded HTTP responses to be returned.
-With service parameters coming from environment properties, rather than hardcoded in the application, we can simply replace
-the bound services configuration with our own values. This application will pick up these new values, pointing to our stub server, at runtime
-without any changes needed to the code.</em></strong></p>
-
-<p>This <a href="https://gist.github.com/jthomas/f573cb94de20b0e95940">stub server</a> has
-been created to capture all incoming HTTP requests and make them available at a
-custom HTTP endpoint. We're also configured HTTP routes to simulate each of the
-external services and return hardcoded responses.</p>
-
-<p>Deploying our test server in a different <a href="http://docs.cloudfoundry.org/concepts/roles.html#spaces">space</a> to production means we can have custom
-credentials set up without having to modify the service configuration in the production environment.</p>
-
-<p>The following commands will show the existing configuration values that we can replicate in the test environment.</p>
-
-<p><code>
-$ cf env phonebot
-$ cf create-space test
-$ cf target -s test
-$ cf cups twilio -p "accountSID, authToken, url"
-$ cf cups speech_to_text -p "username, password, url"
-$ cf cups slack_webhooks -p "slackbot-testing"
-</code></p>
-
-<p>With the test credentials created, we can deploy the application to the "test" space without modifications.</p>
-
-<h2>Setting up Build and Deploy Pipeline</h2>
-
-<p>We're going to use <a href="http://hub.jazz.net">IBM DevOps Services</a> to build and manage the "Continuous Delivery" pipeline.
-From the home page, click the <em>"Create Project"</em> button to import our existing Github project into the workspace.</p>
-
-<p><img src="/images/create_project.png"></p>
-
-<p>The <em>"Create Project"</em> page allows us to link an existing project from Github to the new project.
-Changes to the external repository will be automatically pushed through to our project.</p>
-
-<p><img src="/images/create_phonebot.png"></p>
-
-<p>Selecting the <em>"Make a Bluemix project"</em> option will automatically configure deploying to the Bluemix platform.</p>
-
-<p><img src="/images/import_phonebot_bm.png"></p>
-
-<p>When the project has finished importing, we can access the "Build and Deploy" pipeline...</p>
-
-<p><img src="/images/build_and_deploy.png"></p>
-
-<p>... which will currently be empty. Clicking the <em>"Add Stage"</em> button will allow
-us to start configuring the build, test and deploy jobs for our pipeline.</p>
-
-<p><img src="/images/add_stage.png"></p>
-
-<h3>Running Unit Tests and Code Lint Tools</h3>
-
-<p>The first stage in our pipeline will run the unit tests when a new commit is published
-to the Phonebot repository on Github.</p>
-
-<p>Using the <em>"Input"</em> tab, we're configuring the stage to pick up all changes in the <em>"master"</em> branch
-of the <a href="https://github.com/jthomas/phonebot.git">https://github.com/jthomas/phonebot.git</a> repository.
-The input for a stage can also be the build artifacts from a previous stage.</p>
-
-<p><img src="/images/unit_test_input.png"></p>
-
-<p>On the <em>"Jobs"</em> tab, we can configure multiple tasks to be executed when triggered by the stage input.
-For the unit tests, we're using a simple shell script to install the project dependencies and run
-the NPM task.</p>
-
-<p><img src="/images/unit_tests.png"></p>
-
-<h3>Deploy Test Server</h3>
-
-<p>Adding a second stage to the pipeline after the unit tests, we will use it to deploy our test server.
-This stage will only be executed if the first stage completes successfully.</p>
-
-<p>Using the <em>"Deploy"</em> rather than <em>"Test"</em> job, presents us with a configuration
-panel to set up the deployment parameters. The <em>"test"</em> space which contains our
-test configuration for our mock services. Choosing a different application name
-means our test server won't clash with the existing production host already
-deployed.</p>
-
-<p><img src="/images/deploy_test.png"></p>
-
-<h3>Running Integration Tests Against Test Server</h3>
-
-<p>Once the test server has been deployed, we can trigger the pipeline stage to run
-integration tests against this host.</p>
-
-<p>Using Mocha to run out integration tests means we can follow the setup
-as the unit test stage. Defining a "test" job, we install the project dependencies
-and then run the test harness.</p>
-
-<p><img src="/images/integration_tests.png"></p>
-
-<p>Phonebot's integration tests use environment variables to define the test
-and stub server locations. We can define these through the stage setup page, as
-shown below.</p>
-
-<p><img src="/images/environment_props.png"></p>
-
-<h3>Deploy To Production</h3>
-
-<p>Finally, provided all the previous stages were successfully, the last stage will
-deploy our application into production.</p>
-
-<p>Configuring a <em>"Deploy"</em> task, this time we use the production space <em>"dev"</em> and use the
-proper application name.</p>
-
-<p><img src="/images/deploy_production.png"></p>
-
-<h2>...and that's it!</h2>
-
-<p>With our "Continuous Delivery" pipeline now configured, new versions of
-Phonebot will be automatically deployed to production without any manual work.</p>
-
-<p><img src="/images/deploy_success.png"></p>
-
-<p>For testing, each stage can be triggered manually. Logs are available in to diagnose any issues that may occur.</p>
-
-<p><strong>Using IBM DevOps Services, we rapidly created a build and deploy pipeline linked to a project on Github without having to manually
-configure build systems, test servers or anything else you would expect.</strong></p>
-
-<p>Our example was relatively simple, the service can be configured for far more complicated build and deploy tasks. The <a href="https://hub.jazz.net/docs">documentation</a>
-gives full details on the capabilities of that platform. If you have any issues, please use the <a href="https://developer.ibm.com/answers/smartspace/devops-services/">IBM Answers support forum</a> to post questions and get answers from the development team.</p>
 ]]></content>
   </entry>
   
