@@ -4,7 +4,7 @@
   <title><![CDATA[Category: docker | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/docker/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-09-03T16:38:42+01:00</updated>
+  <updated>2015-09-14T17:32:05+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,384 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Location-Based Cloud Foundry Applications using Nginx and Docker]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/11/location-based-cloud-foundry-applications-with-nginx-and-docker/"/>
+    <updated>2015-09-11T10:24:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/11/location-based-cloud-foundry-applications-with-nginx-and-docker</id>
+    <content type="html"><![CDATA[<p>{% img /images/geo_web_view.png %}</p>
+
+<p>Routing application traffic based upon the geographic location of incoming requests can
+be used for a number of scenarios...</p>
+
+<ul>
+<li>Restricting access to your application outside defined geographic regions.</li>
+<li>Load-balancing traffic to the closest region for improved performance.</li>
+<li>Providing custom applications for different countries.</li>
+</ul>
+
+
+<p>IBM Bluemix allows deploying applications to different geographic regions through
+hosting instances of the <a href="https://www.cloudfoundry.org/">Cloud Foundry</a> platform in <a href="https://www.ibm.com/developerworks/community/blogs/enablingwithbluemix/entry/regions_in_bluemix?lang=en">multiple locations</a>.</p>
+
+<p>Cloud Foundry supports <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/domains-routes.html">simple HTTP routing rules</a> for deployed applications.
+Organisations can register domains and routes for applications. Routes can be
+bound to one or more deployed applications. Incoming HTTP traffic is
+load-balanced, using the <a href="https://en.wikipedia.org/wiki/Round-robin_scheduling">Round-Robin</a> policy, between the application instances bound to a route.</p>
+
+<p><em>However, the platform does not currently support traffic routing based upon the
+geographic location of incoming requests or sharing domains and routes between regions.</em></p>
+
+<p><strong>So, say we want to deploy custom versions of an application to different regions and
+automatically forward users to the correct version based upon their location. How can we
+achieve this?</strong></p>
+
+<p>Let's find out...</p>
+
+<h2>Deploying Application To Different Regions</h2>
+
+<p>IBM Bluemix currently provides Cloud Foundry in <a href="https://www.ng.bluemix.net/docs/overview/overview.html#ov_intro">two regions</a> for deploying applications.</p>
+
+<ul>
+<li><strong>US South</strong> (<em>api.ng.bluemix.net</em>)</li>
+<li><strong>Europe</strong> (<em>api.eu-gb.bluemix.net</em>)</li>
+</ul>
+
+
+<p>Moving between regions is as simple as providing the different region endpoint during the
+authentication command.</p>
+
+<p>``` sh
+[16:25:47 ~]$ cf login -a api.ng.bluemix.net -u james.thomas@uk.ibm.com -s dev
+API endpoint: api.ng.bluemix.net</p>
+
+<p>Password>
+Authenticating...
+OK</p>
+
+<p>Targeted org james.thomas@uk.ibm.com</p>
+
+<p>Targeted space dev</p>
+
+<p>API endpoint:   https://api.ng.bluemix.net (API version: 2.27.0)
+User:           james.thomas@uk.ibm.com
+Org:            james.thomas@uk.ibm.com
+Space:          dev
+[16:26:44 ~]$
+```</p>
+
+<p>We're now authenticated against the US South region.</p>
+
+<p>Let's start by deploying our sample application, which displays a web
+page showing the application URL, to this region.</p>
+
+<p>``` sh
+[16:44:24 ~/code/sample]$ cf api
+API endpoint: https://api.ng.bluemix.net (API version: 2.27.0)
+[16:44:32 ~/code/sample]$ cf push sample-demo-app
+Using manifest file /Users/james/code/sample/manifest.yml</p>
+
+<p>Updating app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>...</p>
+
+<p>Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 256M x 1 instances
+urls: sample-demo-app.mybluemix.net
+last uploaded: Fri Sep 11 15:45:04 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
+
+<pre><code> state     since                    cpu    memory          disk        details
+</code></pre>
+
+<h1>0   running   2015-09-11 04:46:00 PM   0.0%   67.1M of 256M   59M of 1G</h1>
+
+<p>[16:45:14 ~/code/sample]$
+```</p>
+
+<p>Once that has finished, we can move over to the European region and deploy our application there.</p>
+
+<p>``` sh
+[16:52:33 ~/code/sample]$ cf login -a api.eu-gb.bluemix.net -u james.thomas@uk.ibm.com -s dev
+[16:52:58 ~/code/sample]$ cf push sample-demo-app
+Using manifest file /Users/james/code/sample/manifest.yml</p>
+
+<p>Updating app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>...</p>
+
+<p>Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 256M x 1 instances
+urls: sample-demo-app.eu-gb.mybluemix.net
+last uploaded: Fri Sep 11 15:53:31 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
+
+<pre><code> state     since                    cpu    memory          disk        details
+</code></pre>
+
+<h1>0   running   2015-09-11 04:54:17 PM   0.0%   67.4M of 256M   59M of 1G</h1>
+
+<p>[16:54:25 ~/code/bluemix/sample]$
+```</p>
+
+<p>With the second deployment completed, there are now instances of the same application running in separate regions.</p>
+
+<p>Each instance is available through a separate URL.</p>
+
+<ul>
+<li><a href="http://sample-demo-app.mybluemix.net">http://sample-demo-app.mybluemix.net</a></li>
+<li><a href="http://sample-demo-app.eu-gb.mybluemix.net">http://sample-demo-app.eu-gb.mybluemix.net</a></li>
+</ul>
+
+
+<p>Now we need to set up traffic forwarding from the relevant locations to the correct region.</p>
+
+<h2>Reverse Proxy with Region Traffic Forwarding</h2>
+
+<p>Due to the platform not supporting multi-region traffic routing, we
+need to set up a custom reverse proxy. This server will receive
+requests from our external application domain and transparently forward
+them onto the correct region application.</p>
+
+<p>{% img /images/reverse_proxy.png %}</p>
+
+<p>We're going to use <a href="http://nginx.org/">Nginx</a>.</p>
+
+<p>{% blockquote Nginx http://wiki.nginx.org/Main %}</p>
+
+<p>Nginx (pronounced engine-x) is a free, open-source, high-performance HTTP server and reverse proxy, as well as an IMAP/POP3 proxy server</p>
+
+<p>{% endblockquote %}</p>
+
+<p>Nginx comes with a <a href="http://nginx.org/en/docs/http/ngx_http_geoip_module.html">module</a> for looking up locations associated with IP
+address using the <a href="http://dev.maxmind.com/geoip/">MaxMind GeoIP library</a>. The module can
+resolve incoming request addresses into continents, countries and even cities. Using the variables defined by the module, we
+can write traffic forwarding rules to send requests to the correct region.</p>
+
+<h2>Nginx Configuration</h2>
+
+<p>Nginx defines two configuration directives, <em>geoip_country</em> and <em>geoip_city</em>, to
+specify locations for the MaxMind GeoIP database files.</p>
+
+<pre>
+http { 
+    ...
+    geoip_country /usr/share/GeoIP/GeoIP.dat;
+    geoip_city /etc/nginx/geoip/GeoLiteCity.dat;
+    ...
+}
+</pre>
+
+
+<p>When configured, Nginx will expose a series of variables for each request with
+geographical information.</p>
+
+<ul>
+<li><strong>$geoip_country_code</strong> - <em>two-letter country code, for example, “RU”, “US”.</em></li>
+<li><strong>$geoip_country_name</strong> - <em>country name, for example, “Russian Federation”, “United States”.</em></li>
+<li><strong>$geoip_city_continent_code</strong> - <em>two-letter continent code, for example, “EU”, “NA”.</em></li>
+<li><strong>$geoip_city</strong> - <em>city name, for example, “Moscow”, “Washington”.</em></li>
+</ul>
+
+
+<p>Starting with the <a href="http://wiki.nginx.org/FullExample">default nginx configuration</a>,
+there are only a few modifications needed to set up a reverse proxy based upon
+location.</p>
+
+<p>For each request, we check the <em>$geoip_city_continent_code</em> against our list of
+regions. If the request is valid, setting the <em>proxy_pass</em> directive forwards
+the request onto the correct region. We also overwrite the <em>Host:</em> HTTP
+header with the region URL. IBM Bluemix uses this header to internally route
+incoming requests to the correct application host.</p>
+
+<p>Requests coming from outside these locations will be sent to a custom error
+page.</p>
+
+<p><em>Due to a <a href="https://www.ng.bluemix.net/docs/containers/container_troubleshoot.html">known issue</a>
+with IBM Containers, we must use IP addresses rather than the host names with the proxy_pass directive.</em></p>
+
+<p>Here is the full configuration for the <em>enabled-site/default</em> file.</p>
+
+<pre>
+server {
+  listen 80 default_server;
+  listen [::]:80 default_server ipv6only=on;
+
+  root /usr/share/nginx/html;
+  index index.html index.htm;
+  error_page 404 /404.html;
+
+# Make site accessible from http://localhost/
+  server_name localhost;
+
+  location = /404.html {
+    internal;
+  }
+
+  location / {
+    set $host_header "unknown";
+
+    if ($geoip_city_continent_code = "EU") { 
+      proxy_pass http://5.10.124.141;
+      set $host_header "sample-demo-app.eu-gb.mybluemix.net";
+    }
+
+    if ($geoip_city_continent_code = "NA") { 
+      proxy_pass http://75.126.81.66;
+      set $host_header "sample-demo-app.mybluemix.net";
+    }
+
+    if ($host_header = "unknown") {
+      return 404;
+    }
+
+    proxy_set_header Host $host_header;
+  }
+}
+</pre>
+
+
+<p>With the reverse proxy server configured, we need to provision a new
+production server, install Linux and Nginx, configure networking, security updates
+and backup services...</p>
+
+<p><em>...or we can use Docker.</em></p>
+
+<h2>Running Nginx using Docker</h2>
+
+<p>There are <a href="https://hub.docker.com/search/?q=nginx&amp;page=1&amp;isAutomated=0&amp;isOfficial=0&amp;starCount=0&amp;pullCount=0">thousands</a>
+of repositories on Docker Hub providing Nginx, including
+the official image. Unfortunately, the <a href="http://wiki.nginx.org/FullExample">official image</a> provides a version of Nginx
+that is not built with the <em>geo_ip</em> module.</p>
+
+<p>Ubuntu's default package repository for Nginx does provide a build including
+the <em>geo_ip</em> module. By modifying the Dockerfile for the official image, we can
+build a new image from Ubuntu with the required version of Nginx and include
+our custom configuration files.</p>
+
+<pre>
+FROM ubuntu
+RUN apt-get -y install nginx
+
+# copy custom configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY default /etc/nginx/sites-available/
+COPY geoip /etc/nginx/geoip
+COPY 404.html /usr/share/nginx/html/
+
+# forward request and error logs to docker log collector
+RUN ln -sf /dev/stdout /var/log/nginx/access.log
+RUN ln -sf /dev/stderr /var/log/nginx/error.log
+
+# expose HTTP and HTTP ports
+EXPOSE 80 443
+
+CMD ["nginx", "-g", "daemon off;"]
+</pre>
+
+
+<p>Building and running this container locally, we can test that Nginx is configured correctly. The repository containing the Dockerfile
+and build artificats is located <a href="https://github.com/jthomas/geo_ip">here</a>.</p>
+
+<p><code>sh
+[16:58:40 ~/code/final]$ docker build -t geo_ip .
+Sending build context to Docker daemon 15.88 MB
+Step 0 : FROM ubuntu
+ ---&gt; 91e54dfb1179
+...
+Step 9 : CMD nginx -g daemon off;
+ ---&gt; Using cache
+ ---&gt; 7bb6dbaafe3e
+Successfully built 7bb6dbaafe3e
+[16:58:50 ~/code/final]$ docker run -Pti geo_ip
+</code>
+<em>With the custom image ready, we just need to deploy it somewhere...</em></p>
+
+<h2>Running Nginx on IBM Containers</h2>
+
+<p>IBM Bluemix supports deploying Docker containers alongside Cloud Foundry
+applications, allowing us to use the same cloud platform for running our custom
+region applications as providing the reverse proxy</p>
+
+<p>Pushing pre-built images to the IBM Containers service is really as simple as creating a new tag and typing <em>docker push</em>.</p>
+
+<p><em>Please read and follow the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html">documentation</a>
+about installing the command-line container management tools and authenticating
+with the remote service before attempting the commands below.</em></p>
+
+<p><code>sh
+[14:10:52 ~]$ docker tag geo_ip registry.ng.bluemix.net/jthomas/geo_ip
+[14:10:59 ~]$ docker images
+REPOSITORY                               TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+geo_ip                                   latest              7bb6dbaafe3e        3 days ago          222.3 MB
+registry.ng.bluemix.net/jthomas/geo_ip   latest              7bb6dbaafe3e        3 days ago          222.3 MB
+[14:11:07 ~]$ cf ic login
+** Retrieving client certificates from IBM Containers
+** Storing client certificates in /Users/james/.ice/certs
+Successfully retrieved client certificates
+** Authenticating with registry at registry.eu-gb.bluemix.net
+Successfully authenticated with registry
+[14:24:25 ~]$ docker push registry.ng.bluemix.net/jthomas/geo_ip
+The push refers to a repository [registry.ng.bluemix.net/jthomas/geo_ip] (len: 1)
+Sending image list
+Pushing repository registry.ng.bluemix.net/jthomas/geo_ip (1 tags)
+...
+Pushing tag for rev [7bb6dbaafe3e] on {https://registry.ng.bluemix.net/v1/repositories/jthomas/geo_ip/tags/latest}
+[14:25:39 ~]$ cf ic images
+REPOSITORY                                        TAG                 IMAGE ID            CREATED              VIRTUAL SIZE
+registry.ng.bluemix.net/jthomas/geo_ip            latest              7b1865be-778        About a minute ago   0 B
+registry.ng.bluemix.net/ibmliberty                latest              2209a9732f35        3 weeks ago          263.6 MB
+registry.ng.bluemix.net/ibmnode                   latest              8f962f6afc9a        3 weeks ago          178.9 MB
+registry.ng.bluemix.net/ibm-mobilefirst-starter   latest              97513e56aaa7        3 weeks ago          464.9 MB
+[14:26:43 ~]$
+</code></p>
+
+<p>We can now use the IBM Bluemix dashboard to start a new container from our custom image,
+binding a public IP address and exposing ports.</p>
+
+<p>{% img /images/deploy_container.png %}</p>
+
+<p>Once the container starts, accessing the bound IP address shows the
+web page coming back with the region-specific application route.</p>
+
+<p>{% img /images/container_ip_address.png %}</p>
+
+<p>Using DNS <a href="https://en.wikipedia.org/wiki/List_of_DNS_record_types#A">A records</a>, we can now
+map our external URL to the IP address of the container. Users visiting this
+URL will be sent to the reverse proxy server which will then forward the
+request onto the correct region application.</p>
+
+<h2>Testing it all out...</h2>
+
+<p>Testing out the forwarding rules requires us to send HTTP requests from multiple regions.
+<a href="http://geowebview.com">GeoWebView</a> will run web browsers located in different geographies and show you the rendered page output.</p>
+
+<p>Running the tool with our application's <a href="http://geo_ip.jamesthom.as">web address</a>, shows the following rendered page images.</p>
+
+<p>{% img /images/geo_web_view.png %}</p>
+
+<p>We can see the browsers from the United States and Europe are sent to the correct region. The browser from South Africa is shown the custom error page.</p>
+
+<p><em>Using Nginx we've configured a reverse proxy to route users, based upon their location, to applications running in different IBM Bluemix regions. We're hosting
+the service on the same platform as our applications, using Docker. Most importantly, the whole process is transparent to the user, they aren't forced to visit
+country-specific URLs.</em></p>
+
+<p><strong>Success!</strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Debugging Cloud Foundry Stack Issues]]></title>
@@ -31,7 +409,9 @@ run into issues it can be necessary to jump into the weeds and find out what's g
 
 <p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>...</p>
 
-<p><blockquote><p>A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.</p><footer><strong>Cloud Foundry Concepts</strong> <cite><a href='https://docs.cloudfoundry.org/concepts/stacks.html'>docs.cloudfoundry.org/concepts/&hellip;</a></cite></footer></blockquote></p>
+<p>{% blockquote Cloud Foundry Concepts https://docs.cloudfoundry.org/concepts/stacks.html%}
+A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.
+{% endblockquote %}</p>
 
 <p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
 environment.</p>
@@ -119,7 +499,7 @@ $ docker run -i -t ubuntu:trusty /bin/bash
     <link href="http://jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/"/>
     <updated>2015-07-08T10:34:00+01:00</updated>
     <id>http://jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker</id>
-    <content type="html"><![CDATA[<p><img src="/images/Logs.png"></p>
+    <content type="html"><![CDATA[<p>{% img /images/Logs.png %}</p>
 
 <h3><strong>Logs are boring.</strong></h3>
 
@@ -143,7 +523,7 @@ $ docker run -i -t ubuntu:trusty /bin/bash
 
 <h2>Introducing the ELK (Elasticsearch, Logstash, Kibana) stack...</h2>
 
-<p><img src="https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png"></p>
+<p>{% img https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png %}</p>
 
 <p>Five years ago, <a href="https://www.elastic.co/products/elasticsearch">Elasticsearch</a>, an open-source full-text search engine, was
 released. It's now the second most popular enterprise search engine.
@@ -155,7 +535,9 @@ turning those logs into actionable insights.</p>
 
 <p>These tools were commonly used together, now known as the ELK stack, to deliver...</p>
 
-<p><blockquote><p>"an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source."</p></blockquote></p>
+<p>{% blockquote %}
+"an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source."
+{% endblockquote %}</p>
 
 <h4><strong>ELK, making logs awesome!</strong></h4>
 
@@ -165,15 +547,17 @@ turning those logs into actionable insights.</p>
 
 <h2>Docker </h2>
 
-<p><img src="https://upload.wikimedia.org/wikipedia/commons/7/79/Docker<em>(container_engine)</em>logo.png"></p>
+<p>{%img https://upload.wikimedia.org/wikipedia/commons/7/79/Docker<em>(container_engine)</em>logo.png %}</p>
 
-<p><blockquote><p>"Docker allows you to pack, ship and run any application as a lightweight container".</p></blockquote></p>
+<p>{% blockquote %}
+"Docker allows you to pack, ship and run any application as a lightweight container".
+{% endblockquote %}</p>
 
 <p><a href="https://www.docker.com/">Docker</a> <em>images</em> define pre-configured environments that containers
 are started from.  <a href="https://hub.docker.com/">Docker Hub</a> is the public image registry, where anyone can
 publish, search and retrieve new images.</p>
 
-<p><img src="/images/Docker%20Hub.png"></p>
+<p>{%img /images/Docker%20Hub.png %}</p>
 
 <p>Rather than having to install and configure individual software packages, we
 can pull down one of the many existing Docker images for the <a href="https://registry.hub.docker.com/search?q=elk">ELK stack</a>.</p>
@@ -323,7 +707,10 @@ modifications on top and then generates a brand new image.</p>
 
 <p><strong>So, how do we build our own Docker images? Using a Dockerfile.</strong></p>
 
-<p><blockquote><p>A Dockerfile is a text document that contains all the commands you would<br/>normally execute manually in order to build a Docker image.<br/></p></blockquote></p>
+<p>{% blockquote %}
+A Dockerfile is a text document that contains all the commands you would
+normally execute manually in order to build a Docker image.<br/>
+{% endblockquote %}</p>
 
 <p>Reviewing the <a href="https://registry.hub.docker.com/u/sebp/elk/dockerfile/">Dockerfile</a> for the <em>sebp/elk</em> image, configuration for logstash is
 stored in the <em>/etc/logstash/conf.d/</em> directory. All we need to do is replace these files with our custom configuration.</p>
@@ -494,14 +881,14 @@ In this example, we'll be using the IBM Bluemix UI to start and configure a new 
 <p>Logging into the IBM Bluemix, the <em>Catalogue</em> page shows the list of available images used to create new containers. We have both the official
 images from IBM Containers and our custom ELK service.</p>
 
-<p><img src="/images/Container%20Images.png"></p>
+<p>{% img /images/Container%20Images.png %}</p>
 
 <p>Selecting the <em>ELK</em> image, we can configure and run a new container from this
 image. Setting up a new container with a public IP address,
 memory limit to 1GB and expose the same ports as running locally (5000, 5601
 and 9200).</p>
 
-<p><img src="/images/Create%20Container.png"></p>
+<p>{% img /images/Create%20Container.png %}</p>
 
 <p>Clicking the <em>Create</em> button, IBM Bluemix will provision and start our
 new container.</p>
@@ -509,8 +896,8 @@ new container.</p>
 <p>Once the container has started, we can view the <em>Dashboard</em> page for this instance. Here we can view
 details about the container instance, modify the running state and access monitoring and logs tools.</p>
 
-<p><img src="/images/Container%20Overview.png">
-<img src="/images/Container%20Monitoring.png"></p>
+<p>{% img /images/Container%20Overview.png %}
+{% img /images/Container%20Monitoring.png %}</p>
 
 <p><em>...and that's it! We now have our ELK service running using IBM Containers
 ready to start processing logs from our applications.</em></p>
@@ -539,7 +926,7 @@ $ cf restart [app-name]
 <p>Testing this out is as simple as visiting our application to generate sample logs and then looking at the Kibana page to see they are showing up.
 Here is a screenshot of the expected output when our ELK container is successfully processing logs from a Cloud Foundry application.</p>
 
-<p><img src="/images/Kibana.png"></p>
+<p>{% img /images/Kibana.png %}</p>
 
 <h2>Conclusion</h2>
 
@@ -549,7 +936,9 @@ installing and configuring a multitude of different software packages. Pushing
 this image to the IBM Containers platform means we can spin up new ELK
 containers on-demand within minutes!</p>
 
-<p><blockquote><p>Elasticsearch, Docker and IBM Containers... Making Logs Awesome.</p></blockquote></p>
+<p>{% blockquote %}
+Elasticsearch, Docker and IBM Containers... Making Logs Awesome.
+{% endblockquote %}</p>
 ]]></content>
   </entry>
   
