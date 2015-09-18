@@ -4,7 +4,7 @@
   <title><![CDATA[Category: bluemix | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/bluemix/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-09-14T17:32:05+01:00</updated>
+  <updated>2015-09-18T21:37:04+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,183 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Node.js v4 in Cloud Foundry]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/"/>
+    <updated>2015-09-18T17:33:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry</id>
+    <content type="html"><![CDATA[<p>Last week, Node.js <a href="https://nodejs.org/en/blog/release/v4.0.0/">released the latest version</a>
+of their project, v4.0.0. This release, representing the convergence of io.js with the original Node.js
+project, came with lots of exciting features like <a href="http://apmblog.dynatrace.com/2015/09/05/all-you-need-to-know-about-node-js-4-0/">improved ES6 support</a>.</p>
+
+<p>Cloud Foundry already <a href="https://docs.cloudfoundry.org/buildpacks/node/node-tips.html">supports multiple versions</a> of the Node.js runtime.
+Developers select the desired runtime version using a parameter in their
+application's <a href="http://browsenpm.org/package.json">package descriptor</a>.</p>
+
+<p><em>So, we just update package.json to include "4.0.0" and re-deploy our application?</em></p>
+
+<p>Not yet.</p>
+
+<p>There is an <a href="https://github.com/nodejs/node/issues/2783">unresolved technical issue</a>
+delaying the <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">release</a> of "official"
+Node.js v4 support for the platform. 😿</p>
+
+<p><em>Can we add support ourselves?</em></p>
+
+<p><strong>Yes!</strong></p>
+
+<p>To do this, we need to explore how Cloud Foundry configures the runtime
+environment for applications.</p>
+
+<h2>Buildpacks</h2>
+
+<p>Rather than hardcoding supported runtimes and frameworks into the platform,
+Cloud Foundry borrowed the <a href="https://docs.cloudfoundry.org/buildpacks/"><em>buildpack model</em></a> from Heroku. Buildpacks are a
+<a href="https://docs.cloudfoundry.org/buildpacks/custom.html#custom-buildpacks">set of scripts</a>, run by the platform during deployment, to configure the runtime
+environment.</p>
+
+<p>Users can set an explicit buildpack for an application, <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#buildpack">using the manifest</a>, or let
+the platform decide. Buildpacks for <a href="https://docs.cloudfoundry.org/buildpacks/">common runtimes</a> are pre-installed with the platform.
+Buildpacks set through the manifest can point to external URLs, allowing users to create
+new buildpacks supporting custom runtimes.</p>
+
+<p>Each buildpack must contain the following files as executable scripts.</p>
+
+<ul>
+<li><strong>bin/detect</strong> - <em>determine whether a buildpack is suitable for an application.</em></li>
+<li><strong>bin/compile</strong> - <em>install and configure the runtime environment on the DEA.</em></li>
+<li><strong>bin/release</strong> - <em>provide metadata with information on executing application.</em></li>
+</ul>
+
+
+<p>Full details on existing buildpacks for the platform are available <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">here</a>.</p>
+
+<p>Node.js is supported as an "official" buildpack by the platform. This will be
+the one we will modify to add support for the latest version of the runtime.</p>
+
+<h2>Node.js Buildpack </h2>
+
+<p><a href="https://github.com/cloudfoundry/nodejs-buildpack">This</a> is the Node.js
+buildpack for Cloud Foundry. Applications using this buildpack can select the
+version of Node.js to install using the engine parameter in the package
+descriptor.</p>
+
+<p>Looking at the <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile"><em>bin/compile</em></a>
+script will show us how the Node.js runtime is installed during deployment.</p>
+
+<p>This <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile#L66-L88">snippet</a> handles
+accessing the Node.js version configured, using the node.engine parameter from package.json, before calling
+<em>install_nodejs</em> to install the correct runtime package.</p>
+
+<pre>
+install_bins() {
+  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
+  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
+
+  echo "engines.node (package.json):  ${node_engine:-unspecified}"
+  echo "engines.npm (package.json):   ${npm_engine:-unspecified (use default)}"
+  echo ""
+
+  warn_node_engine "$node_engine"
+  install_nodejs "$node_engine" "$BUILD_DIR/.heroku/node"
+  install_npm "$npm_engine" "$BUILD_DIR/.heroku/node"
+  warn_old_npm
+}
+</pre>
+
+
+<p>Searching through the buildpack for this function, it's in the
+<a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/lib/binaries.sh">lib/binaries.sh</a>
+file.  Looking at the <a href="https://github.com/heroku/heroku-buildpack-nodejs/blob/master/lib/binaries.sh#L10-L25">function code</a>, it translates the version number into a
+URL pointing to an archive with the pre-compiled Node.js binary. This archive
+file is downloaded, extracted and installed into the runtime environment.</p>
+
+<p>Translating Node.js version identifiers into archive URLs uses a special file
+in the buildpack, <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/manifest.yml">manifest.yml</a>. This file maps every supported version to a
+pre-built binary location.</p>
+
+<p>Looking at <a href="https://github.com/cloudfoundry/nodejs-buildpack/commit/8536a85cd69c867dc797c9586839a1373da4fd9d">previous commits</a> to the Node.js buildpack, adding support for additional
+versions of Node.js simply requires updating this file with the extra version
+identifier and archive URL.</p>
+
+<p>Until the Cloud Foundry team updates the buildpack to support Node.js v4, they won't
+provide an external archive containing the pre-built runtime environment.</p>
+
+<p><em>Where can we find a suitable build of the Node.js binary?</em></p>
+
+<h2>Node.js Runtime Binaries </h2>
+
+<p>Cloud Foundry borrowed the <strong>buildpack</strong> concept from <a href="https://devcenter.heroku.com/articles/buildpacks">Heroku</a> and still
+maintains backwards compatibility with their platform. Heroku buildpacks will
+work with Cloud Foundry applications. The Node.js buildpack for Cloud Foundry
+is actually still a fork of <a href="https://github.com/heroku/heroku-buildpack-nodejs">Heroku's</a>.</p>
+
+<p>Looking back through the original buildpack source, this URL template is used to translate
+Node.js versions to archive URLs being built by Heroku.</p>
+
+<p><em>http://s3pository.heroku.com/node/v$version/node-v$version-$os-$cpu.tar.gz</em></p>
+
+<p>Combining the correct version identifier and platform parameters with this
+template gave the following location for a potential build of the Node.js v4
+runtime.</p>
+
+<p><a href="">http://s3pository.heroku.com/node/v4.0.0/node-v4.0.0-linux-x64.tar.gz</a></p>
+
+<p>Running curl against the location successfully downloaded the Node.js v4 binary archive!</p>
+
+<h2>Custom v4 Buildpack</h2>
+
+<p>Forking the Cloud Foundry Node.js buildpack on Github, we can update the
+<a href="https://github.com/jthomas/nodejs-v4-buildpack/blob/master/manifest.yml#L57-L62">manifest.yml</a> with the Node.js v4 identifier pointing to the Heroku runtime
+archive. This <a href="https://github.com/jthomas/nodejs-v4-buildpack">external Git repository</a> will be used as the buildpack identifier
+in the application manfest.</p>
+
+<h2>Deploying with v4</h2>
+
+<p>Having updated our application manifest with the custom buildpack location and
+set the updated node version flag, re-deploying our application will start it
+running on Node.js v4.</p>
+
+<p>``` sh
+[20:02:29 ~]$ cf app sample-demo-app
+Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 256M x 1 instances
+urls: sample-demo-app.mybluemix.net
+last uploaded: Fri Sep 18 18:33:56 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
+
+<pre><code> state     since                    cpu    memory          disk        details
+</code></pre>
+
+<h1>0   running   2015-09-18 07:35:01 PM   0.0%   65.3M of 256M   59M of 1G</h1>
+
+<p>[20:03:13 ~]$
+```</p>
+
+<p>Looking at the logs from the deployment we can see the latest Node.js
+runtime has been downloaded and installed within our runtime environment.</p>
+
+<h2>Conclusion</h2>
+
+<p>Buildpacks are a brilliant feature of Cloud Foundry.</p>
+
+<p>Understanding how buildpacks are structured and used by the platform means we
+can start customising existing buildpacks and even start creating our own.</p>
+
+<p><strong>If you want to run Node.js applications using v4 on Cloud Foundry today, you
+can use the <a href="https://github.com/jthomas/nodejs-v4-buildpack">following buildpack</a>
+created using the instructions above.</strong></p>
+
+<p>Cloud Foundry is currently adding support for the version to
+the official buildpack, follow their progress <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">here</a>.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Location-Based Cloud Foundry Applications using Nginx and Docker]]></title>
@@ -872,109 +1049,6 @@ outside of IBM Bluemix required complex configuration to register service creden
 be prompted to input the service credentials in the node editor panel if the application isn't running on IBM Bluemix. Much easier!</p>
 
 <p><strong>If you have questions or encounter issues, please ask over on <a href="http://stackoverflow.com/questions/tagged/node-red">Stackoverflow</a> or raise <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issues</a> in Github</strong></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Debugging Cloud Foundry Stack Issues]]></title>
-    <link href="http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues/"/>
-    <updated>2015-07-10T15:27:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues</id>
-    <content type="html"><![CDATA[<p>Recent <a href="https://groups.google.com/a/cloudfoundry.org/forum/#!topic/vcap-dev/gU7rpD8MSC4">changes</a> to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of <a href="http://stackoverflow.com/questions/31057357/static-buildpack-deploy-now-failing-due-to-unsupported-stack">issues</a> <a href="http://stackoverflow.com/questions/31085626/fail-to-push-static-site-to-bluemix-using-third-party-buildpack/31089127#31089127">for</a> <a href="http://stackoverflow.com/questions/31268155/bluemix-libstdc-so-6-version-glibcxx-3-4-20-not-found/31288182#31288182">users</a>. I've helped users diagnose and fix issues
-that have occurred due to a mistmatches between the platform stack, applications and the buildpack. Learning a number of techniques for helping to discover and resolve these
-issues and I wanted to share them with everyone else.</p>
-
-<p>Running on Cloud Foundry's <em>Platform-as-a-Service</em> solution, we take for granted that low-level concepts like operating systems are abstracted away from the developer.</p>
-
-<p>However, when we
-run into issues it can be necessary to jump into the weeds and find out what's going on under the hood...</p>
-
-<h2>What are Cloud Foundry "stacks"?</h2>
-
-<p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>...</p>
-
-<p>{% blockquote Cloud Foundry Concepts https://docs.cloudfoundry.org/concepts/stacks.html%}
-A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.
-{% endblockquote %}</p>
-
-<p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
-environment.</p>
-
-<p>Most users don't have to care which <em>stack</em> they are running on.</p>
-
-<p>However, if your application needs a specific version of a system library or you want to verify a specific command line application is installed, you
-may need to dig deeper...</p>
-
-<h2>What "stacks" does my platform support?</h2>
-
-<p>Using the Cloud Foundry CLI, issue the following command to see what <em>stacks</em> are available on the platform.</p>
-
-<p>``` sh
-[16:27:30 ~]$ cf stacks
-Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>name         description
-lucid64      Ubuntu 10.04
-seDEA        private
-cflinuxfs2   Ubuntu 14.04.2 trusty
-```</p>
-
-<p>Stack information contains the unique name for each stack and the underlying operating system version.</p>
-
-<h2>Which "stack" is my application running on?</h2>
-
-<p>Since <a href="https://github.com/cloudfoundry/cli/releases/tag/v6.11.0">v6.11.0</a>, the <em>stack</em> for an application has been shown in the CLI application info output.</p>
-
-<p>``` sh
-[16:34:39 ~]$ cf app debug-testing
-Showing health and status for app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>requested state: started
-instances: 1/1
-usage: 512M x 1 instances
-urls: debug-testing.mybluemix.net
-last uploaded: Tue Jun 16 15:47:21 UTC 2015
-stack: lucid64
-buildpack: SDK for Node.js(TM)</p>
-
-<pre><code> state     since                    cpu    memory           disk           details
-</code></pre>
-
-<h1>0   running   2015-06-30 08:53:57 PM   0.0%   242.5M of 512M   196.8M of 1G</h1>
-
-<p>```</p>
-
-<h2>How can I choose the "stack" my application runs on?</h2>
-
-<p>Users can set the <em>stack</em> for an application using the <em>-s</em> command-line parameter during deployment.
-The stack identifier should match one of the names shown in the output from the <em>cf stacks</em> command.</p>
-
-<p><code>sh
-$ cf push -s stack_identifier
-</code></p>
-
-<h2>How are the "stacks" defined?</h2>
-
-<p>This <a href="https://github.com/cloudfoundry/stacks">Github repository</a> contains the source files for building the <em>stacks</em>. There's a
-<a href="https://docs.docker.com/reference/builder/">Dockerfile</a> for the current <a href="https://github.com/cloudfoundry/stacks/blob/master/cflinuxfs2/Dockerfile">cflinuxfs2</a> stack
-to build the image used in Cloud Foundry.</p>
-
-<h2>How can I poke around inside a "stack" locally?</h2>
-
-<p>Using Docker, we can easily pull down the same "base" operating system used for a specifc "stack" and run locally.</p>
-
-<p>For the <em>cflinuxfs2</em> stack, we can pull down the <a href="http://releases.ubuntu.com/14.04/">Ubuntu Trusty</a> image and run a terminal inside it.</p>
-
-<p><code>sh
-$ docker pull ubuntu:trusty
-$ docker run -i -t ubuntu:trusty /bin/bash
-</code></p>
-
-<h2>How can I easily migrate existing applications to a new stack?</h2>
-
-<p>Rather than having to re-deploy each application separately, there's a great <a href="https://github.com/simonleung8/cli-stack-changer">CF CLI plugin</a> to automatically migrate all your applications from <em>lucid64</em> to <em>cflinuxfs2</em>.</p>
 ]]></content>
   </entry>
   

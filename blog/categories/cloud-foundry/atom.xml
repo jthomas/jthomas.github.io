@@ -4,7 +4,7 @@
   <title><![CDATA[Category: cloud foundry | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/cloud-foundry/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2015-09-14T17:32:05+01:00</updated>
+  <updated>2015-09-18T21:37:04+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,183 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Node.js v4 in Cloud Foundry]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/"/>
+    <updated>2015-09-18T17:33:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry</id>
+    <content type="html"><![CDATA[<p>Last week, Node.js <a href="https://nodejs.org/en/blog/release/v4.0.0/">released the latest version</a>
+of their project, v4.0.0. This release, representing the convergence of io.js with the original Node.js
+project, came with lots of exciting features like <a href="http://apmblog.dynatrace.com/2015/09/05/all-you-need-to-know-about-node-js-4-0/">improved ES6 support</a>.</p>
+
+<p>Cloud Foundry already <a href="https://docs.cloudfoundry.org/buildpacks/node/node-tips.html">supports multiple versions</a> of the Node.js runtime.
+Developers select the desired runtime version using a parameter in their
+application's <a href="http://browsenpm.org/package.json">package descriptor</a>.</p>
+
+<p><em>So, we just update package.json to include "4.0.0" and re-deploy our application?</em></p>
+
+<p>Not yet.</p>
+
+<p>There is an <a href="https://github.com/nodejs/node/issues/2783">unresolved technical issue</a>
+delaying the <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">release</a> of "official"
+Node.js v4 support for the platform. 😿</p>
+
+<p><em>Can we add support ourselves?</em></p>
+
+<p><strong>Yes!</strong></p>
+
+<p>To do this, we need to explore how Cloud Foundry configures the runtime
+environment for applications.</p>
+
+<h2>Buildpacks</h2>
+
+<p>Rather than hardcoding supported runtimes and frameworks into the platform,
+Cloud Foundry borrowed the <a href="https://docs.cloudfoundry.org/buildpacks/"><em>buildpack model</em></a> from Heroku. Buildpacks are a
+<a href="https://docs.cloudfoundry.org/buildpacks/custom.html#custom-buildpacks">set of scripts</a>, run by the platform during deployment, to configure the runtime
+environment.</p>
+
+<p>Users can set an explicit buildpack for an application, <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#buildpack">using the manifest</a>, or let
+the platform decide. Buildpacks for <a href="https://docs.cloudfoundry.org/buildpacks/">common runtimes</a> are pre-installed with the platform.
+Buildpacks set through the manifest can point to external URLs, allowing users to create
+new buildpacks supporting custom runtimes.</p>
+
+<p>Each buildpack must contain the following files as executable scripts.</p>
+
+<ul>
+<li><strong>bin/detect</strong> - <em>determine whether a buildpack is suitable for an application.</em></li>
+<li><strong>bin/compile</strong> - <em>install and configure the runtime environment on the DEA.</em></li>
+<li><strong>bin/release</strong> - <em>provide metadata with information on executing application.</em></li>
+</ul>
+
+
+<p>Full details on existing buildpacks for the platform are available <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">here</a>.</p>
+
+<p>Node.js is supported as an "official" buildpack by the platform. This will be
+the one we will modify to add support for the latest version of the runtime.</p>
+
+<h2>Node.js Buildpack </h2>
+
+<p><a href="https://github.com/cloudfoundry/nodejs-buildpack">This</a> is the Node.js
+buildpack for Cloud Foundry. Applications using this buildpack can select the
+version of Node.js to install using the engine parameter in the package
+descriptor.</p>
+
+<p>Looking at the <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile"><em>bin/compile</em></a>
+script will show us how the Node.js runtime is installed during deployment.</p>
+
+<p>This <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile#L66-L88">snippet</a> handles
+accessing the Node.js version configured, using the node.engine parameter from package.json, before calling
+<em>install_nodejs</em> to install the correct runtime package.</p>
+
+<pre>
+install_bins() {
+  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
+  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
+
+  echo "engines.node (package.json):  ${node_engine:-unspecified}"
+  echo "engines.npm (package.json):   ${npm_engine:-unspecified (use default)}"
+  echo ""
+
+  warn_node_engine "$node_engine"
+  install_nodejs "$node_engine" "$BUILD_DIR/.heroku/node"
+  install_npm "$npm_engine" "$BUILD_DIR/.heroku/node"
+  warn_old_npm
+}
+</pre>
+
+
+<p>Searching through the buildpack for this function, it's in the
+<a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/lib/binaries.sh">lib/binaries.sh</a>
+file.  Looking at the <a href="https://github.com/heroku/heroku-buildpack-nodejs/blob/master/lib/binaries.sh#L10-L25">function code</a>, it translates the version number into a
+URL pointing to an archive with the pre-compiled Node.js binary. This archive
+file is downloaded, extracted and installed into the runtime environment.</p>
+
+<p>Translating Node.js version identifiers into archive URLs uses a special file
+in the buildpack, <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/manifest.yml">manifest.yml</a>. This file maps every supported version to a
+pre-built binary location.</p>
+
+<p>Looking at <a href="https://github.com/cloudfoundry/nodejs-buildpack/commit/8536a85cd69c867dc797c9586839a1373da4fd9d">previous commits</a> to the Node.js buildpack, adding support for additional
+versions of Node.js simply requires updating this file with the extra version
+identifier and archive URL.</p>
+
+<p>Until the Cloud Foundry team updates the buildpack to support Node.js v4, they won't
+provide an external archive containing the pre-built runtime environment.</p>
+
+<p><em>Where can we find a suitable build of the Node.js binary?</em></p>
+
+<h2>Node.js Runtime Binaries </h2>
+
+<p>Cloud Foundry borrowed the <strong>buildpack</strong> concept from <a href="https://devcenter.heroku.com/articles/buildpacks">Heroku</a> and still
+maintains backwards compatibility with their platform. Heroku buildpacks will
+work with Cloud Foundry applications. The Node.js buildpack for Cloud Foundry
+is actually still a fork of <a href="https://github.com/heroku/heroku-buildpack-nodejs">Heroku's</a>.</p>
+
+<p>Looking back through the original buildpack source, this URL template is used to translate
+Node.js versions to archive URLs being built by Heroku.</p>
+
+<p><em>http://s3pository.heroku.com/node/v$version/node-v$version-$os-$cpu.tar.gz</em></p>
+
+<p>Combining the correct version identifier and platform parameters with this
+template gave the following location for a potential build of the Node.js v4
+runtime.</p>
+
+<p><a href="">http://s3pository.heroku.com/node/v4.0.0/node-v4.0.0-linux-x64.tar.gz</a></p>
+
+<p>Running curl against the location successfully downloaded the Node.js v4 binary archive!</p>
+
+<h2>Custom v4 Buildpack</h2>
+
+<p>Forking the Cloud Foundry Node.js buildpack on Github, we can update the
+<a href="https://github.com/jthomas/nodejs-v4-buildpack/blob/master/manifest.yml#L57-L62">manifest.yml</a> with the Node.js v4 identifier pointing to the Heroku runtime
+archive. This <a href="https://github.com/jthomas/nodejs-v4-buildpack">external Git repository</a> will be used as the buildpack identifier
+in the application manfest.</p>
+
+<h2>Deploying with v4</h2>
+
+<p>Having updated our application manifest with the custom buildpack location and
+set the updated node version flag, re-deploying our application will start it
+running on Node.js v4.</p>
+
+<p>``` sh
+[20:02:29 ~]$ cf app sample-demo-app
+Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 256M x 1 instances
+urls: sample-demo-app.mybluemix.net
+last uploaded: Fri Sep 18 18:33:56 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
+
+<pre><code> state     since                    cpu    memory          disk        details
+</code></pre>
+
+<h1>0   running   2015-09-18 07:35:01 PM   0.0%   65.3M of 256M   59M of 1G</h1>
+
+<p>[20:03:13 ~]$
+```</p>
+
+<p>Looking at the logs from the deployment we can see the latest Node.js
+runtime has been downloaded and installed within our runtime environment.</p>
+
+<h2>Conclusion</h2>
+
+<p>Buildpacks are a brilliant feature of Cloud Foundry.</p>
+
+<p>Understanding how buildpacks are structured and used by the platform means we
+can start customising existing buildpacks and even start creating our own.</p>
+
+<p><strong>If you want to run Node.js applications using v4 on Cloud Foundry today, you
+can use the <a href="https://github.com/jthomas/nodejs-v4-buildpack">following buildpack</a>
+created using the instructions above.</strong></p>
+
+<p>Cloud Foundry is currently adding support for the version to
+the official buildpack, follow their progress <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">here</a>.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Location-Based Cloud Foundry Applications using Nginx and Docker]]></title>
@@ -1214,219 +1391,6 @@ containers on-demand within minutes!</p>
 <p>{% blockquote %}
 Elasticsearch, Docker and IBM Containers... Making Logs Awesome.
 {% endblockquote %}</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Continuous Delivery for Phonebot]]></title>
-    <link href="http://jamesthom.as/blog/2015/06/11/continuous-delivery-for-phonebot/"/>
-    <updated>2015-06-11T16:08:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/06/11/continuous-delivery-for-phonebot</id>
-    <content type="html"><![CDATA[<p>{% img /images/Phonebot_Pipeline.png %}</p>
-
-<p>Since creating <a href="http://jamesthom.as/blog/2015/05/29/phonebot/">Phonebot</a> last month,
-I've been working on setting up a fully-automated build and deploy for the project.
-Using <a href="http://hub.jazz.net">IBM DevOps Services</a>, Phonebot now has
-"<a href="http://en.wikipedia.org/wiki/Continuous_delivery">Continuous Delivery</a>" enabled.</p>
-
-<p><strong>When new code is commited to the <a href="https://github.com/IBM-Bluemix/phonebot">external Github repository</a>,
-the build service will perform the following tasks.</strong></p>
-
-<ul>
-<li><em>Run Unit Tests and Code Lint Tools</em></li>
-<li><em>Deploy To Test Server</em></li>
-<li><em>Run Integration Tests Against Test Server</em></li>
-<li><em>Deploy To Production</em></li>
-</ul>
-
-
-<p>Each stage will only be executed if the following stage passes.</p>
-
-<p>In the following post, I'll explain how to set up each stage and share tips making it easy to
-replicate this setup for your projects...</p>
-
-<h2>Writing Tests for Phonebot</h2>
-
-<p>Phonebot comes with a comprehensive <a href="https://github.com/IBM-Bluemix/phonebot/tree/master/test">test suite</a>.
-I've used the <a href="http://mochajs.org">Mocha</a> test framework for creating unit and integration tests. Test
-assertions use NodeJS' <a href="https://nodejs.org/api/assert.html">built-in library</a>. The <a href="https://github.com/mfncooper/mockery">mockery</a>
-library is used to replace module dependencies with mock objects.</p>
-
-<p>Setting up the <a href="https://docs.npmjs.com/misc/scripts"><em>scripts</em></a> field in
-<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/package.json"><em>package.json</em></a> allows us to use NPM to run our tests.</p>
-
-<p>NPM will look into the "<em>node_modules/.bin</em>" directory for binaries when running scripts. This means we don't need Mocha installed
-on the deployment host to run tests. The "<em>devDependencies</em>" field includes modules we rely on during development
-but not production.</p>
-
-<p>```
-"devDependencies": {</p>
-
-<pre><code>"mocha": "^2.2.5",
-"mocha-eslint": "^0.1.7",
-"mockery": "^1.4.0"
-</code></pre>
-
-<p>},
-"scripts": {</p>
-
-<pre><code>"test": "mocha test/unit",
-"integration-test": "mocha test/integration",
-"start": "node app.js"
-</code></pre>
-
-<p>  },
-```</p>
-
-<p>Running the following commands will run the unit and integration tests.</p>
-
-<p><code>
-$ npm test  // defaults to 'run test'
-$ npm run integration-test
-</code></p>
-
-<h3>Running Code Linters</h3>
-
-<p>Along with unit tests, we want to run 'code linters' to catch any errors in our JavaScript code.
-We're using the <a href="https://github.com/eslint/eslint">eslint</a> tool with the following
-<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/.eslintrc">configuration</a>. Using this <a href="https://www.npmjs.com/package/mocha-eslint">module</a>,
-we're setting up the eslint tool as a <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/test/unit/eslint.js">test case</a>.</p>
-
-<p>This test will
-be automatically run in the unit test phase and errors incorporated into the test report.</p>
-
-<h3>Mocking Services In Integration Tests</h3>
-
-<p>When the unit tests have passed, we're going to deploy a test instance of the application.
-Integration tests will make HTTP requests to simulate user activity, capture the responses
-and then verify the application is behaving as expected.</p>
-
-<p>Phonebot uses external services, provisioned through IBM Bluemix, to make phone calls, translate
-speech to text and communicate with Slack channels. Services configuration parameters, e.g. username, password, host,
-are passed into the application using <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">environment variables</a>.</p>
-
-<p><strong><em>During integration tests, we want to capture all requests to external services and provide hardcoded HTTP responses to be returned.
-With service parameters coming from environment properties, rather than hardcoded in the application, we can simply replace
-the bound services configuration with our own values. This application will pick up these new values, pointing to our stub server, at runtime
-without any changes needed to the code.</em></strong></p>
-
-<p>This <a href="https://gist.github.com/jthomas/f573cb94de20b0e95940">stub server</a> has
-been created to capture all incoming HTTP requests and make them available at a
-custom HTTP endpoint. We're also configured HTTP routes to simulate each of the
-external services and return hardcoded responses.</p>
-
-<p>Deploying our test server in a different <a href="http://docs.cloudfoundry.org/concepts/roles.html#spaces">space</a> to production means we can have custom
-credentials set up without having to modify the service configuration in the production environment.</p>
-
-<p>The following commands will show the existing configuration values that we can replicate in the test environment.</p>
-
-<p><code>
-$ cf env phonebot
-$ cf create-space test
-$ cf target -s test
-$ cf cups twilio -p "accountSID, authToken, url"
-$ cf cups speech_to_text -p "username, password, url"
-$ cf cups slack_webhooks -p "slackbot-testing"
-</code></p>
-
-<p>With the test credentials created, we can deploy the application to the "test" space without modifications.</p>
-
-<h2>Setting up Build and Deploy Pipeline</h2>
-
-<p>We're going to use <a href="http://hub.jazz.net">IBM DevOps Services</a> to build and manage the "Continuous Delivery" pipeline.
-From the home page, click the <em>"Create Project"</em> button to import our existing Github project into the workspace.</p>
-
-<p>{% img /images/create_project.png %}</p>
-
-<p>The <em>"Create Project"</em> page allows us to link an existing project from Github to the new project.
-Changes to the external repository will be automatically pushed through to our project.</p>
-
-<p>{% img /images/create_phonebot.png %}</p>
-
-<p>Selecting the <em>"Make a Bluemix project"</em> option will automatically configure deploying to the Bluemix platform.</p>
-
-<p>{% img /images/import_phonebot_bm.png %}</p>
-
-<p>When the project has finished importing, we can access the "Build and Deploy" pipeline...</p>
-
-<p>{% img /images/build_and_deploy.png %}</p>
-
-<p>... which will currently be empty. Clicking the <em>"Add Stage"</em> button will allow
-us to start configuring the build, test and deploy jobs for our pipeline.</p>
-
-<p>{% img /images/add_stage.png %}</p>
-
-<h3>Running Unit Tests and Code Lint Tools</h3>
-
-<p>The first stage in our pipeline will run the unit tests when a new commit is published
-to the Phonebot repository on Github.</p>
-
-<p>Using the <em>"Input"</em> tab, we're configuring the stage to pick up all changes in the <em>"master"</em> branch
-of the <a href="https://github.com/jthomas/phonebot.git">https://github.com/jthomas/phonebot.git</a> repository.
-The input for a stage can also be the build artifacts from a previous stage.</p>
-
-<p>{% img /images/unit_test_input.png %}</p>
-
-<p>On the <em>"Jobs"</em> tab, we can configure multiple tasks to be executed when triggered by the stage input.
-For the unit tests, we're using a simple shell script to install the project dependencies and run
-the NPM task.</p>
-
-<p>{% img /images/unit_tests.png %}</p>
-
-<h3>Deploy Test Server</h3>
-
-<p>Adding a second stage to the pipeline after the unit tests, we will use it to deploy our test server.
-This stage will only be executed if the first stage completes successfully.</p>
-
-<p>Using the <em>"Deploy"</em> rather than <em>"Test"</em> job, presents us with a configuration
-panel to set up the deployment parameters. The <em>"test"</em> space which contains our
-test configuration for our mock services. Choosing a different application name
-means our test server won't clash with the existing production host already
-deployed.</p>
-
-<p>{% img /images/deploy_test.png %}</p>
-
-<h3>Running Integration Tests Against Test Server</h3>
-
-<p>Once the test server has been deployed, we can trigger the pipeline stage to run
-integration tests against this host.</p>
-
-<p>Using Mocha to run out integration tests means we can follow the setup
-as the unit test stage. Defining a "test" job, we install the project dependencies
-and then run the test harness.</p>
-
-<p>{% img /images/integration_tests.png %}</p>
-
-<p>Phonebot's integration tests use environment variables to define the test
-and stub server locations. We can define these through the stage setup page, as
-shown below.</p>
-
-<p>{% img /images/environment_props.png %}</p>
-
-<h3>Deploy To Production</h3>
-
-<p>Finally, provided all the previous stages were successfully, the last stage will
-deploy our application into production.</p>
-
-<p>Configuring a <em>"Deploy"</em> task, this time we use the production space <em>"dev"</em> and use the
-proper application name.</p>
-
-<p>{% img /images/deploy_production.png %}</p>
-
-<h2>...and that's it!</h2>
-
-<p>With our "Continuous Delivery" pipeline now configured, new versions of
-Phonebot will be automatically deployed to production without any manual work.</p>
-
-<p>{% img /images/deploy_success.png %}</p>
-
-<p>For testing, each stage can be triggered manually. Logs are available in to diagnose any issues that may occur.</p>
-
-<p><strong>Using IBM DevOps Services, we rapidly created a build and deploy pipeline linked to a project on Github without having to manually
-configure build systems, test servers or anything else you would expect.</strong></p>
-
-<p>Our example was relatively simple, the service can be configured for far more complicated build and deploy tasks. The <a href="https://hub.jazz.net/docs">documentation</a>
-gives full details on the capabilities of that platform. If you have any issues, please use the <a href="https://developer.ibm.com/answers/smartspace/devops-services/">IBM Answers support forum</a> to post questions and get answers from the development team.</p>
 ]]></content>
   </entry>
   
