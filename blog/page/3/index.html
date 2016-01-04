@@ -9,8 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Last week was IBM IMPACT 2012, IBM&#8217;s premier conference for our customers in Las Vegas. I was fortunate enough to
-be there for the duration, &hellip;">
+  <meta name="description" content="There was a bold claim in the release notes for the 1.7 version of The Dojo Toolkit&#8230; Dojo Nano: Less than 4KB gzipped! With the move to the AMD &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -78,6 +77,587 @@ be there for the duration, &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/08/03/finding-nano/">Finding Nano - Getting Dojo Under 4KB</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-08-03T10:33:00+01:00" pubdate data-updated="true">Aug 3<span>rd</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>There was a bold claim in the release notes for the 1.7 version of The Dojo Toolkit&#8230;</p>
+
+<blockquote><p>Dojo Nano: Less than 4KB gzipped!</p></blockquote>
+
+
+<p>With the move to the AMD module format, the new fully-compliant asynchronous module loader could be reduced to
+less than four thousands bytes!</p>
+
+<p>Loading unnecessary code was a common complaint against previous versions of The Dojo Toolkit but now we
+could have complete control over loaded modules using this tiny AMD loader.</p>
+
+<p><em>Was this true?</em></p>
+
+<p><em>Running a standard build to generate a single dojo layer results in a minfied
+and gzipped file over 45,000 bytes.</em></p>
+
+<p><strong>How can we generate this nano
+loader in less than 10% of that size?</strong></p>
+
+<p>Until now, the instructions were spread over mailing
+<a href="http://comments.gmane.org/gmane.comp.web.dojo.devel/15941">list</a> <a href="http://mail.dojotoolkit.org/pipermail/dojo-interest/2011-December/060665.html">posts</a>,
+the <a href="http://livedocs.dojotoolkit.org/build/buildSystem">reference guide</a> and <a href="http://bugs.dojotoolkit.org/ticket/14381">bug tickets</a>,
+making it possible but not very easy!</p>
+
+<p>There already was an <a href="http://bugs.dojotoolkit.org/ticket/14392">open ticket</a> for the project to ship a complete nano-profile within the sample profiles.
+Taking up the challenge, I started investigating how to produce a profile that would generate a fully-functional AMD loader in under 4,000 bytes.</p>
+
+<h2>Nano-Build Profile</h2>
+
+<p>After much experimenting, tweaking and reviewing the toolkit&#8217;s source (along
+with help and advice from other contributors), the smallest usable AMD loader
+can be produced by running the following build profile.</p>
+
+<div><script src='https://gist.github.com/3163114.js'></script>
+<noscript><pre><code>var profile = (function(){
+    return {
+        layerOptimize: &quot;closure&quot;,
+        releaseDir: &quot;../../../release&quot;,
+
+        packages:[{
+            name:&quot;dojo&quot;,
+            location:&quot;../../../dojo&quot;
+        }],
+
+        defaultConfig:{
+            hasCache:{
+                &#39;dojo-built&#39;: 1,
+                &#39;dojo-loader&#39;: 1,
+                &#39;dom&#39;: 1,
+                &#39;host-browser&#39;: 1,
+                &quot;config-selectorEngine&quot;: &quot;lite&quot;
+            },
+            async:1
+        },
+
+        dojoBootText:&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;,
+
+        staticHasFeatures:{
+            &#39;config-dojo-loader-catches&#39;: 0,
+            &#39;config-tlmSiblingOfDojo&#39;: 0,
+            &#39;dojo-log-api&#39;: 0,
+            &#39;dojo-sync-loader&#39;: 0,
+            &#39;dojo-timeout-api&#39;: 0,
+            &#39;dojo-sniff&#39;: 0,
+            &#39;dojo-cdn&#39;: 0,
+            &#39;dojo-loader-eval-hint-url&#39;: 1,
+            &#39;config-stripStrict&#39;: 0,
+            &#39;ie-event-behavior&#39;: 0,
+            &#39;dojo-config-api&#39;: 0
+        },
+
+        layers: {
+            &quot;dojo/dojo&quot;: {
+                include: [],
+                customBase: 1
+            }
+        }
+    };
+})();</code></pre></noscript></div>
+
+
+<p>Once minified and gzipped, the entire loader is only <strong>3652</strong> bytes! Compared
+to the full loader with base modules, which came in a 45705 bytes, this
+represents <strong>more than a 92% reduction in file size</strong>.</p>
+
+<p>So, how does the build profile above squeeze so much space out? Let&#8217;s take a
+closer look at the parameters and explain how they contribute to the reduced
+size&#8230;</p>
+
+<h3>Custom Base Layer</h3>
+
+<p>Unless specified otherwise, the Dojo build system will always generate a <em>base</em> layer containing
+the dojo.js source file combined with all the base modules (those defined under the <em>dojo/_base</em> directory).</p>
+
+<p>Generating just the AMD loader, without all those additional modules, needs the profile to
+contain an explicit definition for the dojo base layer, allowing us to override configuration properties.</p>
+
+<p>Manually defining the base dojo layer is achieved by adding
+a new configuration object to the layers map, identified with the name <em>dojo/dojo</em>, as shown below.</p>
+
+<figure class='code'><figcaption><span>Base-less loader configuration</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">layers</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;dojo/dojo&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">include</span><span class="o">:</span> <span class="p">[],</span>
+</span><span class='line'>        <span class="nx">customBase</span><span class="o">:</span> <span class="mi">1</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Setting the <em>customBase</em> property to true will ensure the build system won&#8217;t automatically roll up all the base modules
+into the nano AMD loader. We&#8217;ve left the <em>include</em> property empty as we don&#8217;t want to add any extra modules.</p>
+
+<p>This first step in producing a nano loader <strong>reduces the minified and gzipped layer by almost 30KB</strong>!</p>
+
+<h3>Using the Closure Compiler</h3>
+
+<p>Dojo&#8217;s build system supports the use of different JavaScript minifiers, which
+perform tricks such as renaming variables and stripping whitespace in order to
+reduce the size of a JavaScript file.</p>
+
+<p>Shrinksafe is the default minifier, but in our profile we&#8217;ve chosen to use Google&#8217;s Closure compiler.</p>
+
+<figure class='code'><figcaption><span>Using closure compiler </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">layerOptimize</span><span class="o">:</span> <span class="s2">&quot;closure&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Experimenting with the different minifiers, it was apparent that Closure was
+more effective at reducing the layer file sizes by the greatest amount.</p>
+
+<p>Closure
+produces a <strong>minified layer file in 35,770 bytes, nearly 10KB less</strong> than the
+original version using Shrinksafe.</p>
+
+<p>More importantly, <em>the Closure compiler supports dead code elimination</em>. Running static analysis
+over the source files, those code branches which are unreachable will be stripped from the output.
+This feature is crucial in allowing us to tune the produced loader&#8217;s features, squeezing even more space out.</p>
+
+<h3>Static Features Configuration</h3>
+
+<p>As the Dojo Toolkit moves towards the 2.0 release, one of the major
+improvements within the code base is the use of dynamic detection for
+determining which features an environment supports, rather than relying on
+brittle user-agent sniffing.</p>
+
+<p>Using feature tests, alternative code paths can be executed to provide shim-functionality for missing platform features, using native libraries otherwise.
+Tests are executed only once, the cached result is returned for each subsequent test.</p>
+
+<p>The build system allows a pre-specified list of feature test results to be provided in the build profile. These parameters will replace
+the feature test calls within the generated layer files with the static boolean result values.</p>
+
+<p>As this happens before minification, <em>any feature test paths that can&#8217;t be
+executed will be automatically stripped by the Closure compiler</em>. This provides a huge benefit in hand-tuning
+the loader size to be as compact as possible.</p>
+
+<p>The sample below shows the static feature test results we provide to produce the minimal AMD loader.</p>
+
+<figure class='code'><figcaption><span>Static feature test results</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">staticHasFeatures</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s1">&#39;config-dojo-loader-catches&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;config-tlmSiblingOfDojo&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-log-api&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-sync-loader&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-timeout-api&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-sniff&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-cdn&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-loader-eval-hint-url&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;config-stripStrict&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;ie-event-behavior&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-config-api&#39;</span><span class="o">:</span> <span class="mi">0</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using static features configuration allows us to remove all non-essential
+code needing for loading AMD modules. This includes the synchronous module
+loader code used to load non-AMD modules (<em>dojo-sync-loader</em>), the debugging methods for module loading (<em>dojo-timeout-api</em> and <em>dojo-log-api</em>), backwards
+compatibility for non-standard DOM event behaviours (<em>ie-event-behaviour</em>) and others.</p>
+
+<p>Full details on each of the feature tests defined in the toolkit will be available in the 1.8 reference guide, see
+<a href="http://livedocs.dojotoolkit.org/dojo/has#feature-names">here</a> for
+a sneak preview.</p>
+
+<p><strong>Hand tuning the static feature test results allowed the build to remove an extra 2,000 bytes from the nano loader.</strong></p>
+
+<h3>Baking in Default Configuration</h3>
+
+<p>Making the smallest AMD loader possible relies on a series of assumptions about the environment we&#8217;ll be running in
+and supported features. Rather than have the user set these values manually, we can hard code
+this configuration into the loader, allowing us to remove the code for parsing configuration values from the
+environment.</p>
+
+<p>The following configuration is provided within the nano profile.</p>
+
+<figure class='code'><figcaption><span>Default loader configuration</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">defaultConfig</span><span class="o">:</span><span class="p">{</span>
+</span><span class='line'>    <span class="nx">hasCache</span><span class="o">:</span><span class="p">{</span>
+</span><span class='line'>        <span class="s1">&#39;dojo-built&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;dojo-loader&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;dom&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;host-browser&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;config-selectorEngine&#39;</span><span class="o">:</span> <span class="s1">&#39;lite&#39;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="nx">async</span><span class="o">:</span><span class="mi">1</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Along with configuration for the environment (modern-ish browser engine), we&#8217;ve set the <em>async</em> property to true, ensuring the
+loader is running in AMD-mode as we&#8217;ve removed all code for handling the legacy Dojo module format.</p>
+
+<h3>Squeezing Out Those Final Bytes</h3>
+
+<p><em>So, what&#8217;s left?</em></p>
+
+<p><em>How can we squeeze a few more bytes out?</em></p>
+
+<p>Reviewing the source code for the build system, when the dojo layer is generated, the following boot sequence is appended to the source.</p>
+
+<figure class='code'><figcaption><span>Dojo boot text</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// must use this.require to make this work in node.js</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">require</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">require</span><span class="p">;</span>
+</span><span class='line'><span class="c1">// consume the cached dojo layer</span>
+</span><span class='line'><span class="nx">require</span><span class="p">({</span><span class="nx">cache</span><span class="o">:</span><span class="p">{}});</span>
+</span><span class='line'><span class="o">!</span><span class="nx">require</span><span class="p">.</span><span class="nx">async</span> <span class="o">&amp;&amp;</span> <span class="nx">require</span><span class="p">([</span><span class="s2">&quot;dojo&quot;</span><span class="p">]);</span>
+</span><span class='line'><span class="nx">require</span><span class="p">.</span><span class="nx">boot</span> <span class="o">&amp;&amp;</span> <span class="nx">require</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">require</span><span class="p">.</span><span class="nx">boot</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This code ensures the loader will work on the NodeJS platform and ensures that all base modules are always
+requested when running in legacy mode.</p>
+
+<p>Our minimal loader doesn&#8217;t need to run outside the browser and we definitely won&#8217;t be running in legacy mode! Therefore,
+we can overwrite the layer boot text with custom code to trim the last few bytes from the nano loader, shown below.</p>
+
+<figure class='code'><figcaption><span>Custom boot text</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">dojoBootText</span><span class="o">:</span><span class="s2">&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;</span><span class="p">,</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>&#8230;and that&#8217;s it! Combining all of the options above results in a fully-functioning AMD loader in less than 4 kilobytes.</strong></p>
+
+<p>For further details on the exact size reductions achieved by each of the profile parameters,
+see this <a href="https://docs.google.com/spreadsheet/ccc?key=0An1xGHsgw2ledE94RW9KcGtISHQ5SnNGV3hYaDRPM2c#gid=0">link</a> for the data.</p>
+
+<h2>Differences between nano-profile and profile included with toolkit</h2>
+
+<p>The profile defined above will produce the smallest functional AMD loader
+possible, sacrificing support for certain common features to reduce the file size even
+further. When producing the <em>nano</em> profile that will be shipped with the toolkit, there&#8217;s a
+slightly less aggressive approach when balancing feature completeness against file size.</p>
+
+<p>Reviewing the feature tests, we decided that <strong>two optional features should be
+included, backwards compatibility for older Internet Explorer browsers (<em>ie-event-behaviour</em>) and the
+ability for manual loader configuration (<em>dojo-config-api</em>)</strong>. These changes only produce an additional
+900 bytes and will make the minimal loader much more consumable.</p>
+
+<p>The <em>nano</em> build profile shipped with the toolkit also contains all configurable feature values, rather
+than just the minimal set needed to produce the smallest build, to demonstrate the full set of parameters
+that can be modified.</p>
+
+<p>More information about the investigations into producing this profile can be found in the contributors mailing list
+thread <a href="http://grokbase.com/t/dojo/dojo-contributors/127q9sm80w/nano-build-profile-ticket-14392">here</a>.</p>
+
+<h2>Finally&#8230;</h2>
+
+<p>This investigation was founded upon previous work by other dojo contributors.
+Thanks to <a href="https://twitter.com/blowery">Ben Lowery</a>, <a href="https://twitter.com/kitsonk">Kitson Kelly</a> and <a href="https://github.com/rcgill/">Rawld Gill</a> for their
+initial efforts and helping me out with questions.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/05/26/dojomvc-controllers/">Creating Todo MVC in Dojo - Part 3: Controllers</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-05-26T00:00:00+01:00" pubdate data-updated="true">May 26<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In the final article of this series, we&#8217;ll be looking at creating an MVC Controller for our sample todo
+application.</p>
+
+<p>We&#8217;ve already shown how to <a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">define our application model</a>,
+creating a domain-specific todo model
+backed by localStorage, along with <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">our view template</a>,
+using widget templating to render our tasks into the page.</p>
+
+<blockquote><p>The controller translates user input into operations on the model.</p><footer><strong>Model View Controller Pattern</strong> <cite><a href='http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller'>Wikipedia</a></cite></footer></blockquote>
+
+
+<p>For our application, we need to handle the user actions to allow adding, removing and completing tasks. We already have a binding between a task&#8217;s completed state
+and our View, using the <a href="https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/form/CheckBox.js">todo.form.CheckBox</a>, allowing changes to flow back to the model without explicitly needing logic in the controller.</p>
+
+<p>Let&#8217;s look more closely at the remaining tasks&#8230;</p>
+
+<h2>Adding Tasks</h2>
+
+<p>The View template, discussed in the <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">second article</a>,
+renders the HTML elements needed to allow the user to any new tasks. Once a user has finished
+typing in their new task, signalled by pressing the enter key, we need to retrieve their text and add it to the model.</p>
+
+<p>Using Dojo&#8217;s <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html#dijit-templatedmixin">declarative programming model</a>,
+the View template includes the custom element attribute needed to connect the &#8220;onkeypress&#8221; DOM event to an event handler within our controller. When our
+widget is rendered in the page, by the Dojo parser, those connections are created automatically.</p>
+
+<figure class='code'><figcaption><span>Declarative event handling</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.html#L4'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;input</span> <span class="na">id=</span><span class="s">&quot;new-todo&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onkeypress:onKeyPress&quot;</span>
+</span><span class='line'> <span class="na">placeholder=</span><span class="s">&quot;What needs to be done?&quot;</span> <span class="na">type=</span><span class="s">&quot;text&quot;</span> <span class="na">autofocus</span><span class="nt">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>Inside our controller, each time an event is fired, the following function is executed:</p>
+
+<figure class='code'><figcaption><span>Controller event handler</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">onKeyPress</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">keyCode</span> <span class="o">!==</span> <span class="nx">keys</span><span class="p">.</span><span class="nx">ENTER</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">addToModel</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">target</span><span class="p">.</span><span class="nx">value</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</span><span class='line'>    <span class="nx">event</span><span class="p">.</span><span class="nx">target</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+</span><span class='line'>  <span class="nx">dojo_event</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="nx">event</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Unless the user has pressed the enter key, we ignore the normal user input event. Once this happens, we extract the new
+task text from the event argument and call the following convenience function to create the new task in the model.</p>
+
+<figure class='code'><figcaption><span>New model task</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">addToModel</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">content</span><span class="p">,</span> <span class="nx">isDone</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">insert</span> <span class="o">=</span> <span class="nx">mvc</span><span class="p">.</span><span class="nx">newStatefulModel</span><span class="p">({</span>
+</span><span class='line'>        <span class="nx">data</span><span class="o">:</span> <span class="p">{</span><span class="nx">todo_text</span><span class="o">:</span> <span class="nx">content</span><span class="p">,</span> <span class="nx">isDone</span><span class="o">:</span> <span class="nx">isDone</span><span class="p">}</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">insert</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This function creates a new Model node, containing the task text and its
+completed state, adding the result to the list of tasks. When inserting new
+entries into the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/StatefulModel.html">DojoX MVC Model</a> array, the insertion position must be
+specified explicitly. By using the current length of the list as the position,
+we always add new items at the end.</p>
+
+<p>Once the model has been modified, the View will automatically update to display the new item. We don&#8217;t need to manually
+update the rendered HTML template or even trigger re-loading of the View. By using widgets from the DojoX MVC package, changes to
+the Model are always reflected in our View in real-time.</p>
+
+<h2>Removing Tasks</h2>
+
+<p>Removing tasks begins with the user clicking the destroy icon, displayed on the right-hand side of each task. Once this happens, the Controller
+needs to trap the event, figure out which task to remove and update the Model. As the tasks&#8217; list
+can be updated during the application, having an individual event connection for each task would require handling the setting up and tearing down
+every time the list changed.</p>
+
+<p>Instead, we can use &#8220;Event Delegation&#8221;, introduced by the new Dojo event module, <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/on.html">dojo/on</a>,
+to listen for any remove events with a single connection.</p>
+
+<p>Once the widget has been rendered, signalled by the <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html#lifecycle">&#8220;postCreate&#8221;</a>
+function being called, we start listening for all click events on the destroy icons. Any events captured are passed through to our event hander, &#8220;onRemove&#8221;, to delete the associated task from the Model.</p>
+
+<figure class='code'><figcaption><span>Event Delegation</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L61-64'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">postCreate</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">on</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">domNode</span><span class="p">,</span> <span class="s2">&quot;.destroy:click&quot;</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;onRemove&quot;</span><span class="p">));</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">onItemStatusUpdate</span><span class="p">();</span>
+</span><span class='line'><span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">onRemove</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">remove</span><span class="p">(</span><span class="nx">domAttr</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">target</span><span class="p">,</span> <span class="s2">&quot;data-model-id&quot;</span><span class="p">));</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>With one event handler for all the remove events, the Controller won&#8217;t directly know which task within the Model the user
+has chosen to remove. To overcome this, the repeating View template for the task uses a HTML5 data attribute to store the unique task index
+on the rendered DOM element for the remove icon.</p>
+
+<p>During rendering of a <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">DojoX MVC Repeat widget</a>,
+the &#8220;index&#8221; attribute on the instance refers to the current
+position within the bound list. This index value can then easily be retrieved from the event generated and used to remove the correct task from the Model.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;button</span> <span class="na">class=</span><span class="s">&quot;destroy&quot;</span> <span class="na">data-model-id=</span><span class="s">&quot;#{this.index}&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'><span class="nt">&lt;/button&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once again, when the Model is changed, the View automatically updates. There&#8217;s no action needed from the Controller in modifying the rendering HTML template.</p>
+
+<h2>Clearing Completed Tasks</h2>
+
+<p>Once a user has completed a series of tasks, they will eventually want to remove them. Rather than having to
+remove each task individually, the application provides the ability to clear all completed tasks from the list.</p>
+
+<p>Again, we&#8217;ve used declarative programming in the View template to connect our event hander, removeCompletedItems, to the DOM event
+triggered when the user clicks the &#8220;Clear Completed&#8221; button.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;button</span> <span class="na">id=</span><span class="s">&quot;clear-completed&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onclick:removeCompletedItems&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'><span class="nt">&lt;/button&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When our handler is fired, we need to iterate over the existing tasks&#8217;
+list, removing any with the correct completed state. Removing items from the Model will left-shift the remaining items, so we need to
+take care to iterate correctly over the remaining items.</p>
+
+<figure class='code'><figcaption><span>Clearing Completed Items</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L80-97'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">removeCompletedItems</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">len</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">idx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="nx">idx</span> <span class="o">&lt;</span> <span class="nx">len</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">[</span><span class="nx">idx</span><span class="p">].</span><span class="nx">isDone</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">remove</span><span class="p">(</span><span class="nx">idx</span><span class="p">);</span>
+</span><span class='line'>            <span class="nx">len</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'>            <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="nx">idx</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When the event handler has finished executing, the View will be updated to clear out those completed tasks.</p>
+
+<h2>Conclusion</h2>
+
+<p>In the final part of this series, we&#8217;ve looked at how to define an MVC
+Controller, responsible for mediating between user actions and model
+operations. Using declarative Dojo programming in our View template, we set up
+bindings between DOM events and event handlers in our Controller.</p>
+
+<p>When user
+actions triggered those events, our handlers were responsible for adding and
+removing todo tasks from the MVC Model class, StatefulModel, we&#8217;ve been using
+to store our application data. These changes then flowed back to the View,
+which automatically re-renders when it detects an updated Model.</p>
+
+<p>Dojo&#8217;s new MVC package, dojox.mvc, offers great capabilities for building dynamic
+JavaScript applications using the MVC programming pattern. Although it&#8217;s still maturing, hopefully this series
+has been able to demonstrate that for most applications it&#8217;s more than capable of providing the features
+developers expect in a modern JavaScript MVC library.</p>
+
+<p>If you have any further questions, feel free to leave comments below, send me an email or a tweet. The source
+code for the application is available on Github, allowing you to run the examples above and compare it against other frameworks.</p>
+
+<h3>What&#8217;s Next?</h3>
+
+<p>This series of articles was based upon the version of DojoX MVC present in the 1.7.0 release of The Dojo Toolkit. My experiences, good and bad,
+building this application were <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-January/026434.html">fed back into the community</a> to
+help improve the package in the future. With the upcoming 1.8 release of The Dojo Toolkit,
+there has been some <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-February/026811.html">major improvements</a> to the MVC package, resolving many of the issues I raised.</p>
+
+<p>When that version of the toolkit is available, I&#8217;ll re-visit the application and show how those changes would make writing this application even simpler.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -1123,6 +1703,14 @@ I&#8217;m looking forward to DojoConf 2012 already&#8230;</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2016/01/04/updated-ibm-watson-nodes/">Updated IBM Watson Nodes for Node-RED</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2016/01/04/node-red-bluemix-nodes-update/">Updated Node-RED IBM Watson Nodes</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/">Node.js v4 in Cloud Foundry</a>
       </li>
     
@@ -1132,14 +1720,6 @@ I&#8217;m looking forward to DojoConf 2012 already&#8230;</p>
     
       <li class="post">
         <a href="/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry/">running one-off tasks in cloud foundry</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/16/geopix-live-photos/">GeoPix Live Photos</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2015/07/15/alchemyapi-and-updated-watson-nodes-for-node-red/">AlchemyAPI &amp; Updated Watson Nodes for Node-RED</a>
       </li>
     
   </ul>
@@ -1190,7 +1770,7 @@ I&#8217;m looking forward to DojoConf 2012 already&#8230;</p>
     </div>
   </div>
   <footer role="contentinfo"><p>
-  Copyright &copy; 2015 - James Thomas -
+  Copyright &copy; 2016 - James Thomas -
   <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
 </p>
 
