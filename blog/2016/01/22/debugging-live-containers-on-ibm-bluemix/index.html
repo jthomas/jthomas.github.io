@@ -5,12 +5,12 @@
 <!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
 <head>
   <meta charset="utf-8">
-  <title>Category: monki gras - James Thomas</title>
+  <title>Debugging Live Containers on IBM Bluemix - James Thomas</title>
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Category: monki gras">
-  
+  <meta name="description" content="Getting shell access by running remote commands on live docker containers on IBM Bluemix">
+  <meta name="keywords" content="bluemix docker">
 
   <!-- http://t.co/dKP3o1e -->
   <meta name="HandheldFriendly" content="True">
@@ -18,7 +18,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   
-  <link rel="canonical" href="http://jamesthom.asblog/categories/monki-gras/">
+  <link rel="canonical" href="http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/">
   <link href="/favicon.png" rel="icon">
   <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
   <script src="/javascripts/modernizr-2.0.js"></script>
@@ -76,36 +76,143 @@
   <div id="main">
     <div id="content">
       <div>
-<article role="article">
+<article class="hentry" role="article">
   
   <header>
-    <h1 class="entry-title">Category: Monki Gras</h1>
+    
+      <h1 class="entry-title">Debugging Live Containers on IBM Bluemix</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-01-22T16:57:00+00:00" pubdate data-updated="true">Jan 22<span>nd</span>, 2016</time>
+        
+      </p>
     
   </header>
-  
-  <div id="blog-archives" class="category">
 
 
+<div class="entry-content"><p>For the last few months, I&#8217;ve been using the <a href="https://www.elastic.co/webinars/introduction-elk-stack">ELK stack</a> to <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">collect logs</a> from my
+Cloud Foundry applications. This service has been deployed on IBM Bluemix using
+a Docker container, previously detailed in <a href="jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">this blog post</a>, and running happily
+until it ran into issues this week.</p>
 
-  
-  <h2>2013</h2>
+<p>Trying to load the Kibana web application, the server was returning <em>connection
+refused</em> errors. Looking at the container in the <a href="http://bluemix.net">IBM Bluemix</a> dashboard showed
+no obvious signs of issues. Reviewing the <a href="https://www.ng.bluemix.net/docs/containers/container_ml_ov.html">container log output</a> uncovered nothing
+indicating what had failed.</p>
 
-<article>
-  
-<h1><a href="/blog/2013/02/04/monkigras/">Monki Gras</a></h1>
-<time datetime="2013-02-04T16:07:00+00:00" pubdate><span class='month'>Feb</span> <span class='day'>04</span> <span class='year'>2013</span></time>
+<p>Hmmm&#8230;</p>
 
-<footer>
-  <span class="categories">posted in <a class='category' href='/blog/categories/conference/'>conference</a>, <a class='category' href='/blog/categories/monki-gras/'>monki gras</a></span>
-</footer>
+<p><strong>Fixing this issue would require me to start debugging from within the live
+container, but how?</strong></p>
+
+<p>This container image had not included an SSH daemon that would allow remote
+access over SSH.</p>
+
+<p>Looking over the <a href="https://www.ng.bluemix.net/docs/containers/container_index.html">documentation</a> for the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html#container_cli_cfic">IBM Containers plugin</a> for the Cloud
+Foundry CLI, I noticed the <em>exec</em> command.</p>
+
+<blockquote><p>Docker exec allows a user to spawn a process inside their Docker container via<br/>the Docker API and CLI.</p></blockquote>
 
 
-</article>
+<p>Since Docker 1.3, released in October 2014, the <a href="https://docs.docker.com/engine/reference/commandline/exec/"><em>exec</em> command</a> has allowed users to
+run new commands within existing containers.</p>
 
+<p>The IBM Containers implementation now <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">supports this Docker command</a>.</p>
+
+<p>Using the IBM Containers plugin for the Cloud Foundry CLI, I can find the
+container id for the instance I want to debug and then start a bash shell to
+start resolving my issue.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf ic ps
+</span><span class='line'><span class="nv">$ </span>cf ic <span class="nb">exec</span> -it &lt;container_id&gt; /bin/bash
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>Having a live shell to my container allowed me to resolve the issue within a
+few minutes, without having to affect the running state of the container. This
+command also removes the need to keep an SSH daemon running on containers for
+remote access.</p>
+
+<p>For more information on the subset of Docker commands supported by IBM
+Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
 </div>
 
+
+  <footer>
+    <p class="meta">
+      
   
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-01-22T16:57:00+00:00" pubdate data-updated="true">Jan 22<span>nd</span>, 2016</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/bluemix/'>bluemix</a>, <a class='category' href='/blog/categories/docker/'>docker</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2016/01/05/cfbot/" title="Previous Post: Cloud Foundry Application Monitoring Bot For Slack">&laquo; Cloud Foundry Application Monitoring Bot For Slack</a>
+      
+      
+    </p>
+  </footer>
 </article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
 
 </div>
 
@@ -195,7 +302,10 @@
       var disqus_shortname = 'notesonjavascript';
       
         
-        var disqus_script = 'count.js';
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/';
+        var disqus_url = 'http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/';
+        var disqus_script = 'embed.js';
       
     (function () {
       var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
