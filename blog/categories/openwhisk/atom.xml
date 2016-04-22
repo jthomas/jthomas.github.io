@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: openwhisk | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2016-04-22T16:20:31+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Playing With OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2016/04/22/openwhisk/"/>
+    <updated>2016-04-22T15:36:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/04/22/openwhisk</id>
+    <content type="html"><![CDATA[<p>IBM recently launched <a href="https://developer.ibm.com/openwhisk/">OpenWhisk</a>,
+their new <a href="https://www.quora.com/What-is-Serverless-Computing">"serverless"</a>
+compute platform.</p>
+
+<p>This service allows developers to register small bits of
+code that are executed on-demand in response to external events. The
+"serverless" stack started in 2014, when Amazon launched
+<a href="https://aws.amazon.com/lambda/">Lambda</a>, but is now set to be a major
+technology trend in 2016 with IBM, Microsoft and Google all launching their own
+solutions.</p>
+
+<p>OpenWhisk is the first <a href="https://github.com/openwhisk/openwhisk">open-source "serverless" platform</a>. It supports running registered
+actions in Node.js, Swift and even executing custom Docker containers.</p>
+
+<p>Playing around with the technology recently, I've created two projects using the platform.</p>
+
+<h2>OpenWhisk Client Library</h2>
+
+<p>OpenWhisk exposes a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#rest-api">RESTful API</a>
+for interacting with the service. Wrapping this API with a
+<a href="https://github.com/openwhisk/openwhisk-client-js">small client library</a> makes it easy for developers to interact with the service from JavaScript.</p>
+
+<p>This library has been donated back to the OpenWhisk project and is <a href="https://www.npmjs.com/package/openwhisk">available through NPM</a>.</p>
+
+<p><code>javascript
+const openwhisk = require('openwhisk')
+const ow = openwhisk({api: 'https://openwhisk.ng.bluemix.net/api/v1/', api_key: '...', namespace: '...'})
+ow.actions.invoke({actionName: 'action'}).then(result =&gt; {
+  // result is service response
+})
+</code></p>
+
+<h2>Whiskify</h2>
+
+<p>This <a href="https://github.com/jthomas/whiskify">project</a>, available through <a href="https://www.npmjs.com/package/openwhisk">NPM</a>, makes it easy to run arbitary JavaScript
+functions as OpenWhisk actions.  Passing a reference to a JavaScript function
+into the module, an OpenWhisk action is created using the function source.  The
+module returns a new JavaScript function, that when executed, will call the
+remote action and returns a Promise with the service response.</p>
+
+<p>``` javascript
+const whiskify = require('whiskify')({api: 'https://', api_key: '...', namespace: '...'})
+const action = whiskify(function (item) { return item + 1; })</p>
+
+<p>action(1).then(function (result) {
+  // == 2
+})</p>
+
+<p>action.map([1, 2, 3, 4]).then(function (result) {
+ // == [2, 3, 4, 5]
+})</p>
+
+<p>action.delete()
+```</p>
+
+<p>This project uses the client library above.</p>
+]]></content>
+  </entry>
+  
+</feed>
