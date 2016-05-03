@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2016-04-22T16:20:31+01:00</updated>
+  <updated>2016-05-03T09:32:42+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,507 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless APIs with OpenWhisk and API Connect]]></title>
+    <link href="http://jamesthom.as/blog/2016/04/26/serverless-apis-with-openwhisk-and-api-connect/"/>
+    <updated>2016-04-26T07:54:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/04/26/serverless-apis-with-openwhisk-and-api-connect</id>
+    <content type="html"><![CDATA[<p>&#8220;Serverless&#8221; cloud platforms are a
+<a href="http://redmonk.com/fryan/2016/04/28/serverless-volume-compute-for-a-new-generation/">major trend in 2016</a>.
+Following on from Amazon&#8217;s <a href="https://aws.amazon.com/lambda/">Lambda service</a>,
+released eighteen months ago, this year has seen <a href="https://developer.ibm.com/openwhisk/">IBM</a>,
+<a href="https://azure.microsoft.com/en-us/documentation/articles/functions-reference/">Microsoft</a>
+and <a href="https://cloud.google.com/functions/">Google</a> all launch their own solutions.</p>
+
+<p>These platforms let you build stateless <a href="http://martinfowler.com/articles/microservices.html">microservices</a>,
+combining APIs with
+business logic, without servers. Microservices are executed on-demand, in
+milliseconds, rather than having to sit idle waiting for incoming requests.
+Users pay only for the raw computation time used.</p>
+
+<p>Combining serverless APIs with static file hosting for site resources, e.g.
+HTML, JavaScript and CSS, means we can build entire <a href="https://blog.hartleybrody.com/serverless-stack/">serverless web applications</a>.</p>
+
+<p>Playing with OpenWhisk recently to build simple microservices, I began to
+investigate using the platform to build the APIs for serverless applications.</p>
+
+<p><strong>How can we use OpenWhisk to define a new microservice and then expose that
+service as an API with a HTTP interface?</strong></p>
+
+<p><em>Let&#8217;s start by looking at OpenWhisk&#8230;</em></p>
+
+<h2>OpenWhisk</h2>
+
+<p>Using the OpenWhisk platform, developers register small bits of code, known as
+<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md"><em>Actions</em></a>,
+that can be invoked on-demand. These functions can be written in
+Node.js, Swift or Docker images. Let&#8217;s look at a simple Node.js Action that
+takes a parameter and returns a message with that value.</p>
+
+<figure class='code'><figcaption><span>OpenWhisk Action</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">payload</span><span class="o">:</span> <span class="s1">&#39;Hello &#39;</span> <span class="o">+</span> <span class="nx">params</span><span class="p">.</span><span class="nx">name</span>
+</span><span class='line'>  <span class="p">};</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#creating-and-invoking-a-simple-javascript-action">Node.js actions</a> must include a function named <em>main</em>. OpenWhisk executes
+this function for each invocation, passing request parameters as arguments.
+Return values from the function will be included in the response.</p>
+
+<p>Using the OpenWhisk <a href="https://new-console.ng.bluemix.net/openwhisk/cli">command-line utility</a>,
+we turn this local JavaScript code into a remote action.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="nv">$ </span>ls
+</span><span class='line'>source.js
+</span><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="nv">$ </span>wsk action create hello_action source.js
+</span><span class='line'>ok: created action hello_action
+</span><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="nv">$ </span>wsk action list
+</span><span class='line'>actions
+</span><span class='line'>/james.thomas@uk.ibm.com_dev/hello_action                         private
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>With the action registered, we can test the service from the command-line.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="nv">$ </span>wsk action invoke -b hello_action -p name <span class="s2">&quot;Bernie Sanders&quot;</span>
+</span><span class='line'>ok: invoked hello_action with id 429b35c3e3ac494ea902390ca64afe32
+</span><span class='line'>response:
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;result&quot;</span>: <span class="o">{</span>
+</span><span class='line'>        <span class="s2">&quot;payload&quot;</span>: <span class="s2">&quot;Hello Bernie Sanders&quot;</span>
+</span><span class='line'>    <span class="o">}</span>,
+</span><span class='line'>    <span class="s2">&quot;status&quot;</span>: <span class="s2">&quot;success&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;success&quot;</span>: <span class="nb">true</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We can also update the action to use default parameter values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="nv">$ </span>wsk action update hello_action -p name <span class="s2">&quot;Donald Trump&quot;</span>
+</span><span class='line'>ok: updated action hello_action
+</span><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="nv">$ </span>wsk action invoke -b hello_action
+</span><span class='line'>ok: invoked hello_action with id 0299bf2baf9242b7a00a8095caaeb7a4
+</span><span class='line'>response:
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;result&quot;</span>: <span class="o">{</span>
+</span><span class='line'>        <span class="s2">&quot;payload&quot;</span>: <span class="s2">&quot;Hello Donald Trump&quot;</span>
+</span><span class='line'>    <span class="o">}</span>,
+</span><span class='line'>    <span class="s2">&quot;status&quot;</span>: <span class="s2">&quot;success&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;success&quot;</span>: <span class="nb">true</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'><span class="o">[</span>~/code/serverless<span class="o">]</span><span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Registered actions can be executed manually, using an authenticated API
+request, or automatically, hooking actions to triggers and feeds using rules.
+For more details on triggers, feeds and rules, please see the <a href="https://github.com/openwhisk/openwhisk/tree/master/docs">OpenWhisk documentation</a>.</p>
+
+<p>The command-line utility translates commands into HTTP requests to
+the OpenWhisk API.</p>
+
+<p><em>Pro-Tip: Adding the &#8216;-v&#8217; flag when using command-line utility will show HTTP
+traffic sent to the OpenWhisk API.</em></p>
+
+<h2>Serverless APIs With OpenWhisk</h2>
+
+<p>Building backend services for serverless web applications, there were two
+challenges to resolve before invoking these APIs from client-side JavaScript code.</p>
+
+<ul>
+<li><p><strong>Authentication.</strong> <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#rest-api">OpenWhisk API</a>
+requests require HTTP authentication, using the
+developer&#8217;s credentials. Embedding these credentials within client-side files
+is a terrible idea&#8230;</p></li>
+<li><p><strong>Cross-Domain Requests.</strong> <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS">CORS support</a>
+is not enabled on the OpenWhisk platform.
+Calling services from a browser would mandate us having CNAME records
+configured with an external domain.</p></li>
+</ul>
+
+
+<p>Authentication needs to be resolved, while cross-domain support is an inconvenience.</p>
+
+<p>Using OpenWhisk on IBM Bluemix, we have access to a huge range of cloud
+services to help build applications. Reviewing the catalogue, there&#8217;s a new
+service <a href="https://developer.ibm.com/apiconnect/">API Connect</a> which can help us
+resolve both issues with minimal effort.</p>
+
+<h2>API Connect</h2>
+
+<p>Announced in February, <a href="https://developer.ibm.com/apiconnect/">API Connect</a> is IBM&#8217;s new &#8220;API Management-as-a-Service&#8221;
+solution. Developers can use the service for creating, running, managing and
+securing APIs in the cloud.</p>
+
+<p><em>Using this service, we can construct new public APIs, with CORS support, that
+proxy the authenticated OpenWhisk APIs used to trigger our services. Using these
+APIs from our serverless frontends will be possible without leaking
+credentials or having to configure DNS records.</em></p>
+
+<p>Once we&#8217;ve signed up for an account with API Connect, you need to install the
+developer toolbox locally. Using this tool will allow us to construct new APIs and
+publish them to the cloud.</p>
+
+<p><strong><em>TLDR: I&#8217;ve exported the sample flow configuration generated below
+<a href="https://gist.github.com/jthomas/5136d53028e53d0e3ab86cfc3fc29869">here</a>.
+Import this YAML file into the API Connect editor, replacing USERNAME, PASSWORD
+and NAMESPACE, before deploying this flow to IBM Bluemix.</em></strong></p>
+
+<h2>API Editor</h2>
+
+<p>Install the API Connect <a href="https://www.npmjs.com/package/apiconnect">Toolkit using NPM</a> and run the following command to open
+the editor.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>npm install -g apiconnect
+</span><span class='line'><span class="nv">$ </span>apic edit
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using the APIs panel, select the <em>Add</em> button. Provide a title for your
+service.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/API%20Wizard.png"></p>
+
+<p>Leave the <em>Add to a new product</em> checkbox selected and provide a
+title for the product.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/API_Add.png"></p>
+
+<p>The editor now shows the Design panel, allowing you to define the external
+public API schema.</p>
+
+<p>We&#8217;re going to define a single endpoint (<em>/hello-name</em>) which supports HTTP GET
+requests with a single query parameter.</p>
+
+<h2>Adding the endpoint</h2>
+
+<p><em>Disable the clientID definition under the &#8220;Security&#8221; panel and then scroll down
+to the Paths section.</em></p>
+
+<p>Add a new path for the endpoint <em>/hello-name</em>. Set a parameter for this path,
+using the identifier <em>name</em> from location as <em>query</em> and type as <em>string</em>.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/paths.png"></p>
+
+<p>Move to the <em>Definitions</em> section to define the API response schema. We
+want to return a JSON object with a single property, result, that contains the
+JSON object returned from the Action response.</p>
+
+<p>Add a new Definition, named <em>whisk_response</em> and type as <em>object</em>, with a
+single object property, <em>result</em>.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/definitions.png"></p>
+
+<p>Under the Paths panel, expand the GET operation.
+Set the schema for the 200 response to <em>whisk_response</em>.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/path_response.png"></p>
+
+<p>CORS supported is already enabled by default (under the Lifecycle section).
+Click the <em>Save</em> icon in toolbar and then move to the &#8220;Assemble&#8221; tab.</p>
+
+<h2>Defining API operations</h2>
+
+<p>Having defined the public API schema, we need to implement the API operations.</p>
+
+<p>On the &#8220;Assemble&#8221; tab, the flow editor allows us to connect different backend
+operations to construct our service. IBM Bluemix only supports deploying flows
+constructed with the &#8220;DataPower Gateway policies&#8221; nodes. Microgateway nodes,
+e.g. Javascript, are not supported.</p>
+
+<h2>Invoking OpenWhisk Actions</h2>
+
+<p>The default flow contains a single invoke node. This node type makes HTTP
+requests, passing the result to the next node in the flow.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/invoke.png"></p>
+
+<p>Use this node to execute your OpenWhisk Action by bringing up the editor and changing the URL to the correct endpoint, e.g.
+<em>https://openwhisk.ng.bluemix.net/api/v1/namespaces/YOUR_NAMESPACE/actions/ACTION_ID?blocking=true</em></p>
+
+<p>Make sure to include the query parameter, <em>blocking=true</em>. This makes OpenWhisk
+wait until the Action has completed execution before returning, rather than
+after invocation starts.</p>
+
+<p>Change the HTTP method from GET to POST and fill in the username and passwords fields.</p>
+
+<p>Add the value <em>invoke_result</em> to the <em>Response Object Variable</em> field. This
+will save the HTTP response into a context variable we can reference in the
+following map node definition.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/invoke_details.png"></p>
+
+<h2>Passing Query Parameters</h2>
+
+<p>Invoking OpenWhisk Actions through the API uses a HTTP POST request, passing
+parameters within the JSON body. Our external API supports HTTP GET
+operations, with parameters through query string values in the URL.</p>
+
+<p>Using the <em>map</em> node in the flow will translate between these two methods.</p>
+
+<p>Drag a <em>map</em> node from the left-hand panel and drop it on the wire between the
+circle and the invoke node.</p>
+
+<p>Open the map node editor and add a new <em>input</em> parameter.
+Change the context variable to <em>request.parameters.name</em> with type <em>string</em>.
+This contains the query parameter value we&#8217;re using to pass in action arguments.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/query_parameter_source.png"></p>
+
+<p>Returning to the map node editor, add a new <em>output</em> parameter. Leave the
+Context variable as <em>message.body</em>. This variable will be used by the invoke
+node to populate the request body.</p>
+
+<p>Change the Content Type to <em>application/json</em>.
+Select the definition as <em>inline schema</em> to define the JSON schema for the HTTP POST body.
+Add the following JSON Schema definition to the editor form.</p>
+
+<figure class='code'><figcaption><span>JSON Schema</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="s2">&quot;properties&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;name&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>      <span class="s2">&quot;type&quot;</span><span class="o">:</span> <span class="s2">&quot;string&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="s2">&quot;type&quot;</span><span class="o">:</span> <span class="s2">&quot;object&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/query_parameter_output.png"></p>
+
+<p>With the input and output formats defined, we can wire the two parameters together.
+Under the <em>Map</em> panel, click the dot next to the input parameter and then click the second dot on the right, next to the <em>name:string</em> label.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/query_parameter.png"></p>
+
+<p>Remember to click <em>Save</em> before proceeding.</p>
+
+<h2>Returning Action Result</h2>
+
+<p>OpenWhisk Action API invocation responses include both the action result
+payload and meta-data about the invocation event.</p>
+
+<figure class='code'><figcaption><span>Sample Invocation Event</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="s2">&quot;name&quot;</span><span class="o">:</span> <span class="s2">&quot;hello_action&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;subject&quot;</span><span class="o">:</span> <span class="s2">&quot;james.thomas@uk.ibm.com&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;activationId&quot;</span><span class="o">:</span> <span class="s2">&quot;5388b29e9f134737baf57bd12257dfd7&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;publish&quot;</span><span class="o">:</span> <span class="kc">false</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;annotations&quot;</span><span class="o">:</span> <span class="p">[],</span>
+</span><span class='line'>  <span class="s2">&quot;version&quot;</span><span class="o">:</span> <span class="s2">&quot;0.0.1&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;response&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;result&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>      <span class="s2">&quot;payload&quot;</span><span class="o">:</span> <span class="s2">&quot;Hello Bernie&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="s2">&quot;success&quot;</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;status&quot;</span><span class="o">:</span> <span class="s2">&quot;success&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="s2">&quot;end&quot;</span><span class="o">:</span> <span class="mi">1461667635975</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;logs&quot;</span><span class="o">:</span> <span class="p">[],</span>
+</span><span class='line'>  <span class="s2">&quot;start&quot;</span><span class="o">:</span> <span class="mi">1461667635970</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;namespace&quot;</span><span class="o">:</span> <span class="s2">&quot;james.thomas@uk.ibm.com&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Rather than returning the raw result, we only want to return the result payload
+property (<em>response.result</em>). Using another <em>map</em> node we can define a subset
+of the invoked API response to be the HTTP response body.</p>
+
+<p>Add a second <em>map</em> node to the flow, this time after the <em>invoke</em> node.</p>
+
+<p>Add a new <em>input</em> property. We previously set a
+context variable in the invoke definition that will contain the API response
+(<em>invoke_api</em>). The response body is available as the <em>body</em> property of this
+variable.</p>
+
+<p>Edit the <em>context variable</em> to be <em>invoke_api.body.response.result</em> to set the
+input property as the child property of the invoke result. Set the <em>content
+type</em> to <em>application/json</em> and schema to <em>object</em>.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/map_response_source.png"></p>
+
+<p>Add a new <em>output</em> property. Leave the context variable as <em>message.body</em>.
+This context variable is used as the response body.</p>
+
+<p>Set <em>content type</em> to <em>application/json</em> and change the definition to <em>#/definitions/whisk_response</em>.
+This was the JSON schema we created during the external API definition.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/map_response_output.png"></p>
+
+<p>Returning to the map overview, wire together the input property to the result
+attribute of the output property.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/map_response.png"></p>
+
+<p>Click the <em>Save</em> icon before making any further changes.</p>
+
+<p>Using the invoke and map nodes, we&#8217;ve now implemented our external API.
+Making our API live requires us to deploy the flow definition to IBM Bluemix.</p>
+
+<h2>Deploying to IBM Bluemix</h2>
+
+<p>After saving your flow, click the <em>Publish</em> icon in the top-right hand corner.
+We&#8217;re going to publish to the default <em>Sandbox</em> target. Follow the steps to
+find and add this target to the local editor.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/publish.png"></p>
+
+<p>Once you&#8217;ve added <em>Sandbox</em> as the default
+target, select <em>Publish</em> and click the configured catalogue. On the dialog box,
+select the <em>Select Specific Products</em> option and choose the <em>openwhisk</em>
+product.</p>
+
+<p>Clicking the confirmation button will upload our API definition to
+the external API Connect platform.</p>
+
+<p>If everything has been configured and deploying correctly, your new API should
+now be live!</p>
+
+<p>Let&#8217;s test it&#8230;</p>
+
+<h2>Testing </h2>
+
+<p>Opening the <a href="https://new-console.ng.bluemix.net/apis/apiconnect">API Connect dashboard</a>,
+the sandbox catalogue should now contain the <em>openwhisk</em> product with the public API we defined using the editor.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/catalogue.png"></p>
+
+<p>We can now verify this API works by making the HTTP request to the endpoint.
+Under the <em>Settings</em> tab, the <em>API Endpoint</em> section contains the <em>Base URL</em>
+for our API catalogue. APIs deployed under this catalogue will use this
+path as the endpoint root.</p>
+
+<p>The API definition registered a relative URL path, <em>/hello-name</em>, which
+we can combine with the catalogue endpoint (e.g.
+<em>https://api.us.apiconnect.ibmcloud.com/USER_ORG_SPACE/sb</em>) to generate an
+public API endpoint.</p>
+
+<p>We can now test this API by sending a HTTP GET request to the URL, passing the
+name as a query parameter.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>17:13:10 ~<span class="o">]</span><span class="nv">$ </span>http get https://api.us.apiconnect.ibmcloud.com/jamesthomasukibmcom-dev2/sb/hello-name?name<span class="o">=</span><span class="s2">&quot;Bernie Sanders&quot;</span>
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Encoding: gzip
+</span><span class='line'>Content-Type: application/json
+</span><span class='line'>Date: Tue, 26 Apr 2016 16:24:36 GMT
+</span><span class='line'>
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;result&quot;</span>: <span class="o">{</span>
+</span><span class='line'>        <span class="s2">&quot;payload&quot;</span>: <span class="s2">&quot;Hello Bernie Sanders&quot;</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>17:24:36 ~<span class="o">]</span><span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>It works! 😃</p>
+
+<p>We&#8217;ve successfully used API Connect to create an external API which proxies the
+OpenWhisk API. We now have a public endpoint we can use to invoke OpenWhisk
+Actions, without exposing our credentials and enabling CORS-support for
+cross-domain XHRs.</p>
+
+<h2>Conclusion</h2>
+
+<p>Serverless computing platforms give developers a rapid way to build APIs
+without servers. Combining this approach for building backend services with
+static file hosting provides an architecture for developing entire serverless
+web applications.</p>
+
+<p>Experimenting with OpenWhisk as the backend platform for building serverless
+web applications, there were two challenges, authentication and cross-domain
+support.</p>
+
+<p>Both issues were resolved using the API Connect service on IBM Bluemix.</p>
+
+<p>API Connect is an incredibly powerful tool for creating, running, managing and
+securing APIs. Using the editor application to construct a new API, the
+endpoint was implemented using the invoke and map nodes. Deploying the
+generated flow to IBM Bluemix exposed the API as a public endpoint.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Playing With OpenWhisk]]></title>
@@ -3951,184 +4452,6 @@ with the ‘cf’ tool.</p>
 
 
 <p><strong>Amazing!</strong></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Monki Gras]]></title>
-    <link href="http://jamesthom.as/blog/2013/02/04/monkigras/"/>
-    <updated>2013-02-04T16:07:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2013/02/04/monkigras</id>
-    <content type="html"><![CDATA[<p>Last week was <a href="http://monkigras.com">Monki Gras</a>, the conference organised by
-<a href="http://redmonk.com/">RedMonk</a>, with this year&#8217;s theme being &#8221;<em>scaling craft</em>&#8221;.</p>
-
-<blockquote><p>We plan to explore Craft that helps scale Technology, or Technology that helps<br/>scale Craft. What are the limits of a craft-based approach? Does quality have<br/>to suffer as businesses scale?</p><footer><strong>James Governor</strong> <cite><a href='http://redmonk.com/jgovernor/2013/01/07/scaling-craft-tech-and-beer-monki-gras-conference-2013/'>redmonk.com/jgovernor/2013/01/&hellip;</a></cite></footer></blockquote>
-
-
-<p>Held over two days in London&#8217;s <a href="http://www.conwayhall.org.uk/">Conway Hall</a>,
-there was an incredible <a href="http://monkigras.com/agenda/">line-up of speakers</a>,
-social events and <a href="http://www.londonfieldsbrewery.co.uk/">evening activities</a>.</p>
-
-<p>Talks were on a diverse range of topics, from best practices for scaling virtual teams to printing your own steam train. Here are my notes
-on those I found most interesting (or, more likely, remembered to write something down&#8230;).</p>
-
-<h2><a href="http://rc3.org/">Rafe Colburn</a> - &#8220;Artisan Software Manufacture&#8221;</h2>
-
-<p>Rafe started his talk by defining characteristics associated with craft and
-mass production, which are normally held up as polar opposites.  Traditionally,
-craft became a byword for quality, whereas mass production signalled
-consistency and resilience. Combining aspects from both domains will often lead
-to the best results.</p>
-
-<p>Consider Apple&#8217;s tag line these days, <em>designed in California, produced in
-China</em>, craft and mass production.</p>
-
-<p>When running an engineering team at <a href="http://etsy.com">Etsy</a>, Rafe detailed the best practices they
-used to ensure they shipped high quality software.</p>
-
-<ul>
-<li><p><em>Measure and monitor everything</em> - This spans all areas of engineering from user
-request metrics produced by the site, application errors generated and enormous A/B testing, etc.</p></li>
-<li><p><em>Automate repeatable processes</em> - New developer can be set-up straight away due to their use of VMs, allowing them to
-start shipping straight away. Continuous integration and automated deployment were core principles of their engineering set-up.</p></li>
-<li><p><em>Growing Craftmanship</em> - Etsy encouraged &#8220;craftmanship&#8221; as a culture internally through activities such as regular
-code reviews, annual bootcamps to shift developers between different teams, scheduled &#8220;bug rotations&#8221; to mix developers together to tackle
-the bug queue and code reading clubs, where developers review open-source software together.</p></li>
-</ul>
-
-
-<p>Finally, spend the time saved on the most important aspect of software development, your employees and keeping them happy.</p>
-
-<h2><a href="http://design.ibm.com">Phil Gilbert</a> - &#8220;Design Thinking at IBM&#8221;</h2>
-
-<p>IBM&#8217;s CEO, <a href="http://en.wikipedia.org/wiki/Ginni_Rometty">Ginni Rometty</a>, recently announced a new division to lead design
-across the entire company, cutting through the individual brands and products,
-transforming IBM into a design-led company.</p>
-
-<p>With close to 480,000 employees,
-this is a herculean task and Phil Gilbert has been put in charge.
-Phil previously led the effort to consolidate IBM&#8217;s BPM portfolio down from nearly
-twenty products to only four.</p>
-
-<p>His team has developed a new framework to deliver
-<a href="http://en.wikipedia.org/wiki/Ginni_Rometty"><strong>&#8220;design-led thinking&#8221;</strong></a> throughout IBM, rather than a formulaic set of policies
-and procedures to enforce design from top-down.</p>
-
-<p>Using the military analogy of
-<a href="http://blogs.hbr.org/frontline-leadership/2010/11/dont-play-golf-in-a-football-g.html">Commander&#8217;s intent</a>
-, the goal was to empower product teams within IBM to embrace design-led thinking, rather than appearing
-as &#8220;just another corporate diktat&#8221;.</p>
-
-<p>Key building blocks in the framework were&#8230;</p>
-
-<ul>
-<li><p><em>Lead Users</em> - Continual and regular engagement with intended consumers straight from the design phase.</p></li>
-<li><p><em>Release Hills</em> - Used to split design and development effort into achievable iterations.</p></li>
-<li><p><em>Metrics</em> - Provide visibility around objective operational data.</p></li>
-<li><p><em>Wiki-based Release BluePrint</em> - Used as source of truth within project, peer-reviewed artifacts, shared between consumers.</p></li>
-</ul>
-
-
-<p>Full details about this new initiative can be found on the <a href="http://design.ibm.com/uxd/design.jsp?site=home&amp;top=x1&amp;left=y3">IBM Design</a> site.</p>
-
-<h2><a href="https://twitter.com/TheSteve0">Steve Citron-Pousty</a> - &#8220;Ecosystem management brings the science to scaling&#8221;</h2>
-
-<p>Steve knows a thing or two about &#8220;ecosystems&#8221;, working as a developer advocate
-for Red Hat and having a PhD in Ecology.</p>
-
-<p>Drawing on his past experience from
-academia, Steve talked about using lessons learned from real ecosystem
-management, specifically Yellowstone Natural Park, to enable more effective
-developer outreach programmes.</p>
-
-<p>Ecosystems experiments come in different forms, natural (let&#8217;s observe the
-effects of a natural disaster) and planned (let&#8217;s introduce a
-new species), choosing the right experiment type can greatly improve the
-results.</p>
-
-<p>Add monitoring to your ecosystem experiments, e.g. A/B testing on click-through rates for
-email marketing, allowing you to perform statistical analysis to quantatively
-assess the outcomes.</p>
-
-<h2><a href="http://redmonk.com/dberkholz/">Donnie Berkholz</a> - &#8220;What Data Scientist Can Learn From DevOps&#8221;</h2>
-
-<p>Donnie Berkholz, analyst at Redmonk, was previous a biological researcher
-working on drug discovery. His talk expanded from this
-<a href="http://redmonk.com/dberkholz/2012/11/06/what-can-data-scientists-learn-from-devops/">article</a>
-about how data scientists could benefit from applying &#8220;engineering culture&#8221;.</p>
-
-<p>The main theme was that traditional statisticians come from a world
-built with custom scripts using R, hand-written log books and manual analysis.
-As &#8220;data scientists&#8221; merge this existing world with better technologies there
-was an enormous amount of &#8220;best practices&#8221; from software engineering that could
-be applied with great success.</p>
-
-<p>Concrete suggestions included source control for artifacts, continuous testing for
-code and data, online collaboration using wikis and engineering for scale.</p>
-
-<p>Slides for the talk are available <a href="http://www.slideshare.net/dberkholz/data-science-devops-and-drinks-the-perfect-combination">here</a>.</p>
-
-<h2><a href="http://prettylittlestatemachine.com/">Shanley Kane</a> - &#8220;Scaling Product Management&#8221;</h2>
-
-<p>Shanley compared <a href="http://en.wikipedia.org/wiki/Inferno_(Dante)">Dante&#8217;s Inferno</a> to
-Product Management, using the nine circles of Hell as metaphors for common issues
-and providing solutions from Paradiso and the spheres of Heaven.</p>
-
-<ul>
-<li><p><em>Fraud</em> - Roadmaps are arbitrary documents with timelines and feature. Premature
-decision making that encourages death marches.  Remove road maps and
-collaborate on living &#8220;working what are working on&#8221; document.</p></li>
-<li><p><em>Greed</em> - You can&#8217;t do everything you want (within a fixed time period).
-Shanley&#8217;s heuristic says, <em>&#8220;take what you want to do, divide it by four, take
-the original time you think you need and double it&#8221;</em>.</p></li>
-<li><p><em>Gluttony</em> - Stop using &#8220;all the tools&#8221;. Perfect tools don&#8217;t exist, lower your expectations and standardise across teams.</p></li>
-<li><p><em>Limbo</em> - Technical debt hinder progress, grows over time. Stop hiding it away, acknowledge it and plan to resolve it.</p></li>
-<li><p><em>Anger</em> - Continually dismissing peoples&#8217; opinions leads to distrust and resentment. Create culture of discussion, including trade-offs and whys. Include
-other departments apart from engineering.</p></li>
-</ul>
-
-
-<h2><a href="https://twitter.com/Tim_Webb_">Tim Webb</a> - &#8220;Tips &amp; tricks, and tools from a company that&#8217;s never had a headquarters.&#8221;</h2>
-
-<p>Tim&#8217;s talked about scaling remote-working teams and how his company makes it
-work.</p>
-
-<p>Setting expectations was key to successful collaboration, how available
-are people supposed to be during core working hours?</p>
-
-<p>Remote working can be
-successful but you can&#8217;t ignore physical distances, having a team with
-employees in Latin America, United Kingdom and China makes it difficult to even
-schedule a conference call.</p>
-
-<p>Use tools a variety of tools, from Google Hangouts
-to Skype, to encourage collaboration. Default to &#8220;over-sharing&#8221; to ensure
-everybody stays in touch.</p>
-
-<h2><a href="https://twitter.com/tnm">Ted Nyman</a> - &#8220;Scaling Happiness&#8221;</h2>
-
-<p>Github has now grown to over 140 employees but still hasn&#8217;t employed a formal manager.</p>
-
-<p>Rather than having a hierarchical organisational, with managers dictating strategy and direction,
-Github&#8217;s engineer&#8217;s work on what they find most interesting and progress happens through consensus and
-discussion.</p>
-
-<p>Ted spoke about &#8220;freedom perks&#8221;, calling out companies who use excessive benefits, e.g. free food,
-rather than engaging work to hold onto employees.</p>
-
-<p><em>Authenticity and autonomy are key to happiness for employees.</em></p>
-
-<p>Github&#8217;s lack of a formal structure creates a culture which embraces disorder, tolerates mistakes and lets teams
-form naturally. This culture eventually reinforces the original structure.</p>
-
-<p>Slides are available <a href="http://ted.io/scaling-happiness.html">here</a>.</p>
-
-<hr />
-
-<p>I&#8217;m looking forward to next year already&#8230;</p>
-
-<p><strong>Finally, thanks to <a href="http://redmonk.com/jgovernor/">James Governor</a> and the rest of the organisers for putting on a fantastic event.
-It must have taken an enormous amount of effort to pull off a high-quality event on this scale.</strong></p>
 ]]></content>
   </entry>
   
