@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: bots | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/bots/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2016-05-12T16:41:06+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Cognitive Bots With IBM Watson]]></title>
+    <link href="http://jamesthom.as/blog/2016/05/10/bots-with-ibm-watson/"/>
+    <updated>2016-05-10T16:29:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/05/10/bots-with-ibm-watson</id>
+    <content type="html"><![CDATA[<p>Later this month, I'm speaking at Twilio's conference about
+<a href="https://www.twilio.com/signal/schedule/6L9DFzeXKg0OOIQW42eik2/building-cognitive-bots-with-ibm-watson">building cognitive bots with IBM Watson</a>.
+Preparing for this presentation, I've been experimenting with the IBM Watson
+services to build sample bots that can understand, and act on, natural language.</p>
+
+<p>IBM's artificial intelligence system, <a href="https://en.wikipedia.org/wiki/Watson_(computer">Watson</a>, now provides a
+series of <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/services-catalog.html">"cognitive" services</a>
+available through <a href="https://bluemix.net">IBM's Bluemix cloud platform</a>.
+Developers can integrate everything from natural language processing, image and
+speech recognition, emotion analysis and more into their applications using
+RESTful APIs.</p>
+
+<p>The <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">Watson Developer Cloud</a>
+site has numerous
+<a href="https://github.com/watson-developer-cloud/dialog-nodejs">sample</a>
+<a href="https://github.com/watson-developer-cloud/conversational-agent-application-starter-kit">apps</a>
+to help you understand how to integrate the services together to build "cognitive" bots.</p>
+
+<p>In one of the samples, the <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">Dialog service</a>
+is used to develop a <a href="http://dialog-demo.mybluemix.net/">pizza ordering bot</a>.
+Users can order a pizza, specifying the size, toppings and delivery method,
+using natural language.</p>
+
+<p>After understanding how this sample worked, I had an idea to enhance it with
+the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">tone analysis service</a>...</p>
+
+<h2>Where the heck is my pizza?</h2>
+
+<p>Let's imagine the customer has ordered a delivery using pizza-bot and the
+driver is being (even) slower than normal.</p>
+
+<p>If the customer asks</p>
+
+<p><strong>"Where is my pizza?"</strong></p>
+
+<p>We return the standard message all pizza takeaways use when calling to
+inquire where the driver is....</p>
+
+<p><strong>"The driver has just left, he'll be ten minutes."</strong></p>
+
+<p><em>An hour later...</em></p>
+
+<p>When the driver still hasn't arrived, the customer would probably ask again and
+with a bit less civility...</p>
+
+<p><strong>"Where the heck is my pizza? I ordered an hour ago! This is ridiculous."</strong></p>
+
+<p>At this point, the "just ten minutes" reply is not going to be well received!</p>
+
+<p>Building bots that can understand conversation tone will mean we can script a
+suitable response, rather than infuriating our hungry customers.</p>
+
+<p>Using the tone analyser service, I wanted to enhance the sample to use
+conversation sentiment to affect the dialogue.
+Bot responses should be generated based upon both user
+input and conversation sentiment.</p>
+
+<p><img src="https://dl.dropboxusercontent.com/u/10404736/pizza_rage.gif"></p>
+
+<p>Let's review both services before looking at how to combine them to create the
+improved pizza bot...</p>
+
+<h2>IBM Watson Dialog</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">IBM Watson Dialog service</a>
+enables a developer to automate scripting
+conversations, using natural language, between a virtual agent and a user.
+Developers build up a <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml">decision tree for dialogue</a>,
+using a markup language to define the conversation paths.</p>
+
+<p>Developers can then utilise the pre-defined linguistic model to converse with
+users. The system will keep track of the conversation state when processing
+user input to generate a suitable response. It can also store
+<a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilevar">conversation properties</a>, either extracted from user input or manually updated through the
+API.</p>
+
+<p>These conversation properties can be used to <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilecheck">control the dialogue branching</a>.</p>
+
+<p>Documentation on the service is available <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/">here</a>.</p>
+
+<h2>IBM Watson Tone Analyser</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer Service</a>
+uses linguistic analysis to detect three types of tones from text: emotion, social tendencies, and language style.</p>
+
+<p>Emotions identified include things like anger, fear, joy, sadness, and disgust.
+Identified social tendencies include things from the Big Five personality
+traits used by some psychologists. These include openness, conscientiousness,
+extroversion, agreeableness, and emotional range. Identified language styles
+include confident, analytical, and tentative.</p>
+
+<p>Documentation on the service is available <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/tone-analyzer/">here</a>.</p>
+
+<h2>Extending Pizza Bot </h2>
+
+<p>Enhancing pizza bot to support dialogue about delivery times, we can start by
+identifying when the user is asking about the pizza delivery. At this point,
+unless the user is angry, we can return the default response. When sentiment
+analysis indicates this user is angry, we should branch to returning a more
+sympathetic message.</p>
+
+<h2>Matching User Input </h2>
+
+<p>Matching user input about delivery times, there a few common questions we want to capture.</p>
+
+<ul>
+<li><em>Where's my order?</em></li>
+<li><em>How long will it be until my pizza arrives?</em></li>
+<li><em>When will my takeout get here?</em></li>
+</ul>
+
+
+<p>Creating our <a href="https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L179-L207">new conversation branch</a>
+within a folder element will allow us to
+group the necessary <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">input</a>,
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_grammar">grammar</a> and
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_output">output</a> elements as a logical section.</p>
+
+<p>``` xml Order Queries http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input
+<folder label="Order">
+  <input></p>
+
+<pre><code>&lt;grammar&gt;
+  ...
+&lt;/grammar&gt;
+&lt;output&gt;
+  &lt;prompt selectionType="RANDOM"&gt;
+    ...
+  &lt;/prompt&gt;
+&lt;/output&gt;
+</code></pre>
+
+<p>  </input>
+</folder>
+```</p>
+
+<p>This structure will process the output element, to generate the bot reply, only
+if the input grammar matches user input. Adding item nodes under the input's
+grammar element will let us define the dialogue matching criteria, shown here.</p>
+
+<p><code>xml Query Grammar https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L181-L188
+&lt;grammar&gt;
+  &lt;item&gt;$where* order&lt;/item&gt;
+  &lt;item&gt;$where* pizza&lt;/item&gt;
+  &lt;item&gt;$how long* order&lt;/item&gt;
+  &lt;item&gt;$how long* pizza&lt;/item&gt;
+  &lt;item&gt;$when * order * here&lt;/item&gt;
+  &lt;item&gt;$when * pizza * here&lt;/item&gt;
+&lt;/grammar&gt;
+</code></p>
+
+<p>Using <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">wildcard matching characters</a>,
+$ and *, means the grammar ("$where * order") will match questions including "Where is my pizza?" and "Where's my
+pizza?" rather than having to manually define every permutation.</p>
+
+<p>People often use synonyms in natural language. Rather than manually defining
+grammar rules for all alternative words for pizza and order, we can add
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_concept">concept elements</a>
+to automatically match these. The sample already has a concept element defined for the pizza term, we only have to add elements for order.</p>
+
+<p>``` xml Concept Entities https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L1647-L1654
+<concept>
+  <grammar></p>
+
+<pre><code>&lt;item&gt;Order&lt;/item&gt;
+&lt;item&gt;Takeaway&lt;/item&gt;
+&lt;item&gt;Takeout&lt;/item&gt;
+&lt;item&gt;Delivery&lt;/item&gt;
+</code></pre>
+
+<p>  </grammar>
+</concept>
+```</p>
+
+<p>Grammar rules which include the <em>order</em> term which automatically match takeaway, takeout or delivery.</p>
+
+<h2>Adding Default Response</h2>
+
+<p>Having matched the user input, we want to return the default response from a pre-specified list.</p>
+
+<p>``` xml Bot Replies https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L198-L205
+<output>
+  <prompt selectionType="RANDOM"></p>
+
+<pre><code>&lt;item&gt;I've just checked and the driver is ten minutes away, is there anything else I can help with?&lt;/item&gt;
+&lt;item&gt;Hmmm the driver's running a bit late, they'll be about ten minutes. Is there anything else I can help with?&lt;/item&gt;
+&lt;item&gt;They should be with you in ten minutes. Is there anything else I can help with?&lt;/item&gt;
+</code></pre>
+
+<p>  </prompt>
+  <goto ref="getUserInput_2442994"/>
+</output>
+```</p>
+
+<h2>Handling Angry Customers</h2>
+
+<p>Within the dialog markup, <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_variables">profile variables</a>
+can be defined to store conversation entities. These variables can be referenced by
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_if">conditional branches</a>
+in the markup to control responses.</p>
+
+<p>Defining a new profile variable for the anger score, this value can be updated
+manually before the current user input is processed to return the dialogue
+response.</p>
+
+<p>``` xml Profile Variable https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L2062
+<variables>
+  <var_folder name="Home"></p>
+
+<pre><code>...
+&lt;var name="anger" type="NUMBER" initValue="0" description="Anger emotion score for conversation."/&gt;
+</code></pre>
+
+<p>  </var_folder>
+</variables>
+```</p>
+
+<p>Adding a child branch, for the conditional response, after the input grammar
+will allow us to return a custom response if the profile variable for the anger
+emotion is above a threshold.</p>
+
+<p>``` xml Anger Branching https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L189-L197
+<folder label="Order">
+  <input></p>
+
+<pre><code>&lt;grammar&gt;
+  &lt;item&gt;$where* order&lt;/item&gt;
+&lt;/grammar&gt;
+&lt;if matchType="ANY"&gt;
+  &lt;cond varName="anger" operator="GREATER_THEN"&gt;0.50&lt;/cond&gt;
+  &lt;output&gt;
+    &lt;prompt selectionType="RANDOM"&gt;
+      &lt;item&gt;Please accept our apologies for the delivery driver being very late. Could you call us on 0800 800 800 and we'll get this fixed?&lt;/item&gt;
+    &lt;/prompt&gt;
+  &lt;/output&gt;
+&lt;/if&gt;
+</code></pre>
+
+<p>```</p>
+
+<p>When we've detected the user is angry about the delivery delay, we direct
+them to ring the restaurant to find out what's happened to the driver.</p>
+
+<h2>Combining Watson Services</h2>
+
+<p>Modifying the backend service that calls the Watson services, we're now passing
+the user's input through the Tone Analyzer service and manually updating user's
+anger score in their profile, before calling the Dialog service.</p>
+
+<p>This anger score will be used to control the dialogue response in real-time.</p>
+
+<p>``` js Using Tone Analyser https://github.com/jthomas/dialog-nodejs/blob/master/app.js#L56-L85
+app.post('/conversation', function(req, res, next) {
+  tone_analyzer.tone({ text: req.body.input }, function(err, tone) {</p>
+
+<pre><code>var categories = tone.document_tone.tone_categories
+var emotion_tones = categories.find(function (tone) {
+  return tone.category_id === 'emotion_tone'
+})
+
+var anger_tone = emotion_tones.tones.find(function (tone) {
+  return tone.tone_id === 'anger'
+})
+
+var params = {client_id: req.body.client_id, dialog_id: dialog_id, name_values: [{name: 'anger', value: anger_tone.score}]}
+dialog.updateProfile(params, function (err, results) {
+  var params = extend({ dialog_id: dialog_id }, req.body);
+  dialog.conversation(params, function(err, results) {
+    else
+      res.json({ dialog_id: dialog_id, conversation: results});
+  });
+})
+</code></pre>
+
+<p>  });
+});
+```</p>
+
+<p>The <a href="https://github.com/jthomas/dialog-nodejs/commit/6d025040e005ef0d9aa976bfe20039db05f681fe">commit log</a>
+for the fork shows the full changes needed to integrate this feature.</p>
+
+<h2>Conclusion</h2>
+
+<p>Bots are a <a href="https://medium.com/chris-messina/2016-will-be-the-year-of-conversational-commerce-1586e85e3991#.524ovvaj8">huge trend for 2016</a>.
+One of the major challenges to developing your
+own bots is handling user input using natural language. How can you go beyond
+simple keyword matching and regular expressions to build solutions that
+actually understand what your user is asking?</p>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/overview.shtml">IBM Watson Dialog service</a> users can script natural language
+conversations. Defining a linguistic model for their dialogue using markup
+language, the system can use this to process natural language and return the
+appropriate response. Conversation entities are recognised and stored in a user
+profile.</p>
+
+<p>Combining this service with the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer</a>, users can script
+conversations that use the user's emotional tone to modify the response.</p>
+
+<p>Modifying the pizza sample, we incorporate the anger score to return a more
+appropriate response when the user is angry about their delivery being delayed.</p>
+
+<p>IBM Watson has <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">many other services</a>
+that can be integrated with the Dialog
+service using the same pattern to build "cognitive" bots. Using these services
+takes the hard work out of building bots that actually understand and respond
+with emotion to input using natural language.</p>
+]]></content>
+  </entry>
+  
+</feed>
