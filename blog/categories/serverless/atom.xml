@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2016-06-15T15:36:22+01:00</updated>
+  <updated>2016-06-22T14:12:24+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,315 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Go Actions]]></title>
+    <link href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/"/>
+    <updated>2016-06-21T17:01:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/06/21/serverless-go-actions</id>
+    <content type="html"><![CDATA[<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless
+platform, provides the ability to invoke custom
+<a href="https://www.docker.com/">Docker</a> containers as serverless functions.</p>
+
+<p>Developers can create new
+<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">Actions</a>,
+referencing public images on <a href="https://dockerhub.com">Dockerhub</a>. OpenWhisk
+manages creating and executing containers using these images per invocation
+request.</p>
+
+<p>Using this feature, developers can write serverless functions using the
+<a href="https://golang.org/">Go language</a>. Compiled Go language binaries are embedded
+within custom Docker images and pushed into the platform.</p>
+
+<p><strong>So, how do we start?</strong></p>
+
+<p><em>This blog post will explain how to get your Go language functions running as
+"serverless functions" on OpenWhisk. If you're impatient to get to the code,
+this <a href="https://github.com/jthomas/openwhisk_go_action">repository</a> contains the
+examples for everything discussed below.</em></p>
+
+<p>OpenWhisk helps developers create custom Actions using Docker through an SDK...</p>
+
+<h2>OpenWhisk Docker SDK</h2>
+
+<p>Using the
+<a href="https://new-console.ng.bluemix.net/docs/openwhisk/index.html"><em>wsk</em> command-line utility</a>,
+developers can install the
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> into the
+current directory.</p>
+
+<p><code>
+$ wsk sdk install docker
+</code></p>
+
+<p>The SDK provides the <a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">source for a custom Docker image</a>, which executes a custom
+binary in response to invocation requests. The default SDK copies the
+executable file, located at the <em>client/action</em>, into the image during the
+build process. Users build the image locally before pushing this to Dockerhub.</p>
+
+<p><code>sh
+$ docker build -t &lt;dockerhub_user&gt;/docker_action .
+$ docker push &lt;dockerhub_user&gt;/docker_action
+</code></p>
+
+<p>Using the command-line utility, users can then create a new Action referencing
+this public Docker image. When this Action is invoked, the platform will spin
+up a new container from this custom image.</p>
+
+<p><code>sh
+$ wsk action create docker_action --docker &lt;dockerhub_user&gt;/docker_action
+$ wsk action invoke --blocking --result docker_action
+</code></p>
+
+<h2>OpenWhisk Docker Action </h2>
+
+<p>OpenWhisk SDK's Docker image uses a Node.js
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker/server">application</a>
+to handle the JSON invocation request from the platform and spawns a process to
+execute the binary. Invocation parameters are passed as a JSON string through a
+command-line argument to the binary. The executable must write the JSON
+response to stdout, the handler will return this to the platform.</p>
+
+<p>Containers used to run OpenWhisk Actions must be expose a HTTP API on port 8080
+with two paths, <em>/init</em> and <em>/run</em>. The platform sends HTTP POST requests to
+these paths to initialise the Action and schedule invocations.</p>
+
+<p>The <em>/init</em> path is used to provide the Action source for languages which
+support runtime evaluation. <strong>User-provided Docker images do not need to
+implement this method, other than returning a non-error HTTP response.</strong></p>
+
+<p>The <em>/run</em> path is called by the platform for each invocation request.
+Parameters for the invocation are passed as the <em>value</em> property of the JSON
+request body. Any non-empty JSON response will be interpreted as the invocation
+result.</p>
+
+<h2>Go Actions using the Docker SDK</h2>
+
+<p>Using Go binaries with the Docker SDK requires the developer to cross-compile
+the source for the platform architecture and copy the binary to the
+<em>client/action</em> path.</p>
+
+<p><code>
+export GOARCH=386
+export GOOS=linux
+go build -o action
+mv action client/action
+</code></p>
+
+<p>The Go code must parse the invocation parameters as a JSON string from the
+command-line argument. Data written to <em>stdout</em> will be parsed as JSON and
+returned as the Action response.</p>
+
+<p>This sample Go source demonstrates using this method to implement a "reverse
+string" Action.</p>
+
+<p>``` go
+package main</p>
+
+<p>import "os"
+import "encoding/json"
+import "log"</p>
+
+<p>type Params struct {
+  Payload string <code>json:"payload"</code>
+}</p>
+
+<p>type Result struct {
+  Reversed string <code>json:"reversed"</code>
+}</p>
+
+<p>// extract invocation parameters, passed as JSON string argument on command-line.
+func params() Params {
+  var params Params
+  source := os.Args[1]
+  buf := []byte(source)
+  if err := json.Unmarshal(buf, &amp;params); err != nil {</p>
+
+<pre><code>log.Fatal(err)
+</code></pre>
+
+<p>  }
+  return params
+}</p>
+
+<p>// convert struct back to JSON for response
+func return_result(result Result) {
+  buf, err := json.Marshal(result)
+  if err != nil {</p>
+
+<pre><code>log.Fatal(err)
+</code></pre>
+
+<p>  }
+  os.Stdout.Write(buf)
+}</p>
+
+<p>func main() {
+  input := params()</p>
+
+<p>  // reverse the string passed from invocation parameters
+  chars := []rune(input.Payload)
+  for i, j := 0, len(chars)-1; i &lt; j; i, j = i+1, j-1 {</p>
+
+<pre><code>chars[i], chars[j] = chars[j], chars[i]
+</code></pre>
+
+<p>  }
+  result := Result{</p>
+
+<pre><code>Reversed: string(chars),
+</code></pre>
+
+<p>  }</p>
+
+<p>  return_result(result)
+}
+```</p>
+
+<h2>Docker SDK Base Image</h2>
+
+<p>Building a base image from the OpenWhisk Docker SDK and publishing on Dockerhub
+simplifies the process of building a Docker-based Action. Developers can now
+use the following image
+(<a href="https://hub.docker.com/r/jamesthomas/openwhisk_docker_action/">jamesthomas/openwhisk_docker_action</a>),
+without having to install the SDK locally.</p>
+
+<p><code>
+FROM jamesthomas/openwhisk_docker_action
+COPY action /blackbox/action
+</code></p>
+
+<p>This base image includes the Node.js handler to manage the platform HTTP
+requests. An executable file at <em>/blackbox/action</em> will be called for each
+invocation. JSON parameters and responses are still passed using command-line
+arguments and stdout.</p>
+
+<h2>Custom Go Handler </h2>
+
+<p>Using the Docker SDK for OpenWhisk relies on a Node.js application to handle
+the platform HTTP requests, spawning a process to execute the user binary file.</p>
+
+<p>Implementing the HTTP API, described above, in Go would allow us to remove the
+Node.js handler from the image. Compiling the Go Action source with the HTTP
+API handler into a single binary and using an Alpine Linux base image will
+dramatically reduce the image size.</p>
+
+<p>This should improve execution performance, by removing the Node.js VM process,
+and cold start-up time, through having a smaller Docker image.</p>
+
+<p><strong>Using this Go package, <a href="https://github.com/jthomas/ow">jthomas/ow</a>, users can
+automate the process of creating Go-based Actions.</strong></p>
+
+<p><code>
+go get jthomas/ow
+</code></p>
+
+<p><em>The package provides a method for registering Action callbacks and implements
+the HTTP endpoints for handling platform requests.</em></p>
+
+<p><em>Invocation parameters are passed using a function parameter, rather than a raw
+JSON string. Returned interface values will be automatically serialised to JSON
+as the Action response.</em></p>
+
+<p><code>go
+openwhisk.RegisterAction(func(value json.RawMessage) (interface{}, error) {
+   ...  
+}
+</code></p>
+
+<p>Re-writing the "reverse string" Action above to use this package is shown here.</p>
+
+<p>``` go
+package main</p>
+
+<p>import (</p>
+
+<pre><code>"encoding/json"
+"github.com/jthomas/ow"
+</code></pre>
+
+<p>)</p>
+
+<p>type Params struct {</p>
+
+<pre><code>Payload string `json:"payload"`
+</code></pre>
+
+<p>}</p>
+
+<p>type Result struct {</p>
+
+<pre><code>Reversed string `json:"reversed"`
+</code></pre>
+
+<p>}</p>
+
+<p>func reverse_string(to_reverse string) string {</p>
+
+<pre><code>chars := []rune(to_reverse)
+for i, j := 0, len(chars)-1; i &lt; j; i, j = i+1, j-1 {
+    chars[i], chars[j] = chars[j], chars[i]
+}
+return string(chars)
+</code></pre>
+
+<p>}</p>
+
+<p>func main() {</p>
+
+<pre><code>ow.RegisterAction(func(value json.RawMessage) (interface{}, error) {
+    var params Params
+    err := json.Unmarshal(value, &amp;params)
+    if err != nil {
+        return nil, err
+    }
+    return Result{Reversed: reverse_string(params.Payload)}, nil
+})
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Cross-compiling the Action source, bundling this package, creates a single
+lightweight binary.</p>
+
+<p>Embedding this file within a Docker image, using a minimal base image, creates
+a tiny image (&lt;10MB). Containers from these images only execute a single
+process to handle both the HTTP requests and running the Action source.</p>
+
+<p><code>
+FROM alpine:3.4
+COPY action /action
+EXPOSE 8080
+CMD ["./action"]
+</code></p>
+
+<p>Pushing the local image to Dockerhub and then using it to create an Action
+follows the same instructions above.</p>
+
+<h2>Conclusion</h2>
+
+<p>Running OpenWhisk Actions from user-provided Docker images allows developers to
+execute "serverless functions" using any language. This is a fantastic feature
+not currently supported by many of the other serverless providers.</p>
+
+<p>OpenWhisk provides an
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> letting
+users build a local Docker image which executes their Action and handles the
+HTTP requests from the platform. Using this with <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/docker_sdk">Go-based Actions</a> requires us
+to cross-compile our binary for the platform and handle passing JSON through
+command-line arguments and stdout.</p>
+
+<p>Re-writing the HTTP handler <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/go_handler">natively in Go</a>
+means the Docker image can contain and execute a single binary for both tasks.
+Using this <a href="https://github.com/jthomas/ow">Go package</a> provides an interface for registering Actions and handles
+the HTTP requests automatically.</p>
+
+<p><strong>This <a href="https://github.com/jthomas/openwhisk_go_action">project</a> contains
+examples for the "reverse string" Action using both the Docker SDK and Go-based
+handler detailed above.</strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk and MQTT]]></title>

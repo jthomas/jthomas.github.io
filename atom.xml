@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2016-06-15T15:36:22+01:00</updated>
+  <updated>2016-06-22T14:12:24+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,387 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Go Actions]]></title>
+    <link href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/"/>
+    <updated>2016-06-21T17:01:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/06/21/serverless-go-actions</id>
+    <content type="html"><![CDATA[<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless
+platform, provides the ability to invoke custom
+<a href="https://www.docker.com/">Docker</a> containers as serverless functions.</p>
+
+<p>Developers can create new
+<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">Actions</a>,
+referencing public images on <a href="https://dockerhub.com">Dockerhub</a>. OpenWhisk
+manages creating and executing containers using these images per invocation
+request.</p>
+
+<p>Using this feature, developers can write serverless functions using the
+<a href="https://golang.org/">Go language</a>. Compiled Go language binaries are embedded
+within custom Docker images and pushed into the platform.</p>
+
+<p><strong>So, how do we start?</strong></p>
+
+<p><em>This blog post will explain how to get your Go language functions running as
+&#8220;serverless functions&#8221; on OpenWhisk. If you&#8217;re impatient to get to the code,
+this <a href="https://github.com/jthomas/openwhisk_go_action">repository</a> contains the
+examples for everything discussed below.</em></p>
+
+<p>OpenWhisk helps developers create custom Actions using Docker through an SDK&#8230;</p>
+
+<h2>OpenWhisk Docker SDK</h2>
+
+<p>Using the
+<a href="https://new-console.ng.bluemix.net/docs/openwhisk/index.html"><em>wsk</em> command-line utility</a>,
+developers can install the
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> into the
+current directory.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk sdk install docker</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The SDK provides the <a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">source for a custom Docker image</a>, which executes a custom
+binary in response to invocation requests. The default SDK copies the
+executable file, located at the <em>client/action</em>, into the image during the
+build process. Users build the image locally before pushing this to Dockerhub.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker build -t &lt;dockerhub_user&gt;/docker_action .
+</span><span class='line'><span class="nv">$ </span>docker push &lt;dockerhub_user&gt;/docker_action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using the command-line utility, users can then create a new Action referencing
+this public Docker image. When this Action is invoked, the platform will spin
+up a new container from this custom image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create docker_action --docker &lt;dockerhub_user&gt;/docker_action
+</span><span class='line'><span class="nv">$ </span>wsk action invoke --blocking --result docker_action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>OpenWhisk Docker Action </h2>
+
+<p>OpenWhisk SDK&#8217;s Docker image uses a Node.js
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker/server">application</a>
+to handle the JSON invocation request from the platform and spawns a process to
+execute the binary. Invocation parameters are passed as a JSON string through a
+command-line argument to the binary. The executable must write the JSON
+response to stdout, the handler will return this to the platform.</p>
+
+<p>Containers used to run OpenWhisk Actions must be expose a HTTP API on port 8080
+with two paths, <em>/init</em> and <em>/run</em>. The platform sends HTTP POST requests to
+these paths to initialise the Action and schedule invocations.</p>
+
+<p>The <em>/init</em> path is used to provide the Action source for languages which
+support runtime evaluation. <strong>User-provided Docker images do not need to
+implement this method, other than returning a non-error HTTP response.</strong></p>
+
+<p>The <em>/run</em> path is called by the platform for each invocation request.
+Parameters for the invocation are passed as the <em>value</em> property of the JSON
+request body. Any non-empty JSON response will be interpreted as the invocation
+result.</p>
+
+<h2>Go Actions using the Docker SDK</h2>
+
+<p>Using Go binaries with the Docker SDK requires the developer to cross-compile
+the source for the platform architecture and copy the binary to the
+<em>client/action</em> path.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nb">export </span><span class="nv">GOARCH</span><span class="o">=</span>386
+</span><span class='line'><span class="nb">export </span><span class="nv">GOOS</span><span class="o">=</span>linux
+</span><span class='line'>go build -o action
+</span><span class='line'>mv action client/action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The Go code must parse the invocation parameters as a JSON string from the
+command-line argument. Data written to <em>stdout</em> will be parsed as JSON and
+returned as the Action response.</p>
+
+<p>This sample Go source demonstrates using this method to implement a &#8220;reverse
+string&#8221; Action.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
+</span><span class='line'>
+</span><span class='line'><span class="kn">import</span> <span class="s">&quot;os&quot;</span>
+</span><span class='line'><span class="kn">import</span> <span class="s">&quot;encoding/json&quot;</span>
+</span><span class='line'><span class="kn">import</span> <span class="s">&quot;log&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">type</span> <span class="nx">Params</span> <span class="kd">struct</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">Payload</span> <span class="kt">string</span> <span class="s">`json:&quot;payload&quot;`</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">type</span> <span class="nx">Result</span> <span class="kd">struct</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">Reversed</span> <span class="kt">string</span> <span class="s">`json:&quot;reversed&quot;`</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// extract invocation parameters, passed as JSON string argument on command-line.</span>
+</span><span class='line'><span class="kd">func</span> <span class="nx">params</span><span class="p">()</span> <span class="nx">Params</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">params</span> <span class="nx">Params</span>
+</span><span class='line'>  <span class="nx">source</span> <span class="o">:=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">Args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+</span><span class='line'>  <span class="nx">buf</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">source</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">if</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">(</span><span class="nx">buf</span><span class="p">,</span> <span class="o">&amp;</span><span class="nx">params</span><span class="p">);</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">params</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// convert struct back to JSON for response</span>
+</span><span class='line'><span class="kd">func</span> <span class="nx">return_result</span><span class="p">(</span><span class="nx">result</span> <span class="nx">Result</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">buf</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="nx">os</span><span class="p">.</span><span class="nx">Stdout</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">buf</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">input</span> <span class="o">:=</span> <span class="nx">params</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// reverse the string passed from invocation parameters</span>
+</span><span class='line'>  <span class="nx">chars</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">rune</span><span class="p">(</span><span class="nx">input</span><span class="p">.</span><span class="nx">Payload</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">for</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">j</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="p">=</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="nx">result</span> <span class="o">:=</span> <span class="nx">Result</span><span class="p">{</span>
+</span><span class='line'>    <span class="nx">Reversed</span><span class="p">:</span> <span class="nb">string</span><span class="p">(</span><span class="nx">chars</span><span class="p">),</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">return_result</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Docker SDK Base Image</h2>
+
+<p>Building a base image from the OpenWhisk Docker SDK and publishing on Dockerhub
+simplifies the process of building a Docker-based Action. Developers can now
+use the following image
+(<a href="https://hub.docker.com/r/jamesthomas/openwhisk_docker_action/">jamesthomas/openwhisk_docker_action</a>),
+without having to install the SDK locally.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">FROM</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">openwhisk_docker_action</span>
+</span><span class='line'><span class="nx">COPY</span> <span class="nx">action</span> <span class="o">/</span><span class="nx">blackbox</span><span class="o">/</span><span class="nx">action</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This base image includes the Node.js handler to manage the platform HTTP
+requests. An executable file at <em>/blackbox/action</em> will be called for each
+invocation. JSON parameters and responses are still passed using command-line
+arguments and stdout.</p>
+
+<h2>Custom Go Handler </h2>
+
+<p>Using the Docker SDK for OpenWhisk relies on a Node.js application to handle
+the platform HTTP requests, spawning a process to execute the user binary file.</p>
+
+<p>Implementing the HTTP API, described above, in Go would allow us to remove the
+Node.js handler from the image. Compiling the Go Action source with the HTTP
+API handler into a single binary and using an Alpine Linux base image will
+dramatically reduce the image size.</p>
+
+<p>This should improve execution performance, by removing the Node.js VM process,
+and cold start-up time, through having a smaller Docker image.</p>
+
+<p><strong>Using this Go package, <a href="https://github.com/jthomas/ow">jthomas/ow</a>, users can
+automate the process of creating Go-based Actions.</strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="k">go</span> <span class="nx">get</span> <span class="nx">jthomas</span><span class="o">/</span><span class="nx">ow</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>The package provides a method for registering Action callbacks and implements
+the HTTP endpoints for handling platform requests.</em></p>
+
+<p><em>Invocation parameters are passed using a function parameter, rather than a raw
+JSON string. Returned interface values will be automatically serialised to JSON
+as the Action response.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">openwhisk</span><span class="p">.</span><span class="nx">RegisterAction</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">value</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">)</span> <span class="p">(</span><span class="kd">interface</span><span class="p">{},</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="o">...</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Re-writing the &#8220;reverse string&#8221; Action above to use this package is shown here.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
+</span><span class='line'>
+</span><span class='line'><span class="kn">import</span> <span class="p">(</span>
+</span><span class='line'>    <span class="s">&quot;encoding/json&quot;</span>
+</span><span class='line'>    <span class="s">&quot;github.com/jthomas/ow&quot;</span>
+</span><span class='line'><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">type</span> <span class="nx">Params</span> <span class="kd">struct</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">Payload</span> <span class="kt">string</span> <span class="s">`json:&quot;payload&quot;`</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">type</span> <span class="nx">Result</span> <span class="kd">struct</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">Reversed</span> <span class="kt">string</span> <span class="s">`json:&quot;reversed&quot;`</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">func</span> <span class="nx">reverse_string</span><span class="p">(</span><span class="nx">to_reverse</span> <span class="kt">string</span><span class="p">)</span> <span class="kt">string</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">chars</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">rune</span><span class="p">(</span><span class="nx">to_reverse</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">for</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">j</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="p">=</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nb">string</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">ow</span><span class="p">.</span><span class="nx">RegisterAction</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">value</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">)</span> <span class="p">(</span><span class="kd">interface</span><span class="p">{},</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">params</span> <span class="nx">Params</span>
+</span><span class='line'>        <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="o">&amp;</span><span class="nx">params</span><span class="p">)</span>
+</span><span class='line'>        <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">return</span> <span class="kc">nil</span><span class="p">,</span> <span class="nx">err</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nx">Result</span><span class="p">{</span><span class="nx">Reversed</span><span class="p">:</span> <span class="nx">reverse_string</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">Payload</span><span class="p">)},</span> <span class="kc">nil</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Cross-compiling the Action source, bundling this package, creates a single
+lightweight binary.</p>
+
+<p>Embedding this file within a Docker image, using a minimal base image, creates
+a tiny image (&lt;10MB). Containers from these images only execute a single
+process to handle both the HTTP requests and running the Action source.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">FROM</span> <span class="nx">alpine</span><span class="p">:</span><span class="mf">3.4</span>
+</span><span class='line'><span class="nx">COPY</span> <span class="nx">action</span> <span class="o">/</span><span class="nx">action</span>
+</span><span class='line'><span class="nx">EXPOSE</span> <span class="mi">8080</span>
+</span><span class='line'><span class="nx">CMD</span> <span class="p">[</span><span class="s">&quot;./action&quot;</span><span class="p">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Pushing the local image to Dockerhub and then using it to create an Action
+follows the same instructions above.</p>
+
+<h2>Conclusion</h2>
+
+<p>Running OpenWhisk Actions from user-provided Docker images allows developers to
+execute &#8220;serverless functions&#8221; using any language. This is a fantastic feature
+not currently supported by many of the other serverless providers.</p>
+
+<p>OpenWhisk provides an
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> letting
+users build a local Docker image which executes their Action and handles the
+HTTP requests from the platform. Using this with <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/docker_sdk">Go-based Actions</a> requires us
+to cross-compile our binary for the platform and handle passing JSON through
+command-line arguments and stdout.</p>
+
+<p>Re-writing the HTTP handler <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/go_handler">natively in Go</a>
+means the Docker image can contain and execute a single binary for both tasks.
+Using this <a href="https://github.com/jthomas/ow">Go package</a> provides an interface for registering Actions and handles
+the HTTP requests automatically.</p>
+
+<p><strong>This <a href="https://github.com/jthomas/openwhisk_go_action">project</a> contains
+examples for the &#8220;reverse string&#8221; Action using both the Docker SDK and Go-based
+handler detailed above.</strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk and MQTT]]></title>
@@ -4476,236 +4857,6 @@ I&#8217;m looking forward to seeing what plugins the community comes up with!</s
 <p>You can see the plugin in action below&#8230;</p>
 
 <p><img src="https://dl.dropboxusercontent.com/u/10404736/copyenv.gif"></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Cloud Foundry Custom Buildpacks]]></title>
-    <link href="http://jamesthom.as/blog/2015/03/04/cloud-foundry-custom-buildpacks/"/>
-    <updated>2015-03-04T13:25:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2015/03/04/cloud-foundry-custom-buildpacks</id>
-    <content type="html"><![CDATA[<p>Cloud Foundry <a href="http://docs.cloudfoundry.org/buildpacks/">Buildpacks</a> provide runtime and framework support for applications. Users can rely on the built-in selection for Java, NodeJS, Python, etc. or additional <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">community buildpacks</a> from Github.</p>
-
-<p>Buildpacks are open-source, making them simple to customise and include  libraries needed by your application.</p>
-
-<p><a href="https://github.com/jthomas/doctor-watson">Doctor Watson</a> uses an <a href="https://www.npmjs.com/package/sox">NPM module</a> that relies on a command-line application, <a href="sox.sourceforge.net">SOX</a>, being installed in the runtime environment.</p>
-
-<p>Making this command-line application available on the platform required the project to create a <a href="https://github.com/jthomas/nodejs-buildpack">custom NodeJS buildpack</a>.</p>
-
-<p>This was the first time I&#8217;ve needed to create a custom buildpack. Documenting the steps below will hopefully provide a guide for other people wanting to do the same.</p>
-
-<p>Overall, the process was straightforward and left me with a greater understanding of how buildpacks works.</p>
-
-<h2>SOX Audio Processing Library</h2>
-
-<p>We&#8217;re using the SOX package within Doctor Watson to up-sample an audio file.
-This module depends on the command-line SOX audio processing utility being installed and available on the command line. SOX is an open-source C application.</p>
-
-<h2>Buildpack Internals</h2>
-
-<p>Cloud Foundry Buildpacks are Git repositories which must contain three shell scripts under the &#8220;bin&#8221; directory.</p>
-
-<ul>
-<li>detect - Does this buildpack apply to this application?</li>
-<li>compile - Build the runtime used to execute the application</li>
-<li>release - Controls how the application should be executed</li>
-</ul>
-
-
-<p>These shell scripts can be modified to perform any task necessary for an application runtime.</p>
-
-<p>We&#8217;re starting with the <a href="https://github.com/cloudfoundry/nodejs-buildpack">default NodeJS buildpack</a>.</p>
-
-<p>The <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile">&#8220;bin/compile&#8221;</a> script installs the correct NodeJS version, NPM modules and sets up the runtime environment to start the application. When the script is ran, a command line argument will give a directory path to place files needed at runtime.</p>
-
-<p>We will need to install the SOX binary and dependent libraries under this directory path.</p>
-
-<p>One method for doing this would be downloading the SOX source code and compiling during deployment, before installing the created binaries into the correct location.</p>
-
-<p>Unfortunately, compiling from source during each deployment would add an unacceptable delay.</p>
-
-<p><em>Therefore, most buildpacks use pre-built binaries, which are downloaded and moved to the build directory during deployment, saving a huge amount of time.</em></p>
-
-<h2>Creating the pre-built binary archive</h2>
-
-<p>Rather than manually creating our binaries from source, we can pull them from the Ubuntu package manager which already maintains a pre-built set of binaries for the <a href="https://packages.debian.org/unstable/sound/sox">SOX package</a>.</p>
-
-<p>Packaging the binary and any dynamic libraries dependencies into an archive file, this can be stored in the buildpack repository for extraction during deployment.</p>
-
-<p>We need to ensure the pre-built binaries were compiled for the same host environment that Cloud Foundry will use to run our application.</p>
-
-<p>Using the cf stacks command, we can see the platforms details.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>13:51:45 ~<span class="o">]</span><span class="nv">$ </span>cf stacks
-</span><span class='line'>Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>name      description
-</span><span class='line'>lucid64   Ubuntu 10.04
-</span><span class='line'>seDEA     private
-</span><span class='line'><span class="o">[</span>13:53:10 ~<span class="o">]</span><span class="err">$</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we just need access to the same platform to run the package manager on&#8230;</p>
-
-<p>Docker to the rescue!</p>
-
-<h2>Using Docker</h2>
-
-<p>We&#8217;re going to use Docker to run a new container with the same operating system as the Cloud Foundry environment. Using this we can install the SOX package using &#8216;apt-get&#8217; and extract all the installed files.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>13:56:46 ~<span class="o">]</span><span class="nv">$ </span>docker run -t -i  ubuntu:10.04 /bin/bash
-</span><span class='line'>root@7fdb1e9047e1:/#
-</span><span class='line'>root@7fdb1e9047e1:/# apt-get install sox
-</span><span class='line'>root@7fdb1e9047e1:/# which sox
-</span><span class='line'>/usr/bin/sox
-</span><span class='line'>root@7fdb1e9047e1:/# ldd /usr/bin/sox
-</span><span class='line'>    linux-vdso.so.1 <span class="o">=</span>&gt;  <span class="o">(</span>0x00007fff2819f000<span class="o">)</span>
-</span><span class='line'>    libsox.so.1 <span class="o">=</span>&gt; /usr/lib/libsox.so.1 <span class="o">(</span>0x00007f0f32a94000<span class="o">)</span>
-</span><span class='line'>    libltdl.so.7 <span class="o">=</span>&gt; /usr/lib/libltdl.so.7 <span class="o">(</span>0x00007f0f3288a000<span class="o">)</span>
-</span><span class='line'>    libdl.so.2 <span class="o">=</span>&gt; /lib/libdl.so.2 <span class="o">(</span>0x00007f0f32685000<span class="o">)</span>
-</span><span class='line'>    libpng12.so.0 <span class="o">=</span>&gt; /lib/libpng12.so.0 <span class="o">(</span>0x00007f0f3245e000<span class="o">)</span>
-</span><span class='line'>    libmagic.so.1 <span class="o">=</span>&gt; /usr/lib/libmagic.so.1 <span class="o">(</span>0x00007f0f32242000<span class="o">)</span>
-</span><span class='line'>    libz.so.1 <span class="o">=</span>&gt; /lib/libz.so.1 <span class="o">(</span>0x00007f0f3202a000<span class="o">)</span>
-</span><span class='line'>    libgomp.so.1 <span class="o">=</span>&gt; /usr/lib/libgomp.so.1 <span class="o">(</span>0x00007f0f31e1c000<span class="o">)</span>
-</span><span class='line'>    libgsm.so.1 <span class="o">=</span>&gt; /usr/lib/libgsm.so.1 <span class="o">(</span>0x00007f0f31c0e000<span class="o">)</span>
-</span><span class='line'>    libm.so.6 <span class="o">=</span>&gt; /lib/libm.so.6 <span class="o">(</span>0x00007f0f3198a000<span class="o">)</span>
-</span><span class='line'>    libpthread.so.0 <span class="o">=</span>&gt; /lib/libpthread.so.0 <span class="o">(</span>0x00007f0f3176d000<span class="o">)</span>
-</span><span class='line'>    libc.so.6 <span class="o">=</span>&gt; /lib/libc.so.6 <span class="o">(</span>0x00007f0f313eb000<span class="o">)</span>
-</span><span class='line'>    /lib64/ld-linux-x86-64.so.2 <span class="o">(</span>0x00007f0f32d28000<span class="o">)</span>
-</span><span class='line'>    librt.so.1 <span class="o">=</span>&gt; /lib/librt.so.1 <span class="o">(</span>0x00007f0f311e2000<span class="o">)</span>
-</span><span class='line'>root@7fdb1e9047e1:/#
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we have the location of the SOX binary along with a list of the dynamic libraries it depends on.</p>
-
-<p><em>How do we know which of those libraries were already available in the operating system and those the package manager installed?</em></p>
-
-<p>Using Docker diff, we can compare the container to the base image.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>14:02:43 ~<span class="o">]</span><span class="nv">$ </span>docker diff 7fdb1e9047e1 | grep <span class="s1">&#39;\.so\.&#39;</span>
-</span><span class='line'>C /etc/ld.so.cache
-</span><span class='line'>C /etc/ld.so.conf.d
-</span><span class='line'>A /etc/ld.so.conf.d/libasound2.conf
-</span><span class='line'>C /lib/libgcc_s.so.1
-</span><span class='line'>A /usr/lib/libFLAC.so.8
-</span><span class='line'>A /usr/lib/libFLAC.so.8.2.0
-</span><span class='line'>A /usr/lib/libasound.so.2
-</span><span class='line'>A /usr/lib/libasound.so.2.0.0
-</span><span class='line'>A /usr/lib/libgomp.so.1
-</span><span class='line'>A /usr/lib/libgomp.so.1.0.0
-</span><span class='line'>....
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This command will output list of files that have been modified. Grepping this for the list of dependencies we have, it&#8217;s easy to extract those which are new.</p>
-
-<p>We can now copy the files needed from the container filesystem to our local host and bundle into an <a href="https://github.com/jthomas/nodejs-buildpack/blob/master/vendor/sox.tar.gz">archive in the &#8220;vendor&#8221; directory</a>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>14:02:43 ~<span class="o">]</span><span class="nv">$ </span>docker cp 7fdb1e9047e1:/usr/bin/sox .
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Modifying the &#8220;bin/compile&#8221; script</h2>
-
-<p>With the pre-built binary package available in the buildpack repository, we just need to extract this during deployment from the vendor directory into the build directory.</p>
-
-<p>Modifying the PATH and LD_LIBRARY_PATH variables will expose the binary during runtime and ensure the dynamic libraries are recognised.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c"># Add SOX binary and libraries to path</span>
-</span><span class='line'>status <span class="s2">&quot;Adding SOX library support&quot;</span>
-</span><span class='line'>tar xzf <span class="nv">$bp_dir</span>/vendor/sox.tar.gz -C <span class="nv">$build_dir</span>/vendor/
-</span><span class='line'>
-</span><span class='line'><span class="c"># Update the PATH</span>
-</span><span class='line'>status <span class="s2">&quot;Building runtime environment&quot;</span>
-</span><span class='line'>mkdir -p <span class="nv">$build_dir</span>/.profile.d
-</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;export PATH=\&quot;\$HOME/vendor/node/bin:\$HOME/bin:\$HOME/node_modules/.bin:\$HOME/vendor/:\$PATH\&quot;;&quot;</span> &gt; <span class="nv">$build_dir</span>/.profile.d/nodejs.sh
-</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;export LD_LIBRARY_PATH=\&quot;\$HOME/vendor/libs/\&quot;;&quot;</span> &gt;&gt; <span class="nv">$build_dir</span>/.profile.d/nodejs.sh
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Using the custom buildpack</h2>
-
-<p>Once the buildpack modifications have been committed to the <a href="https://github.com/jthomas/nodejs-buildpack">external Github repository</a>, the application manifest can be modified to point to this new location.</p>
-
-<pre>
----
-applications:
-- name: doctor-watson
-  memory: 256M 
-  buildpack: https://github.com/jthomas/nodejs-buildpack.git
-  command: node app.js
-  services:
-  - twilio
-  - speech_to_text
-  - question_and_answer
-</pre>
-
-
-<p>&#8230; at this point all we have to do is deploy our application again to take advantage of the modified runtime.</p>
-
-<h2>Conclusion</h2>
-
-<p>Buildpacks are a fantastic feature of the Cloud Foundry, allowing the platform to support for almost any runtime. Using open-source Git repositories means you can build on any existing buildpack.</p>
-
-<p>For Doctor Watson, we were able to add a command line binary, built in another language, to the NodeJS runtime. Docker was a great tool when developing our custom buildpack.</p>
-
-<p>If you want more information on customising buildpacks, check out the Cloud Foundary <a href="http://docs.cloudfoundry.org/buildpacks/custom.html">documentation</a>.</p>
-
-<p>Source code for the custom buildpack we created is available <a href="https://github.com/jthomas/nodejs-buildpack">here</a>.</p>
 ]]></content>
   </entry>
   
