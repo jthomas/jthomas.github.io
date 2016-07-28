@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2016-06-22T14:12:24+01:00</updated>
+  <updated>2016-07-28T11:11:25+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,210 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Node-RED Docker Images]]></title>
+    <link href="http://jamesthom.as/blog/2016/07/27/node-red-docker-images/"/>
+    <updated>2016-07-27T15:24:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/07/27/node-red-docker-images</id>
+    <content type="html"><![CDATA[<p>This week, I&#8217;ve been helping create and publish official <a href="https://www.docker.com/">Docker</a> images for the
+<a href="http://nodered.org/">Node-RED</a> project. Users can start Node-RED instances from these images using the following command.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Node-RED is now publishing the <a href="https://hub.docker.com/r/nodered/node-red-docker/">following images to Docker Hub</a> for each new release.</p>
+
+<ul>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/latest">latest</a></strong> - uses <a href="https://hub.docker.com/_/node/">official Node.JS v4 base image</a>.</li>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/slim">slim</a></strong> - uses <a href="https://hub.docker.com/r/mhart/alpine-node/">Alpine Linux base image</a>.</li>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/rpi">rpi</a></strong> - uses <a href="https://hub.docker.com/r/hypriot/rpi-node/">RPi-compatible base image</a>.</li>
+</ul>
+
+
+<p>When a new version is <a href="https://www.npmjs.com/package/node-red">released on NPM</a>, an <a href="https://travis-ci.org/node-red/node-red-docker">automated CI service</a> will build, test and
+publish new images with the <a href="https://hub.docker.com/r/nodered/node-red-docker/tags/">updated version tags</a>.</p>
+
+<p>The source repository for the Docker images is available at <a href="https://github.com/node-red/node-red-docker">https://github.com/node-red/node-red-docker</a>.</p>
+
+<h2>Background</h2>
+
+<p>There was a <a href="https://github.com/node-red/node-red/issues/603">long-standing issue</a> open with the project
+to provide official Docker images for the tool. Many users had <a href="https://hub.docker.com/r/cpswan/node-red/">already</a> <a href="https://github.com/jamesbrink/docker-node-red">been</a>
+<a href="http://ivyco.blogspot.co.uk/2015/03/docker-awesomeness.html">experimenting</a> with Node-RED and Docker.</p>
+
+<p><em>Reviewing the community&#8217;s efforts, we wanted to create official images that
+made it simple for users to start Node-RED as Docker containers with minimal
+configuration whilst allowing for easy customisation, i.e. adding new nodes.</em></p>
+
+<p>Docker images are created using a configuration file (<a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a>) that lists the
+commands to build that image and can start by <a href="https://docs.docker.com/engine/reference/builder/#/from">using another image as the &#8216;base&#8217;</a>.</p>
+
+<p>Node-RED is a Node.js application, published as an <a href="https://www.npmjs.com/package/node-red">NPM module</a>.
+The Node.js project publishes <a href="https://hub.docker.com/_/node/">official Docker images</a> which we used as our base image.
+These images provide an environment with the correct versions of Node.js and
+NPM installed.</p>
+
+<p>Rather than manually copying the Node-RED source code into the container image,
+we used NPM to install the source code by defining a custom <a href="https://docs.npmjs.com/files/package.json">package.json</a>
+which includes Node-RED as dependency.</p>
+
+<figure class='code'><figcaption><span>package.json</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;node-red-docker&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;0.14.5&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Docker images for Node-RED&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;node_modules/node-red/red/red.js&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;scripts&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;start&quot;</span><span class="p">:</span> <span class="s2">&quot;node-red&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="err">...</span>
+</span><span class='line'>    <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;node-red&quot;</span><span class="p">:</span> <span class="s2">&quot;0.14.5&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="nt">&quot;engines&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;node&quot;</span><span class="p">:</span> <span class="s2">&quot;4.*.*&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Adding this file into the container image and then running <a href="https://docs.npmjs.com/cli/install">NPM install</a>, using
+the <a href="https://docs.docker.com/engine/reference/builder/#/add">ADD</a> and <a href="https://docs.docker.com/engine/reference/builder/#/run">RUN</a> commands, will retrieve the correct Node-RED version and build
+that into the container image.</p>
+
+<p>Docker images define a <a href="https://docs.docker.com/engine/reference/builder/#/cmd">default start command</a> to run when the container is
+created. Using <em>npm start</em> for this image will parse the start script
+listed in the package.json file, which has been set to
+<em>node-red</em>.</p>
+
+<h2>Adding New Nodes</h2>
+
+<p>Node-RED has a <a href="http://flows.nodered.org/">huge community</a> which produces custom nodes for everything from
+accessing data from a <a href="http://flows.nodered.org/node/node-red-contrib-gpio">Raspberry Pi&#8217;s sensors</a> to a <a href="http://flows.nodered.org/node/node-red-contrib-teslams">Tesla car</a>.</p>
+
+<p>Additional nodes <a href="http://nodered.org/docs/getting-started/adding-nodes">can be installed</a> by putting the files into your user
+directory, which defaults to <em>$HOME/.node-red</em>.</p>
+
+<p>Allowing users to install additional nodes without building new images is
+possible using <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">Docker&#8217;s volume support</a>. Docker data volumes can be used to
+share files between the container and the host system, by <a href="https://docs.docker.com/engine/tutorials/dockervolumes/#/mount-a-host-directory-as-a-data-volume">mounting a directory on the host as a data volume within the container</a>.</p>
+
+<p>Exposing the Node-RED user directory within the container as a data volume
+means users can mount this on the host system. Nodes installed into this
+directory, using NPM on the host system, will automatically be registered when
+Node-RED starts.</p>
+
+<p>Within the Dockerfile for the Node-RED image, the /data directory is configured
+as the user directory and <a href="https://github.com/node-red/node-red-docker/blob/master/latest/Dockerfile#L23">exported as a data volume</a>.</p>
+
+<p>Users can mount their local user directory into the container with the
+following command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -v ~/.node-red:/data nodered/node-red-docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Environment Parameters</h2>
+
+<p>Docker <a href="http://stackoverflow.com/questions/30494050/how-to-pass-environment-variables-to-docker-containers">supports injecting environment parameter</a> values into running containers,
+using command-line options on the host system. This is often used to configure
+runtime options without users having to build new container images. Node-RED&#8217;s
+Docker images support the following environment parameters.</p>
+
+<h3>Flows Configuration</h3>
+
+<p>User flow configurations are <a href="http://nodered.org/docs/getting-started/running">stored in a JSON file under the user directory</a>. This defaults to
+<em>flows.json</em> but can be configured using an environment parameter
+(<strong>FLOWS</strong>) passed to the container, as shown below.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -e <span class="nv">FLOWS</span><span class="o">=</span>my_flows.json nodered/node-red-docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Node Options</h3>
+
+<p>Node.js runtime arguments can be passed to the container using an environment
+parameter (<strong>NODE_OPTIONS</strong>). For example, to <a href="https://github.com/nodejs/node/issues/2738">fix the heap size</a> used by the Node.js
+garbage collector you would use the following command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -e <span class="nv">NODE_OPTIONS</span><span class="o">=</span><span class="s2">&quot;--max_old_space_size=128&quot;</span> nodered/node-red-docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Alpine Linux Image</h2>
+
+<p>The official Node.js Docker image uses the <a href="https://hub.docker.com/_/debian/">Debian Jessie base image</a>. This image
+provides a full Linux install, which means dependent Docker images can be
+hundreds of megabytes in size. Node-RED&#8217;s Docker image, using this base image,
+is nearly 300 MB.</p>
+
+<p>Reducing Docker image sizes can <a href="http://jasonwilder.com/blog/2014/08/19/squashing-docker-images/">dramatically reduce build and deployment times</a>.</p>
+
+<p><a href="https://www.alpinelinux.org/">Alpine Linux</a> is a lightweight Linux distribution, focused on security and
+performance. A <a href="https://hub.docker.com/_/alpine/">minimal Docker image</a> based on Alpine Linux is only 5 MB in
+size!</p>
+
+<p>Using the <a href="https://hub.docker.com/r/mhart/alpine-node/">alpine-node</a> base
+image, which provides an Alpine Linux environment with Node.js &amp; NPM, in our
+Dockerfiles reduces the resulting image file to under 50 MB.</p>
+
+<p>Alpine Linux does make it <a href="http://stackoverflow.com/questions/36202095/node-serialport-failing-on-alpine-linux">more difficult to install NPM modules with native dependencies</a>, due to missing common libraries and tools needed to build them.</p>
+
+<p>Therefore, we&#8217;re publishing the Alpine Linux image as a seperate tag (<em>slim</em>), rather
+than using this base image throughout our Dockerfiles.</p>
+
+<p>This version should provide an extremely lightweight Node-RED image that works
+for most users.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:slim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Raspberry Pi Image</h2>
+
+<p>Node-RED is an incredibly popular tool for hacking on the <a href="https://www.raspberrypi.org/">Raspberry Pi</a>. Using a
+<a href="http://blog.hypriot.com/getting-started-with-docker-on-your-arm-device/">custom Raspberry Pi image</a>, developers can also have a full Docker system
+running in the Linux environment on their device.</p>
+
+<p><strong>So, can we use Docker to start Node-RED on the Raspberry Pi?</strong></p>
+
+<p>Due to the platform architecture, ARM rather than x86/x64 by Intel or AMD,
+Docker images must be packaged specifically for that platform. The existing
+Docker images created for Node-RED will not work.</p>
+
+<p>Fortunately, there&#8217;s an <a href="https://hub.docker.com/r/hypriot/rpi-node/">existing RPi-compatible Docker image</a>
+with Node.js and NPM.</p>
+
+<p>Using this base image to build a new Raspberry Pi-specific Node-RED image,
+published with the <em>rpi</em> tag, means users can now start Node-RED on the Raspberry Pi using Docker.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:rpi
+</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Serverless Go Actions]]></title>
@@ -4457,406 +4661,6 @@ provided you have the <a href="http://docs.run.pivotal.io/devguide/deploy-apps/e
 configured to provide the service credentials.</p>
 
 <p>For information about the individual services, please see the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">IBM Watson Developer Cloud</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Creating CF CLI Plugins]]></title>
-    <link href="http://jamesthom.as/blog/2015/04/16/creating-cf-cli-plugins/"/>
-    <updated>2015-04-16T09:53:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/04/16/creating-cf-cli-plugins</id>
-    <content type="html"><![CDATA[<p>Since the v.6.7 release of the Cloud Foundry Command Line Interface (CF CLI), users have been to create and install plugins to provide custom commands.</p>
-
-<p>There&#8217;s now a whole community of <a href="http://plugins.cloudfoundry.org/ui/">third-party plugins</a> to help make you more productive developing Cloud Foundry applications.</p>
-
-<h2>Installing Plugins</h2>
-
-<p>Plugins can be installed directly from the platform binary.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ go get github.com/sample_user/sample_plugin
-</span><span class='line'>$ cf install-plugin $GOPATH/bin/sample_plugin</span></code></pre></td></tr></table></div></figure>
-
-
-<p>&#8230;or discovered and installed directly from plugin repositories.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cf add-plugin-repo cf-plugins http://plugins.cloudfoundry.org/
-</span><span class='line'>$ cf list-plugin-repos
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>Repo Name    Url
-</span><span class='line'>cf-plugins   http://plugins.cloudfoundry.org/
-</span><span class='line'>
-</span><span class='line'>$ cf repo-plugins
-</span><span class='line'>Getting plugins from all repositories ...
-</span><span class='line'>
-</span><span class='line'>Repository: cf-plugins
-</span><span class='line'>name                   version   description
-</span><span class='line'>CLI-Recorder           1.0.1     Records and playbacks CLI commands.
-</span><span class='line'>Live Stats             1.0.0     Monitor CPU and Memory usage on an app via the browser.
-</span><span class='line'>Console                1.0.0     Start a tmate session on an application container
-</span><span class='line'>Diego-Beta             1.3.0     Enables Diego-specific commands and functionality
-</span><span class='line'>Open                   1.1.0     Open app url in browser
-</span><span class='line'>autopilot              0.0.1     zero downtime deploy plugin for cf applications
-</span><span class='line'>Brooklyn               0.1.1     Interact with Service Broker for Apache Brooklyn
-</span><span class='line'>kibana-me-logs         0.3.0     Launches the Kibana UI (from kibana-me-logs) for an application.
-</span><span class='line'>Buildpack Usage        1.0.0     View all buildpacks used in the current CLI target context.
-</span><span class='line'>CF App Stack Changer   1.0.0     Allows admins to list and update applications with outdated lucid64 stacks.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once a repository has been registered, we can search and install the available plugins.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ cf install-plugin open -r cf-plugins
-</span><span class='line'>Looking up 'open' from repository 'cf-plugins'
-</span><span class='line'>  7998292 bytes downloaded...
-</span><span class='line'>Installing plugin /var/folders/db/9y12sh3n0kdg4v3zxnn8dbg80000gn/T/ filename=cf-plugin-open_darwin_amd64...
-</span><span class='line'>OK
-</span><span class='line'>Plugin open v1.1.0 successfully installed.
-</span><span class='line'>
-</span><span class='line'>$ cf plugins
-</span><span class='line'>Listing Installed Plugins...
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>Plugin Name   Version   Command Name   Command Help
-</span><span class='line'>open          1.1.0     open           open app url in browser
-</span><span class='line'>
-</span><span class='line'>$ cf open
-</span><span class='line'>NAME:
-</span><span class='line'>   open - open app url in browser
-</span><span class='line'>
-</span><span class='line'>USAGE:
-</span><span class='line'>   open &lt;appname&gt;</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>How about creating your own plugins? Here I&#8217;ll show you how by walking through the steps used to create my first plugin, <a href="https://github.com/jthomas/copyenv">copyenv</a>.</strong></p>
-
-<h2>Creating New Plugins</h2>
-
-<p>Plugins are <a href="http://golang.org">Go</a> binaries, implenting a <a href="https://github.com/cloudfoundry/cli/blob/master/plugin/plugin.go">common interface</a>
-defined by the CF CLI project.</p>
-
-<p>There&#8217;s a Run() function to implement that acts as a callback when the user issues the plugin command along
-with a GetMetadata() function to provide the metadata for the new command.</p>
-
-<p>There&#8217;s a list of <a href="https://github.com/cloudfoundry/cli/tree/master/plugin_examples">example plugins</a>
-to start with in the CF CLI repository.</p>
-
-<p>For our plugin, we&#8217;re starting with the
-<a href="https://github.com/cloudfoundry/cli/blob/master/plugin_examples/basic_plugin.go">basic_plugin</a>
-code. This file contains a skeleton outline for a basic plugin implementation
-that you can modify.</p>
-
-<h3>Plugin Structure</h3>
-
-<p>Reviewing the basic_plugin example, plugins follow a simple structure.</p>
-
-<p>First, we declare the Go package &#8220;main&#8221; as this code will be compiled into an executable command.
-Application dependencies are registered with the &#8220;import&#8221; definition. We link to the CF
-CLI Plugin package to access the common interface that defines a runnable plugin. BasicPlugin is the
-name of our struct that will implement the Plugin Interface.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="p">(</span>
-</span><span class='line'>  <span class="s">&quot;fmt&quot;</span>
-</span><span class='line'>  <span class="s">&quot;github.com/cloudfoundry/cli/plugin&quot;</span>
-</span><span class='line'><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">BasicPlugin</span> <span class="kd">struct</span><span class="p">{}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The &#8220;Run&#8221; function will be executed each time a user calls our custom plugin command. We are passed
-a reference to the CF CLI, for running additional commands, along with the command line arguments.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="p">(</span><span class="nx">c</span> <span class="o">*</span><span class="nx">BasicPlugin</span><span class="p">)</span> <span class="nx">Run</span><span class="p">(</span><span class="nx">cliConnection</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">CliConnection</span><span class="p">,</span> <span class="nx">args</span> <span class="p">[]</span><span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// Ensure that we called the command basic-plugin-command</span>
-</span><span class='line'>  <span class="k">if</span> <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&quot;basic-plugin-command&quot;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;Running the basic-plugin-command&quot;</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Returning metadata to install the plugin is implemented via the &#8220;GetMetadata&#8221; function. We can specify the
-plugin version number, help documentation and command identifiers.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="p">(</span><span class="nx">c</span> <span class="o">*</span><span class="nx">BasicPlugin</span><span class="p">)</span> <span class="nx">GetMetadata</span><span class="p">()</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">PluginMetadata</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">PluginMetadata</span><span class="p">{</span>
-</span><span class='line'>    <span class="nx">Name</span><span class="p">:</span> <span class="s">&quot;MyBasicPlugin&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">Version</span><span class="p">:</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">VersionType</span><span class="p">{</span>
-</span><span class='line'>      <span class="nx">Major</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>      <span class="nx">Minor</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>      <span class="nx">Build</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="nx">Commands</span><span class="p">:</span> <span class="p">[]</span><span class="nx">plugin</span><span class="p">.</span><span class="nx">Command</span><span class="p">{</span>
-</span><span class='line'>      <span class="nx">plugin</span><span class="p">.</span><span class="nx">Command</span><span class="p">{</span>
-</span><span class='line'>        <span class="nx">Name</span><span class="p">:</span>     <span class="s">&quot;basic-plugin-command&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nx">HelpText</span><span class="p">:</span> <span class="s">&quot;Basic plugin command&#39;s help text&quot;</span><span class="p">,</span>
-</span><span class='line'>
-</span><span class='line'>        <span class="c1">// UsageDetails is optional</span>
-</span><span class='line'>        <span class="c1">// It is used to show help of usage of each command</span>
-</span><span class='line'>        <span class="nx">UsageDetails</span><span class="p">:</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">Usage</span><span class="p">{</span>
-</span><span class='line'>          <span class="nx">Usage</span><span class="p">:</span> <span class="s">&quot;basic-plugin-command\n   cf basic-plugin-command&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">},</span>
-</span><span class='line'>      <span class="p">},</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Finally, the &#8220;main&#8221; function will the entry point when executing the compiled binary.
-Calling &#8220;plugin.Start&#8221; with a pointer to the struct implementing the Plugin interace will
-register our plugin.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">plugin</span><span class="p">.</span><span class="nx">Start</span><span class="p">(</span><span class="nb">new</span><span class="p">(</span><span class="nx">BasicPlugin</span><span class="p">))</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>CopyEnv Plugin</h2>
-
-<blockquote><p>Cloud Foundry CLI plugin to export application VCAP_SERVICES onto the local machine.</p></blockquote>
-
-
-<p>Applications running on Cloud Foundry rely on the VCAP_SERVICES environment
-variable to provide service credentials.</p>
-
-<p>When running applications locally for development and testing, it&#8217;s useful to
-have the same VCAP_SERVICES values available in the local environment to
-simulate running on the host platform.</p>
-
-<p>This plugin will export the remote application environment variables, available
-using cf env, into a format that makes it simple to expose those same values
-locally.</p>
-
-<h3>Modifying the Sample Plugin</h3>
-
-<p>For the new plugin, we will need to get an application name from the user,
-access the remote VCAP_SERVICES environment variable and then export this into
-the user&#8217;s local environment.</p>
-
-<p>Accessing an application&#8217;s environment variables can be retrieved using the existing cf env command.
-The &#8220;plugin.CliConnection&#8221; reference passed into the Run function has <a href="https://github.com/cloudfoundry/cli/blob/master/plugin/plugin.go#L14-L17">methods for executing CLI commands</a> from within the plugin.</p>
-
-<p>We&#8217;re following the convention of the &#8220;cf env&#8221; command by having the application name as a command line argument.
-This means we can modify the existing &#8220;args&#8221; value to set up the CLI command to retrieve the VCAP_SERVICES value.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="p">(</span><span class="nx">c</span> <span class="o">*</span><span class="nx">CopyEnv</span><span class="p">)</span> <span class="nx">Run</span><span class="p">(</span><span class="nx">cliConnection</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">CliConnection</span><span class="p">,</span> <span class="nx">args</span> <span class="p">[]</span><span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">&lt;</span> <span class="mi">2</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;ERROR: Missing application name&quot;</span><span class="p">)</span>
-</span><span class='line'>     <span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">=</span> <span class="s">&quot;env&quot;</span>
-</span><span class='line'>  <span class="nx">output</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">cliConnection</span><span class="p">.</span><span class="nx">CliCommandWithoutTerminalOutput</span><span class="p">(</span><span class="nx">args</span><span class="o">...</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we have an array of strings, output, containing the text output from cf env APP_NAME command.
-Iterating through this list, we search for the line which contains the VCAP_SERVICES definition.
-This value will be a JSON object with a VCAP_SERVICES attribute defining the service credentials.</p>
-
-<p>Exporting this JSON object to the local environment, we need to convert the VCAP_SERVICES object
-into a shell environment variable definition. Go has built in support for the JSON language. We
-decode the parent JSON to a Map interface and then export the VCAP_SERVICES attribute as JSON. This
-text is then wrapped within a shell variable definition.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">val</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">output</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">strings</span><span class="p">.</span><span class="nx">Contains</span><span class="p">(</span><span class="nx">val</span><span class="p">,</span> <span class="s">&quot;VCAP_SERVICES&quot;</span><span class="p">))</span> <span class="p">{</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">f</span> <span class="kd">interface</span><span class="p">{}</span>
-</span><span class='line'>    <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">val</span><span class="p">),</span> <span class="o">&amp;</span><span class="nx">f</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>      <span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">m</span> <span class="o">:=</span> <span class="nx">f</span><span class="p">.(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{})</span>
-</span><span class='line'>    <span class="nx">b</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">m</span><span class="p">[</span><span class="s">&quot;VCAP_SERVICES&quot;</span><span class="p">])</span>
-</span><span class='line'>    <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>      <span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">vcap_services</span> <span class="o">:=</span> <span class="s">&quot;export VCAP_SERVICES=&#39;&quot;</span> <span class="o">+</span> <span class="nb">string</span><span class="p">(</span><span class="nx">b</span><span class="p">[:])</span> <span class="o">+</span> <span class="s">&quot;&#39;;&quot;</span>
-</span><span class='line'>    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">vcap_services</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once we&#8217;ve finished the code, install the compiled binary using the CF CLI.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">build</span> <span class="nx">copyenv</span><span class="p">.</span><span class="k">go</span>
-</span><span class='line'><span class="err">$</span> <span class="nx">cf</span> <span class="nx">install</span><span class="o">-</span><span class="nx">plugin</span> <span class="nx">copyenv</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Making plugin available for other users</h3>
-
-<p>Exporting out plugin into an external Git repository will allow users to use the Go package manager
-to retrieve and compile the plugin for installation with the CF CLI.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">get</span> <span class="nx">github</span><span class="p">.</span><span class="nx">com</span><span class="o">/</span><span class="nx">sample_user</span><span class="o">/</span><span class="nx">sample_plugin</span>
-</span><span class='line'><span class="err">$</span> <span class="nx">cf</span> <span class="nx">install</span><span class="o">-</span><span class="nx">plugin</span> <span class="err">$</span><span class="nx">GOPATH</span><span class="o">/</span><span class="nx">bin</span><span class="o">/</span><span class="nx">sample_plugin</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We can also include the plugin in the official Cloud Foundry <a href="plugins.cloudfoundry.org">Plugin Repository</a>
-by forking the <a href="https://github.com/cloudfoundry-incubator/cli-plugin-repo">source project</a>,
-adding their plugin definition to the <a href="https://github.com/cloudfoundry-incubator/cli-plugin-repo/blob/master/repo-index.yml">repo-index.yml</a>
-file and submitting a pull request.</p>
-
-<p>For maximum compatibility, plugin authors are encouraged to include <a href="https://github.com/jthomas/copyenv/tree/master/bin">platform binaries</a>
-for their plugins.</p>
-
-<p>Go makes it extremely easy to cross-compile your source code for different platforms.</p>
-
-<p>On Mac OS X, if you used Brew to install Go, you can set up cross-compilation with the following commands:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="nx">brew</span> <span class="nx">reinstall</span> <span class="k">go</span> <span class="o">--</span><span class="nx">with</span><span class="o">-</span><span class="nx">cc</span><span class="o">-</span><span class="nx">common</span>
-</span><span class='line'><span class="err">$</span> <span class="nx">GOOS</span><span class="p">=</span><span class="nx">windows</span> <span class="nx">GOARCH</span><span class="p">=</span><span class="mi">386</span> <span class="k">go</span> <span class="nx">build</span> <span class="nx">appname</span><span class="p">.</span><span class="k">go</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>For the full list of supported platforms, see the <a href="https://golang.org/doc/install/source#environment">Go documentation</a></p>
-
-<h2>Using the Plugin</h2>
-
-<p>With the CopyEnv plugin installed, we can now run the following command to export an application&#8217;s VCAP_SERVICES into our local environment.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf copyenv APP_NAME
-</span><span class='line'><span class="nb">export </span><span class="nv">VCAP_SERVICES</span><span class="o">=</span><span class="s1">&#39;{...}&#39;</span>;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Writing a new plugin for the CF CLI was extremely straightforward. It&#8217;s a
-great feature to that enables people to contribute new plugins with minimal effort.
-I&#8217;m looking forward to seeing what plugins the community comes up with!</strong></p>
-
-<p>You can see the plugin in action below&#8230;</p>
-
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/copyenv.gif"></p>
 ]]></content>
   </entry>
   
