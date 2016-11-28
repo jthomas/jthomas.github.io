@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2016-11-01T16:06:18+00:00</updated>
+  <updated>2016-11-28T16:32:56+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,266 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[NPM Modules in OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/"/>
+    <updated>2016-11-28T14:03:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk now <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">supports creating Node.js Actions from a zip file</a>. The archive file will be extracted into the runtime environment by the platform. This allows us to split microservice logic across multiple files, use third-party <a href="https://www.npmjs.com/">NPM modules</a> or include non-JavaScript assets (configuration files, images, HTML files).</p>
+
+<h2>"Hello World" Example</h2>
+
+<p>Let's look at a "Hello World" example of registering a serverless function from a zip file. Our archive will contain two files, the <a href="https://docs.npmjs.com/files/package.json">package descriptor</a> and a JavaScript file.</p>
+
+<p>Here is the minimal <code>package.json</code> file required for loading a module from a directory.</p>
+
+<p><code>json package.json
+{
+  "main": "my_file.js"
+}
+</code></p>
+
+<p>In <code>my_file.js</code>, a function is returned through the <code>main</code> property on the <code>exports</code> object. This function <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#creating-and-invoking-javascript-actions">implements the Action interface.</a></p>
+
+<p><code>javascript my_file.js
+exports.main = function (params) {
+  return {result: "Hello World"};
+};
+</code></p>
+
+<p>Creating a zip file from the current directory, we can deploy this Action through the command-line utility.</p>
+
+<p><code>sh
+$ zip -r action.zip *
+$ wsk action create hello_world --kind nodejs:default action.zip
+</code></p>
+
+<p>When this Action is invoked, the archive will be unzipped into a temporary directory. OpenWhisk loads the directory as a Node.js module and invokes the function property on the module for each invocation.</p>
+
+<p>``` sh
+$ wsk action invoke hello_world --result
+{</p>
+
+<pre><code>"result": "Hello world"
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Using NPM Dependencies</h2>
+
+<p>Let's look a more complicated example which uses an external <a href="https://www.npmjs.com/">NPM module</a> in our Action.</p>
+
+<p>``` javascript index.js
+const leftPad = require("left-pad")</p>
+
+<p>function myAction(args) {</p>
+
+<pre><code>const lines = args.lines || [];
+return { padded: lines.map(l =&gt; leftPad(l, 30, ".")) }
+</code></pre>
+
+<p>}</p>
+
+<p>exports.main = myAction;
+```</p>
+
+<p>This module uses the <a href="http://qz.com/646467/how-one-programmer-broke-the-internet-by-deleting-a-tiny-piece-of-code/">extremely popular</a> <a href="https://www.npmjs.com/package/left-pad">left-pad</a> module to process an array of strings, passed through a request parameter. The resulting output is returned in the response.</p>
+
+<p>Before using this module, we need to install the dependencies listed in <code>package.json</code>.</p>
+
+<p>``` json
+{
+  "name": "my-action",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies" : {</p>
+
+<pre><code>"left-pad" : "1.1.3"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><strong>OpenWhisk does not automatically install dependencies listed in <code>package.json</code> in the runtime environment.</strong></p>
+
+<p>The developer has to run <code>npm install</code> locally and include the <code>node_modules</code> directory in the zip file.</p>
+
+<ul>
+<li>Install NPM dependencies locally.</li>
+</ul>
+
+
+<p><code>sh
+$ npm install
+</code></p>
+
+<ul>
+<li>Create a <code>.zip</code> archive containing all files.</li>
+</ul>
+
+
+<p><code>sh
+$ zip -r action.zip *
+</code></p>
+
+<ul>
+<li>Create the action using command-line utility.</li>
+</ul>
+
+
+<p><code>sh
+$ wsk action create packageAction --kind nodejs:default action.zip
+</code></p>
+
+<p>Now we can test out our action to check it works….</p>
+
+<p>``` sh
+$ wsk action invoke --blocking --result packageAction --param lines "[\"and now\", \"for something completely\", \"different\" ]"
+{</p>
+
+<pre><code>"padded": [
+    ".......................and now",
+    "......for something completely",
+    ".....................different"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Native Module Dependencies</h2>
+
+<p>Node.js provides a mechanism for JavaScript modules to <a href="https://nodejs.org/api/addons.html">include native platform code</a> as if they were ordinary modules. This is often used to improve performance by deferring operations to native C/C++ libraries. NPM handles compiling native code during the dependency install process.</p>
+
+<p><strong>Using modules with native dependencies in Actions requires the native code to be compiled for the platform runtime.</strong></p>
+
+<h3>Compiling dependencies with Docker</h3>
+
+<p>One solution to this problem uses Docker to simulate the same runtime environment.</p>
+
+<p>OpenWhisk uses Docker to manage the runtime environments for Actions. The <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile"><em>buildpack-deps:trusty-curl</em></a> image is used as the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejsActionBase/Dockerfile">base image for all Node.js Actions</a>.</p>
+
+<p>Running a local container from this image will give access to the same runtime environment. Running <code>npm install</code> within this container will produce the <code>node_modules</code> directory with native code compiled for the correct architecture.</p>
+
+<h3>Action With Native Modules</h3>
+
+<p>Let's look at an example…</p>
+
+<p>``` javascript index.js
+const SHA3 = require('sha3');</p>
+
+<p>function SHA(args) {
+  const d = new SHA3.SHA3Hash();
+  d.update(args.payload);
+  return { sha: d.digest('hex') };
+}</p>
+
+<p>exports.main = SHA;
+```</p>
+
+<p>This module returns a function that calculates a SHA3 cryptographic hash for the invocation payload. The hex string for the hash is returned as the function response.</p>
+
+<p>The NPM module (<a href="https://www.npmjs.com/package/sha3">sha3</a>) used to calculate the digest uses a C++ extension for the hashing algorithm.</p>
+
+<p>``` json package.json
+{
+  "name": "hashing-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {</p>
+
+<pre><code>"sha3": "^1.2.0"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h3>Action Runtime Environments</h3>
+
+<p>OpenWhisk uses a <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile">public Docker image</a> as the base image for the Action environments. It then <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejs6Action/Dockerfile">builds a custom image</a> by installing Node.js and NPM for the particular runtime version.</p>
+
+<p>Rather than building this image ourselves, we can use existing images published on <a href="https://hub.docker.com/">Docker Hub</a>.</p>
+
+<p><a href="https://nodesource.com/">NodeSource</a> provides <a href="https://hub.docker.com/u/nodesource/">public Docker images pre-installed with different Node.js versions</a>. Provided the base image (Ubuntu Trusty) and Node.js version (6.7) matches, the runtime environment will be the same.</p>
+
+<p>Starting a local container from this image, we can use Docker's <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">host volume support</a> to mount the local directory into the host container.</p>
+
+<p><code>sh
+$ docker run -it -v "/action:/usr/src/app" nodesource/trusty:6.7 /bin/sh
+</code></p>
+
+<p>Running <code>npm install</code> in the container, the <code>sha3</code> dependency is compiled and installed.</p>
+
+<p>``` sh</p>
+
+<h1>npm install</h1>
+
+<blockquote><p>sha3@1.2.0 install /usr/src/app/node_modules/sha3                                                                 <br/>
+node-gyp rebuild</p></blockquote>
+
+<p>make: Entering directory <code>/usr/src/app/node_modules/sha3/build'                                                       
+make: Warning: File</code>sha3.target.mk' has modification time 0.19 s in the future                                     <br/>
+  CXX(target) Release/obj.target/sha3/src/addon.o                                                                   <br/>
+  CXX(target) Release/obj.target/sha3/src/displayIntermediateValues.o                                               <br/>
+  CXX(target) Release/obj.target/sha3/src/KeccakF-1600-reference.o                                                  <br/>
+  CXX(target) Release/obj.target/sha3/src/KeccakNISTInterface.o                                                     <br/>
+  CXX(target) Release/obj.target/sha3/src/KeccakSponge.o                                                            <br/>
+  SOLINK_MODULE(target) Release/obj.target/sha3.node                                                                <br/>
+  COPY Release/sha3.node                                                                                            <br/>
+make: warning:  Clock skew detected.  Your build may be incomplete.                                                 <br/>
+make: Leaving directory <code>/usr/src/app/node_modules/sha3/build'                                                        
+my-action@1.0.0 /usr/src/app                                                                                          
+</code>-- sha3@1.2.0                                                                                                      <br/>
+  `-- nan@2.4.0</p>
+
+<p>```</p>
+
+<p>The <code>node_modules</code> directory will be available on the host system after exiting the container. Repeat the steps above to archive the source files and deploy our serverless function.</p>
+
+<p><code>sh
+$ zip -r action.zip *
+$ wsk action create packageAction --kind nodejs:6 action.zip  
+ok: created action packageAction          
+</code></p>
+
+<p>Invoking the Action will now use the native code to produce hash values for the invocation parameters.</p>
+
+<p>``` sh
+$ wsk action invoke packageAction -b -p payload "Hello" --result                            <br/>
+{</p>
+
+<pre><code>"sha": "c33fede18a1ae53ddb8663710f8054866beb714044fce759790459996196f101d94dfc7bd8268577f7ee3d2f8ff0cef4004a963222
+</code></pre>
+
+<p>7db84df62d2b40682d69e2"                                                                                             <br/>
+}                     <br/>
+```</p>
+
+<h2>Action Package Details</h2>
+
+<p>Upon invocation, OpenWhisk extracts the action's zip file to a temporary directory in the runtime environment. It then <a href="https://nodejs.org/api/modules.html#modules_all_together">loads the directory as a standard Node.js module</a>, using <code>require</code>.</p>
+
+<p>Node.js expects the directory to have a valid <code>package.json</code> file. The <code>main</code> property is used to define which JavaScript file is evaluated when the module is loaded. This file can assign values to the global <code>exports</code> object. These references are then returned when <code>require</code> is called for this module.</p>
+
+<p><strong>OpenWhisk expects the returned module object to have a property called <code>main</code> which references a function. This function will be executed for each invocation request.</strong></p>
+
+<p>Request parameters are passed as object properties on the first function argument. The function must return an object for the invocation response.</p>
+
+<p>Other files included in the archive will be available in the current working directory. These can also be loaded as modules or read directly from the file-system.</p>
+
+<h2>Conclusions</h2>
+
+<p>OpenWhisk support for Action packages is a huge step forward for the platform. Node.js has an enormous ecosystem of third-party modules. Developers can now easily use any of these modules within their Actions.</p>
+
+<p>This feature can also be used to include non-JS files within the runtime environment. It would be possible to use configuration files in JSON or static assets like HTML or CSS files.</p>
+
+<p><strong><em>The team are now working on providing support for other runtimes, watch this space…</em></strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Serverless Logs With Elasticsearch]]></title>
@@ -365,7 +625,7 @@ $ openwhisk-workshop verify
 
 <p>This video shows the updated nodes being used to define a new OpenWhisk Action, invoking it in response to a message from an inject node and then making modifications to the source code.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/NR_and_OW.gif"></p>
+<p>{% img https://dl.dropboxusercontent.com/u/10404736/NR_and_OW.gif %}</p>
 
 <h3>interested?</h3>
 
@@ -402,315 +662,6 @@ $ openwhisk-workshop verify
 <h2>Conference Sessions</h2>
 
 <p>This talk was <a href="http://www.jday.com.ua/#nav-schedule">first delivered</a> at <a href="https://http://www.jday.com.ua/">JDayLviv</a> earlier this month. The session was recorded so the video should surface online soon. I'll be repeating the talk at <a href="https://belgrade.voxxeddays.com/talk/145/">VoxxedDays Belgrade</a> and <a href="http://javaday.org.ua/kyiv/#speakers">JavaDay Kiev</a> in September and October.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Serverless Go Actions]]></title>
-    <link href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/"/>
-    <updated>2016-06-21T17:01:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/06/21/serverless-go-actions</id>
-    <content type="html"><![CDATA[<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless
-platform, provides the ability to invoke custom
-<a href="https://www.docker.com/">Docker</a> containers as serverless functions.</p>
-
-<p>Developers can create new
-<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">Actions</a>,
-referencing public images on <a href="https://dockerhub.com">Dockerhub</a>. OpenWhisk
-manages creating and executing containers using these images per invocation
-request.</p>
-
-<p>Using this feature, developers can write serverless functions using the
-<a href="https://golang.org/">Go language</a>. Compiled Go language binaries are embedded
-within custom Docker images and pushed into the platform.</p>
-
-<p><strong>So, how do we start?</strong></p>
-
-<p><em>This blog post will explain how to get your Go language functions running as
-"serverless functions" on OpenWhisk. If you're impatient to get to the code,
-this <a href="https://github.com/jthomas/openwhisk_go_action">repository</a> contains the
-examples for everything discussed below.</em></p>
-
-<p>OpenWhisk helps developers create custom Actions using Docker through an SDK...</p>
-
-<h2>OpenWhisk Docker SDK</h2>
-
-<p>Using the
-<a href="https://new-console.ng.bluemix.net/docs/openwhisk/index.html"><em>wsk</em> command-line utility</a>,
-developers can install the
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> into the
-current directory.</p>
-
-<p><code>
-$ wsk sdk install docker
-</code></p>
-
-<p>The SDK provides the <a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">source for a custom Docker image</a>, which executes a custom
-binary in response to invocation requests. The default SDK copies the
-executable file, located at the <em>client/action</em>, into the image during the
-build process. Users build the image locally before pushing this to Dockerhub.</p>
-
-<p><code>sh
-$ docker build -t &lt;dockerhub_user&gt;/docker_action .
-$ docker push &lt;dockerhub_user&gt;/docker_action
-</code></p>
-
-<p>Using the command-line utility, users can then create a new Action referencing
-this public Docker image. When this Action is invoked, the platform will spin
-up a new container from this custom image.</p>
-
-<p><code>sh
-$ wsk action create docker_action --docker &lt;dockerhub_user&gt;/docker_action
-$ wsk action invoke --blocking --result docker_action
-</code></p>
-
-<h2>OpenWhisk Docker Action </h2>
-
-<p>OpenWhisk SDK's Docker image uses a Node.js
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker/server">application</a>
-to handle the JSON invocation request from the platform and spawns a process to
-execute the binary. Invocation parameters are passed as a JSON string through a
-command-line argument to the binary. The executable must write the JSON
-response to stdout, the handler will return this to the platform.</p>
-
-<p>Containers used to run OpenWhisk Actions must be expose a HTTP API on port 8080
-with two paths, <em>/init</em> and <em>/run</em>. The platform sends HTTP POST requests to
-these paths to initialise the Action and schedule invocations.</p>
-
-<p>The <em>/init</em> path is used to provide the Action source for languages which
-support runtime evaluation. <strong>User-provided Docker images do not need to
-implement this method, other than returning a non-error HTTP response.</strong></p>
-
-<p>The <em>/run</em> path is called by the platform for each invocation request.
-Parameters for the invocation are passed as the <em>value</em> property of the JSON
-request body. Any non-empty JSON response will be interpreted as the invocation
-result.</p>
-
-<h2>Go Actions using the Docker SDK</h2>
-
-<p>Using Go binaries with the Docker SDK requires the developer to cross-compile
-the source for the platform architecture and copy the binary to the
-<em>client/action</em> path.</p>
-
-<p><code>
-export GOARCH=386
-export GOOS=linux
-go build -o action
-mv action client/action
-</code></p>
-
-<p>The Go code must parse the invocation parameters as a JSON string from the
-command-line argument. Data written to <em>stdout</em> will be parsed as JSON and
-returned as the Action response.</p>
-
-<p>This sample Go source demonstrates using this method to implement a "reverse
-string" Action.</p>
-
-<p>``` go
-package main</p>
-
-<p>import "os"
-import "encoding/json"
-import "log"</p>
-
-<p>type Params struct {
-  Payload string <code>json:"payload"</code>
-}</p>
-
-<p>type Result struct {
-  Reversed string <code>json:"reversed"</code>
-}</p>
-
-<p>// extract invocation parameters, passed as JSON string argument on command-line.
-func params() Params {
-  var params Params
-  source := os.Args[1]
-  buf := []byte(source)
-  if err := json.Unmarshal(buf, &amp;params); err != nil {</p>
-
-<pre><code>log.Fatal(err)
-</code></pre>
-
-<p>  }
-  return params
-}</p>
-
-<p>// convert struct back to JSON for response
-func return_result(result Result) {
-  buf, err := json.Marshal(result)
-  if err != nil {</p>
-
-<pre><code>log.Fatal(err)
-</code></pre>
-
-<p>  }
-  os.Stdout.Write(buf)
-}</p>
-
-<p>func main() {
-  input := params()</p>
-
-<p>  // reverse the string passed from invocation parameters
-  chars := []rune(input.Payload)
-  for i, j := 0, len(chars)-1; i &lt; j; i, j = i+1, j-1 {</p>
-
-<pre><code>chars[i], chars[j] = chars[j], chars[i]
-</code></pre>
-
-<p>  }
-  result := Result{</p>
-
-<pre><code>Reversed: string(chars),
-</code></pre>
-
-<p>  }</p>
-
-<p>  return_result(result)
-}
-```</p>
-
-<h2>Docker SDK Base Image</h2>
-
-<p>Building a base image from the OpenWhisk Docker SDK and publishing on Dockerhub
-simplifies the process of building a Docker-based Action. Developers can now
-use the following image
-(<a href="https://hub.docker.com/r/jamesthomas/openwhisk_docker_action/">jamesthomas/openwhisk_docker_action</a>),
-without having to install the SDK locally.</p>
-
-<p><code>
-FROM jamesthomas/openwhisk_docker_action
-COPY action /blackbox/action
-</code></p>
-
-<p>This base image includes the Node.js handler to manage the platform HTTP
-requests. An executable file at <em>/blackbox/action</em> will be called for each
-invocation. JSON parameters and responses are still passed using command-line
-arguments and stdout.</p>
-
-<h2>Custom Go Handler </h2>
-
-<p>Using the Docker SDK for OpenWhisk relies on a Node.js application to handle
-the platform HTTP requests, spawning a process to execute the user binary file.</p>
-
-<p>Implementing the HTTP API, described above, in Go would allow us to remove the
-Node.js handler from the image. Compiling the Go Action source with the HTTP
-API handler into a single binary and using an Alpine Linux base image will
-dramatically reduce the image size.</p>
-
-<p>This should improve execution performance, by removing the Node.js VM process,
-and cold start-up time, through having a smaller Docker image.</p>
-
-<p><strong>Using this Go package, <a href="https://github.com/jthomas/ow">jthomas/ow</a>, users can
-automate the process of creating Go-based Actions.</strong></p>
-
-<p><code>
-go get jthomas/ow
-</code></p>
-
-<p><em>The package provides a method for registering Action callbacks and implements
-the HTTP endpoints for handling platform requests.</em></p>
-
-<p><em>Invocation parameters are passed using a function parameter, rather than a raw
-JSON string. Returned interface values will be automatically serialised to JSON
-as the Action response.</em></p>
-
-<p><code>go
-openwhisk.RegisterAction(func(value json.RawMessage) (interface{}, error) {
-   ...  
-}
-</code></p>
-
-<p>Re-writing the "reverse string" Action above to use this package is shown here.</p>
-
-<p>``` go
-package main</p>
-
-<p>import (</p>
-
-<pre><code>"encoding/json"
-"github.com/jthomas/ow"
-</code></pre>
-
-<p>)</p>
-
-<p>type Params struct {</p>
-
-<pre><code>Payload string `json:"payload"`
-</code></pre>
-
-<p>}</p>
-
-<p>type Result struct {</p>
-
-<pre><code>Reversed string `json:"reversed"`
-</code></pre>
-
-<p>}</p>
-
-<p>func reverse_string(to_reverse string) string {</p>
-
-<pre><code>chars := []rune(to_reverse)
-for i, j := 0, len(chars)-1; i &lt; j; i, j = i+1, j-1 {
-    chars[i], chars[j] = chars[j], chars[i]
-}
-return string(chars)
-</code></pre>
-
-<p>}</p>
-
-<p>func main() {</p>
-
-<pre><code>ow.RegisterAction(func(value json.RawMessage) (interface{}, error) {
-    var params Params
-    err := json.Unmarshal(value, &amp;params)
-    if err != nil {
-        return nil, err
-    }
-    return Result{Reversed: reverse_string(params.Payload)}, nil
-})
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Cross-compiling the Action source, bundling this package, creates a single
-lightweight binary.</p>
-
-<p>Embedding this file within a Docker image, using a minimal base image, creates
-a tiny image (&lt;10MB). Containers from these images only execute a single
-process to handle both the HTTP requests and running the Action source.</p>
-
-<p><code>
-FROM alpine:3.4
-COPY action /action
-EXPOSE 8080
-CMD ["./action"]
-</code></p>
-
-<p>Pushing the local image to Dockerhub and then using it to create an Action
-follows the same instructions above.</p>
-
-<h2>Conclusion</h2>
-
-<p>Running OpenWhisk Actions from user-provided Docker images allows developers to
-execute "serverless functions" using any language. This is a fantastic feature
-not currently supported by many of the other serverless providers.</p>
-
-<p>OpenWhisk provides an
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> letting
-users build a local Docker image which executes their Action and handles the
-HTTP requests from the platform. Using this with <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/docker_sdk">Go-based Actions</a> requires us
-to cross-compile our binary for the platform and handle passing JSON through
-command-line arguments and stdout.</p>
-
-<p>Re-writing the HTTP handler <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/go_handler">natively in Go</a>
-means the Docker image can contain and execute a single binary for both tasks.
-Using this <a href="https://github.com/jthomas/ow">Go package</a> provides an interface for registering Actions and handles
-the HTTP requests automatically.</p>
-
-<p><strong>This <a href="https://github.com/jthomas/openwhisk_go_action">project</a> contains
-examples for the "reverse string" Action using both the Docker SDK and Go-based
-handler detailed above.</strong></p>
 ]]></content>
   </entry>
   
