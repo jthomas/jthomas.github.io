@@ -4,7 +4,7 @@
   <title><![CDATA[Category: docker | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/docker/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-01-16T16:46:31+00:00</updated>
+  <updated>2017-01-17T10:46:57+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,11 +14,142 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Openwhisk and Go]]></title>
+    <link href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/"/>
+    <updated>2017-01-17T09:00:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/01/17/openwhisk-and-go</id>
+    <content type="html"><![CDATA[<p><a href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/">In an earlier blog post</a>, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for each serverless function and hosting them on Docker Hub.</p>
+
+<p><a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">Recent updates</a>  to Docker-based Actions have made this process much simpler. Developers don't need to build and expose public images anymore.</p>
+
+<p>Let's re-visit the example from the previous post and see how to get it running using this new approach…</p>
+
+<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
+
+<h2>Go Language Actions</h2>
+
+<p>Go's <a href="https://golang.org/pkg/go/build/">build system</a> combines application source code and dependencies into a single execution binary. Bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
+
+<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
+
+<h3>Action Source Code</h3>
+
+<p>Here's a simple Go function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn't present, it defaults to <code>Stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
+
+<p>``` go
+package main</p>
+
+<p>import "encoding/json"
+import "fmt"
+import "os"</p>
+
+<p>func main() {</p>
+
+<pre><code>// native actions receive one argument, the JSON object as a string
+arg := os.Args[1]
+
+// unmarshal the string to a JSON object
+var obj map[string]interface{}
+json.Unmarshal([]byte(arg), &amp;obj)
+name, ok := obj["name"].(string)
+if !ok {
+    name = "Stranger"
+}
+msg := map[string]string{"msg": ("Hello, " + name + "!")}
+res, _ := json.Marshal(msg)
+fmt.Println(string(res))
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Building this locally allows us to test it works.</p>
+
+<p><code>go
+$ go run test.go '{"name": "James"}'
+{"msg":"Hello, James!"}
+</code></p>
+
+<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
+
+<h3>Cross-Compiling Locally</h3>
+
+<p>Go 1.5 <a href="https://dave.cheney.net/2015/08/22/cross-compilation-with-go-1-5">introduced much improved</a> support for cross-compilation.</p>
+
+<p>If you have the development environment installed locally, you can compile the binary for another platform by setting environment variables. The full list of supported architectures is available <a href="https://golang.org/doc/install/source#environment">here</a>.</p>
+
+<p><em>OpenWhisk uses an <a href="https://hub.docker.com/_/alpine/">Alpine Linux-based</a> environment to execute Actions.</em></p>
+
+<p><code>sh
+$ env GOOS=linux GOARCH=amd64 go build exec.go
+</code></p>
+
+<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
+
+<p><code>sh
+$ file exec
+exec: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+</code></p>
+
+<h3>Cross-Compiling Using Docker</h3>
+
+<p>If you don't want to install the Go development toolchain, Docker can be used to start a container with the environment set up.</p>
+
+<p><code>sh
+$ docker pull golang
+$ docker run -it -v $(pwd):/go/src golang
+root@0a2f1655eece:/go# cd src/
+root@0a2f1655eece:/go/src# go build exec.go
+root@0a2f1655eece:/go/src# ls
+exec  exec.go
+$ file exec
+exec: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+</code></p>
+
+<h3>Create &amp; Deploy Archive</h3>
+
+<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
+
+<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
+
+<p><code>sh
+$ zip action.zip exec
+  adding: exec (deflated 66%)
+$ wsk action create go_test action.zip --docker
+ok: created action go_test
+</code></p>
+
+<h3>Invoking Action</h3>
+
+<p>Test the action from the command-line to verify it works.</p>
+
+<p>```sh
+$ wsk action invoke go_test --blocking --result
+{</p>
+
+<pre><code>"msg": "Hello, Stranger!"
+</code></pre>
+
+<p>}
+$ wsk action invoke go_test --blocking --result --param name James
+{</p>
+
+<pre><code>"msg": "Hello, James!"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Success 😎.</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[OpenWhisk Docker Actions]]></title>
     <link href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/"/>
     <updated>2017-01-16T11:05:00+00:00</updated>
     <id>http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions</id>
-    <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://github.com/serverless/examples/tree/master/openwhisk-node-simple">following changes</a> to Docker-based Actions.</p>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
 
 <p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
 
@@ -814,107 +945,6 @@ the service on the same platform as our applications, using Docker. Most importa
 country-specific URLs.</em></p>
 
 <p><strong>Success!</strong></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Debugging Cloud Foundry Stack Issues]]></title>
-    <link href="http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues/"/>
-    <updated>2015-07-10T15:27:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/07/10/debugging-cloud-foundry-stack-issues</id>
-    <content type="html"><![CDATA[<p>Recent <a href="https://groups.google.com/a/cloudfoundry.org/forum/#!topic/vcap-dev/gU7rpD8MSC4">changes</a> to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of <a href="http://stackoverflow.com/questions/31057357/static-buildpack-deploy-now-failing-due-to-unsupported-stack">issues</a> <a href="http://stackoverflow.com/questions/31085626/fail-to-push-static-site-to-bluemix-using-third-party-buildpack/31089127#31089127">for</a> <a href="http://stackoverflow.com/questions/31268155/bluemix-libstdc-so-6-version-glibcxx-3-4-20-not-found/31288182#31288182">users</a>. I've helped users diagnose and fix issues
-that have occurred due to a mistmatches between the platform stack, applications and the buildpack. Learning a number of techniques for helping to discover and resolve these
-issues and I wanted to share them with everyone else.</p>
-
-<p>Running on Cloud Foundry's <em>Platform-as-a-Service</em> solution, we take for granted that low-level concepts like operating systems are abstracted away from the developer.</p>
-
-<p>However, when we
-run into issues it can be necessary to jump into the weeds and find out what's going on under the hood...</p>
-
-<h2>What are Cloud Foundry "stacks"?</h2>
-
-<p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>...</p>
-
-<p><blockquote><p>A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.</p><footer><strong>Cloud Foundry Concepts</strong> <cite><a href='https://docs.cloudfoundry.org/concepts/stacks.html'>docs.cloudfoundry.org/concepts/&hellip;</a></cite></footer></blockquote></p>
-
-<p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
-environment.</p>
-
-<p>Most users don't have to care which <em>stack</em> they are running on.</p>
-
-<p>However, if your application needs a specific version of a system library or you want to verify a specific command line application is installed, you
-may need to dig deeper...</p>
-
-<h2>What "stacks" does my platform support?</h2>
-
-<p>Using the Cloud Foundry CLI, issue the following command to see what <em>stacks</em> are available on the platform.</p>
-
-<p>``` sh
-[16:27:30 ~]$ cf stacks
-Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>name         description
-lucid64      Ubuntu 10.04
-seDEA        private
-cflinuxfs2   Ubuntu 14.04.2 trusty
-```</p>
-
-<p>Stack information contains the unique name for each stack and the underlying operating system version.</p>
-
-<h2>Which "stack" is my application running on?</h2>
-
-<p>Since <a href="https://github.com/cloudfoundry/cli/releases/tag/v6.11.0">v6.11.0</a>, the <em>stack</em> for an application has been shown in the CLI application info output.</p>
-
-<p>``` sh
-[16:34:39 ~]$ cf app debug-testing
-Showing health and status for app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>requested state: started
-instances: 1/1
-usage: 512M x 1 instances
-urls: debug-testing.mybluemix.net
-last uploaded: Tue Jun 16 15:47:21 UTC 2015
-stack: lucid64
-buildpack: SDK for Node.js(TM)</p>
-
-<pre><code> state     since                    cpu    memory           disk           details
-</code></pre>
-
-<h1>0   running   2015-06-30 08:53:57 PM   0.0%   242.5M of 512M   196.8M of 1G</h1>
-
-<p>```</p>
-
-<h2>How can I choose the "stack" my application runs on?</h2>
-
-<p>Users can set the <em>stack</em> for an application using the <em>-s</em> command-line parameter during deployment.
-The stack identifier should match one of the names shown in the output from the <em>cf stacks</em> command.</p>
-
-<p><code>sh
-$ cf push -s stack_identifier
-</code></p>
-
-<h2>How are the "stacks" defined?</h2>
-
-<p>This <a href="https://github.com/cloudfoundry/stacks">Github repository</a> contains the source files for building the <em>stacks</em>. There's a
-<a href="https://docs.docker.com/reference/builder/">Dockerfile</a> for the current <a href="https://github.com/cloudfoundry/stacks/blob/master/cflinuxfs2/Dockerfile">cflinuxfs2</a> stack
-to build the image used in Cloud Foundry.</p>
-
-<h2>How can I poke around inside a "stack" locally?</h2>
-
-<p>Using Docker, we can easily pull down the same "base" operating system used for a specifc "stack" and run locally.</p>
-
-<p>For the <em>cflinuxfs2</em> stack, we can pull down the <a href="http://releases.ubuntu.com/14.04/">Ubuntu Trusty</a> image and run a terminal inside it.</p>
-
-<p><code>sh
-$ docker pull ubuntu:trusty
-$ docker run -i -t ubuntu:trusty /bin/bash
-</code></p>
-
-<h2>How can I easily migrate existing applications to a new stack?</h2>
-
-<p>Rather than having to re-deploy each application separately, there's a great <a href="https://github.com/simonleung8/cli-stack-changer">CF CLI plugin</a> to automatically migrate all your applications from <em>lucid64</em> to <em>cflinuxfs2</em>.</p>
 ]]></content>
   </entry>
   

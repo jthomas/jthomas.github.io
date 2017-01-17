@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-01-16T16:46:31+00:00</updated>
+  <updated>2017-01-17T10:46:57+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,11 +14,142 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Openwhisk and Go]]></title>
+    <link href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/"/>
+    <updated>2017-01-17T09:00:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/01/17/openwhisk-and-go</id>
+    <content type="html"><![CDATA[<p><a href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/">In an earlier blog post</a>, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for each serverless function and hosting them on Docker Hub.</p>
+
+<p><a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">Recent updates</a>  to Docker-based Actions have made this process much simpler. Developers don't need to build and expose public images anymore.</p>
+
+<p>Let's re-visit the example from the previous post and see how to get it running using this new approach…</p>
+
+<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
+
+<h2>Go Language Actions</h2>
+
+<p>Go's <a href="https://golang.org/pkg/go/build/">build system</a> combines application source code and dependencies into a single execution binary. Bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
+
+<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
+
+<h3>Action Source Code</h3>
+
+<p>Here's a simple Go function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn't present, it defaults to <code>Stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
+
+<p>``` go
+package main</p>
+
+<p>import "encoding/json"
+import "fmt"
+import "os"</p>
+
+<p>func main() {</p>
+
+<pre><code>// native actions receive one argument, the JSON object as a string
+arg := os.Args[1]
+
+// unmarshal the string to a JSON object
+var obj map[string]interface{}
+json.Unmarshal([]byte(arg), &amp;obj)
+name, ok := obj["name"].(string)
+if !ok {
+    name = "Stranger"
+}
+msg := map[string]string{"msg": ("Hello, " + name + "!")}
+res, _ := json.Marshal(msg)
+fmt.Println(string(res))
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Building this locally allows us to test it works.</p>
+
+<p><code>go
+$ go run test.go '{"name": "James"}'
+{"msg":"Hello, James!"}
+</code></p>
+
+<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
+
+<h3>Cross-Compiling Locally</h3>
+
+<p>Go 1.5 <a href="https://dave.cheney.net/2015/08/22/cross-compilation-with-go-1-5">introduced much improved</a> support for cross-compilation.</p>
+
+<p>If you have the development environment installed locally, you can compile the binary for another platform by setting environment variables. The full list of supported architectures is available <a href="https://golang.org/doc/install/source#environment">here</a>.</p>
+
+<p><em>OpenWhisk uses an <a href="https://hub.docker.com/_/alpine/">Alpine Linux-based</a> environment to execute Actions.</em></p>
+
+<p><code>sh
+$ env GOOS=linux GOARCH=amd64 go build exec.go
+</code></p>
+
+<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
+
+<p><code>sh
+$ file exec
+exec: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+</code></p>
+
+<h3>Cross-Compiling Using Docker</h3>
+
+<p>If you don't want to install the Go development toolchain, Docker can be used to start a container with the environment set up.</p>
+
+<p><code>sh
+$ docker pull golang
+$ docker run -it -v $(pwd):/go/src golang
+root@0a2f1655eece:/go# cd src/
+root@0a2f1655eece:/go/src# go build exec.go
+root@0a2f1655eece:/go/src# ls
+exec  exec.go
+$ file exec
+exec: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+</code></p>
+
+<h3>Create &amp; Deploy Archive</h3>
+
+<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
+
+<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
+
+<p><code>sh
+$ zip action.zip exec
+  adding: exec (deflated 66%)
+$ wsk action create go_test action.zip --docker
+ok: created action go_test
+</code></p>
+
+<h3>Invoking Action</h3>
+
+<p>Test the action from the command-line to verify it works.</p>
+
+<p>```sh
+$ wsk action invoke go_test --blocking --result
+{</p>
+
+<pre><code>"msg": "Hello, Stranger!"
+</code></pre>
+
+<p>}
+$ wsk action invoke go_test --blocking --result --param name James
+{</p>
+
+<pre><code>"msg": "Hello, James!"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Success 😎.</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[OpenWhisk Docker Actions]]></title>
     <link href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/"/>
     <updated>2017-01-16T11:05:00+00:00</updated>
     <id>http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions</id>
-    <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://github.com/serverless/examples/tree/master/openwhisk-node-simple">following changes</a> to Docker-based Actions.</p>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
 
 <p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
 
@@ -791,37 +922,6 @@ $ openwhisk-workshop verify
 <li>Twitter <a href="https://twitter.com/openwhisk">@openwhisk</a></li>
 </ul>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[OpenWhisk and Node-RED]]></title>
-    <link href="http://jamesthom.as/blog/2016/09/26/node-red-and-openwhisk/"/>
-    <updated>2016-09-26T15:16:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/09/26/node-red-and-openwhisk</id>
-    <content type="html"><![CDATA[<p><a href="https://www.npmjs.com/package/node-red-node-openwhisk">Node-RED nodes for OpenWhisk</a> were initially released earlier this year. The nodes allowed users to manually invoke existing Actions and Triggers. This month, a <a href="https://github.com/node-red/node-red-node-openwhisk/releases/tag/0.3.0">new version of the package</a> has been released providing a huge improvement in the functionality…</p>
-
-<h3>features</h3>
-
-<ul>
-<li>Users can now define new Actions using the flow editor UI, providing the source code through the inline node configuration panel.</li>
-<li>Users can also modify existing Actions, with the live Action source being previewed in the node editor panel.</li>
-<li>Triggers can be created and updated in the same way.</li>
-<li>Both nodes allow users to view, define and modify default parameters for both Actions and Triggers.</li>
-</ul>
-
-
-<p><em>Deploying the flow will make the modifications to Actions and Triggers live for the configured OpenWhisk platform.</em></p>
-
-<h3>example</h3>
-
-<p>This video shows the updated nodes being used to define a new OpenWhisk Action, invoking it in response to a message from an inject node and then making modifications to the source code.</p>
-
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/NR_and_OW.gif"></p>
-
-<h3>interested?</h3>
-
-<p>Grab the <a href="https://www.npmjs.com/package/node-red-node-openwhisk">updated NPM package</a> to test the new features out today…</p>
 ]]></content>
   </entry>
   

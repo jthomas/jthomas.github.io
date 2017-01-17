@@ -9,8 +9,8 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Last week was Monki Gras, the conference organised by
-RedMonk, with this year&#8217;s theme being &#8221;scaling craft&#8221;. We plan to explore &hellip;">
+  <meta name="description" content="Here&#8217;s a video I&#8217;ve made showing you how to deploy new versions of an
+application on IBM Bluemix without the end-user having to suffer &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -78,6 +78,91 @@ RedMonk, with this year&#8217;s theme being &#8221;scaling craft&#8221;. We plan
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/07/22/zero-downtime-deployments-using-bluemix/">Zero Downtime Deployments Using IBM Bluemix</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-07-22T14:42:00+01:00" pubdate data-updated="true">Jul 22<span>nd</span>, 2014</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Here&#8217;s a video I&#8217;ve made showing you how to deploy new versions of an
+application on IBM Bluemix without the end-user having to suffer any down time:</p>
+
+<iframe width="420" height="315" src="//www.youtube.com/embed/yfLi2hLfgSU" frameborder="0" allowfullscreen></iframe>
+
+
+<p>Utilising the <a href="http://martinfowler.com/bliki/BlueGreenDeployment.html">Blue Green deployment pattern</a>, we deploy the
+new version to a separate host within the production environment, rather than
+taking down and updating the existing application. The HTTP router in front of
+the applications controls tunnelling application requests between the different
+versions. Once we verified the new version is working correctly, we can turn
+off the previous version and transfer all traffic to the new instance.</p>
+
+<p><strong>This complex deployment pattern is automatically supported by the Cloud Foundry
+technology underpinning IBM Bluemix</strong>.</p>
+
+<p><em>Staging multiple versions of an application, bound to the same external address, with automatic load balancing is handled transparently by the platform.</em></p>
+
+<p><em>This works for any language or
+runtime without any modifications to your application.</em></p>
+
+<p>There are a few <a href="https://www.ng.%20bluemix.net/docs/#manageapps/index-gentopic3.html#d2e1">different ways</a>
+to achieve this deployment approach using the
+platform. The example in the video only uses three commands
+with the ‘cf’ tool.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>// Rename the existing application to allow staging a new instance without
+</span><span class='line'>// overwriting existing version.
+</span><span class='line'><span class="nv">$ </span>cf rename app old_app
+</span><span class='line'>
+</span><span class='line'>// Deploy the updated application, which will be bound to the same external
+</span><span class='line'>// address. HTTP traffic is load balanced between the two versions automatically.
+</span><span class='line'><span class="nv">$ </span>cf push
+</span><span class='line'>
+</span><span class='line'>// Verify the new application is working and <span class="k">then </span>turn off the old instance.
+</span><span class='line'><span class="nv">$ </span>cf stop old_app
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Amazing!</strong></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2209,285 +2294,6 @@ the link and vote for the idea.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2012/04/13/dojomvc-views/">Creating Todo MVC in Dojo - Part 2: Views</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2012-04-13T00:00:00+01:00" pubdate data-updated="true">Apr 13<span>th</span>, 2012</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In the previous article, we looked at defining our application Model using the
-<a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">Dojo MVC</a> package. The
-model contained a list of todo tasks, each with a description and finished
-state, along with composite values representing the total completed and
-remaining task counts.</p>
-
-<p>Dojo&#8217;s MVC package provides a series of widgets (<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">Group</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">Output</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">Repeat</a>,
-<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Generate.html">Generate</a>) that assist the rendering of model attributes in our View, which
-automatically update when model values change. We&#8217;re going to look at using
-these widgets to build our TodoMVC Application View&#8230;</p>
-
-<h2>Defining a View template</h2>
-
-<p>For a long time, Dojo has had excellent support for creating widgets with HTML
-templates using modules from the Dijit package. Defining a new widget simply
-requires inheriting from a base class (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html">_WidgetBase</a>), adding in mixins for
-template support (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html">_TemplatedMixin</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetsInTemplateMixin.html">_WidgetsInTemplateMixin</a>) and providing
-a HTML template file that will be automatically rendered in the page by the Dojo
-parser. In our application, we&#8217;ve created a new templated widget <a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo">todo.app</a>,
-present in <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js">app.js</a> along with a template file <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html">app.html</a>.</p>
-
-<p>The basic outline of this module is shown below.</p>
-
-<figure class='code'><figcaption><span>Templated TodoMVC Widget</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js'>Source Link </a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">define</span><span class="p">([</span><span class="s2">&quot;dojo/_base/declare&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="c1">// Parent classes</span>
-</span><span class='line'>        <span class="s2">&quot;dijit/_WidgetBase&quot;</span><span class="p">,</span> <span class="s2">&quot;dijit/_TemplatedMixin&quot;</span><span class="p">,</span> <span class="s2">&quot;dijit/_WidgetsInTemplateMixin&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="c1">// Widget template</span>
-</span><span class='line'>        <span class="s2">&quot;dojo/text!./app.html&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">...</span>
-</span><span class='line'>    <span class="kd">function</span><span class="p">(</span><span class="nx">declare</span><span class="p">,</span> <span class="nx">_WidgetBase</span><span class="p">,</span> <span class="nx">_TemplatedMixin</span><span class="p">,</span> <span class="nx">_WidgetsInTemplateMixin</span><span class="p">,</span> <span class="nx">template</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">return</span> <span class="nx">declare</span><span class="p">(</span><span class="s2">&quot;todo.app&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nx">_WidgetBase</span><span class="p">,</span> <span class="nx">_TemplatedMixin</span><span class="p">,</span> <span class="nx">_WidgetsInTemplateMixin</span><span class="p">],</span> <span class="p">{</span>
-</span><span class='line'>            <span class="nx">templateString</span><span class="o">:</span> <span class="nx">template</span><span class="p">,</span>
-</span><span class='line'>        <span class="p">});</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Defining our application as a templated widget lets us annotate HTML elements,
-using the data-dojo-type attribute, in the application page to be automatically
-instantiated into corresponding widgets at runtime by the <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/parser.html">Dojo parser</a>. When this
-occurs, the view template will replace the annotated HTML element in the page
-and any child widgets in the view will be recursively created.</p>
-
-<p>The HTML snippet below shows how we load Dojo, the parser, our application and turn on the automatic parsing on load to render
-our Todo widget within the page.</p>
-
-<figure class='code'><figcaption><span>Loading TodoMVC App Within The Page</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/index.html'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;script </span><span class="na">data-dojo-config=</span><span class="s">&quot;async:true, parseOnLoad:true, paths:{&#39;todo&#39;:&#39;../../todo&#39;}, </span>
-</span><span class='line'><span class="s">    deps:[&#39;dojo/parser&#39;, &#39;todo/app&#39;]&quot;</span> <span class="na">src=</span><span class="s">&quot;./js/dtk/dojo/dojo.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
-</span><span class='line'>
-</span><span class='line'>...
-</span><span class='line'>
-</span><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;content&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;todo.app&quot;</span><span class="nt">&gt;&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This templated widget is rendered within the page and represents our view. The view has three main
-tasks:</p>
-
-<p>** Display the list of todo items
-* Allow a user to enter more tasks
-* Show statistics for the number of completed and remaining tasks.</p>
-
-<p>We&#8217;ll look at each individually to see how we implemented those features using
-the Dojo MVC package.</p>
-
-<h2>Displaying Todo Tasks</h2>
-
-<p>We&#8217;ve used the &lt;ul&gt; element to represent the container for our todo tasks, each task being an &lt;li&gt; element
-with the same HTML template populated with different values. The content for each task and the number of tasks
-needs to be dynamically generated based upon the values in the model.</p>
-
-<p>Dojo MVC provides a widget for this pattern, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>,
-letting the user specify an array in the model for binding to with a HTML
-template to be repeated for each element.</p>
-
-<p>The HTML template for the repeating todo tasks is shown below.</p>
-
-<figure class='code'><figcaption><span>Rendering Todo Tasks</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L7-20'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;ul</span> <span class="na">class=</span><span class="s">&quot;todo-list&quot;</span> <span class="na">data-dojo-attach-point=</span><span class="s">&quot;todo_list&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Repeat&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.todos, exprchar: &#39;#&#39;&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;li</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Group&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: &#39;#{this.index}&#39;&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;input</span> <span class="na">class=</span><span class="s">&quot;check&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;todo.form.CheckBox&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&#39;ref: &quot;isDone&quot;&#39;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo-content dijitInline&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit.InlineEditBox&quot;</span>
-</span><span class='line'>                <span class="na">data-dojo-props=</span><span class="s">&#39;ref: &quot;todo_text&quot;, editor:&quot;dijit.form.TextBox&quot;, autosave:true, width:&quot;420px&quot;, style:&quot;width:420px;&quot;&#39;</span><span class="nt">&gt;&lt;/div&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-destroy&quot;</span> <span class="na">data-model-id=</span><span class="s">&quot;#{this.index}&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            <span class="nt">&lt;/span&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;/div&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/li&gt;</span>
-</span><span class='line'><span class="nt">&lt;/ul&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<h3>Repeating View Templates</h3>
-
-<p>In the template, the containing &lt;ul&gt; element is registered as the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>
-widget using the data-dojo-type attribute. Using the data-dojo-props
-attribute, we can pass widget parameters to the newly created widget when it&#8217;s instantiated by the parser.</p>
-
-<p>The first parameter, ref, provides a variable name
-for the model attribute to bind to. We&#8217;re using the model available on the widget instance, &#8220;this.model&#8221;, with the &#8220;todos&#8221; attribute, which contains
-an array of task objects. The second parameter, exprchar, is the character to use for substitution expressions in declarative child widget attributes. By default,
-this value is the &#8216;$&#8217; character. As we&#8217;re using the declarative programming style, these expressions would be confused with normal template value substitutions and we
-use the &#8216;#&#8217; character instead.</p>
-
-<p>Under the &lt;ul&gt; element, we have the HTML template for each todo task, represented by the &lt;li&gt; element. Here we are using the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">dojox.mvc.Group</a> widget, which provides
-the parent model context for any child widgets which use substituion expressions and references to access model values. Registering the parent context as an individual
-item within the model &#8220;todos&#8221; array is achieved by using the &#8220;#{this.index}&#8221; reference, this will be automatically incremented by the parent Repeat widget as it iterates
-through the model array.</p>
-
-<h3>Binding UI Controls</h3>
-
-<p>Each todo task has three UI controls, the task text (either as a read-only
-value or an inline edit box for modification), a checkbox representing the
-completed state of the widget and an icon to allow the removal of the task. Our
-chosen UI controls (<a href="http://dojotoolkit.org/reference-guide/dijit/InlineEditBox.html">InlineEditBox</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/form/CheckBox.html">CheckBox</a>) are bound to model values by
-providing a &#8220;ref&#8221; attribute with the attribute name. These widgets will
-automatically be populated with the current model values during rendering.</p>
-
-<p>This binding between the view and the model is bi-directional, changes to the
-model will automatically propagate to the view widgets and changes to the view
-widgets will flow back to the model.</p>
-
-<p>When a user wants to remove a task, the &#8220;click&#8221; event generated by the icon in the view
-will be intercepted by the Controller. Allowing the controller to determine which todo task
-to remove from the model is provided by setting the current item index as a custom parameter on the HTML
-element. We will be looking at the code to perform the removal in a later article.</p>
-
-<h2>Showing Completed &amp; Remaining Counts</h2>
-
-<p>Along with the todo tasks, we need to display stats for the number of completed
-and remaining tasks. These attributes are composite model values, being
-automatically calculated from other model attributes. The displayed values need
-to be updated live as the other model attributes change but won&#8217;t be directly
-modifable by the user. The code snippet below shows the HTML template in the
-view for this component.</p>
-
-<figure class='code'><figcaption><span>Showing Task Stats</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L22-33'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo-stats&quot;</span> <span class="na">data-dojo-attach-point=</span><span class="s">&quot;todo_stats&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-count&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;span</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Output&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.incomplete&quot;</span> <span class="na">class=</span><span class="s">&quot;number&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;word&quot;</span><span class="nt">&gt;</span>items<span class="nt">&lt;/span&gt;</span> left.
-</span><span class='line'>    <span class="nt">&lt;/span&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-clear&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;#&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onclick:removeCompletedItems&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>            Clear
-</span><span class='line'>            <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;number-done&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Output&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.complete&quot;</span> <span class="nt">&gt;&lt;/span&gt;</span>
-</span><span class='line'>            completed items
-</span><span class='line'>        <span class="nt">&lt;/a&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/span&gt;</span>
-</span><span class='line'><span class="nt">&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We&#8217;ve used simple HTML elements to display the values, rather than Dijit widgets, due to the
-lack of user interaction needed. Binding a HTML element to a Model property can be achieved using the
-<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">dojox.mvc.Output</a> widget.
-Again, we use the &#8220;ref&#8221; attribute to specify which model property the &#8220;innerHTML&#8221;
-value on the HTML element should be linked with.</p>
-
-<h2>Adding New Tasks</h2>
-
-<p>Finally, we need to let the user add new tasks. Using a normal HTML input
-field, we connect the &#8220;onkeypress&#8221; event to an internal event handler to allow
-the app to access the new tasks.</p>
-
-<figure class='code'><figcaption><span>Adding New Tasks</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L2-5'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;create-todo&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;input</span> <span class="na">class=</span><span class="s">&quot;new-todo&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onkeypress:onKeyPress&quot;</span> <span class="na">placeholder=</span><span class="s">&quot;What needs to be done?&quot;</span> <span class="na">type=</span><span class="s">&quot;text&quot;</span><span class="nt">/&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;ui-tooltip-top&quot;</span> <span class="na">style=</span><span class="s">&quot;display:none;&quot;</span><span class="nt">&gt;</span>Press Enter to save this task<span class="nt">&lt;/span&gt;</span>
-</span><span class='line'><span class="nt">&lt;/div&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>The application controller is responsible for
-handling the generated events, retrieving the new tasks and adding them into
-the model. We&#8217;ll be looking at exactly how this works in the next article. When
-new tasks are added, the task list in the view will be automatically
-re-rendered.</p>
-
-<h2>Conclusion</h2>
-
-<p>Following on from the first article, we&#8217;ve now looked at how the View component
-of our MVC application works. Using Dojo MVC widgets, we&#8217;ve been able to
-bind simple HTML elements and full Dijit widgets to show model values. This
-dynamic binding allows Model updates to automatically flow through to the View controls.
-Secondly, any user modified values automatically update the Model.</p>
-
-<p>The dojox.mvc.Output widget was used to display Model attributes are
-read-only values in normal HTML elements. We also used the dojox.mvc.Repeat
-and dojox.mvc.Group widgets to generate a repeated view template for the
-todo tasks. Connecting user events from the view to the Controller used Dojo&#8217;s
-templated widget mixins.</p>
-
-<p>In the final article, we&#8217;ll look at the last component the MVC pattern,
-Controllers. This includes adding new tasks to the Model, removing individual
-and completed tasks along with controlling the view components being displayed.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/5/">&larr; Older</a>
@@ -2505,6 +2311,10 @@ and completed tasks along with controlling the view components being displayed.<
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2017/01/17/openwhisk-and-go/">Openwhisk and Go</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2017/01/16/openwhisk-docker-actions/">OpenWhisk Docker Actions</a>
       </li>
     
@@ -2518,10 +2328,6 @@ and completed tasks along with controlling the view components being displayed.<
     
       <li class="post">
         <a href="/blog/2016/10/10/openwhisk-workshop/">OpenWhisk Workshop</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/09/26/node-red-and-openwhisk/">OpenWhisk and Node-RED</a>
       </li>
     
   </ul>
