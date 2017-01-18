@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-01-17T10:46:57+00:00</updated>
+  <updated>2017-01-18T09:40:01+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,244 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[OpenWhisk and Rust]]></title>
+    <link href="http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust/"/>
+    <updated>2017-01-18T09:00:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust</id>
+    <content type="html"><![CDATA[<p><em>This blog post is <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">one of</a> <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">a series</a> looking at using Docker Actions in OpenWhisk to support extra runtimes.</em></p>
+
+<p>Let's look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
+
+<p><blockquote><p>Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.</p></blockquote></p>
+
+<p>Rust has been growing in popularity since it launched in 2010. Rust is a popular language for writing microservices due to the focus on the attention to safety and strong concurrency support.</p>
+
+<p>None of the major serverless platform natively support Rust at the moment. OpenWhisk does not include this as a default runtime. However, <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">recent updates</a> to OpenWhisk provide a path for writing serverless functions with Rust.</p>
+
+<p>Let's re-write <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">the example</a> from the previous post in Rust and see how to get it running using this new approach…</p>
+
+<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
+
+<h2>Rust Language Actions</h2>
+
+<p>Rust has a <a href="http://doc.crates.io/guide.html">build system</a> that supports creating static binaries. These binaries contain the application source code and dependent libraries.</p>
+
+<p>Using the same approach as the <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">Go-based example</a>, bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
+
+<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
+
+<h3>Action Source Code</h3>
+
+<p>Here's a simple Rust function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn't present, it defaults to <code>stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
+
+<p>``` rust
+extern crate rustc_serialize;
+use rustc_serialize::json;
+use rustc_serialize::json::Json;
+use std::env;</p>
+
+<h1>[derive(RustcDecodable, RustcEncodable)]</h1>
+
+<p>pub struct Greeting {</p>
+
+<pre><code>message: String
+</code></pre>
+
+<p>}</p>
+
+<p>fn main() {</p>
+
+<pre><code>let mut name = "stranger".to_string();
+
+// first arg contains JSON parameters
+if let Some(arg1) = env::args().nth(1) {
+    // parse JSON and extract 'name' field
+    let params = Json::from_str(&amp;arg1).unwrap();
+    if let Some(params_obj) = params.as_object() {
+        if let Some(params_name) = params_obj.get("name") {
+            name = params_name.as_string().unwrap().to_string();
+        }
+    }
+};
+
+let greeting = Greeting {
+    message: format!("Hello, {}!", name),
+};
+
+println!("{}", json::encode(&amp;greeting).unwrap());
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>Set Up Project</h3>
+
+<p>Using Rust's package management tool, create a new project for our serverless function.</p>
+
+<p>Add the source code above into the <code>src/main.rs</code> file.</p>
+
+<p>```sh
+$ cargo new action; cd action</p>
+
+<pre><code> Created library `action` project
+</code></pre>
+
+<p>$ mv src/lib.rs src/main.rs
+$ vim src/main.rs
+$ tree .
+.
+├── Cargo.toml
+└── src</p>
+
+<pre><code>└── main.rs
+</code></pre>
+
+<p>1 directory, 2 files
+```</p>
+
+<p>This function uses the <code>rustc-serialize</code> crate to handle parsing and producing JSON.</p>
+
+<p>Add this identifier to the project's dependencies listed in <code>Cargo.toml</code>.</p>
+
+<p>``` sh
+[package]
+name = "action"
+version = "0.1.0"
+authors = ["Me <a href="&#109;&#97;&#x69;&#x6c;&#x74;&#111;&#58;&#109;&#101;&#x40;&#101;&#109;&#x61;&#x69;&#x6c;&#x2e;&#x63;&#111;&#109;">&#109;&#101;&#64;&#x65;&#109;&#97;&#x69;&#x6c;&#46;&#x63;&#111;&#x6d;</a>"]</p>
+
+<p>[dependencies]
+rustc-serialize = "0.3"
+```</p>
+
+<p>Build and run the binary to test it works as expected.</p>
+
+<p>```go
+$ cargo run</p>
+
+<pre><code>Updating registry `https://github.com/rust-lang/crates.io-index`
+</code></pre>
+
+<p>   Compiling rustc-serialize v0.3.22
+   Compiling action v0.1.0 (file:///private/tmp/test/action)</p>
+
+<pre><code>Finished debug [unoptimized + debuginfo] target(s) in 7.0 secs
+ Running `target/debug/action`
+</code></pre>
+
+<p>{"message":"Hello, stranger!"}
+$ cargo run '{"name": "James"}'</p>
+
+<pre><code>Finished debug [unoptimized + debuginfo] target(s) in 0.0 secs
+ Running `target/debug/action {\"name\":\ \"James\"}`
+</code></pre>
+
+<p>{"message":"Hello, James!"}
+```</p>
+
+<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
+
+<h3>Cross-Compiling Locally</h3>
+
+<p>Rust's compiler uses LLVM under the covers, making it possible to generate machine code for different architectures. Cross-compiling for different platforms requires having the correct compiler, linker and libraries for that architecture installed.</p>
+
+<p>Rust <a href="https://blog.rust-lang.org/2016/05/13/rustup.html">recently released</a> a <a href="https://rustup.rs/">toolchain manager</a> to simplify this process.</p>
+
+<p>Install the Rust toolchain for the <code>x86_64-unknown-linux-musl</code> runtime.</p>
+
+<p><code>sh
+$ rustup target add x86_64-unknown-linux-musl
+info: downloading component 'rust-std' for 'x86_64-unknown-linux-musl'
+info: installing component 'rust-std' for 'x86_64-unknown-linux-musl'
+</code></p>
+
+<p>Add the configuration file to set the correct linker for the runtime.</p>
+
+<p><code>sh
+$ cat .cargo/config
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"
+</code></p>
+
+<p>We can now cross-compile the binary for the correct environment.</p>
+
+<p>``` sh
+$ cargo build --target=x86_64-unknown-linux-musl --release
+   Compiling rustc-serialize v0.3.22
+   Compiling action v0.1.0 (file:///Users/james/code/bluemix/openwhisk-languages/rust/action)</p>
+
+<pre><code>Finished release [optimized] target(s) in 9.30 secs
+</code></pre>
+
+<p>```</p>
+
+<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
+
+<p><code>sh
+$ file target/x86_64-unknown-linux-musl/release/action
+target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, not stripped
+</code></p>
+
+<h3>Cross-Compiling Using Docker</h3>
+
+<p>If you don't want to install the Rust development toolchain, Docker can be used to start a container with the <a href="https://github.com/emk/rust-musl-builder">environment set up</a>.</p>
+
+<p>```sh
+$ docker pull ekidd/rust-musl-builder
+$ docker run -it -v $(pwd):/home/rust/src ekidd/rust-musl-builder cargo build --release</p>
+
+<pre><code>Updating registry `https://github.com/rust-lang/crates.io-index`
+</code></pre>
+
+<p> Downloading rustc-serialize v0.3.22
+   Compiling action v0.1.0 (file:///home/rust/src)</p>
+
+<pre><code>Finished release [optimized] target(s) in 1.80 secs
+</code></pre>
+
+<p>$ file target/x86_64-unknown-linux-musl/release/action
+target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, not stripped
+```</p>
+
+<h3>Create &amp; Deploy Archive</h3>
+
+<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
+
+<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
+
+<p><code>sh
+$ cp target/x86_64-unknown-linux-musl/release/action exec
+$ zip action.zip exec
+  adding: exec (deflated 64%)
+$ wsk action create rust_test action.zip --docker
+ok: created action rust_test
+</code></p>
+
+<h3>Invoking Action</h3>
+
+<p>Test the action from the command-line to verify it works.</p>
+
+<p>```sh
+$ wsk action invoke rust_test --blocking --result
+{</p>
+
+<pre><code>"msg": "Hello, Stranger!"
+</code></pre>
+
+<p>}
+$ wsk action invoke rust_test --blocking --result --param name James
+{</p>
+
+<pre><code>"msg": "Hello, James!"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Success 😎.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Openwhisk and Go]]></title>
@@ -832,96 +1070,6 @@ schedule =&gt; { "every" =&gt; "15m"}
 <p>In the next post, we'll look at using Docker to set up Elasticsearch, Logstash and Kibana with our custom OpenWhisk plugin.</p>
 
 <p>Until then... 😎</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[OpenWhisk Workshop]]></title>
-    <link href="http://jamesthom.as/blog/2016/10/10/openwhisk-workshop/"/>
-    <updated>2016-10-10T14:51:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/10/10/openwhisk-workshop</id>
-    <content type="html"><![CDATA[<p><img src="https://dl.dropboxusercontent.com/u/10404736/serverless_ldn.png" alt="serverless london" /></p>
-
-<p><a href="http://serverlessconf.io/">Serverless Conference</a> comes to London <a href="http://london.serverlessconf.io/">later this month</a>.</p>
-
-<p>IBM will be hosting a full-day workshop at the event. Developers can come and learn how to use <a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless platform.</p>
-
-<p>I'm going to be one of the mentors on the day, along with members from the product team.</p>
-
-<p>Working on training material for the session, I remembered that the Node.js community had a popular workshop tool for running training sessions around the world.</p>
-
-<h2>NodeSchool</h2>
-
-<p><a href="http://nodeschool.io/">NodeSchool</a> provides developers with a command-line utility that helps them learn the platform. This tool provides a series of interactive exercises to test their knowledge. Each exercise requires the developers to write some code. The application can then verify their solution and record their progress.</p>
-
-<p>The Node.js community <a href="https://github.com/workshopper">open-sourced the tools</a> used to develop NodeSchool. </p>
-
-<p>Using this toolchain makes it simple to create similar exercise-led workshops for developers.</p>
-
-<h2>OpenWhiskSchool?</h2>
-
-<p>OpenWhisk has great documentation. The <a href="https://github.com/openwhisk/openwhisk/tree/master/docs">project repository includes Markdown files</a> for each feature of the platform.</p>
-
-<p><strong><em>Would it be possible to use this material with the NodeSchool toolchain to create an interactive OpenWhisk workshop for developers?</em></strong></p>
-
-<p>Developers would review the relevant documentation for a particular feature and use the tool to test their knowledge through an interactive exercise.</p>
-
-<p>Each exercise would require them to build, deploy and configure a sample serverless function which used that platform feature.</p>
-
-<p><em>After getting set up with the toolchain and reviewing other example projects, we started work on it…</em></p>
-
-<h2>openwhisk-workshop</h2>
-
-<p>🎉 <strong>Developers can now install the <a href="https://www.npmjs.com/package/openwhisk-workshop">workshop from NPM</a> as a global command.</strong> 🎉</p>
-
-<p><code>
-$ npm install -g openwhisk-workshop
-</code></p>
-
-<p><em>This tool needs the OpenWhisk command-line utility installed and authenticated against an instance of the platform. For more details on getting this environment setup, see the following documentation <a href="https://new-console.ng.bluemix.net/openwhisk/cli">here</a>.</em></p>
-
-<p>Once the tool is installed, developers can open the application by running the following command.</p>
-
-<p><code>
-$ openwhisk-workshop
-</code></p>
-
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/ow_workshop.png" alt="overview" /></p>
-
-<p>The list of exercises will be displayed, along with current completion progress. Using the arrow keys (<kbd>↑</kbd><kbd>↓</kbd>) to navigate the menu, press <kbd>RETURN</kbd> to open an exercise.</p>
-
-<p>On selecting an exercise, the problem challenge will be printed to the terminal.</p>
-
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/challenge.png" alt="exercise" /></p>
-
-<p>Each exercise comes with a documentation page which explains the concepts behind the challenge. Use the following command to display the exercise documentation in the terminal.</p>
-
-<p><code>
-$ openwhisk-workshop more
-</code></p>
-
-<p>Once the developer has solved the challenge, they can verify their solution with the following command.</p>
-
-<p><code>
-$ openwhisk-workshop verify
-</code></p>
-
-<p>If their solution is correct, that task is marked as completed and the utility returns to the list of exercises.  Developers can continue working through the exercises until they have completed them all.</p>
-
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/verify.png" alt="verify" /></p>
-
-<h2>feedback</h2>
-
-<p>If you have problems with the workshop, please <a href="https://github.com/openwhisk/openwhisk-workshop/issues">raise an issue</a> in the repository.</p>
-
-<p><em>Need more general help with OpenWhisk?</em></p>
-
-<ul>
-<li><a href="http://stackoverflow.com/questions/tagged/openwhisk">Stack Overflow #openwhisk</a>.</li>
-<li><a href="https://developer.ibm.com/open/slackin/">Slack Group #openwhisk</a>.</li>
-<li>Twitter <a href="https://twitter.com/openwhisk">@openwhisk</a></li>
-</ul>
-
 ]]></content>
   </entry>
   

@@ -4,7 +4,7 @@
   <title><![CDATA[Category: docker | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/docker/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-01-17T10:46:57+00:00</updated>
+  <updated>2017-01-18T09:40:01+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,244 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[OpenWhisk and Rust]]></title>
+    <link href="http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust/"/>
+    <updated>2017-01-18T09:00:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust</id>
+    <content type="html"><![CDATA[<p><em>This blog post is <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">one of</a> <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">a series</a> looking at using Docker Actions in OpenWhisk to support extra runtimes.</em></p>
+
+<p>Let's look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
+
+<p><blockquote><p>Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.</p></blockquote></p>
+
+<p>Rust has been growing in popularity since it launched in 2010. Rust is a popular language for writing microservices due to the focus on the attention to safety and strong concurrency support.</p>
+
+<p>None of the major serverless platform natively support Rust at the moment. OpenWhisk does not include this as a default runtime. However, <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">recent updates</a> to OpenWhisk provide a path for writing serverless functions with Rust.</p>
+
+<p>Let's re-write <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">the example</a> from the previous post in Rust and see how to get it running using this new approach…</p>
+
+<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
+
+<h2>Rust Language Actions</h2>
+
+<p>Rust has a <a href="http://doc.crates.io/guide.html">build system</a> that supports creating static binaries. These binaries contain the application source code and dependent libraries.</p>
+
+<p>Using the same approach as the <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">Go-based example</a>, bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
+
+<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
+
+<h3>Action Source Code</h3>
+
+<p>Here's a simple Rust function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn't present, it defaults to <code>stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
+
+<p>``` rust
+extern crate rustc_serialize;
+use rustc_serialize::json;
+use rustc_serialize::json::Json;
+use std::env;</p>
+
+<h1>[derive(RustcDecodable, RustcEncodable)]</h1>
+
+<p>pub struct Greeting {</p>
+
+<pre><code>message: String
+</code></pre>
+
+<p>}</p>
+
+<p>fn main() {</p>
+
+<pre><code>let mut name = "stranger".to_string();
+
+// first arg contains JSON parameters
+if let Some(arg1) = env::args().nth(1) {
+    // parse JSON and extract 'name' field
+    let params = Json::from_str(&amp;arg1).unwrap();
+    if let Some(params_obj) = params.as_object() {
+        if let Some(params_name) = params_obj.get("name") {
+            name = params_name.as_string().unwrap().to_string();
+        }
+    }
+};
+
+let greeting = Greeting {
+    message: format!("Hello, {}!", name),
+};
+
+println!("{}", json::encode(&amp;greeting).unwrap());
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>Set Up Project</h3>
+
+<p>Using Rust's package management tool, create a new project for our serverless function.</p>
+
+<p>Add the source code above into the <code>src/main.rs</code> file.</p>
+
+<p>```sh
+$ cargo new action; cd action</p>
+
+<pre><code> Created library `action` project
+</code></pre>
+
+<p>$ mv src/lib.rs src/main.rs
+$ vim src/main.rs
+$ tree .
+.
+├── Cargo.toml
+└── src</p>
+
+<pre><code>└── main.rs
+</code></pre>
+
+<p>1 directory, 2 files
+```</p>
+
+<p>This function uses the <code>rustc-serialize</code> crate to handle parsing and producing JSON.</p>
+
+<p>Add this identifier to the project's dependencies listed in <code>Cargo.toml</code>.</p>
+
+<p>``` sh
+[package]
+name = "action"
+version = "0.1.0"
+authors = ["Me <a href="&#x6d;&#x61;&#x69;&#108;&#116;&#x6f;&#58;&#x6d;&#x65;&#x40;&#101;&#x6d;&#97;&#x69;&#108;&#x2e;&#x63;&#x6f;&#109;">&#109;&#101;&#64;&#x65;&#109;&#x61;&#105;&#x6c;&#x2e;&#x63;&#x6f;&#109;</a>"]</p>
+
+<p>[dependencies]
+rustc-serialize = "0.3"
+```</p>
+
+<p>Build and run the binary to test it works as expected.</p>
+
+<p>```go
+$ cargo run</p>
+
+<pre><code>Updating registry `https://github.com/rust-lang/crates.io-index`
+</code></pre>
+
+<p>   Compiling rustc-serialize v0.3.22
+   Compiling action v0.1.0 (file:///private/tmp/test/action)</p>
+
+<pre><code>Finished debug [unoptimized + debuginfo] target(s) in 7.0 secs
+ Running `target/debug/action`
+</code></pre>
+
+<p>{"message":"Hello, stranger!"}
+$ cargo run '{"name": "James"}'</p>
+
+<pre><code>Finished debug [unoptimized + debuginfo] target(s) in 0.0 secs
+ Running `target/debug/action {\"name\":\ \"James\"}`
+</code></pre>
+
+<p>{"message":"Hello, James!"}
+```</p>
+
+<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
+
+<h3>Cross-Compiling Locally</h3>
+
+<p>Rust's compiler uses LLVM under the covers, making it possible to generate machine code for different architectures. Cross-compiling for different platforms requires having the correct compiler, linker and libraries for that architecture installed.</p>
+
+<p>Rust <a href="https://blog.rust-lang.org/2016/05/13/rustup.html">recently released</a> a <a href="https://rustup.rs/">toolchain manager</a> to simplify this process.</p>
+
+<p>Install the Rust toolchain for the <code>x86_64-unknown-linux-musl</code> runtime.</p>
+
+<p><code>sh
+$ rustup target add x86_64-unknown-linux-musl
+info: downloading component 'rust-std' for 'x86_64-unknown-linux-musl'
+info: installing component 'rust-std' for 'x86_64-unknown-linux-musl'
+</code></p>
+
+<p>Add the configuration file to set the correct linker for the runtime.</p>
+
+<p><code>sh
+$ cat .cargo/config
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"
+</code></p>
+
+<p>We can now cross-compile the binary for the correct environment.</p>
+
+<p>``` sh
+$ cargo build --target=x86_64-unknown-linux-musl --release
+   Compiling rustc-serialize v0.3.22
+   Compiling action v0.1.0 (file:///Users/james/code/bluemix/openwhisk-languages/rust/action)</p>
+
+<pre><code>Finished release [optimized] target(s) in 9.30 secs
+</code></pre>
+
+<p>```</p>
+
+<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
+
+<p><code>sh
+$ file target/x86_64-unknown-linux-musl/release/action
+target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, not stripped
+</code></p>
+
+<h3>Cross-Compiling Using Docker</h3>
+
+<p>If you don't want to install the Rust development toolchain, Docker can be used to start a container with the <a href="https://github.com/emk/rust-musl-builder">environment set up</a>.</p>
+
+<p>```sh
+$ docker pull ekidd/rust-musl-builder
+$ docker run -it -v $(pwd):/home/rust/src ekidd/rust-musl-builder cargo build --release</p>
+
+<pre><code>Updating registry `https://github.com/rust-lang/crates.io-index`
+</code></pre>
+
+<p> Downloading rustc-serialize v0.3.22
+   Compiling action v0.1.0 (file:///home/rust/src)</p>
+
+<pre><code>Finished release [optimized] target(s) in 1.80 secs
+</code></pre>
+
+<p>$ file target/x86_64-unknown-linux-musl/release/action
+target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, not stripped
+```</p>
+
+<h3>Create &amp; Deploy Archive</h3>
+
+<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
+
+<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
+
+<p><code>sh
+$ cp target/x86_64-unknown-linux-musl/release/action exec
+$ zip action.zip exec
+  adding: exec (deflated 64%)
+$ wsk action create rust_test action.zip --docker
+ok: created action rust_test
+</code></p>
+
+<h3>Invoking Action</h3>
+
+<p>Test the action from the command-line to verify it works.</p>
+
+<p>```sh
+$ wsk action invoke rust_test --blocking --result
+{</p>
+
+<pre><code>"msg": "Hello, Stranger!"
+</code></pre>
+
+<p>}
+$ wsk action invoke rust_test --blocking --result --param name James
+{</p>
+
+<pre><code>"msg": "Hello, James!"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Success 😎.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Openwhisk and Go]]></title>
@@ -571,380 +809,6 @@ remote access.</p>
 
 <p>For more information on the subset of Docker commands supported by IBM
 Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Location-Based Cloud Foundry Applications using Nginx and Docker]]></title>
-    <link href="http://jamesthom.as/blog/2015/09/11/location-based-cloud-foundry-applications-with-nginx-and-docker/"/>
-    <updated>2015-09-11T10:24:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2015/09/11/location-based-cloud-foundry-applications-with-nginx-and-docker</id>
-    <content type="html"><![CDATA[<p><img src="/images/geo_web_view.png"></p>
-
-<p>Routing application traffic based upon the geographic location of incoming requests can
-be used for a number of scenarios...</p>
-
-<ul>
-<li>Restricting access to your application outside defined geographic regions.</li>
-<li>Load-balancing traffic to the closest region for improved performance.</li>
-<li>Providing custom applications for different countries.</li>
-</ul>
-
-
-<p>IBM Bluemix allows deploying applications to different geographic regions through
-hosting instances of the <a href="https://www.cloudfoundry.org/">Cloud Foundry</a> platform in <a href="https://www.ibm.com/developerworks/community/blogs/enablingwithbluemix/entry/regions_in_bluemix?lang=en">multiple locations</a>.</p>
-
-<p>Cloud Foundry supports <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/domains-routes.html">simple HTTP routing rules</a> for deployed applications.
-Organisations can register domains and routes for applications. Routes can be
-bound to one or more deployed applications. Incoming HTTP traffic is
-load-balanced, using the <a href="https://en.wikipedia.org/wiki/Round-robin_scheduling">Round-Robin</a> policy, between the application instances bound to a route.</p>
-
-<p><em>However, the platform does not currently support traffic routing based upon the
-geographic location of incoming requests or sharing domains and routes between regions.</em></p>
-
-<p><strong>So, say we want to deploy custom versions of an application to different regions and
-automatically forward users to the correct version based upon their location. How can we
-achieve this?</strong></p>
-
-<p>Let's find out...</p>
-
-<h2>Deploying Application To Different Regions</h2>
-
-<p>IBM Bluemix currently provides Cloud Foundry in <a href="https://www.ng.bluemix.net/docs/overview/overview.html#ov_intro">two regions</a> for deploying applications.</p>
-
-<ul>
-<li><strong>US South</strong> (<em>api.ng.bluemix.net</em>)</li>
-<li><strong>Europe</strong> (<em>api.eu-gb.bluemix.net</em>)</li>
-</ul>
-
-
-<p>Moving between regions is as simple as providing the different region endpoint during the
-authentication command.</p>
-
-<p>``` sh
-[16:25:47 ~]$ cf login -a api.ng.bluemix.net -u james.thomas@uk.ibm.com -s dev
-API endpoint: api.ng.bluemix.net</p>
-
-<p>Password>
-Authenticating...
-OK</p>
-
-<p>Targeted org james.thomas@uk.ibm.com</p>
-
-<p>Targeted space dev</p>
-
-<p>API endpoint:   https://api.ng.bluemix.net (API version: 2.27.0)
-User:           james.thomas@uk.ibm.com
-Org:            james.thomas@uk.ibm.com
-Space:          dev
-[16:26:44 ~]$
-```</p>
-
-<p>We're now authenticated against the US South region.</p>
-
-<p>Let's start by deploying our sample application, which displays a web
-page showing the application URL, to this region.</p>
-
-<p>``` sh
-[16:44:24 ~/code/sample]$ cf api
-API endpoint: https://api.ng.bluemix.net (API version: 2.27.0)
-[16:44:32 ~/code/sample]$ cf push sample-demo-app
-Using manifest file /Users/james/code/sample/manifest.yml</p>
-
-<p>Updating app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>...</p>
-
-<p>Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>requested state: started
-instances: 1/1
-usage: 256M x 1 instances
-urls: sample-demo-app.mybluemix.net
-last uploaded: Fri Sep 11 15:45:04 UTC 2015
-stack: lucid64
-buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
-
-<pre><code> state     since                    cpu    memory          disk        details
-</code></pre>
-
-<h1>0   running   2015-09-11 04:46:00 PM   0.0%   67.1M of 256M   59M of 1G</h1>
-
-<p>[16:45:14 ~/code/sample]$
-```</p>
-
-<p>Once that has finished, we can move over to the European region and deploy our application there.</p>
-
-<p>``` sh
-[16:52:33 ~/code/sample]$ cf login -a api.eu-gb.bluemix.net -u james.thomas@uk.ibm.com -s dev
-[16:52:58 ~/code/sample]$ cf push sample-demo-app
-Using manifest file /Users/james/code/sample/manifest.yml</p>
-
-<p>Updating app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>...</p>
-
-<p>Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-OK</p>
-
-<p>requested state: started
-instances: 1/1
-usage: 256M x 1 instances
-urls: sample-demo-app.eu-gb.mybluemix.net
-last uploaded: Fri Sep 11 15:53:31 UTC 2015
-stack: lucid64
-buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
-
-<pre><code> state     since                    cpu    memory          disk        details
-</code></pre>
-
-<h1>0   running   2015-09-11 04:54:17 PM   0.0%   67.4M of 256M   59M of 1G</h1>
-
-<p>[16:54:25 ~/code/bluemix/sample]$
-```</p>
-
-<p>With the second deployment completed, there are now instances of the same application running in separate regions.</p>
-
-<p>Each instance is available through a separate URL.</p>
-
-<ul>
-<li><a href="http://sample-demo-app.mybluemix.net">http://sample-demo-app.mybluemix.net</a></li>
-<li><a href="http://sample-demo-app.eu-gb.mybluemix.net">http://sample-demo-app.eu-gb.mybluemix.net</a></li>
-</ul>
-
-
-<p>Now we need to set up traffic forwarding from the relevant locations to the correct region.</p>
-
-<h2>Reverse Proxy with Region Traffic Forwarding</h2>
-
-<p>Due to the platform not supporting multi-region traffic routing, we
-need to set up a custom reverse proxy. This server will receive
-requests from our external application domain and transparently forward
-them onto the correct region application.</p>
-
-<p><img src="/images/reverse_proxy.png"></p>
-
-<p>We're going to use <a href="http://nginx.org/">Nginx</a>.</p>
-
-<p><blockquote><p></p></p><p><p>Nginx (pronounced engine-x) is a free, open-source, high-performance HTTP server and reverse proxy, as well as an IMAP/POP3 proxy server</p></p><p><p></p><footer><strong>Nginx</strong> <cite><a href='http://wiki.nginx.org/Main'>wiki.nginx.org/Main/&hellip;</a></cite></footer></blockquote></p>
-
-<p>Nginx comes with a <a href="http://nginx.org/en/docs/http/ngx_http_geoip_module.html">module</a> for looking up locations associated with IP
-address using the <a href="http://dev.maxmind.com/geoip/">MaxMind GeoIP library</a>. The module can
-resolve incoming request addresses into continents, countries and even cities. Using the variables defined by the module, we
-can write traffic forwarding rules to send requests to the correct region.</p>
-
-<h2>Nginx Configuration</h2>
-
-<p>Nginx defines two configuration directives, <em>geoip_country</em> and <em>geoip_city</em>, to
-specify locations for the MaxMind GeoIP database files.</p>
-
-<pre>
-http { 
-    ...
-    geoip_country /usr/share/GeoIP/GeoIP.dat;
-    geoip_city /etc/nginx/geoip/GeoLiteCity.dat;
-    ...
-}
-</pre>
-
-
-<p>When configured, Nginx will expose a series of variables for each request with
-geographical information.</p>
-
-<ul>
-<li><strong>$geoip_country_code</strong> - <em>two-letter country code, for example, “RU”, “US”.</em></li>
-<li><strong>$geoip_country_name</strong> - <em>country name, for example, “Russian Federation”, “United States”.</em></li>
-<li><strong>$geoip_city_continent_code</strong> - <em>two-letter continent code, for example, “EU”, “NA”.</em></li>
-<li><strong>$geoip_city</strong> - <em>city name, for example, “Moscow”, “Washington”.</em></li>
-</ul>
-
-
-<p>Starting with the <a href="http://wiki.nginx.org/FullExample">default nginx configuration</a>,
-there are only a few modifications needed to set up a reverse proxy based upon
-location.</p>
-
-<p>For each request, we check the <em>$geoip_city_continent_code</em> against our list of
-regions. If the request is valid, setting the <em>proxy_pass</em> directive forwards
-the request onto the correct region. We also overwrite the <em>Host:</em> HTTP
-header with the region URL. IBM Bluemix uses this header to internally route
-incoming requests to the correct application host.</p>
-
-<p>Requests coming from outside these locations will be sent to a custom error
-page.</p>
-
-<p><em>Due to a <a href="https://www.ng.bluemix.net/docs/containers/container_troubleshoot.html">known issue</a>
-with IBM Containers, we must use IP addresses rather than the host names with the proxy_pass directive.</em></p>
-
-<p>Here is the full configuration for the <em>enabled-site/default</em> file.</p>
-
-<pre>
-server {
-  listen 80 default_server;
-  listen [::]:80 default_server ipv6only=on;
-
-  root /usr/share/nginx/html;
-  index index.html index.htm;
-  error_page 404 /404.html;
-
-# Make site accessible from http://localhost/
-  server_name localhost;
-
-  location = /404.html {
-    internal;
-  }
-
-  location / {
-    set $host_header "unknown";
-
-    if ($geoip_city_continent_code = "EU") { 
-      proxy_pass http://5.10.124.141;
-      set $host_header "sample-demo-app.eu-gb.mybluemix.net";
-    }
-
-    if ($geoip_city_continent_code = "NA") { 
-      proxy_pass http://75.126.81.66;
-      set $host_header "sample-demo-app.mybluemix.net";
-    }
-
-    if ($host_header = "unknown") {
-      return 404;
-    }
-
-    proxy_set_header Host $host_header;
-  }
-}
-</pre>
-
-
-<p>With the reverse proxy server configured, we need to provision a new
-production server, install Linux and Nginx, configure networking, security updates
-and backup services...</p>
-
-<p><em>...or we can use Docker.</em></p>
-
-<h2>Running Nginx using Docker</h2>
-
-<p>There are <a href="https://hub.docker.com/search/?q=nginx&amp;page=1&amp;isAutomated=0&amp;isOfficial=0&amp;starCount=0&amp;pullCount=0">thousands</a>
-of repositories on Docker Hub providing Nginx, including
-the official image. Unfortunately, the <a href="http://wiki.nginx.org/FullExample">official image</a> provides a version of Nginx
-that is not built with the <em>geo_ip</em> module.</p>
-
-<p>Ubuntu's default package repository for Nginx does provide a build including
-the <em>geo_ip</em> module. By modifying the Dockerfile for the official image, we can
-build a new image from Ubuntu with the required version of Nginx and include
-our custom configuration files.</p>
-
-<pre>
-FROM ubuntu
-RUN apt-get -y install nginx
-
-# copy custom configuration
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY default /etc/nginx/sites-available/
-COPY geoip /etc/nginx/geoip
-COPY 404.html /usr/share/nginx/html/
-
-# forward request and error logs to docker log collector
-RUN ln -sf /dev/stdout /var/log/nginx/access.log
-RUN ln -sf /dev/stderr /var/log/nginx/error.log
-
-# expose HTTP and HTTP ports
-EXPOSE 80 443
-
-CMD ["nginx", "-g", "daemon off;"]
-</pre>
-
-
-<p>Building and running this container locally, we can test that Nginx is configured correctly. The repository containing the Dockerfile
-and build artificats is located <a href="https://github.com/jthomas/geo_ip">here</a>.</p>
-
-<p><code>sh
-[16:58:40 ~/code/final]$ docker build -t geo_ip .
-Sending build context to Docker daemon 15.88 MB
-Step 0 : FROM ubuntu
- ---&gt; 91e54dfb1179
-...
-Step 9 : CMD nginx -g daemon off;
- ---&gt; Using cache
- ---&gt; 7bb6dbaafe3e
-Successfully built 7bb6dbaafe3e
-[16:58:50 ~/code/final]$ docker run -Pti geo_ip
-</code>
-<em>With the custom image ready, we just need to deploy it somewhere...</em></p>
-
-<h2>Running Nginx on IBM Containers</h2>
-
-<p>IBM Bluemix supports deploying Docker containers alongside Cloud Foundry
-applications, allowing us to use the same cloud platform for running our custom
-region applications as providing the reverse proxy</p>
-
-<p>Pushing pre-built images to the IBM Containers service is really as simple as creating a new tag and typing <em>docker push</em>.</p>
-
-<p><em>Please read and follow the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html">documentation</a>
-about installing the command-line container management tools and authenticating
-with the remote service before attempting the commands below.</em></p>
-
-<p><code>sh
-[14:10:52 ~]$ docker tag geo_ip registry.ng.bluemix.net/jthomas/geo_ip
-[14:10:59 ~]$ docker images
-REPOSITORY                               TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
-geo_ip                                   latest              7bb6dbaafe3e        3 days ago          222.3 MB
-registry.ng.bluemix.net/jthomas/geo_ip   latest              7bb6dbaafe3e        3 days ago          222.3 MB
-[14:11:07 ~]$ cf ic login
-** Retrieving client certificates from IBM Containers
-** Storing client certificates in /Users/james/.ice/certs
-Successfully retrieved client certificates
-** Authenticating with registry at registry.eu-gb.bluemix.net
-Successfully authenticated with registry
-[14:24:25 ~]$ docker push registry.ng.bluemix.net/jthomas/geo_ip
-The push refers to a repository [registry.ng.bluemix.net/jthomas/geo_ip] (len: 1)
-Sending image list
-Pushing repository registry.ng.bluemix.net/jthomas/geo_ip (1 tags)
-...
-Pushing tag for rev [7bb6dbaafe3e] on {https://registry.ng.bluemix.net/v1/repositories/jthomas/geo_ip/tags/latest}
-[14:25:39 ~]$ cf ic images
-REPOSITORY                                        TAG                 IMAGE ID            CREATED              VIRTUAL SIZE
-registry.ng.bluemix.net/jthomas/geo_ip            latest              7b1865be-778        About a minute ago   0 B
-registry.ng.bluemix.net/ibmliberty                latest              2209a9732f35        3 weeks ago          263.6 MB
-registry.ng.bluemix.net/ibmnode                   latest              8f962f6afc9a        3 weeks ago          178.9 MB
-registry.ng.bluemix.net/ibm-mobilefirst-starter   latest              97513e56aaa7        3 weeks ago          464.9 MB
-[14:26:43 ~]$
-</code></p>
-
-<p>We can now use the IBM Bluemix dashboard to start a new container from our custom image,
-binding a public IP address and exposing ports.</p>
-
-<p><img src="/images/deploy_container.png"></p>
-
-<p>Once the container starts, accessing the bound IP address shows the
-web page coming back with the region-specific application route.</p>
-
-<p><img src="/images/container_ip_address.png"></p>
-
-<p>Using DNS <a href="https://en.wikipedia.org/wiki/List_of_DNS_record_types#A">A records</a>, we can now
-map our external URL to the IP address of the container. Users visiting this
-URL will be sent to the reverse proxy server which will then forward the
-request onto the correct region application.</p>
-
-<h2>Testing it all out...</h2>
-
-<p>Testing out the forwarding rules requires us to send HTTP requests from multiple regions.
-<a href="http://geowebview.com">GeoWebView</a> will run web browsers located in different geographies and show you the rendered page output.</p>
-
-<p>Running the tool with our application's <a href="http://geo_ip.jamesthom.as">web address</a>, shows the following rendered page images.</p>
-
-<p><img src="/images/geo_web_view.png"></p>
-
-<p>We can see the browsers from the United States and Europe are sent to the correct region. The browser from South Africa is shown the custom error page.</p>
-
-<p><em>Using Nginx we've configured a reverse proxy to route users, based upon their location, to applications running in different IBM Bluemix regions. We're hosting
-the service on the same platform as our applications, using Docker. Most importantly, the whole process is transparent to the user, they aren't forced to visit
-country-specific URLs.</em></p>
-
-<p><strong>Success!</strong></p>
 ]]></content>
   </entry>
   
