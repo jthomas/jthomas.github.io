@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="This blog post is one of a series looking at using Docker Actions in OpenWhisk to support extra runtimes. Let&#8217;s look at writing serverless &hellip;">
+  <meta name="description" content="This is smsbot. It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,843 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2017/03/20/smsbot/">Building an SMS Bot for Slack.</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-03-20T16:02:00+00:00" pubdate data-updated="true">Mar 20<span>th</span>, 2017</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This is <a href="https://github.com/ibmets/smsbot">smsbot</a>.</p>
+
+<p><img src="/images/smsbot/slack_text_hidden.jpg"></p>
+
+<p>It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their messages posted into the channel. Channel users can respond to the messages and have their response sent back to the sender using SMS.</p>
+
+<blockquote><p>smsbot was developed in under a few hours and less than one hundred lines of code using a serverless cloud platform.</p></blockquote>
+
+
+<p>Want to understand how it works? Let&#8217;s find out…</p>
+
+<p>The first challenge was how to programmatically send and receive SMS messages.</p>
+
+<p><em><strong>Want to deploy smsbot yourself? Follow the <a href="#Deployment">instructions</a> at the bottom or check out the <a href="https://github.com/ibmets/smsbot">Github repository</a>.</strong></em></p>
+
+<h2>Twilio</h2>
+
+<p><img src="http://www.timothylutts.com/wp-content/uploads/2016/09/twilio.jpg"></p>
+
+<p><a href="https://twilio.com">Twilio</a> provides a platform for building SMS, voice and messaging applications using an API.</p>
+
+<p>Developers can <a href="https://www.twilio.com/console/phone-numbers">register phone numbers</a> through the service that invoke webhooks for incoming calls and SMS messages. Webhooks are passed message details and return a custom markup language (TwilML) to encode the instructions on how to respond to the request.</p>
+
+<p>The platform also provides a REST API to <a href="https://www.twilio.com/sms/api">initiate phone calls and SMS messages</a>.</p>
+
+<p><em>We now have a way to handle text messages for our bot, how do we integrate a new bot in Slack?</em></p>
+
+<h2>Slack</h2>
+
+<p><img src="http://stratejos.ai/img/logos/slack-logo.png"></p>
+
+<p><a href="https://slack.com">Slack</a> also provides a webhook-based mechanism to integrate custom bots into the platform. The platform has two different integrations…</p>
+
+<h3>Incoming Webhooks.</h3>
+
+<p>Provide a way to post messages into Slack from external sources. It provides a custom URL that supports HTTP requests with a JSON payload. These requests are turned into channel messages. The JSON payload is used to control the content and formatting of the message.</p>
+
+<p><a href="https://api.slack.com/incoming-webhooks">https://api.slack.com/incoming-webhooks</a></p>
+
+<h3>Outgoing Webhooks</h3>
+
+<p>Allow you to listen for messages in channels without using the full real-time API. Slack sends HTTP requests to registered URLs when specific trigger words appear in channel messages. The HTTP request body contains the message details.</p>
+
+<p><a href="https://api.slack.com/outgoing-webhooks">https://api.slack.com/outgoing-webhooks</a></p>
+
+<p><em>Now we just need a way to write simple HTTP services to listen for webhook requests…</em></p>
+
+<h2>OpenWhisk</h2>
+
+<p><img src="http://openwhisk.org/images/apache-openwhisk.jpg"></p>
+
+<p><a href="http://openwhisk.org">OpenWhisk</a> is an open-source serverless cloud platform. <a href="https://martinfowler.com/articles/serverless.html">Serverless platforms</a> make it easy to create microservices in the cloud without having to set up or manage any infrastructure.</p>
+
+<p>Developers push their code directly into the platform. The platform will instantiate the runtime and invoke the code on-demand for each request. Serverless functions can be <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">exposed as HTTP endpoints</a> or connected to <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/catalog.md">event sources</a> like <a href="https://github.com/openwhisk/openwhisk-package-kafka/blob/master/README.md">message queues</a> or <a href="https://github.com/openwhisk/openwhisk-package-cloudant/blob/master/README.md">databases</a>.</p>
+
+<p>Serverless platforms make it easy to create simple HTTP services to handle webhook requests.</p>
+
+<h3>Web Actions</h3>
+
+<p><a href="https://medium.com/openwhisk/serverless-http-handlers-with-openwhisk-90a986cc7cdd#.rki6bwjgu">Web Actions</a> are a new feature in OpenWhisk for exposing serverless functions as simple HTTP endpoints. Functions have access to the full HTTP request and can control the HTTP response returned. This method is suitable for simple public endpoints that do not need more enterprise features supported by the <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">API gateway</a>.</p>
+
+<p>Web Actions are available at the following <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">platform API path</a>.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>https://{APIHOST}/api/v1/experimental/web/{USER_NAMESPACE}/{PACKAGE}/{ACTION_NAME}.{TYPE}</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li><em>APIHOST</em> - platform endpoint e.g. <em>openwhisk.ng.bluemix.net.</em></li>
+<li><em>USER_NAMESPACE</em> - must be explicit and cannot use the default namespace (_).</li>
+<li><em>PACKAGE</em> - action package or <code>default</code>.</li>
+<li><em>ACTION_NAME</em> - function identifier.</li>
+<li><em>TYPE</em> - <code>.json</code>, <code>.html</code>, <code>.text</code> or <code>.http</code>.</li>
+</ul>
+
+
+<h3>Example</h3>
+
+<p>Here&#8217;s a simple Web Actions that returns HTML content when invoked through the API.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">msg</span> <span class="o">=</span> <span class="s2">&quot;you didn&amp;#39;t tell me who you are.&quot;</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">msg</span> <span class="o">=</span> <span class="err">`</span><span class="nx">hello</span> <span class="nx">$</span><span class="p">{</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">}</span><span class="o">!</span><span class="err">`</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="k">return</span> <span class="p">{</span><span class="nx">body</span><span class="o">:</span>
+</span><span class='line'>       <span class="err">`</span><span class="o">&lt;</span><span class="nx">html</span><span class="o">&gt;&lt;</span><span class="nx">body</span><span class="o">&gt;&lt;</span><span class="nx">h3</span><span class="o">&gt;&lt;</span><span class="nx">center</span><span class="o">&gt;</span><span class="nx">$</span><span class="p">{</span><span class="nx">msg</span><span class="p">}</span><span class="o">&lt;</span><span class="err">/center&gt;&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;`}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Actions can be turned into web-accessible actions by setting a custom annotation.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">greeting</span> <span class="nx">source</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">annotation</span> <span class="nx">web</span><span class="o">-</span><span class="kr">export</span> <span class="kc">true</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>greeting</code> function can then be invoked through a HTTP request to the following endpoint.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/greeting.http?name=James</code></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http post https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/html_greeting.http?name<span class="o">=</span>James
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>...
+</span><span class='line'>
+</span><span class='line'>&lt;html&gt;&lt;body&gt;&lt;h3&gt;&lt;center&gt;hello James!&lt;/center&gt;&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Twilio &lt;=> Slack</h2>
+
+<p>OpenWhisk Web Actions are a great solution for creating webhook endpoints. Connecting Twilio to Slack (and vice-versa) can be implemented using two different OpenWhisk Web Actions.</p>
+
+<ul>
+<li><strong>Twilio Webhook.</strong> Invoked for SMS messages. Uses the Slack Incoming Webhook to create a bot messages from content.
+​</li>
+<li><strong>Slack Outgoing Webhook.</strong> Invoked for channel replies. Uses Twilio API to send replies as SMS messages.</li>
+</ul>
+
+
+<p>Let&#8217;s have a look at the Twilio webhook first…</p>
+
+<h3>Twilio Webhook</h3>
+
+<p>When a new SMS message is received, we want to post this bot message into our Slack channel.</p>
+
+<p>Twilio allows developers to <a href="https://www.twilio.com/docs/api/twiml/sms/twilio_request">configure webhooks</a> for each registered phone number. The webhook endpoint will be invoked for each SMS message that is received. Twilio can either send a HTTP POST request, with parameters in the body, or a HTTP GET request, with URL query parameters.</p>
+
+<p>OpenWhisk Web Actions support both formats. Request parameters will be available as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md#http-context">properties on the function argument</a>.</p>
+
+<p>Here&#8217;s a simple Web Action that would log the message sender and content for each SMS received.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">Text</span> <span class="nx">message</span> <span class="nx">from</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">From</span><span class="p">}</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">Body</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Creating Bot Messages From SMS</h4>
+
+<p>When an SMS message is received, we need to send a HTTP POST to the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook URL</a>. The JSON body of the HTTP request is used to configure the channel message. Using the <code>username</code>, <code>icon_emoji</code> and and <code>text</code> properties allows us to customise our bot message.</p>
+
+<p>OpenWhisk Actions in Node.js have <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#javascript-runtime-environments">numerous popular NPM modules</a> pre-installed in the environment. This includes a <a href="https://github.com/request/request">HTTP client library</a>. This code snippet demonstrates sending the HTTP request to create out bot message. The Slack Webhook URL is bound as a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameter</a> to the action.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">request</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;request&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">slack_message</span> <span class="o">=</span> <span class="nx">text</span> <span class="o">=&gt;</span> <span class="p">({</span>
+</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="s1">&#39;smsbot&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">icon_emoji</span><span class="o">:</span> <span class="s1">&#39;:phone:&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">text</span>
+</span><span class='line'><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">request</span><span class="p">.</span><span class="nx">post</span><span class="p">({</span>
+</span><span class='line'>      <span class="nx">body</span><span class="o">:</span> <span class="nx">slack_message</span><span class="p">(</span><span class="err">`</span><span class="nx">Text</span> <span class="nx">message</span> <span class="nx">from</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">From</span><span class="p">}</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">Body</span><span class="p">}</span><span class="err">`</span><span class="p">),</span>
+</span><span class='line'>      <span class="nx">json</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>      <span class="nx">url</span><span class="o">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">slack</span><span class="p">.</span><span class="nx">webhook</span>
+</span><span class='line'>    <span class="p">},</span> <span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">);</span>
+</span><span class='line'>      <span class="nx">resolve</span><span class="p">();</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>  <span class="p">})</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Returning a Promise ensures the request is completed before the function exits.</p>
+
+<h4>Sending Acknowledgement Message</h4>
+
+<p>Returning <a href="https://www.twilio.com/docs/api/twiml">TwilML</a> content allows us to control the response from Twilio to the incoming message.</p>
+
+<p>This snippet would send an SMS reply to sender with the content &#8220;Hello World!&#8221;.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="cp">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;</span>
+</span><span class='line'><span class="nt">&lt;Response&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;Message&gt;</span>Hello World!<span class="nt">&lt;/Message&gt;</span>
+</span><span class='line'><span class="nt">&lt;/Response&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><a href="https://www.npmjs.com/package/twilio">Twilio&#8217;s client library</a> for Node.js can be used to programatically generate TwilML.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">resp</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">twilml</span> <span class="o">=</span> <span class="nx">resp</span><span class="p">.</span><span class="nx">message</span><span class="p">(</span><span class="s1">&#39;Thanks for letting us know.&#39;</span><span class="p">).</span><span class="nx">toString</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Returning XML content as the HTTP response requires us to set the response headers, body and status code in the Web Action.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">xml</span> <span class="o">=</span> <span class="s1">&#39;...&#39;</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>      <span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span> <span class="s1">&#39;text/xml&#39;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="nx">code</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">body</span><span class="o">:</span> <span class="nx">xml</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Web Action Source</h4>
+
+<p>Adding the XML response code into the existing function completes the OpenWhisk Web Action required to handle incoming SMS messages.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">request</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;request&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">resp</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">twilml</span> <span class="o">=</span> <span class="nx">resp</span><span class="p">.</span><span class="nx">message</span><span class="p">(</span><span class="s1">&#39;Thanks for letting us know.&#39;</span><span class="p">).</span><span class="nx">toString</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">response</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span> <span class="s1">&#39;text/xml&#39;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="nx">code</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">body</span><span class="o">:</span> <span class="nx">twilml</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">slack_message</span> <span class="o">=</span> <span class="nx">text</span> <span class="o">=&gt;</span> <span class="p">({</span>
+</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="s1">&#39;smsbot&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">icon_emoji</span><span class="o">:</span> <span class="s1">&#39;:phone:&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">text</span>
+</span><span class='line'><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">request</span><span class="p">.</span><span class="nx">post</span><span class="p">({</span>
+</span><span class='line'>      <span class="nx">body</span><span class="o">:</span> <span class="nx">slack_message</span><span class="p">(</span><span class="err">`</span><span class="nx">Text</span> <span class="nx">message</span> <span class="nx">from</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">From</span><span class="p">}</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">Body</span><span class="p">}</span><span class="err">`</span><span class="p">),</span>
+</span><span class='line'>      <span class="nx">json</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>      <span class="nx">url</span><span class="o">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">slack</span><span class="p">.</span><span class="nx">webhook</span>
+</span><span class='line'>    <span class="p">},</span> <span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">);</span>
+</span><span class='line'>      <span class="nx">resolve</span><span class="p">(</span><span class="nx">response</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>  <span class="p">})</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Register Webhook</h4>
+
+<p>Once we have deployed the Web Action, we can configure the Twilio SMS webhook endpoint to use following URL.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@email.com_dev/default/smsbot-dev-incoming.http</code></p>
+
+<p><img src="/images/smsbot/twilio_sms_webhook.png"></p>
+
+<h3>Slack Outgoing Webhook</h3>
+
+<p>When someone sends a channel message to the bot, smsbot should send that content as an SMS message to the last person who sent an SMS to the channel. An <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> will be used to trigger the bot.</p>
+
+<p>Outgoing Webhooks have a configurable trigger word. Channel messages which start with this word are send as HTTP requests to the list of URLs registered for that webhook. We will use <code>smsbot</code> as our trigger word.</p>
+
+<p><img src="/images/smsbot/outgoing_webhook_trigger.png"></p>
+
+<h4>Request Parameters</h4>
+
+<p>Slack sends the following parameters for each channel message.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">token</span><span class="o">=</span><span class="nx">XXXXXXXXXXXXXXXXXX</span>
+</span><span class='line'><span class="nx">team_id</span><span class="o">=</span><span class="nx">T0001</span>
+</span><span class='line'><span class="nx">team_domain</span><span class="o">=</span><span class="nx">example</span>
+</span><span class='line'><span class="nx">channel_id</span><span class="o">=</span><span class="nx">C2147483705</span>
+</span><span class='line'><span class="nx">channel_name</span><span class="o">=</span><span class="nx">test</span>
+</span><span class='line'><span class="nx">timestamp</span><span class="o">=</span><span class="mf">1355517523.000005</span>
+</span><span class='line'><span class="nx">user_id</span><span class="o">=</span><span class="nx">U2147483697</span>
+</span><span class='line'><span class="nx">user_name</span><span class="o">=</span><span class="nx">Steve</span>
+</span><span class='line'><span class="nx">text</span><span class="o">=</span><span class="nx">googlebot</span><span class="o">:</span> <span class="nx">What</span> <span class="nx">is</span> <span class="nx">the</span> <span class="nx">air</span><span class="o">-</span><span class="nx">speed</span> <span class="nx">velocity</span> <span class="nx">of</span> <span class="nx">an</span> <span class="nx">unladen</span> <span class="nx">swallow</span><span class="o">?</span>
+</span><span class='line'><span class="nx">trigger_word</span><span class="o">=</span><span class="nx">googlebot</span><span class="o">:</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In OpenWhisk Web Actions, these parameters will be available on the function argument object.</p>
+
+<p>Here&#8217;s a simple Web Action that would parse and log the message contents when the webhook is fired.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">msg</span> <span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">text</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">trigger_word</span><span class="p">.</span><span class="nx">length</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;channel message:&#39;</span><span class="p">,</span> <span class="nx">msg</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When this webhook is fired, we need to add code to send an SMS message with the channel message.</p>
+
+<h4>Sending SMS Messages</h4>
+
+<p><a href="https://www.twilio.com/docs/api/rest">Twilio&#8217;s API</a> allows us to programatically <a href="https://www.twilio.com/docs/api/rest/sending-messages">send SMS messages</a> from our registered numbers.</p>
+
+<p>This snippet shows you how to use their <a href="http://npmjs.com/package/twilio">Node.js client library</a> to send sample message.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">creds</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">account</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">auth</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span> <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="nx">twilio</span><span class="p">(</span><span class="nx">creds</span><span class="p">.</span><span class="nx">account</span><span class="p">,</span> <span class="nx">creds</span><span class="p">.</span><span class="nx">auth</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">callback</span> <span class="o">=</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">message</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;sent sms message.&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span> <span class="nx">to</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">from</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">body</span><span class="o">:</span> <span class="s1">&#39;hello world&#39;</span> <span class="p">},</span> <span class="nx">callback</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The webhook should use this client library to send a message to the last person who send us an incoming message.</p>
+
+<h4>Reply to Message Sender</h4>
+
+<p>How can we determine who was the last person who sent a message to our bot? The Web Action processing the incoming messages is a separate service to the Web Action sending SMS messages.</p>
+
+<p>Rather than setting up a database to share application state, the service can use Twilio&#8217;s API to retrieve the received message details.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">creds</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">account</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">auth</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span> <span class="p">}</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="nx">twilio</span><span class="p">(</span><span class="nx">creds</span><span class="p">.</span><span class="nx">account</span><span class="p">,</span> <span class="nx">creds</span><span class="p">.</span><span class="nx">auth</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">list</span><span class="p">({</span><span class="nx">to</span><span class="o">:</span> <span class="s1">&#39;+44....&#39;</span><span class="p">},</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">last</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">messages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">last</span> <span class="nx">message</span> <span class="nx">from</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">last</span><span class="p">.</span><span class="nx">from</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>SMSBot Channel Response</h4>
+
+<p><a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhooks</a> which respond with a JSON body will generate a new channel message.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;username&quot;</span><span class="p">:</span> <span class="s2">&quot;smsbot&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;icon_emoji&quot;</span><span class="p">:</span> <span class="s2">&quot;:phone:&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;sms sent to ...&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Web Action Source</h4>
+
+<p>Combing the channel message parsing code with the snippets for sending SMS messages and obtaining the last message sender completes the Web Action needed to handle the Outgoing Webhook.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">slack_message</span> <span class="o">=</span> <span class="nx">text</span> <span class="o">=&gt;</span> <span class="p">({</span>
+</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="s1">&#39;smsbot&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">icon_emoji</span><span class="o">:</span> <span class="s1">&#39;:phone:&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">text</span>
+</span><span class='line'><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">function</span> <span class="nx">reply</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="nx">twilio</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">twilio</span><span class="p">.</span><span class="nx">account</span><span class="p">,</span> <span class="nx">params</span><span class="p">.</span><span class="nx">twilio</span><span class="p">.</span><span class="nx">auth</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">list</span><span class="p">({</span><span class="nx">to</span><span class="o">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">twilio</span><span class="p">.</span><span class="nx">number</span><span class="p">},</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">Promise</span><span class="p">.</span><span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">last</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">messages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">msg</span> <span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">text</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">trigger_word</span><span class="p">.</span><span class="nx">length</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">to</span><span class="o">:</span> <span class="nx">last</span><span class="p">.</span><span class="nx">from</span><span class="p">,</span> <span class="nx">from</span><span class="o">:</span> <span class="nx">last</span><span class="p">.</span><span class="nx">to</span><span class="p">,</span> <span class="nx">body</span><span class="o">:</span> <span class="nx">msg</span> <span class="p">}</span>
+</span><span class='line'>    <span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="nx">options</span><span class="p">,</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">message</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">Promise</span><span class="p">.</span><span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>        <span class="nx">resolve</span><span class="p">(</span><span class="nx">slack_message</span><span class="p">(</span><span class="err">`</span><span class="nx">sms</span> <span class="nx">reply</span> <span class="nx">sent</span> <span class="nx">to</span> <span class="nx">$</span><span class="p">{</span><span class="nx">last</span><span class="p">.</span><span class="nx">from</span><span class="p">}</span><span class="err">`</span><span class="p">))</span>
+</span><span class='line'>      <span class="p">})</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>  <span class="p">})</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Twilio account credentials are bound as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameters</a> to the Web Action during deployment.</p>
+
+<h2>Deployment</h2>
+
+<p><a href="https://github.com/ibmets/smsbot">smsbot</a> is built using <a href="https://serverless.com/">The Serverless Framework</a>.</p>
+
+<p><img src="https://cloud.githubusercontent.com/assets/20538501/24154626/b86ad64a-0e1f-11e7-8e12-979b8d194430.png"></p>
+
+<p>This framework makes building serverless applications really easy. The tool handles the entire configuration and deployment process for your serverless provider. OpenWhisk <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">recently released integration</a> with the framework through a provider plugin.</p>
+
+<p><strong><em>Let&#8217;s look at how to use the framework to deploy our serverless application…</em></strong></p>
+
+<h3>OpenWhisk</h3>
+
+<p>Register for an account with an OpenWhisk provider, e.g. <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>.</p>
+
+<p><a href="https://console.ng.bluemix.net/openwhisk/learn/cli">Set up</a> the <code>wsk</code> CLI and run the command to authenticate against the platform endpoint.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">property</span> <span class="nx">set</span> <span class="o">--</span><span class="nx">apihost</span> <span class="nx">openwhisk</span><span class="p">.</span><span class="nx">ng</span><span class="p">.</span><span class="nx">bluemix</span><span class="p">.</span><span class="nx">net</span> <span class="o">--</span><span class="nx">auth</span> <span class="nx">SECRET</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Serverless Framework</h3>
+
+<p>Install the <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/serverless/serverless-openwhisk">OpenWhisk provider plugin</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">npm</span> <span class="nx">install</span> <span class="o">--</span><span class="nx">global</span> <span class="nx">serverless</span> <span class="nx">serverless</span><span class="o">-</span><span class="nx">openwhisk</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Source Code</h3>
+
+<p>Download the <a href="https://github.com/jthomas/smsbot">source code</a> from Github and install the project dependencies.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">git</span> <span class="nx">clone</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//github.com/ibmets/smsbot.git</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">cd</span> <span class="nx">smsbot</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">npm</span> <span class="nx">install</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create a new file called <code>credentials.yml</code> with the following content.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">twilio</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">account</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">auth</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">number</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="l-Scalar-Plain">numbers</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="l-Scalar-Plain">slack</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">webhook</span><span class="p-Indicator">:</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Twilio</h3>
+
+<p>Register an account with Twilio and provision <a href="https://www.twilio.com/console/phone-numbers/search">a new phone number</a>. Make a note of the phone number. Retrieve the account identifier and auth token from the <a href="https://www.twilio.com/console">Twilio console</a>.</p>
+
+<p>Fill in the account identifier, auth token and phone number in the <code>credentials.yml</code> file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">twilio</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">account</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">AC_USER_ID</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">auth</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">AUTH_TOKEN</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">number</span><span class="p-Indicator">:</span> <span class="s">&#39;+441234567890&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Important: the <code>twilio.number</code> property value must be a quoted string.</em></p>
+
+<h3>Phone Numbers</h3>
+
+<p>During Twilio&#8217;s free trial, you will need <a href="https://support.twilio.com/hc/en-us/articles/223136107-How-does-Twilio-s-Free-Trial-work-">manually verify each phone number</a> that you want to send messages to.</p>
+
+<p>Fill in all verified numbers in <code>credentials.yml</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">numbers</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="s">&#39;+441234567890&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Joe Smith</span>
+</span><span class='line'>    <span class="s">&#39;+441234567891&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Jane Smith</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Important: the <code>numbers</code> property values must be a quoted strings.</em></p>
+
+<h3>Incoming Webhook</h3>
+
+<p>Create a new <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook</a> integration for the Slack channel messages should appear in.</p>
+
+<p>Fill in the <code>slack.webhook</code> property in <code>credentials.yml</code> with this url.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">slack</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">webhook</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">https://hooks.slack.com/services/XXXX/YYYY/ZZZZ</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Deploy Application</h3>
+
+<p>Use The Serverless Framework to deploy your application.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">$ serverless deploy</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Packaging service...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Functions...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling API Gateway definitions...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Rules...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Triggers &amp; Feeds...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deploying Functions...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deployment successful!</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">Service Information</span>
+</span><span class='line'><span class="l-Scalar-Plain">platform</span><span class="err">:   </span><span class="l-Scalar-Plain">openwhisk.ng.bluemix.net</span>
+</span><span class='line'><span class="l-Scalar-Plain">namespace</span><span class="err">:  </span><span class="l-Scalar-Plain">_</span>
+</span><span class='line'><span class="l-Scalar-Plain">service</span><span class="err">:    </span><span class="l-Scalar-Plain">smsbot</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">actions</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="l-Scalar-Plain">smsbot-dev-incoming    smsbot-dev-reply</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">triggers</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="err">*</span><span class="nv">*no</span> <span class="l-Scalar-Plain">triggers deployed**</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">rules</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="err">*</span><span class="nv">*no</span> <span class="l-Scalar-Plain">rules deployed**</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">endpoints</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="err">*</span><span class="nv">*no</span> <span class="l-Scalar-Plain">routes deployed**</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Twilio Webhook</h3>
+
+<p>On the <a href="https://www.twilio.com/console/phone-numbers/incoming">Phone Numbers</a> page in the Twilio console, configure the &#8221;<em>Messaging</em>&#8221; webhook URL.</p>
+
+<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-incoming.http</code></p>
+
+<p><img src="/images/smsbot/twilio_sms_webhook.png"></p>
+
+<h3>Outgoing Webhook</h3>
+
+<p>Create a new <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> integration for the Slack channel messages should appear in. Use <code>smsbot</code> as the <em>Trigger Word</em>.</p>
+
+<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-reply.json</code></p>
+
+<p><img src="/images/smsbot/outgoing_webhook_trigger.png"></p>
+
+<h3>Test it out!</h3>
+
+<p>Send a text message to the phone number you registered through Twilio. smsbot should post the contents into Slack and send an SMS response with the message &#8221;<em>Thanks for letting us know!</em>&#8221;.</p>
+
+<p><img src="/images/smsbot/slack_text_hidden.jpg"></p>
+
+<p>If you send a channel message starting with the trigger word (<em>smsbot</em>), the phone number should receive a new SMS message with the message text.</p>
+
+<p><img src="/images/smsbot/sms_app.png"></p>
+
+<p>Awesome-sauce 😎.</p>
+
+<h2>Conclusions</h2>
+
+<p><a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">OpenWhisk Web Actions</a> provide a convenient way to expose serverless functions as simple HTTP APIs. This feature is ideal for implementing webhook endpoints.</p>
+
+<p>Both Slack and Twilio provide webhook integration for developers to use their platforms. Using OpenWhisk Web Actions, we can write serverless functions that act as a bridge between these services. With less than a hundred lines of code, we&#8217;ve created a new slack bot that can connect users to channels using SMS messages.</p>
+
+<p>Pretty cool, huh?! 👏👏👏</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2017/02/09/openwhisk-and-the-serverless-framework/">Openwhisk and the Serverless Framework</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-02-09T15:04:00+00:00" pubdate data-updated="true">Feb 9<span>th</span>, 2017</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="https://serverless.com">The Serverless Framework</a> is the most popular open-source framework for building serverless applications.</p>
+
+<p><a href="https://serverless.com/blog/serverless-v1.6.0/">Recent releases</a> included support for using the framework with non-AWS providers. This feature makes it easier for developers to try different serverless platforms and move applications between providers.</p>
+
+<p>Since last summer, I&#8217;ve been <a href="https://github.com/serverless/serverless-openwhisk">leading the technical effort</a> to provide an <a href="http://openwhisk.org/">OpenWhisk</a> provider plugin for the framework.</p>
+
+<p>OpenWhisk is the first non-AWS serverless provider to complete integration into the framework.</p>
+
+<p><img src="https://cloud.githubusercontent.com/assets/20538501/22434123/748ae372-e6e0-11e6-86d0-38db9941552d.png"></p>
+
+<h2>Getting Started</h2>
+
+<p>Documentation for the provider plugin is available on <a href="https://serverless.com/framework/docs/">The Serverless Framework&#8217;s website</a>.</p>
+
+<p>Example projects using the framework to build applications for OpenWhisk are now available in <a href="https://github.com/serverless/examples">this repository</a>.</p>
+
+<p>More details on the provider plugin can be found on the <a href="https://github.com/serverless/serverless-openwhisk">project repository</a>.</p>
+
+<p>Found an issue? Feature request? Need help? Please <a href="https://github.com/serverless/serverless-openwhisk/issues">open issues on Github</a>.</p>
+
+<h2>Video Demonstration</h2>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/GJY10W98Itc" frameborder="0" allowfullscreen></iframe>
+
+
+<h2>Serverless Meetup Presentation</h2>
+
+<p>Last week, I was invited to speak at the <a href="https://www.meetup.com/Serverless-London/events/236664340/">London&#8217;s Serverless Meetup</a> about building multi-provider serverless applications using this feature.</p>
+
+<p>Slides from the presentation are here:</p>
+
+<script async class="speakerdeck-embed" data-id="592fbd47aceb4fbc9021ae3bf2f6b06c" data-ratio="1.77777777777778" src="//speakerdeck.com/assets/embed.js"></script>
+
+
+<p>There is a (low-fi) video recording from the event here:</p>
+
+<iframe src="https://player.twitch.tv/?video=v119142073&autoplay=false" frameborder="0" allowfullscreen="true" scrolling="no" height="378" width="620"></iframe>
+
+
+<p><a href="https://www.twitch.tv/serverlessldn?tt_medium=live_embed&tt_content=text_link" style="padding:2px 0px 4px; display:block; width:345px; font-weight:normal; font-size:10px; text-decoration:underline;">Watch live video from serverlessldn on www.twitch.tv</a></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -588,6 +1425,271 @@
 
 
 <p>Success 😎.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2017/01/16/openwhisk-docker-actions+%28jamess-mbp-2.hursley.uk.ibm.com%27s+conflicted+copy+2017-02-20%29/">OpenWhisk Docker Actions</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-01-16T11:05:00+00:00" pubdate data-updated="true">Jan 16<span>th</span>, 2017</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
+
+<p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
+
+<p>This makes it much easier to support (<em>almost</em>) any programming language in OpenWhisk. Awesome!</p>
+
+<p>Let&#8217;s start by explaining how this new feature works&#8230;</p>
+
+<h2>Docker Actions</h2>
+
+<p>Docker Actions in OpenWhisk are <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/Dockerfile">built</a> from the following <a href="https://github.com/openwhisk/openwhisk/tree/master/core/actionProxy">repository</a> using the <a href="https://github.com/docker-library/python/blob/693a75332e8ae5ad3bfae6e8399c4d7cc3cb6181/2.7/alpine/Dockerfile">python:2.7.12-alpine</a> base image. This image is available on Docker Hub as <a href="https://hub.docker.com/r/openwhisk/dockerskeleton/"><code>openwhisk/dockerskeleton</code></a>.</p>
+
+<p>The image includes a Python application which <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">implements the HTTP API</a> used to handle platform requests, e.g. <em>invoke the action with these parameters</em>.</p>
+
+<p>This service executes a file (<code>/action/exec</code>) for each invocation. Replacing this file allows us to control the runtime environment.</p>
+
+<p>Request parameters are passed, using a JSON string, as the first command-line argument. Response values are interpreted as JSON written to <code>stdout</code>.</p>
+
+<p>Developers can now include a zip file when creating Docker-based Actions. This archive will be extracted into the <code>/action</code> directory prior to invocations. If the archive contains a file named <code>exec</code> this will replace the exectuable file called by the invocation handler.</p>
+
+<h3>Testing It Out</h3>
+
+<p>Using the <code>wsk</code> command-line, developers can create Actions using this Docker image.</p>
+
+<p>If the archive file is missing, the <code>/action/exec</code> path contains the the following <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">stub file</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create skeleton --docker openwhisk/dockerskeleton
+</span><span class='line'>ok: created action skeleton
+</span><span class='line'><span class="nv">$ </span>wsk action invoke skeleton --blocking --result
+</span><span class='line'><span class="o">{</span> <span class="s2">&quot;error&quot;</span>: <span class="s2">&quot;This is a stub action. Replace it with custom logic.&quot;</span> <span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Let&#8217;s update this stub file to return a custom greeting.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cat <span class="nb">exec</span>
+</span><span class='line'><span class="c">#!/bin/bash</span>
+</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;{ \&quot;hello\&quot;: \&quot;ran without a docker pull!\&quot; }&quot;</span>
+</span><span class='line'><span class="nv">$ </span>./exec
+</span><span class='line'><span class="o">{</span> <span class="s2">&quot;hello&quot;</span>: <span class="s2">&quot;ran without a docker pull!&quot;</span> <span class="o">}</span>
+</span><span class='line'><span class="nv">$ </span>zip exec.zip <span class="nb">exec</span>
+</span><span class='line'><span class="nb">  </span>adding: <span class="nb">exec</span> <span class="o">(</span>stored 0%<span class="o">)</span>
+</span><span class='line'><span class="nv">$ </span>wsk action create custom_docker_action exec.zip --docker
+</span><span class='line'>ok: created action custom_docker_action
+</span><span class='line'><span class="nv">$ </span>wsk action invoke custom_docker_action --blocking --result
+</span><span class='line'><span class="o">{</span> <span class="s2">&quot;hello&quot;</span>: <span class="s2">&quot;ran without a docker pull!&quot;</span> <span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The archive file could include a static binary, or even a complete runtime, to replace the <code>exec</code> stub.</p>
+
+<p>All files in the archive file will be available under the <code>/action</code> directory.</p>
+
+<h2>Running Locally</h2>
+
+<p>The <code>openwhisk/dockerskeleton</code> image exposes a Python-based HTTP server on port 8080.</p>
+
+<p>Pulling the <code>openwhisk/dockerskeleton</code> image from Docker Hub allows us to run it locally for development.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull openwhisk/dockerskeleton
+</span><span class='line'><span class="nv">$ </span>docker run -it -p 8080:8080 openwhisk/dockerskeleton
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The platform uses the following HTTP endpoints to initialise and invoke Actions.</p>
+
+<ul>
+<li><code>POST /init</code> -> Set up Action source from JSON payload.</li>
+<li><code>POST /run</code> -> Invoke Action</li>
+</ul>
+
+
+<h3>Initialising The Environment</h3>
+
+<p>Before invoking Actions using this image, we need to deploy and unpack the archive file into the <code>/action</code> directory.</p>
+
+<p>Reviewing the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py#L47-L80">Python source code</a>, the platform triggers this by sending a HTTP POST with the following JSON to <code>/init</code> endpoint.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;binary&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;code&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>code</code> contains the archive file as a base64 encoded string.</p>
+
+<p>Let&#8217;s try this out using the action archive we created above.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>base64 exec.zip  | <span class="nb">echo</span> <span class="s2">&quot;\&quot;$(cat)\&quot;&quot;</span> | jq <span class="s1">&#39;{value: {binary: true, code: .}}&#39;</span> &gt; init.json
+</span><span class='line'><span class="nv">$ </span>cat init.json
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>  <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;binary&quot;</span>: <span class="nb">true</span>,
+</span><span class='line'>    <span class="s2">&quot;code&quot;</span>: <span class="s2">&quot;UEsDBAoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABwAZXhlY1VUCQADRcl8WFDJfFh1eAsAAQT1AQAABBQAAAAjIS9iaW4vYmFzaAplY2hvICJ7IFwiaGVsbG9cIjogXCJyYW4gd2l0aG91dCBhIGRvY2tlciBwdWxsIVwiIH0iClBLAQIeAwoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABgAAAAAAAEAAADtgQAAAABleGVjVVQFAANFyXxYdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEASgAAAH8AAAAAAA==&quot;</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we can issue the HTTP request to push this archive into the container.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http post localhost:8080/init &lt; init.json
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Length: 2
+</span><span class='line'>Content-Type: text/html; <span class="nv">charset</span><span class="o">=</span>utf-8
+</span><span class='line'>Date: Mon, 16 Jan 2017 14:11:04 GMT
+</span><span class='line'>
+</span><span class='line'>OK
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Accessing the container filesystem allows us to verify the archive has been extracted correctly.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker ps
+</span><span class='line'>CONTAINER ID        IMAGE                         COMMAND                  CREATED             STATUS              PORTS                    NAMES
+</span><span class='line'>b37a7dc1cab1        openwhisk/dockerskeleton      <span class="s2">&quot;/bin/bash -c &#39;cd ...&quot;</span>   About an hour ago   Up About an hour    0.0.0.0:8080-&gt;8080/tcp   relaxed_davinci
+</span><span class='line'><span class="nv">$ </span>docker <span class="nb">exec</span> -it b37a7dc1cab1 /bin/sh
+</span><span class='line'>/ <span class="c"># cd /action</span>
+</span><span class='line'>/action <span class="c"># ls</span>
+</span><span class='line'><span class="nb">exec</span>
+</span><span class='line'>/action <span class="c"># cat exec</span>
+</span><span class='line'><span class="c">#!/bin/bash</span>
+</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;{ \&quot;hello\&quot;: \&quot;ran without a docker pull!\&quot; }&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Invocation Requests</h3>
+
+<p>Action invocations are triggered by sending a HTTP POST to the <code>/run</code> endpoint.</p>
+
+<p>This endpoint expects the following JSON body.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">{</span>
+</span><span class='line'>  <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;foo&quot;</span>: <span class="s2">&quot;bar&quot;</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The inner object parameters under the <code>value</code> property are passed, as a JSON string, to the executable as the first command-line argument.</p>
+
+<p>Sending this request to our container will trigger the shell script from our archive and return the JSON response.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">echo</span> <span class="s2">&quot;{}&quot;</span> | jq <span class="s1">&#39;{value: .}&#39;</span> | http post localhost:8080/run
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>Content-Length: 44
+</span><span class='line'>Content-Type: application/json
+</span><span class='line'>Date: Mon, 16 Jan 2017 14:17:15 GMT
+</span><span class='line'>
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;hello&quot;</span>: <span class="s2">&quot;ran without a docker pull!&quot;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Conclusion</h2>
+
+<p>Recent updates to Docker-based Actions in OpenWhisk make it much easier to customise the runtime environment.</p>
+
+<p>Being able to deploy arbitrary files into the runtime container, prior to invocation, simplifies the process of supporting new runtimes.</p>
+
+<p>Hopefully this blog post has shown you how to get started with this feature.</p>
+
+<p>Over the next few weeks, we&#8217;re going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates&#8230;</p>
 </div>
   
   
@@ -1711,706 +2813,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/09/08/microservices-without-servers/">Microservices Without Servers</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2016-09-08T16:17:00+01:00" pubdate data-updated="true">Sep 8<span>th</span>, 2016</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>…is the title of my presentation about building serverless applications using OpenWhisk.</p>
-
-<script async class="speakerdeck-embed" data-id="387717983473473bb9eed49d50e6e279" data-ratio="1.77777777777778" src="//speakerdeck.com/assets/embed.js"></script>
-
-
-<h2>Abstract</h2>
-
-<p><em>Servers are killing your productivity. Rather than building better software for your users, you end up constantly distracted by maintaining computers. Wasn&#8217;t the &#8220;cloud&#8221; supposed to fix this? It sounded so promising until we realised it was just renting VMs in someone else&#8217;s datacenter. We couldn&#8217;t escape &#8220;servers&#8221;. Until now&#8230;</em></p>
-
-<p><em>In this session, developers will learn how to build microservices without servers, using modern “serverless” cloud platforms. We’ll look at common challenges (and solutions) to building applications using “serverless” stacks. Exploring emerging “serverless” design patterns will give developers the knowledge to build application architectures using these new platforms.</em></p>
-
-<p><em>This session is aimed at software developers experienced in building traditional backend web applications, who want to learn how to build microservices without servers.</em></p>
-
-<h2>Slides, Code, Videos</h2>
-
-<p>Slides for the talk are available <a href="https://speakerdeck.com/jthomas/microservices-without-servers">here</a>.</p>
-
-<p>There&#8217;s a Github repository with resources <a href="https://github.com/jthomas/microservices_without_servers">from the talk</a>, including a <a href="https://github.com/jthomas/microservices_without_servers/blob/master/transcript.md">transcript</a>, <a href="https://github.com/jthomas/microservices_without_servers/blob/master/code">code demos</a> and <a href="https://www.youtube.com/playlist?list=PL0UyhC0D6KABYPvGroXcIeE-4x_yEbdB4">videos</a>.</p>
-
-<p>If you have questions or issues, raise an issue in the repository or send me a <a href="https://twitter.com/thomasj">tweet</a>.</p>
-
-<h2>Conference Sessions</h2>
-
-<p>This talk was <a href="http://www.jday.com.ua/#nav-schedule">first delivered</a> at <a href="https://http://www.jday.com.ua/">JDayLviv</a> earlier this month. The session was recorded so the video should surface online soon. I&#8217;ll be repeating the talk at <a href="https://belgrade.voxxeddays.com/talk/145/">VoxxedDays Belgrade</a> and <a href="http://javaday.org.ua/kyiv/#speakers">JavaDay Kiev</a> in September and October.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/07/27/node-red-docker-images/">Node-RED Docker Images</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2016-07-27T15:24:00+01:00" pubdate data-updated="true">Jul 27<span>th</span>, 2016</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>This week, I&#8217;ve been helping create and publish official <a href="https://www.docker.com/">Docker</a> images for the
-<a href="http://nodered.org/">Node-RED</a> project. Users can start Node-RED instances from these images using the following command.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Node-RED is now publishing the <a href="https://hub.docker.com/r/nodered/node-red-docker/">following images to Docker Hub</a> for each new release.</p>
-
-<ul>
-<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/latest">latest</a></strong> - uses <a href="https://hub.docker.com/_/node/">official Node.JS v4 base image</a>.</li>
-<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/slim">slim</a></strong> - uses <a href="https://hub.docker.com/r/mhart/alpine-node/">Alpine Linux base image</a>.</li>
-<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/rpi">rpi</a></strong> - uses <a href="https://hub.docker.com/r/hypriot/rpi-node/">RPi-compatible base image</a>.</li>
-</ul>
-
-
-<p>When a new version is <a href="https://www.npmjs.com/package/node-red">released on NPM</a>, an <a href="https://travis-ci.org/node-red/node-red-docker">automated CI service</a> will build, test and
-publish new images with the <a href="https://hub.docker.com/r/nodered/node-red-docker/tags/">updated version tags</a>.</p>
-
-<p>The source repository for the Docker images is available at <a href="https://github.com/node-red/node-red-docker">https://github.com/node-red/node-red-docker</a>.</p>
-
-<h2>Background</h2>
-
-<p>There was a <a href="https://github.com/node-red/node-red/issues/603">long-standing issue</a> open with the project
-to provide official Docker images for the tool. Many users had <a href="https://hub.docker.com/r/cpswan/node-red/">already</a> <a href="https://github.com/jamesbrink/docker-node-red">been</a>
-<a href="http://ivyco.blogspot.co.uk/2015/03/docker-awesomeness.html">experimenting</a> with Node-RED and Docker.</p>
-
-<p><em>Reviewing the community&#8217;s efforts, we wanted to create official images that
-made it simple for users to start Node-RED as Docker containers with minimal
-configuration whilst allowing for easy customisation, i.e. adding new nodes.</em></p>
-
-<p>Docker images are created using a configuration file (<a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a>) that lists the
-commands to build that image and can start by <a href="https://docs.docker.com/engine/reference/builder/#/from">using another image as the &#8216;base&#8217;</a>.</p>
-
-<p>Node-RED is a Node.js application, published as an <a href="https://www.npmjs.com/package/node-red">NPM module</a>.
-The Node.js project publishes <a href="https://hub.docker.com/_/node/">official Docker images</a> which we used as our base image.
-These images provide an environment with the correct versions of Node.js and
-NPM installed.</p>
-
-<p>Rather than manually copying the Node-RED source code into the container image,
-we used NPM to install the source code by defining a custom <a href="https://docs.npmjs.com/files/package.json">package.json</a>
-which includes Node-RED as dependency.</p>
-
-<figure class='code'><figcaption><span>package.json</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;node-red-docker&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;0.14.5&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Docker images for Node-RED&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;node_modules/node-red/red/red.js&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;scripts&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nt">&quot;start&quot;</span><span class="p">:</span> <span class="s2">&quot;node-red&quot;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="err">...</span>
-</span><span class='line'>    <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nt">&quot;node-red&quot;</span><span class="p">:</span> <span class="s2">&quot;0.14.5&quot;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="nt">&quot;engines&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nt">&quot;node&quot;</span><span class="p">:</span> <span class="s2">&quot;4.*.*&quot;</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Adding this file into the container image and then running <a href="https://docs.npmjs.com/cli/install">NPM install</a>, using
-the <a href="https://docs.docker.com/engine/reference/builder/#/add">ADD</a> and <a href="https://docs.docker.com/engine/reference/builder/#/run">RUN</a> commands, will retrieve the correct Node-RED version and build
-that into the container image.</p>
-
-<p>Docker images define a <a href="https://docs.docker.com/engine/reference/builder/#/cmd">default start command</a> to run when the container is
-created. Using <em>npm start</em> for this image will parse the start script
-listed in the package.json file, which has been set to
-<em>node-red</em>.</p>
-
-<h2>Adding New Nodes</h2>
-
-<p>Node-RED has a <a href="http://flows.nodered.org/">huge community</a> which produces custom nodes for everything from
-accessing data from a <a href="http://flows.nodered.org/node/node-red-contrib-gpio">Raspberry Pi&#8217;s sensors</a> to a <a href="http://flows.nodered.org/node/node-red-contrib-teslams">Tesla car</a>.</p>
-
-<p>Additional nodes <a href="http://nodered.org/docs/getting-started/adding-nodes">can be installed</a> by putting the files into your user
-directory, which defaults to <em>$HOME/.node-red</em>.</p>
-
-<p>Allowing users to install additional nodes without building new images is
-possible using <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">Docker&#8217;s volume support</a>. Docker data volumes can be used to
-share files between the container and the host system, by <a href="https://docs.docker.com/engine/tutorials/dockervolumes/#/mount-a-host-directory-as-a-data-volume">mounting a directory on the host as a data volume within the container</a>.</p>
-
-<p>Exposing the Node-RED user directory within the container as a data volume
-means users can mount this on the host system. Nodes installed into this
-directory, using NPM on the host system, will automatically be registered when
-Node-RED starts.</p>
-
-<p>Within the Dockerfile for the Node-RED image, the /data directory is configured
-as the user directory and <a href="https://github.com/node-red/node-red-docker/blob/master/latest/Dockerfile#L23">exported as a data volume</a>.</p>
-
-<p>Users can mount their local user directory into the container with the
-following command.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -v ~/.node-red:/data nodered/node-red-docker
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Environment Parameters</h2>
-
-<p>Docker <a href="http://stackoverflow.com/questions/30494050/how-to-pass-environment-variables-to-docker-containers">supports injecting environment parameter</a> values into running containers,
-using command-line options on the host system. This is often used to configure
-runtime options without users having to build new container images. Node-RED&#8217;s
-Docker images support the following environment parameters.</p>
-
-<h3>Flows Configuration</h3>
-
-<p>User flow configurations are <a href="http://nodered.org/docs/getting-started/running">stored in a JSON file under the user directory</a>. This defaults to
-<em>flows.json</em> but can be configured using an environment parameter
-(<strong>FLOWS</strong>) passed to the container, as shown below.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -e <span class="nv">FLOWS</span><span class="o">=</span>my_flows.json nodered/node-red-docker
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Node Options</h3>
-
-<p>Node.js runtime arguments can be passed to the container using an environment
-parameter (<strong>NODE_OPTIONS</strong>). For example, to <a href="https://github.com/nodejs/node/issues/2738">fix the heap size</a> used by the Node.js
-garbage collector you would use the following command.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -e <span class="nv">NODE_OPTIONS</span><span class="o">=</span><span class="s2">&quot;--max_old_space_size=128&quot;</span> nodered/node-red-docker
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Alpine Linux Image</h2>
-
-<p>The official Node.js Docker image uses the <a href="https://hub.docker.com/_/debian/">Debian Jessie base image</a>. This image
-provides a full Linux install, which means dependent Docker images can be
-hundreds of megabytes in size. Node-RED&#8217;s Docker image, using this base image,
-is nearly 300 MB.</p>
-
-<p>Reducing Docker image sizes can <a href="http://jasonwilder.com/blog/2014/08/19/squashing-docker-images/">dramatically reduce build and deployment times</a>.</p>
-
-<p><a href="https://www.alpinelinux.org/">Alpine Linux</a> is a lightweight Linux distribution, focused on security and
-performance. A <a href="https://hub.docker.com/_/alpine/">minimal Docker image</a> based on Alpine Linux is only 5 MB in
-size!</p>
-
-<p>Using the <a href="https://hub.docker.com/r/mhart/alpine-node/">alpine-node</a> base
-image, which provides an Alpine Linux environment with Node.js &amp; NPM, in our
-Dockerfiles reduces the resulting image file to under 50 MB.</p>
-
-<p>Alpine Linux does make it <a href="http://stackoverflow.com/questions/36202095/node-serialport-failing-on-alpine-linux">more difficult to install NPM modules with native dependencies</a>, due to missing common libraries and tools needed to build them.</p>
-
-<p>Therefore, we&#8217;re publishing the Alpine Linux image as a seperate tag (<em>slim</em>), rather
-than using this base image throughout our Dockerfiles.</p>
-
-<p>This version should provide an extremely lightweight Node-RED image that works
-for most users.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:slim
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Raspberry Pi Image</h2>
-
-<p>Node-RED is an incredibly popular tool for hacking on the <a href="https://www.raspberrypi.org/">Raspberry Pi</a>. Using a
-<a href="http://blog.hypriot.com/getting-started-with-docker-on-your-arm-device/">custom Raspberry Pi image</a>, developers can also have a full Docker system
-running in the Linux environment on their device.</p>
-
-<p><strong>So, can we use Docker to start Node-RED on the Raspberry Pi?</strong></p>
-
-<p>Due to the platform architecture, ARM rather than x86/x64 by Intel or AMD,
-Docker images must be packaged specifically for that platform. The existing
-Docker images created for Node-RED will not work.</p>
-
-<p>Fortunately, there&#8217;s an <a href="https://hub.docker.com/r/hypriot/rpi-node/">existing RPi-compatible Docker image</a>
-with Node.js and NPM.</p>
-
-<p>Using this base image to build a new Raspberry Pi-specific Node-RED image,
-published with the <em>rpi</em> tag, means users can now start Node-RED on the Raspberry Pi using Docker.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:rpi
-</span></code></pre></td></tr></table></div></figure>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/06/21/serverless-go-actions/">Serverless Go Actions</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2016-06-21T17:01:00+01:00" pubdate data-updated="true">Jun 21<span>st</span>, 2016</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><strong>There&#8217;s now a better way to do this! See here: <a href="/blog/2017/01/17/openwhisk-and-go/">http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/</a></strong></p>
-
-<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless
-platform, provides the ability to invoke custom
-<a href="https://www.docker.com/">Docker</a> containers as serverless functions.</p>
-
-<p>Developers can create new
-<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">Actions</a>,
-referencing public images on <a href="https://dockerhub.com">Dockerhub</a>. OpenWhisk
-manages creating and executing containers using these images per invocation
-request.</p>
-
-<p>Using this feature, developers can write serverless functions using the
-<a href="https://golang.org/">Go language</a>. Compiled Go language binaries are embedded
-within custom Docker images and pushed into the platform.</p>
-
-<p><strong>So, how do we start?</strong></p>
-
-<p><em>This blog post will explain how to get your Go language functions running as
-&#8220;serverless functions&#8221; on OpenWhisk. If you&#8217;re impatient to get to the code,
-this <a href="https://github.com/jthomas/openwhisk_go_action">repository</a> contains the
-examples for everything discussed below.</em></p>
-
-<p>OpenWhisk helps developers create custom Actions using Docker through an SDK&#8230;</p>
-
-<h2>OpenWhisk Docker SDK</h2>
-
-<p>Using the
-<a href="https://new-console.ng.bluemix.net/docs/openwhisk/index.html"><em>wsk</em> command-line utility</a>,
-developers can install the
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> into the
-current directory.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk sdk install docker</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The SDK provides the <a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">source for a custom Docker image</a>, which executes a custom
-binary in response to invocation requests. The default SDK copies the
-executable file, located at the <em>client/action</em>, into the image during the
-build process. Users build the image locally before pushing this to Dockerhub.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker build -t &lt;dockerhub_user&gt;/docker_action .
-</span><span class='line'><span class="nv">$ </span>docker push &lt;dockerhub_user&gt;/docker_action
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using the command-line utility, users can then create a new Action referencing
-this public Docker image. When this Action is invoked, the platform will spin
-up a new container from this custom image.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create docker_action --docker &lt;dockerhub_user&gt;/docker_action
-</span><span class='line'><span class="nv">$ </span>wsk action invoke --blocking --result docker_action
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>OpenWhisk Docker Action </h2>
-
-<p>OpenWhisk SDK&#8217;s Docker image uses a Node.js
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker/server">application</a>
-to handle the JSON invocation request from the platform and spawns a process to
-execute the binary. Invocation parameters are passed as a JSON string through a
-command-line argument to the binary. The executable must write the JSON
-response to stdout, the handler will return this to the platform.</p>
-
-<p>Containers used to run OpenWhisk Actions must be expose a HTTP API on port 8080
-with two paths, <em>/init</em> and <em>/run</em>. The platform sends HTTP POST requests to
-these paths to initialise the Action and schedule invocations.</p>
-
-<p>The <em>/init</em> path is used to provide the Action source for languages which
-support runtime evaluation. <strong>User-provided Docker images do not need to
-implement this method, other than returning a non-error HTTP response.</strong></p>
-
-<p>The <em>/run</em> path is called by the platform for each invocation request.
-Parameters for the invocation are passed as the <em>value</em> property of the JSON
-request body. Any non-empty JSON response will be interpreted as the invocation
-result.</p>
-
-<h2>Go Actions using the Docker SDK</h2>
-
-<p>Using Go binaries with the Docker SDK requires the developer to cross-compile
-the source for the platform architecture and copy the binary to the
-<em>client/action</em> path.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nb">export </span><span class="nv">GOARCH</span><span class="o">=</span>386
-</span><span class='line'><span class="nb">export </span><span class="nv">GOOS</span><span class="o">=</span>linux
-</span><span class='line'>go build -o action
-</span><span class='line'>mv action client/action
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The Go code must parse the invocation parameters as a JSON string from the
-command-line argument. Data written to <em>stdout</em> will be parsed as JSON and
-returned as the Action response.</p>
-
-<p>This sample Go source demonstrates using this method to implement a &#8220;reverse
-string&#8221; Action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;os&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;encoding/json&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;log&quot;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Params</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">Payload</span> <span class="kt">string</span> <span class="s">`json:&quot;payload&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Result</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">Reversed</span> <span class="kt">string</span> <span class="s">`json:&quot;reversed&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// extract invocation parameters, passed as JSON string argument on command-line.</span>
-</span><span class='line'><span class="kd">func</span> <span class="nx">params</span><span class="p">()</span> <span class="nx">Params</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">params</span> <span class="nx">Params</span>
-</span><span class='line'>  <span class="nx">source</span> <span class="o">:=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">Args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>  <span class="nx">buf</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">source</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">if</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">(</span><span class="nx">buf</span><span class="p">,</span> <span class="o">&amp;</span><span class="nx">params</span><span class="p">);</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">params</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// convert struct back to JSON for response</span>
-</span><span class='line'><span class="kd">func</span> <span class="nx">return_result</span><span class="p">(</span><span class="nx">result</span> <span class="nx">Result</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">buf</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="nx">os</span><span class="p">.</span><span class="nx">Stdout</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">buf</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">input</span> <span class="o">:=</span> <span class="nx">params</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="c1">// reverse the string passed from invocation parameters</span>
-</span><span class='line'>  <span class="nx">chars</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">rune</span><span class="p">(</span><span class="nx">input</span><span class="p">.</span><span class="nx">Payload</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">for</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">j</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="p">=</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="nx">result</span> <span class="o">:=</span> <span class="nx">Result</span><span class="p">{</span>
-</span><span class='line'>    <span class="nx">Reversed</span><span class="p">:</span> <span class="nb">string</span><span class="p">(</span><span class="nx">chars</span><span class="p">),</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">return_result</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Docker SDK Base Image</h2>
-
-<p>Building a base image from the OpenWhisk Docker SDK and publishing on Dockerhub
-simplifies the process of building a Docker-based Action. Developers can now
-use the following image
-(<a href="https://hub.docker.com/r/jamesthomas/openwhisk_docker_action/">jamesthomas/openwhisk_docker_action</a>),
-without having to install the SDK locally.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">FROM</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">openwhisk_docker_action</span>
-</span><span class='line'><span class="nx">COPY</span> <span class="nx">action</span> <span class="o">/</span><span class="nx">blackbox</span><span class="o">/</span><span class="nx">action</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This base image includes the Node.js handler to manage the platform HTTP
-requests. An executable file at <em>/blackbox/action</em> will be called for each
-invocation. JSON parameters and responses are still passed using command-line
-arguments and stdout.</p>
-
-<h2>Custom Go Handler </h2>
-
-<p>Using the Docker SDK for OpenWhisk relies on a Node.js application to handle
-the platform HTTP requests, spawning a process to execute the user binary file.</p>
-
-<p>Implementing the HTTP API, described above, in Go would allow us to remove the
-Node.js handler from the image. Compiling the Go Action source with the HTTP
-API handler into a single binary and using an Alpine Linux base image will
-dramatically reduce the image size.</p>
-
-<p>This should improve execution performance, by removing the Node.js VM process,
-and cold start-up time, through having a smaller Docker image.</p>
-
-<p><strong>Using this Go package, <a href="https://github.com/jthomas/ow">jthomas/ow</a>, users can
-automate the process of creating Go-based Actions.</strong></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="k">go</span> <span class="nx">get</span> <span class="nx">jthomas</span><span class="o">/</span><span class="nx">ow</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>The package provides a method for registering Action callbacks and implements
-the HTTP endpoints for handling platform requests.</em></p>
-
-<p><em>Invocation parameters are passed using a function parameter, rather than a raw
-JSON string. Returned interface values will be automatically serialised to JSON
-as the Action response.</em></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">openwhisk</span><span class="p">.</span><span class="nx">RegisterAction</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">value</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">)</span> <span class="p">(</span><span class="kd">interface</span><span class="p">{},</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>   <span class="o">...</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Re-writing the &#8220;reverse string&#8221; Action above to use this package is shown here.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="p">(</span>
-</span><span class='line'>    <span class="s">&quot;encoding/json&quot;</span>
-</span><span class='line'>    <span class="s">&quot;github.com/jthomas/ow&quot;</span>
-</span><span class='line'><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Params</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">Payload</span> <span class="kt">string</span> <span class="s">`json:&quot;payload&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Result</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">Reversed</span> <span class="kt">string</span> <span class="s">`json:&quot;reversed&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">reverse_string</span><span class="p">(</span><span class="nx">to_reverse</span> <span class="kt">string</span><span class="p">)</span> <span class="kt">string</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">chars</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">rune</span><span class="p">(</span><span class="nx">to_reverse</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">for</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">j</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="p">=</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>    <span class="k">return</span> <span class="nb">string</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">ow</span><span class="p">.</span><span class="nx">RegisterAction</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">value</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">)</span> <span class="p">(</span><span class="kd">interface</span><span class="p">{},</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="kd">var</span> <span class="nx">params</span> <span class="nx">Params</span>
-</span><span class='line'>        <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="o">&amp;</span><span class="nx">params</span><span class="p">)</span>
-</span><span class='line'>        <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>            <span class="k">return</span> <span class="kc">nil</span><span class="p">,</span> <span class="nx">err</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>        <span class="k">return</span> <span class="nx">Result</span><span class="p">{</span><span class="nx">Reversed</span><span class="p">:</span> <span class="nx">reverse_string</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">Payload</span><span class="p">)},</span> <span class="kc">nil</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Cross-compiling the Action source, bundling this package, creates a single
-lightweight binary.</p>
-
-<p>Embedding this file within a Docker image, using a minimal base image, creates
-a tiny image (&lt;10MB). Containers from these images only execute a single
-process to handle both the HTTP requests and running the Action source.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">FROM</span> <span class="nx">alpine</span><span class="p">:</span><span class="mf">3.4</span>
-</span><span class='line'><span class="nx">COPY</span> <span class="nx">action</span> <span class="o">/</span><span class="nx">action</span>
-</span><span class='line'><span class="nx">EXPOSE</span> <span class="mi">8080</span>
-</span><span class='line'><span class="nx">CMD</span> <span class="p">[</span><span class="s">&quot;./action&quot;</span><span class="p">]</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Pushing the local image to Dockerhub and then using it to create an Action
-follows the same instructions above.</p>
-
-<h2>Conclusion</h2>
-
-<p>Running OpenWhisk Actions from user-provided Docker images allows developers to
-execute &#8220;serverless functions&#8221; using any language. This is a fantastic feature
-not currently supported by many of the other serverless providers.</p>
-
-<p>OpenWhisk provides an
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> letting
-users build a local Docker image which executes their Action and handles the
-HTTP requests from the platform. Using this with <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/docker_sdk">Go-based Actions</a> requires us
-to cross-compile our binary for the platform and handle passing JSON through
-command-line arguments and stdout.</p>
-
-<p>Re-writing the HTTP handler <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/go_handler">natively in Go</a>
-means the Docker image can contain and execute a single binary for both tasks.
-Using this <a href="https://github.com/jthomas/ow">Go package</a> provides an interface for registering Actions and handles
-the HTTP requests automatically.</p>
-
-<p><strong>This <a href="https://github.com/jthomas/openwhisk_go_action">project</a> contains
-examples for the &#8220;reverse string&#8221; Action using both the Docker SDK and Go-based
-handler detailed above.</strong></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -2426,6 +2828,14 @@ handler detailed above.</strong></p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2017/03/20/smsbot/">Building an SMS Bot for Slack.</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/02/09/openwhisk-and-the-serverless-framework/">Openwhisk and The Serverless Framework</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2017/01/18/openwhisk-and-rust/">OpenWhisk and Rust</a>
       </li>
     
@@ -2434,15 +2844,7 @@ handler detailed above.</strong></p>
       </li>
     
       <li class="post">
-        <a href="/blog/2017/01/16/openwhisk-docker-actions/">OpenWhisk Docker Actions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/11/28/npm-modules-in-openwhisk/">NPM Modules in OpenWhisk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2016/10/31/serverless-logs-with-elasticsearch/">Serverless Logs With Elasticsearch</a>
+        <a href="/blog/2017/01/16/openwhisk-docker-actions+%28jamess-mbp-2.hursley.uk.ibm.com%27s+conflicted+copy+2017-02-20%29/">OpenWhisk Docker Actions</a>
       </li>
     
   </ul>

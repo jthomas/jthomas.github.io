@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-01-18T09:40:01+00:00</updated>
+  <updated>2017-03-28T14:29:53+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,631 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Building an SMS Bot for Slack.]]></title>
+    <link href="http://jamesthom.as/blog/2017/03/20/smsbot/"/>
+    <updated>2017-03-20T16:02:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/03/20/smsbot</id>
+    <content type="html"><![CDATA[<p>This is <a href="https://github.com/ibmets/smsbot">smsbot</a>.</p>
+
+<p>{% img /images/smsbot/slack_text_hidden.jpg %}</p>
+
+<p>It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their messages posted into the channel. Channel users can respond to the messages and have their response sent back to the sender using SMS.</p>
+
+<p>{% blockquote %}</p>
+
+<p>smsbot was developed in under a few hours and less than one hundred lines of code using a serverless cloud platform.</p>
+
+<p>{% endblockquote %}</p>
+
+<p>Want to understand how it works? Let's find out…</p>
+
+<p>The first challenge was how to programmatically send and receive SMS messages.</p>
+
+<p><em><strong>Want to deploy smsbot yourself? Follow the <a href="#Deployment">instructions</a> at the bottom or check out the <a href="https://github.com/ibmets/smsbot">Github repository</a>.</strong></em></p>
+
+<h2>Twilio</h2>
+
+<p>{% img http://www.timothylutts.com/wp-content/uploads/2016/09/twilio.jpg %}</p>
+
+<p><a href="https://twilio.com">Twilio</a> provides a platform for building SMS, voice and messaging applications using an API.</p>
+
+<p>Developers can <a href="https://www.twilio.com/console/phone-numbers">register phone numbers</a> through the service that invoke webhooks for incoming calls and SMS messages. Webhooks are passed message details and return a custom markup language (TwilML) to encode the instructions on how to respond to the request.</p>
+
+<p>The platform also provides a REST API to <a href="https://www.twilio.com/sms/api">initiate phone calls and SMS messages</a>.</p>
+
+<p><em>We now have a way to handle text messages for our bot, how do we integrate a new bot in Slack?</em></p>
+
+<h2>Slack</h2>
+
+<p>{% img http://stratejos.ai/img/logos/slack-logo.png %}</p>
+
+<p><a href="https://slack.com">Slack</a> also provides a webhook-based mechanism to integrate custom bots into the platform. The platform has two different integrations…</p>
+
+<h3>Incoming Webhooks.</h3>
+
+<p>Provide a way to post messages into Slack from external sources. It provides a custom URL that supports HTTP requests with a JSON payload. These requests are turned into channel messages. The JSON payload is used to control the content and formatting of the message.</p>
+
+<p><a href="https://api.slack.com/incoming-webhooks">https://api.slack.com/incoming-webhooks</a></p>
+
+<h3>Outgoing Webhooks</h3>
+
+<p>Allow you to listen for messages in channels without using the full real-time API. Slack sends HTTP requests to registered URLs when specific trigger words appear in channel messages. The HTTP request body contains the message details.</p>
+
+<p><a href="https://api.slack.com/outgoing-webhooks">https://api.slack.com/outgoing-webhooks</a></p>
+
+<p><em>Now we just need a way to write simple HTTP services to listen for webhook requests…</em></p>
+
+<h2>OpenWhisk</h2>
+
+<p>{% img http://openwhisk.org/images/apache-openwhisk.jpg %}</p>
+
+<p><a href="http://openwhisk.org">OpenWhisk</a> is an open-source serverless cloud platform. <a href="https://martinfowler.com/articles/serverless.html">Serverless platforms</a> make it easy to create microservices in the cloud without having to set up or manage any infrastructure.</p>
+
+<p>Developers push their code directly into the platform. The platform will instantiate the runtime and invoke the code on-demand for each request. Serverless functions can be <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">exposed as HTTP endpoints</a> or connected to <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/catalog.md">event sources</a> like <a href="https://github.com/openwhisk/openwhisk-package-kafka/blob/master/README.md">message queues</a> or <a href="https://github.com/openwhisk/openwhisk-package-cloudant/blob/master/README.md">databases</a>.</p>
+
+<p>Serverless platforms make it easy to create simple HTTP services to handle webhook requests.</p>
+
+<h3>Web Actions</h3>
+
+<p><a href="https://medium.com/openwhisk/serverless-http-handlers-with-openwhisk-90a986cc7cdd#.rki6bwjgu">Web Actions</a> are a new feature in OpenWhisk for exposing serverless functions as simple HTTP endpoints. Functions have access to the full HTTP request and can control the HTTP response returned. This method is suitable for simple public endpoints that do not need more enterprise features supported by the <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">API gateway</a>.</p>
+
+<p>Web Actions are available at the following <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">platform API path</a>.</p>
+
+<p><code>
+https://{APIHOST}/api/v1/experimental/web/{USER_NAMESPACE}/{PACKAGE}/{ACTION_NAME}.{TYPE}
+</code></p>
+
+<ul>
+<li><em>APIHOST</em> - platform endpoint e.g. <em>openwhisk.ng.bluemix.net.</em></li>
+<li><em>USER_NAMESPACE</em> - must be explicit and cannot use the default namespace (_).</li>
+<li><em>PACKAGE</em> - action package or <code>default</code>.</li>
+<li><em>ACTION_NAME</em> - function identifier.</li>
+<li><em>TYPE</em> - <code>.json</code>, <code>.html</code>, <code>.text</code> or <code>.http</code>.</li>
+</ul>
+
+
+<h3>Example</h3>
+
+<p>Here's a simple Web Actions that returns HTML content when invoked through the API.</p>
+
+<p>```javascript
+function main(args) {</p>
+
+<pre><code>var msg = "you didn&amp;#39;t tell me who you are."
+if (args.name) {
+    msg = `hello ${args.name}!`
+}
+return {body:
+   `&lt;html&gt;&lt;body&gt;&lt;h3&gt;&lt;center&gt;${msg}&lt;/center&gt;&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;`}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Actions can be turned into web-accessible actions by setting a custom annotation.</p>
+
+<p><code>
+$ wsk action create greeting source.js --annotation web-export true
+</code></p>
+
+<p>The <code>greeting</code> function can then be invoked through a HTTP request to the following endpoint.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/greeting.http?name=James</code></p>
+
+<p>```sh
+$ http post https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/html_greeting.http?name=James
+HTTP/1.1 200 OK
+...</p>
+
+<p><html><body><h3><center>hello James!</center></h3></body></html>
+```</p>
+
+<h2>Twilio &lt;=> Slack</h2>
+
+<p>OpenWhisk Web Actions are a great solution for creating webhook endpoints. Connecting Twilio to Slack (and vice-versa) can be implemented using two different OpenWhisk Web Actions.</p>
+
+<ul>
+<li><strong>Twilio Webhook.</strong> Invoked for SMS messages. Uses the Slack Incoming Webhook to create a bot messages from content.
+​</li>
+<li><strong>Slack Outgoing Webhook.</strong> Invoked for channel replies. Uses Twilio API to send replies as SMS messages.</li>
+</ul>
+
+
+<p>Let's have a look at the Twilio webhook first…</p>
+
+<h3>Twilio Webhook</h3>
+
+<p>When a new SMS message is received, we want to post this bot message into our Slack channel.</p>
+
+<p>Twilio allows developers to <a href="https://www.twilio.com/docs/api/twiml/sms/twilio_request">configure webhooks</a> for each registered phone number. The webhook endpoint will be invoked for each SMS message that is received. Twilio can either send a HTTP POST request, with parameters in the body, or a HTTP GET request, with URL query parameters.</p>
+
+<p>OpenWhisk Web Actions support both formats. Request parameters will be available as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md#http-context">properties on the function argument</a>.</p>
+
+<p>Here's a simple Web Action that would log the message sender and content for each SMS received.</p>
+
+<p><code>javascript
+function main (params) {
+  console.log(`Text message from ${params.From}: ${params.Body}`)
+}
+</code></p>
+
+<h4>Creating Bot Messages From SMS</h4>
+
+<p>When an SMS message is received, we need to send a HTTP POST to the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook URL</a>. The JSON body of the HTTP request is used to configure the channel message. Using the <code>username</code>, <code>icon_emoji</code> and and <code>text</code> properties allows us to customise our bot message.</p>
+
+<p>OpenWhisk Actions in Node.js have <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#javascript-runtime-environments">numerous popular NPM modules</a> pre-installed in the environment. This includes a <a href="https://github.com/request/request">HTTP client library</a>. This code snippet demonstrates sending the HTTP request to create out bot message. The Slack Webhook URL is bound as a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameter</a> to the action.</p>
+
+<p>```javascript
+const request = require('request')</p>
+
+<p>const slack_message = text => ({
+  username: 'smsbot',
+  icon_emoji: ':phone:',
+  text
+})</p>
+
+<p>function main (params) {<br/>
+  return new Promise(function (resolve, reject) {</p>
+
+<pre><code>request.post({
+  body: slack_message(`Text message from ${params.From}: ${params.Body}`),
+  json: true,
+  url: params.slack.webhook
+}, err =&gt; {
+  if (err) return reject(err);
+  resolve();
+})
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<p>Returning a Promise ensures the request is completed before the function exits.</p>
+
+<h4>Sending Acknowledgement Message</h4>
+
+<p>Returning <a href="https://www.twilio.com/docs/api/twiml">TwilML</a> content allows us to control the response from Twilio to the incoming message.</p>
+
+<p>This snippet would send an SMS reply to sender with the content "Hello World!".</p>
+
+<p><code>xml
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;Response&gt;
+  &lt;Message&gt;Hello World!&lt;/Message&gt;
+&lt;/Response&gt;
+</code></p>
+
+<p><a href="https://www.npmjs.com/package/twilio">Twilio's client library</a> for Node.js can be used to programatically generate TwilML.</p>
+
+<p><code>javascript
+const twilio = require('twilio')
+const resp = new twilio.TwimlResponse()
+const twilml = resp.message('Thanks for letting us know.').toString()
+</code></p>
+
+<p>Returning XML content as the HTTP response requires us to set the response headers, body and status code in the Web Action.</p>
+
+<p>```javascript
+function main () {
+  const xml = '...'
+  return {</p>
+
+<pre><code>headers: {
+  'Content-Type': 'text/xml'
+},
+code: 200,
+body: xml
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h4>Web Action Source</h4>
+
+<p>Adding the XML response code into the existing function completes the OpenWhisk Web Action required to handle incoming SMS messages.</p>
+
+<p>```javascript
+const request = require('request')
+const twilio = require('twilio')</p>
+
+<p>const resp = new twilio.TwimlResponse()
+const twilml = resp.message('Thanks for letting us know.').toString()</p>
+
+<p>const response = {
+  headers: {</p>
+
+<pre><code>'Content-Type': 'text/xml'
+</code></pre>
+
+<p>  },
+  code: 200,
+  body: twilml
+}</p>
+
+<p>const slack_message = text => ({
+  username: 'smsbot',
+  icon_emoji: ':phone:',
+  text
+})</p>
+
+<p>function main (params) {<br/>
+  return new Promise(function (resolve, reject) {</p>
+
+<pre><code>request.post({
+  body: slack_message(`Text message from ${params.From}: ${params.Body}`),
+  json: true,
+  url: params.slack.webhook
+}, err =&gt; {
+  if (err) return reject(err);
+  resolve(response);
+})
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<h4>Register Webhook</h4>
+
+<p>Once we have deployed the Web Action, we can configure the Twilio SMS webhook endpoint to use following URL.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@email.com_dev/default/smsbot-dev-incoming.http</code></p>
+
+<p>{% img /images/smsbot/twilio_sms_webhook.png %}</p>
+
+<h3>Slack Outgoing Webhook</h3>
+
+<p>When someone sends a channel message to the bot, smsbot should send that content as an SMS message to the last person who sent an SMS to the channel. An <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> will be used to trigger the bot.</p>
+
+<p>Outgoing Webhooks have a configurable trigger word. Channel messages which start with this word are send as HTTP requests to the list of URLs registered for that webhook. We will use <code>smsbot</code> as our trigger word.</p>
+
+<p>{% img /images/smsbot/outgoing_webhook_trigger.png %}</p>
+
+<h4>Request Parameters</h4>
+
+<p>Slack sends the following parameters for each channel message.</p>
+
+<p><code>
+token=XXXXXXXXXXXXXXXXXX
+team_id=T0001
+team_domain=example
+channel_id=C2147483705
+channel_name=test
+timestamp=1355517523.000005
+user_id=U2147483697
+user_name=Steve
+text=googlebot: What is the air-speed velocity of an unladen swallow?
+trigger_word=googlebot:
+</code></p>
+
+<p>In OpenWhisk Web Actions, these parameters will be available on the function argument object.</p>
+
+<p>Here's a simple Web Action that would parse and log the message contents when the webhook is fired.</p>
+
+<p><code>javascript
+function main (params) {
+  const msg = params.text.slice(params.trigger_word.length + 1)
+  console.log('channel message:', msg)
+}
+</code></p>
+
+<p>When this webhook is fired, we need to add code to send an SMS message with the channel message.</p>
+
+<h4>Sending SMS Messages</h4>
+
+<p><a href="https://www.twilio.com/docs/api/rest">Twilio's API</a> allows us to programatically <a href="https://www.twilio.com/docs/api/rest/sending-messages">send SMS messages</a> from our registered numbers.</p>
+
+<p>This snippet shows you how to use their <a href="http://npmjs.com/package/twilio">Node.js client library</a> to send sample message.</p>
+
+<p>```javascript
+const twilio = require('twilio')
+const creds = { account: '...', auth: '...' }</p>
+
+<p>const client = twilio(creds.account, creds.auth)
+const callback = (err, message) => {
+  if (err) return console.log(err)
+  console.log('sent sms message.')
+}</p>
+
+<p>client.messages.create({ to: '...', from: '...', body: 'hello world' }, callback)
+```</p>
+
+<p>The webhook should use this client library to send a message to the last person who send us an incoming message.</p>
+
+<h4>Reply to Message Sender</h4>
+
+<p>How can we determine who was the last person who sent a message to our bot? The Web Action processing the incoming messages is a separate service to the Web Action sending SMS messages.</p>
+
+<p>Rather than setting up a database to share application state, the service can use Twilio's API to retrieve the received message details.</p>
+
+<p>```javascript
+const twilio = require('twilio')
+const creds = { account: '...', auth: '...' }
+const client = twilio(creds.account, creds.auth)</p>
+
+<p>client.messages.list({to: '+44....'}, (err, data) => {
+  const last = data.messages[0]
+  console.log(<code>last message from: ${last.from}</code>)
+})
+```</p>
+
+<h4>SMSBot Channel Response</h4>
+
+<p><a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhooks</a> which respond with a JSON body will generate a new channel message.</p>
+
+<p><code>json
+{
+  "username": "smsbot",
+  "icon_emoji": ":phone:",
+  "text": "sms sent to ..."
+}
+</code></p>
+
+<h4>Web Action Source</h4>
+
+<p>Combing the channel message parsing code with the snippets for sending SMS messages and obtaining the last message sender completes the Web Action needed to handle the Outgoing Webhook.</p>
+
+<p>```javascript
+const twilio = require('twilio')</p>
+
+<p>const slack_message = text => ({
+  username: 'smsbot',
+  icon_emoji: ':phone:',
+  text
+})</p>
+
+<p>function reply (params) {
+  const client = twilio(params.twilio.account, params.twilio.auth)
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>client.messages.list({to: params.twilio.number}, (err, data) =&gt; {
+if (err) return Promise.reject(err)
+
+const last = data.messages[0]
+const msg = params.text.slice(params.trigger_word.length + 1)
+const options = { to: last.from, from: last.to, body: msg }
+client.messages.create(options, (err, message) =&gt; {
+    if (err) return Promise.reject(err)
+    resolve(slack_message(`sms reply sent to ${last.from}`))
+  })
+})
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<p>Twilio account credentials are bound as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameters</a> to the Web Action during deployment.</p>
+
+<h2>Deployment</h2>
+
+<p><a href="https://github.com/ibmets/smsbot">smsbot</a> is built using <a href="https://serverless.com/">The Serverless Framework</a>.</p>
+
+<p>{% img https://cloud.githubusercontent.com/assets/20538501/24154626/b86ad64a-0e1f-11e7-8e12-979b8d194430.png %}</p>
+
+<p>This framework makes building serverless applications really easy. The tool handles the entire configuration and deployment process for your serverless provider. OpenWhisk <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">recently released integration</a> with the framework through a provider plugin.</p>
+
+<p><strong><em>Let's look at how to use the framework to deploy our serverless application…</em></strong></p>
+
+<h3>OpenWhisk</h3>
+
+<p>Register for an account with an OpenWhisk provider, e.g. <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>.</p>
+
+<p><a href="https://console.ng.bluemix.net/openwhisk/learn/cli">Set up</a> the <code>wsk</code> CLI and run the command to authenticate against the platform endpoint.</p>
+
+<p><code>
+wsk property set --apihost openwhisk.ng.bluemix.net --auth SECRET
+</code></p>
+
+<h3>Serverless Framework</h3>
+
+<p>Install the <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/serverless/serverless-openwhisk">OpenWhisk provider plugin</a>.</p>
+
+<p><code>
+npm install --global serverless serverless-openwhisk
+</code></p>
+
+<h3>Source Code</h3>
+
+<p>Download the <a href="https://github.com/jthomas/smsbot">source code</a> from Github and install the project dependencies.</p>
+
+<p><code>
+$ git clone https://github.com/ibmets/smsbot.git
+$ cd smsbot
+$ npm install
+</code></p>
+
+<p>Create a new file called <code>credentials.yml</code> with the following content.</p>
+
+<p>```yaml
+twilio:</p>
+
+<pre><code>account:
+auth:
+number:
+</code></pre>
+
+<p>numbers:
+slack:</p>
+
+<pre><code>webhook:
+</code></pre>
+
+<p>```</p>
+
+<h3>Twilio</h3>
+
+<p>Register an account with Twilio and provision <a href="https://www.twilio.com/console/phone-numbers/search">a new phone number</a>. Make a note of the phone number. Retrieve the account identifier and auth token from the <a href="https://www.twilio.com/console">Twilio console</a>.</p>
+
+<p>Fill in the account identifier, auth token and phone number in the <code>credentials.yml</code> file.</p>
+
+<p>```yaml
+twilio:</p>
+
+<pre><code>account: AC_USER_ID
+auth: AUTH_TOKEN
+number: '+441234567890'
+</code></pre>
+
+<p>```</p>
+
+<p><em>Important: the <code>twilio.number</code> property value must be a quoted string.</em></p>
+
+<h3>Phone Numbers</h3>
+
+<p>During Twilio's free trial, you will need <a href="https://support.twilio.com/hc/en-us/articles/223136107-How-does-Twilio-s-Free-Trial-work-">manually verify each phone number</a> that you want to send messages to.</p>
+
+<p>Fill in all verified numbers in <code>credentials.yml</code>.</p>
+
+<p>```yaml
+numbers:</p>
+
+<pre><code>'+441234567890': Joe Smith
+'+441234567891': Jane Smith
+</code></pre>
+
+<p><code>``
+*Important: the</code>numbers` property values must be a quoted strings.*</p>
+
+<h3>Incoming Webhook</h3>
+
+<p>Create a new <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook</a> integration for the Slack channel messages should appear in.</p>
+
+<p>Fill in the <code>slack.webhook</code> property in <code>credentials.yml</code> with this url.</p>
+
+<p>```yaml
+slack:</p>
+
+<pre><code>webhook: https://hooks.slack.com/services/XXXX/YYYY/ZZZZ
+</code></pre>
+
+<p>```</p>
+
+<h3>Deploy Application</h3>
+
+<p>Use The Serverless Framework to deploy your application.</p>
+
+<p>```
+$ serverless deploy
+Serverless: Packaging service...
+Serverless: Compiling Functions...
+Serverless: Compiling API Gateway definitions...
+Serverless: Compiling Rules...
+Serverless: Compiling Triggers &amp; Feeds...
+Serverless: Deploying Functions...
+Serverless: Deployment successful!</p>
+
+<p>Service Information
+platform:   openwhisk.ng.bluemix.net
+namespace:  _
+service:    smsbot</p>
+
+<p>actions:
+smsbot-dev-incoming    smsbot-dev-reply</p>
+
+<p>triggers:
+<strong>no triggers deployed</strong></p>
+
+<p>rules:
+<strong>no rules deployed</strong></p>
+
+<p>endpoints:
+<strong>no routes deployed</strong>
+```</p>
+
+<h3>Twilio Webhook</h3>
+
+<p>On the <a href="https://www.twilio.com/console/phone-numbers/incoming">Phone Numbers</a> page in the Twilio console, configure the "<em>Messaging</em>" webhook URL.</p>
+
+<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-incoming.http</code></p>
+
+<p>{% img /images/smsbot/twilio_sms_webhook.png %}</p>
+
+<h3>Outgoing Webhook</h3>
+
+<p>Create a new <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> integration for the Slack channel messages should appear in. Use <code>smsbot</code> as the <em>Trigger Word</em>.</p>
+
+<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
+
+<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-reply.json</code></p>
+
+<p>{% img /images/smsbot/outgoing_webhook_trigger.png %}</p>
+
+<h3>Test it out!</h3>
+
+<p>Send a text message to the phone number you registered through Twilio. smsbot should post the contents into Slack and send an SMS response with the message "<em>Thanks for letting us know!</em>".</p>
+
+<p>{% img /images/smsbot/slack_text_hidden.jpg %}</p>
+
+<p>If you send a channel message starting with the trigger word (<em>smsbot</em>), the phone number should receive a new SMS message with the message text.</p>
+
+<p>{% img /images/smsbot/sms_app.png %}</p>
+
+<p>Awesome-sauce 😎.</p>
+
+<h2>Conclusions</h2>
+
+<p><a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">OpenWhisk Web Actions</a> provide a convenient way to expose serverless functions as simple HTTP APIs. This feature is ideal for implementing webhook endpoints.</p>
+
+<p>Both Slack and Twilio provide webhook integration for developers to use their platforms. Using OpenWhisk Web Actions, we can write serverless functions that act as a bridge between these services. With less than a hundred lines of code, we've created a new slack bot that can connect users to channels using SMS messages.</p>
+
+<p>Pretty cool, huh?! 👏👏👏</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Openwhisk and The Serverless Framework]]></title>
+    <link href="http://jamesthom.as/blog/2017/02/09/openwhisk-and-the-serverless-framework/"/>
+    <updated>2017-02-09T15:04:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/02/09/openwhisk-and-the-serverless-framework</id>
+    <content type="html"><![CDATA[<p><a href="https://serverless.com">The Serverless Framework</a> is the most popular open-source framework for building serverless applications.</p>
+
+<p><a href="https://serverless.com/blog/serverless-v1.6.0/">Recent releases</a> included support for using the framework with non-AWS providers. This feature makes it easier for developers to try different serverless platforms and move applications between providers.</p>
+
+<p>Since last summer, I've been <a href="https://github.com/serverless/serverless-openwhisk">leading the technical effort</a> to provide an <a href="http://openwhisk.org/">OpenWhisk</a> provider plugin for the framework.</p>
+
+<p>OpenWhisk is the first non-AWS serverless provider to complete integration into the framework.</p>
+
+<p>{% img https://cloud.githubusercontent.com/assets/20538501/22434123/748ae372-e6e0-11e6-86d0-38db9941552d.png %}</p>
+
+<h2>Getting Started</h2>
+
+<p>Documentation for the provider plugin is available on <a href="https://serverless.com/framework/docs/">The Serverless Framework's website</a>.</p>
+
+<p>Example projects using the framework to build applications for OpenWhisk are now available in <a href="https://github.com/serverless/examples">this repository</a>.</p>
+
+<p>More details on the provider plugin can be found on the <a href="https://github.com/serverless/serverless-openwhisk">project repository</a>.</p>
+
+<p>Found an issue? Feature request? Need help? Please <a href="https://github.com/serverless/serverless-openwhisk/issues">open issues on Github</a>.</p>
+
+<h2>Video Demonstration</h2>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/GJY10W98Itc" frameborder="0" allowfullscreen></iframe>
+
+
+<h2>Serverless Meetup Presentation</h2>
+
+<p>Last week, I was invited to speak at the <a href="https://www.meetup.com/Serverless-London/events/236664340/">London's Serverless Meetup</a> about building multi-provider serverless applications using this feature.</p>
+
+<p>Slides from the presentation are here:</p>
+
+<script async class="speakerdeck-embed" data-id="592fbd47aceb4fbc9021ae3bf2f6b06c" data-ratio="1.77777777777778" src="http://jamesthom.as//speakerdeck.com/assets/embed.js"></script>
+
+
+<p>There is a (low-fi) video recording from the event here:</p>
+
+<iframe src="https://player.twitch.tv/?video=v119142073&autoplay=false" frameborder="0" allowfullscreen="true" scrolling="no" height="378" width="620"></iframe>
+
+
+<p><a href="https://www.twitch.tv/serverlessldn?tt_medium=live_embed&tt_content=text_link" style="padding:2px 0px 4px; display:block; width:345px; font-weight:normal; font-size:10px; text-decoration:underline;">Watch live video from serverlessldn on www.twitch.tv</a></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk and Rust]]></title>
@@ -22,7 +647,9 @@
 
 <p>Let's look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
 
-<p><blockquote><p>Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.</p></blockquote></p>
+<p>{% blockquote %}
+Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
+{% endblockquote %}</p>
 
 <p>Rust has been growing in popularity since it launched in 2010. Rust is a popular language for writing microservices due to the focus on the attention to safety and strong concurrency support.</p>
 
@@ -117,7 +744,7 @@ $ tree .
 [package]
 name = "action"
 version = "0.1.0"
-authors = ["Me <a href="&#109;&#97;&#x69;&#x6c;&#x74;&#111;&#58;&#109;&#101;&#x40;&#101;&#109;&#x61;&#x69;&#x6c;&#x2e;&#x63;&#111;&#109;">&#109;&#101;&#64;&#x65;&#109;&#97;&#x69;&#x6c;&#46;&#x63;&#111;&#x6d;</a>"]</p>
+authors = ["Me <a href="&#x6d;&#97;&#105;&#108;&#116;&#x6f;&#x3a;&#109;&#x65;&#x40;&#x65;&#109;&#97;&#x69;&#x6c;&#46;&#x63;&#x6f;&#109;">&#109;&#x65;&#x40;&#101;&#x6d;&#x61;&#x69;&#108;&#x2e;&#99;&#x6f;&#109;</a>"]</p>
 
 <p>[dependencies]
 rustc-serialize = "0.3"
@@ -384,9 +1011,9 @@ $ wsk action invoke go_test --blocking --result --param name James
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk Docker Actions]]></title>
-    <link href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/"/>
+    <link href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions+%28jamess-mbp-2.hursley.uk.ibm.com%27s+conflicted+copy+2017-02-20%29/"/>
     <updated>2017-01-16T11:05:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions</id>
+    <id>http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions (jamess-mbp-2.hursley.uk.ibm.com's conflicted copy 2017-02-20)</id>
     <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
 
 <p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
@@ -397,7 +1024,7 @@ $ wsk action invoke go_test --blocking --result --param name James
 
 <h2>Docker Actions</h2>
 
-<p>Docker Actions in OpenWhisk are <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/Dockerfile">built</a> from the following <a href="https://github.com/openwhisk/openwhisk/tree/master/core/actionProxy">repository</a> using the <a href="https://github.com/docker-library/python/blob/693a75332e8ae5ad3bfae6e8399c4d7cc3cb6181/2.7/alpine/Dockerfile">python:2.7.12-alpine</a> base image. This image is available on Docker Hub as <a href="https://hub.docker.com/r/openwhisk/dockerskeleton/"><code>openwhisk/dockerskeletion</code></a>.</p>
+<p>Docker Actions in OpenWhisk are <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/Dockerfile">built</a> from the following <a href="https://github.com/openwhisk/openwhisk/tree/master/core/actionProxy">repository</a> using the <a href="https://github.com/docker-library/python/blob/693a75332e8ae5ad3bfae6e8399c4d7cc3cb6181/2.7/alpine/Dockerfile">python:2.7.12-alpine</a> base image. This image is available on Docker Hub as <a href="https://hub.docker.com/r/openwhisk/dockerskeleton/"><code>openwhisk/dockerskeleton</code></a>.</p>
 
 <p>The image includes a Python application which <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">implements the HTTP API</a> used to handle platform requests, e.g. <em>invoke the action with these parameters</em>.</p>
 
@@ -571,505 +1198,6 @@ Date: Mon, 16 Jan 2017 14:17:15 GMT</p>
 <p>Hopefully this blog post has shown you how to get started with this feature.</p>
 
 <p>Over the next few weeks, we're going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates...</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[NPM Modules in OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/"/>
-    <updated>2016-11-28T14:03:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk</id>
-    <content type="html"><![CDATA[<p>OpenWhisk now <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">supports creating Node.js Actions from a zip file</a>. The archive file will be extracted into the runtime environment by the platform. This allows us to split microservice logic across multiple files, use third-party <a href="https://www.npmjs.com/">NPM modules</a> or include non-JavaScript assets (configuration files, images, HTML files).</p>
-
-<h2>"Hello World" Example</h2>
-
-<p>Let's look at a "Hello World" example of registering a serverless function from a zip file. Our archive will contain two files, the <a href="https://docs.npmjs.com/files/package.json">package descriptor</a> and a JavaScript file.</p>
-
-<p>Here is the minimal <code>package.json</code> file required for loading a module from a directory.</p>
-
-<p><code>json package.json
-{
-  "main": "my_file.js"
-}
-</code></p>
-
-<p>In <code>my_file.js</code>, a function is returned through the <code>main</code> property on the <code>exports</code> object. This function <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#creating-and-invoking-javascript-actions">implements the Action interface.</a></p>
-
-<p><code>javascript my_file.js
-exports.main = function (params) {
-  return {result: "Hello World"};
-};
-</code></p>
-
-<p>Creating a zip file from the current directory, we can deploy this Action through the command-line utility.</p>
-
-<p><code>sh
-$ zip -r action.zip *
-$ wsk action create hello_world --kind nodejs:default action.zip
-</code></p>
-
-<p>When this Action is invoked, the archive will be unzipped into a temporary directory. OpenWhisk loads the directory as a Node.js module and invokes the function property on the module for each invocation.</p>
-
-<p>``` sh
-$ wsk action invoke hello_world --result
-{</p>
-
-<pre><code>"result": "Hello world"
-</code></pre>
-
-<p>}
-```</p>
-
-<h2>Using NPM Dependencies</h2>
-
-<p>Let's look a more complicated example which uses an external <a href="https://www.npmjs.com/">NPM module</a> in our Action.</p>
-
-<p>``` javascript index.js
-const leftPad = require("left-pad")</p>
-
-<p>function myAction(args) {</p>
-
-<pre><code>const lines = args.lines || [];
-return { padded: lines.map(l =&gt; leftPad(l, 30, ".")) }
-</code></pre>
-
-<p>}</p>
-
-<p>exports.main = myAction;
-```</p>
-
-<p>This module uses the <a href="http://qz.com/646467/how-one-programmer-broke-the-internet-by-deleting-a-tiny-piece-of-code/">extremely popular</a> <a href="https://www.npmjs.com/package/left-pad">left-pad</a> module to process an array of strings, passed through a request parameter. The resulting output is returned in the response.</p>
-
-<p>Before using this module, we need to install the dependencies listed in <code>package.json</code>.</p>
-
-<p>``` json
-{
-  "name": "my-action",
-  "version": "1.0.0",
-  "main": "index.js",
-  "dependencies" : {</p>
-
-<pre><code>"left-pad" : "1.1.3"
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p><strong>OpenWhisk does not automatically install dependencies listed in <code>package.json</code> in the runtime environment.</strong></p>
-
-<p>The developer has to run <code>npm install</code> locally and include the <code>node_modules</code> directory in the zip file.</p>
-
-<ul>
-<li>Install NPM dependencies locally.</li>
-</ul>
-
-
-<p><code>sh
-$ npm install
-</code></p>
-
-<ul>
-<li>Create a <code>.zip</code> archive containing all files.</li>
-</ul>
-
-
-<p><code>sh
-$ zip -r action.zip *
-</code></p>
-
-<ul>
-<li>Create the action using command-line utility.</li>
-</ul>
-
-
-<p><code>sh
-$ wsk action create packageAction --kind nodejs:default action.zip
-</code></p>
-
-<p>Now we can test out our action to check it works….</p>
-
-<p>``` sh
-$ wsk action invoke --blocking --result packageAction --param lines "[\"and now\", \"for something completely\", \"different\" ]"
-{</p>
-
-<pre><code>"padded": [
-    ".......................and now",
-    "......for something completely",
-    ".....................different"
-]
-</code></pre>
-
-<p>}
-```</p>
-
-<h2>Native Module Dependencies</h2>
-
-<p>Node.js provides a mechanism for JavaScript modules to <a href="https://nodejs.org/api/addons.html">include native platform code</a> as if they were ordinary modules. This is often used to improve performance by deferring operations to native C/C++ libraries. NPM handles compiling native code during the dependency install process.</p>
-
-<p><strong>Using modules with native dependencies in Actions requires the native code to be compiled for the platform runtime.</strong></p>
-
-<h3>Compiling dependencies with Docker</h3>
-
-<p>One solution to this problem uses Docker to simulate the same runtime environment.</p>
-
-<p>OpenWhisk uses Docker to manage the runtime environments for Actions. The <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile"><em>buildpack-deps:trusty-curl</em></a> image is used as the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejsActionBase/Dockerfile">base image for all Node.js Actions</a>.</p>
-
-<p>Running a local container from this image will give access to the same runtime environment. Running <code>npm install</code> within this container will produce the <code>node_modules</code> directory with native code compiled for the correct architecture.</p>
-
-<h3>Action With Native Modules</h3>
-
-<p>Let's look at an example…</p>
-
-<p>``` javascript index.js
-const SHA3 = require('sha3');</p>
-
-<p>function SHA(args) {
-  const d = new SHA3.SHA3Hash();
-  d.update(args.payload);
-  return { sha: d.digest('hex') };
-}</p>
-
-<p>exports.main = SHA;
-```</p>
-
-<p>This module returns a function that calculates a SHA3 cryptographic hash for the invocation payload. The hex string for the hash is returned as the function response.</p>
-
-<p>The NPM module (<a href="https://www.npmjs.com/package/sha3">sha3</a>) used to calculate the digest uses a C++ extension for the hashing algorithm.</p>
-
-<p>``` json package.json
-{
-  "name": "hashing-service",
-  "version": "1.0.0",
-  "main": "index.js",
-  "dependencies": {</p>
-
-<pre><code>"sha3": "^1.2.0"
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<h3>Action Runtime Environments</h3>
-
-<p>OpenWhisk uses a <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile">public Docker image</a> as the base image for the Action environments. It then <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejs6Action/Dockerfile">builds a custom image</a> by installing Node.js and NPM for the particular runtime version.</p>
-
-<p>Rather than building this image ourselves, we can use existing images published on <a href="https://hub.docker.com/">Docker Hub</a>.</p>
-
-<p><a href="https://nodesource.com/">NodeSource</a> provides <a href="https://hub.docker.com/u/nodesource/">public Docker images pre-installed with different Node.js versions</a>. Provided the base image (Ubuntu Trusty) and Node.js version (6.7) matches, the runtime environment will be the same.</p>
-
-<p>Starting a local container from this image, we can use Docker's <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">host volume support</a> to mount the local directory into the host container.</p>
-
-<p><code>sh
-$ docker run -it -v "/action:/usr/src/app" nodesource/trusty:6.7 /bin/sh
-</code></p>
-
-<p>Running <code>npm install</code> in the container, the <code>sha3</code> dependency is compiled and installed.</p>
-
-<p>``` sh</p>
-
-<h1>npm install</h1>
-
-<blockquote><p>sha3@1.2.0 install /usr/src/app/node_modules/sha3                                                                 <br/>
-node-gyp rebuild</p></blockquote>
-
-<p>make: Entering directory <code>/usr/src/app/node_modules/sha3/build'                                                       
-make: Warning: File</code>sha3.target.mk' has modification time 0.19 s in the future                                     <br/>
-  CXX(target) Release/obj.target/sha3/src/addon.o                                                                   <br/>
-  CXX(target) Release/obj.target/sha3/src/displayIntermediateValues.o                                               <br/>
-  CXX(target) Release/obj.target/sha3/src/KeccakF-1600-reference.o                                                  <br/>
-  CXX(target) Release/obj.target/sha3/src/KeccakNISTInterface.o                                                     <br/>
-  CXX(target) Release/obj.target/sha3/src/KeccakSponge.o                                                            <br/>
-  SOLINK_MODULE(target) Release/obj.target/sha3.node                                                                <br/>
-  COPY Release/sha3.node                                                                                            <br/>
-make: warning:  Clock skew detected.  Your build may be incomplete.                                                 <br/>
-make: Leaving directory <code>/usr/src/app/node_modules/sha3/build'                                                        
-my-action@1.0.0 /usr/src/app                                                                                          
-</code>-- sha3@1.2.0                                                                                                      <br/>
-  `-- nan@2.4.0</p>
-
-<p>```</p>
-
-<p>The <code>node_modules</code> directory will be available on the host system after exiting the container. Repeat the steps above to archive the source files and deploy our serverless function.</p>
-
-<p><code>sh
-$ zip -r action.zip *
-$ wsk action create packageAction --kind nodejs:6 action.zip  
-ok: created action packageAction          
-</code></p>
-
-<p>Invoking the Action will now use the native code to produce hash values for the invocation parameters.</p>
-
-<p>``` sh
-$ wsk action invoke packageAction -b -p payload "Hello" --result                            <br/>
-{</p>
-
-<pre><code>"sha": "c33fede18a1ae53ddb8663710f8054866beb714044fce759790459996196f101d94dfc7bd8268577f7ee3d2f8ff0cef4004a963222
-</code></pre>
-
-<p>7db84df62d2b40682d69e2"                                                                                             <br/>
-}                     <br/>
-```</p>
-
-<h2>Action Package Details</h2>
-
-<p>Upon invocation, OpenWhisk extracts the action's zip file to a temporary directory in the runtime environment. It then <a href="https://nodejs.org/api/modules.html#modules_all_together">loads the directory as a standard Node.js module</a>, using <code>require</code>.</p>
-
-<p>Node.js expects the directory to have a valid <code>package.json</code> file. The <code>main</code> property is used to define which JavaScript file is evaluated when the module is loaded. This file can assign values to the global <code>exports</code> object. These references are then returned when <code>require</code> is called for this module.</p>
-
-<p><strong>OpenWhisk expects the returned module object to have a property called <code>main</code> which references a function. This function will be executed for each invocation request.</strong></p>
-
-<p>Request parameters are passed as object properties on the first function argument. The function must return an object for the invocation response.</p>
-
-<p>Other files included in the archive will be available in the current working directory. These can also be loaded as modules or read directly from the file-system.</p>
-
-<h2>Conclusions</h2>
-
-<p>OpenWhisk support for Action packages is a huge step forward for the platform. Node.js has an enormous ecosystem of third-party modules. Developers can now easily use any of these modules within their Actions.</p>
-
-<p>This feature can also be used to include non-JS files within the runtime environment. It would be possible to use configuration files in JSON or static assets like HTML or CSS files.</p>
-
-<p><strong><em>The team are now working on providing support for other runtimes, watch this space…</em></strong></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Serverless Logs With Elasticsearch]]></title>
-    <link href="http://jamesthom.as/blog/2016/10/31/serverless-logs-with-elasticsearch/"/>
-    <updated>2016-10-31T10:39:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/10/31/serverless-logs-with-elasticsearch</id>
-    <content type="html"><![CDATA[<p><a href="http://martinfowler.com/articles/serverless.html">Serverless platforms</a> can seem like magic.</p>
-
-<p>Taking your code and turning it into scalable microservices in the cloud without having to set up or manage any infrastructure.</p>
-
-<p><em>No provisioning VMs. No configuring Linux environments. No upgrading middleware packages.</em></p>
-
-<p>Which is wonderful until something goes wrong with your microservices in production…</p>
-
-<p><em>"Let me just log into the machine."</em></p>
-
-<p><strong>Serverless platforms do not allow this.</strong></p>
-
-<p><em>No tracing system calls. No running top. No connecting a debugger to the process. You can't even grep through the logs!</em></p>
-
-<p>Many of the tools and techniques we use to diagnose bugs rely on having access to the environment.</p>
-
-<p><em>Fortunately, we do still have access to logging output generated by our serverless functions. Phew.</em></p>
-
-<p><strong>Storing, searching and analysing these logs is crucial to efficiently diagnosing and fixing issues on serverless platforms.</strong></p>
-
-<p>In this blog post, we're going to look at using a popular open-source solution to manage the logs being generated by our serverless functions. This solution is also known as "<a href="https://www.oreilly.com/ideas/understanding-the-elk-stack">The ELK Stack</a>".</p>
-
-<p><strong><em>TLDR: There is now a Logstash input plugin for OpenWhisk. This will automatically index serverless application logs into Elasticsearch. See here for usage instructions: <a href="https://github.com/jthomas/logstash-input-openwhisk">https://github.com/jthomas/logstash-input-openwhisk</a></em></strong></p>
-
-<h2>Elasticsearch, Logstash and Kibana</h2>
-
-<p>…are the three open-source projects that, when combined, are known as The ELK Stack. It provides a scalable search engine for indexed documents.</p>
-
-<p><a href="https://github.com/elastic/elasticsearch">Elasticsearch</a> <em>"is a search engine based on Lucene. It provides a distributed, multitenant-capable full-text search engine with an HTTP web interface and schema-free JSON documents."</em></p>
-
-<p><a href="https://github.com/elastic/logstash">Logstash</a> is a tool for managing events and logs. You can use it to collect logs, parse them, and store them for later use (like, for searching). If you store them in Elasticsearch, you can view and analyze them with Kibana.</p>
-
-<p><a href="https://github.com/elastic/kibana">Kibana</a> is an open source analytics and visualization platform designed to work with Elasticsearch. You use Kibana to search, view, and interact with data stored in Elasticsearch.</p>
-
-<p>The ELK Stack is a perfect solution for managing logs from our serverless functions.</p>
-
-<p><strong>But how do we configure this solution to automatically index logs from our serverless platform?</strong></p>
-
-<p><em>Let's start by looking serverless platform we are using…</em></p>
-
-<h2>OpenWhisk</h2>
-
-<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a> is an open-source serverless platform developed by IBM. Developers <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">deploy functions</a> to execute in response to <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/triggers_rules.md">external events</a>, e.g. database updates, messages on a queue or HTTP requests. The platform invokes these functions on-demand in milliseconds, rather than having services sat idle waiting for requests to arrive.</p>
-
-<p><em>Let's walk through an example.</em></p>
-
-<h3>Serverless Functions</h3>
-
-<p>Here's a sample serverless function which returns a greeting to the user. The code logs the invocation parameters and response message.</p>
-
-<p>``` javascript logs.js
-function main (params) {
-  console.log('invoked with parameters:', params)</p>
-
-<p>  const user = params.user || 'Donald Trump'
-  const response = { greeting: <code>Hello ${user}</code> }</p>
-
-<p>  console.log('returns: ', response)
-  return response
-}
-```</p>
-
-<p>Deploying this serverless function to OpenWhisk and invoking it generates an activation record.</p>
-
-<p>``` sh
-$ wsk action create logs logs.js
-ok: created action logs
-$ wsk action invoke logs -b -r -p user 'Bernie Sanders'
-{</p>
-
-<pre><code>"greeting": "Hello Bernie Sanders"
-</code></pre>
-
-<p>}
-$ wsk activation list
-activations
-2adbbbcc0242457f80dc51944dcd2039                 logs
-...
-```</p>
-
-<p>OpenWhisk activation records are available through the <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/whiskswagger.json">platform API</a>. Each record contains the stdout and stderr logs generated during the serverless function invocation.</p>
-
-<h3>Serverless Logs</h3>
-
-<p>Retrieving the activation record for the previous invocation, we can see the output generated by the calls to <code>console.log</code>.</p>
-
-<p>``` sh
-$ wsk activation get 2adbbbcc0242457f80dc51944dcd2039
-ok: got activation 2adbbbcc0242457f80dc51944dcd2039
-{</p>
-
-<pre><code>"namespace": "james.thomas@uk.ibm.com",
-"name": "logs",
-"version": "0.0.3",
-"publish": false,
-"subject": "james.thomas@uk.ibm.com",
-"activationId": "2adbbbcc0242457f80dc51944dcd2039",
-"start": 1477925373990,
-"end": 1477925374063,
-"response": {
-    "status": "success",
-    "statusCode": 0,
-    "success": true,
-    "result": {
-        "greeting": "Hello Bernie Sanders"
-    }
-},
-"logs": [
-    "2016-10-31T14:49:34.059745626Z stdout: invoked with parameters: {}",
-    "2016-10-31T14:49:34.061228724Z stdout: returns:  { greeting: 'Hello Donald Trump' }"
-],
-...
-</code></pre>
-
-<p>}
-```</p>
-
-<p>OpenWhisk stores these records indefinitely, making them available for <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/whiskswagger.json#!/Activations/getActivationById">retrieval by the activation id</a>.</p>
-
-<p>However, developers need more than being able to retrieve logs to be effective at diagnosing and resolving issues with serverless functions.</p>
-
-<p>Forwarding these logs to Elasticsearch will enable us to run full-text search across all logs generated, quickly retrieve all output for a particular serverless function, set up monitoring dashboards and much more…</p>
-
-<p>Using Logstash will allow us to ingest and transform OpenWhisk logs into Elasticsearch documents.</p>
-
-<h2>Logstash Input Plugins</h2>
-
-<p>Logstash supports a huge variety of event sources through the use of a <a href="https://www.elastic.co/guide/en/logstash/current/working-with-plugins.html">plugin mechanism</a>. These plugins handle retrieving the external events and converting them to Elasticsearch documents.</p>
-
-<p>Logstash has a huge repository of <a href="https://www.elastic.co/guide/en/logstash/current/input-plugins.html">official and community supported input plugins</a>. These plugins ingest everything from log files, syslog streams, databases, message queues, websockets and much more.</p>
-
-<h3>HTTP Polling Input Plugin</h3>
-
-<p>Logstash already has an input plugin for <a href="https://github.com/logstash-plugins/logstash-input-http_poller">pulling events from a HTTP URL by polling</a>. Users provide the URL in the logstash configuration, along with the polling schedule. Logstash will automatically retrieve and ingest the JSON response as an event stream.</p>
-
-<p>```
-input {
-  http_poller {</p>
-
-<pre><code>urls =&gt; {
-  "my_events" =&gt; "http://localhost:8000/events"
-}
-# Poll site every 10s
-interval =&gt; 10
-request_timeout =&gt; 60
-codec =&gt; "json"
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p><em>Great, so we can configure this plugin to call OpenWhisk API for retrieving activation records and automatically ingest them into Elasticsearch?</em></p>
-
-<p>Unfortunately not...</p>
-
-<h3>Polling OpenWhisk Logs?</h3>
-
-<p>Each time the client calls the API to retrieve the activation records, we want to retrieve only those records that have occurred since the last poll. This ensures we are not ingesting the same records more than once.</p>
-
-<p>The <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/whiskswagger.json#!/Activations/getActivations">OpenWhisk API for retrieving activation records</a> supports a query parameter (<code>since</code>) which restricts results to those that occurred after the parameter value's timestamp.</p>
-
-<p>Using this parameter in the polling URL, updated to the value of the last polling time, will allow us to ensure we only retrieve new activation records.</p>
-
-<p><strong>Unfortunately, the HTTP input plugin does not support setting dynamic query string parameters.</strong></p>
-
-<p>This means we cannot use the existing plugin to efficiently ingest OpenWhisk logs into Elasticsearch.</p>
-
-<p><em>So we started work on a new plugin to support this behaviour…</em></p>
-
-<h3>OpenWhisk Input Plugin</h3>
-
-<p>This <a href="https://github.com/jthomas/logstash-input-openwhisk">input plugin</a> drains logs from OpenWhisk into Elasticsearch.</p>
-
-<p>Install the plugin with the following command.</p>
-
-<p><code>sh
-$ bin/logstash-plugin install logstash-input-openwhisk
-</code></p>
-
-<p>Once the plugin is installed, you need to configure Logstash with your platform endpoint and user credentials.</p>
-
-<p>This sample configuration will poll the OpenWhisk platform for new logs every fifteen minutes and index them into Elasticsearch. Each activation record will be a separate document.</p>
-
-<p>```
-input {
-  openwhisk {</p>
-
-<pre><code># Mandatory Configuration Parameters
-hostname =&gt; "openwhisk.ng.bluemix.net"
-username =&gt; "sample_user@email.com"
-password =&gt; "some_password"
-# Supports "cron", "every", "at" and "in" schedules by rufus scheduler
-schedule =&gt; { "every" =&gt; "15m"}
-</code></pre>
-
-<p>  }
-}</p>
-
-<p>output {
-  elasticsearch {</p>
-
-<pre><code>hosts =&gt; ["localhost:9200"]
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p>The plugin supports the same configuration values for the <code>schedule</code> parameter as the <a href="https://github.com/logstash-plugins/logstash-input-http_poller">HTTP input plugin</a>.</p>
-
-<p>More examples of using the plugin are available in the <a href="https://github.com/jthomas/logstash-input-openwhisk/tree/master/examples">examples</a> directory in the project repository.</p>
-
-<h2>Demonstration</h2>
-
-<p>Here's a demonstration of the OpenWhisk input plugin being used in the ELK stack. As we invoke serverless functions in OpenWhisk, Kibana shows the activation records appearing in the dashboard. Logstash is polling the logs API and ingesting the records into Elasticsearch in real-time.</p>
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/9gNyrW58EqE" frameborder="0" allowfullscreen></iframe>
-
-
-<h2>Conclusion</h2>
-
-<p>Developers using serverless platforms have no access to the infrastructure environment running their code. Debugging production bugs relies on using logging output to diagnose and resolve issues.</p>
-
-<p>Elasticsearch, Logstash and Kibana has become the scalable open-source solution for log management and analysis.</p>
-
-<p>Using the <a href="https://github.com/jthomas/logstash-input-openwhisk">Logstash plugin for OpenWhisk</a>, serverless logs will be automatically indexed into Elasticsearch in real-time. Developers can use the Kibana frontend to easily diagnose and monitor issues in production.</p>
-
-<p>In the next post, we'll look at using Docker to set up Elasticsearch, Logstash and Kibana with our custom OpenWhisk plugin.</p>
-
-<p>Until then... 😎</p>
 ]]></content>
   </entry>
   
