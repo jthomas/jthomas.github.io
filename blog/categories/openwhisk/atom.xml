@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-03-28T14:29:53+01:00</updated>
+  <updated>2017-04-27T17:28:25+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,240 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Python Packages in OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/"/>
+    <updated>2017-04-27T17:15:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk's Python runtime <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#python-actions">includes popular third-party libraries</a> like requests, scrapy and simplejson. Developers don't have to manually install packages to use those libraries.</p>
+
+<p><em>Great, but what about using other libraries that aren't pre-installed?</em></p>
+
+<p>In a <a href="./blog/2016/11/28/npm-modules-in-openwhisk/">previous blog post</a>, we showed how to deploy Node.js actions from zip files containing third-party modules. These modules are then made available in the Node.js runtime.</p>
+
+<p><strong><a href="https://github.com/openwhisk/openwhisk/pull/1940">Recent updates</a> to OpenWhisk allow us to use the same approach with the Python runtime!</strong></p>
+
+<h2>Python Packages</h2>
+
+<p>Python packages can be installed using the <a href="https://pypi.python.org/pypi/pip">pip tool</a>. This can be used to install individual packages or a series of dependencies from an external file.</p>
+
+<p><code>
+$ pip install blah
+$ pip install -r requirements.txt
+</code></p>
+
+<p>pip defaults to installing packages in a global location (<a href="http://stackoverflow.com/questions/31384639/what-is-pythons-site-packages-directory">site-packages</a>) which is shared between all users. This can cause issues when different projects require different versions of the same package.</p>
+
+<h3>virtualenv</h3>
+
+<p><a href="http://python-guide-pt-br.readthedocs.io/en/latest/dev/virtualenvs/">virtualenv</a> is a tool that solves this issue by creating virtual python environments for projects. The virtual environment includes a custom <code>site-packages</code> folder to install packages into.</p>
+
+<p><code>
+$ virtualenv env
+Using base prefix '/Library/Frameworks/Python.framework/Versions/3.6'
+New python executable in /private/tmp/env/bin/python3.6
+Also creating executable in /private/tmp/env/bin/python
+Installing setuptools, pip, wheel...done.
+</code></p>
+
+<p>OpenWhisk <a href="https://github.com/openwhisk/openwhisk/pull/1940">recently added support</a> for using virtualenv in the Python runtime.</p>
+
+<h3>custom packages on openwhisk</h3>
+
+<p>OpenWhisk actions can be created from a zip file <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">containing source files and other resources</a>.</p>
+
+<p>If the archive includes a virtual Python environment folder, the platform runs the <code>./bin/activate_this.py</code> script before executing Python actions. This script modifies the module search path to include the local <code>site-packages</code> folder.</p>
+
+<p><em>This will only happen during "cold" activations.</em></p>
+
+<p><strong>This feature comes with the following restrictions.</strong></p>
+
+<ul>
+<li>Virtual Python environment must be in a folder called <code>virtualenv</code> under the top-level directory.</li>
+<li>Packages must be available for the Python runtime being used in OpenWhisk (2.7 or 3.6).</li>
+</ul>
+
+
+<p>Let's look at an example of building an OpenWhisk Python action which uses an external Python package.</p>
+
+<h3>Python Package Example</h3>
+
+<p>The <a href="https://pypi.python.org/pypi/pyjokes">pyjokes</a> package provides a library for generating (terrible) jokes for programmers. Let's turn this package into an API (Jokes-as-a-Service!) using the Python runtime on OpenWhisk.</p>
+
+<p>Start by creating a new directory for your project and set up the virtual Python environment.</p>
+
+<p><code>sh
+$ mkdir jokes; cd jokes
+$ virtualenv virtualenv
+Using base prefix '/Library/Frameworks/Python.framework/Versions/3.6'
+New python executable in /tmp/jokes/virtualenv/bin/python3.6
+Also creating executable in /tmp/jokes/virtualenv/bin/python
+Installing setuptools, pip, wheel...done.
+$ source virtualenv/bin/activate
+(virtualenv) $ pip install pyjokes
+Collecting pyjokes
+  Using cached pyjokes-0.5.0-py2.py3-none-any.whl
+Installing collected packages: pyjokes
+Successfully installed pyjokes-0.5.0
+(virtualenv) $
+</code></p>
+
+<p>In the project directory, create a new file (<code>__main__.py</code>) and paste the following code.</p>
+
+<p>```python
+import pyjokes</p>
+
+<p>def joke(params):</p>
+
+<pre><code>return {"joke": pyjokes.get_joke()}
+</code></pre>
+
+<p>```</p>
+
+<p>Check the script works with the Python intepreter.</p>
+
+<p>```sh
+(virtualenv) $ python -i .</p>
+
+<blockquote><blockquote><blockquote><p>joke({})
+{'joke': 'What do you call a programmer from Finland? Nerdic.'}</p>
+
+<p>```</p></blockquote></blockquote></blockquote>
+
+<p>Add the <code>virtualenv</code> folder and Python script to a new zip file.</p>
+
+<p><code>
+$ zip -r jokes.zip virtualenv __main__.py
+  adding: virtualenv/ (stored 0%)
+  adding: virtualenv/.Python (deflated 65%)
+  adding: virtualenv/bin/ (stored 0%)
+  adding: virtualenv/bin/activate (deflated 63%)
+  ...
+$ ls
+__main__.py  jokes.zip   virtualenv
+</code></p>
+
+<p>Create a new OpenWhisk action for the Python runtime using the <code>wsk</code> cli.</p>
+
+<p><code>
+$ wsk action create jokes --kind python:3 --main joke jokes.zip
+ok: created action jokes
+</code></p>
+
+<p>Invoking our new action will return (bad) jokes on-demand using the third-party Python package.</p>
+
+<p>```
+$ wsk action invoke jokes --blocking --result
+{</p>
+
+<pre><code>"joke": "Software salesmen and used-car salesmen differ in that the latter know when they are lying."
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>Installing Packages With Docker</h3>
+
+<p>In the example above, the Python runtime used in development (v3.6) matched the OpenWhisk runtime environment. Packages installed using <code>virtualenv</code> must be for the same major and minor versions of the Python runtime used by OpenWhisk.</p>
+
+<p>OpenWhisk publishes the runtime environments as <a href="https://hub.docker.com/u/openwhisk/">Docker images on Docker Hub</a>.</p>
+
+<p>Running containers from <a href="https://hub.docker.com/r/openwhisk/python3action/">those runtime images</a> provides a way to download packages for the correct environment.</p>
+
+<p><code>
+$ docker run --rm -v "$PWD:/tmp" openwhisk/python3action sh \
+  -c "cd tmp; virtualenv virtualenv; source virtualenv/bin/activate; pip install pyjokes;"
+Using base prefix '/usr/local'
+New python executable in /tmp/virtualenv/bin/python3.6
+Also creating executable in /tmp/virtualenv/bin/python
+Installing setuptools, pip, wheel...done.
+Collecting pyjokes
+  Downloading pyjokes-0.5.0-py2.py3-none-any.whl
+Installing collected packages: pyjokes
+Successfully installed pyjokes-0.5.0
+$
+</code></p>
+
+<p>This will leave you a <code>virtualenv</code> folder in the current directory with packages for the correct Python runtime.</p>
+
+<h3>Speeding Up Deployments</h3>
+
+<p>Peeking inside the <code>virtualenv</code> folder reveals a huge number of files to set up the virtual Python environment. If we just want to use a third-party package from the local <code>site-packages</code> folder, most of those files are unnecessary.</p>
+
+<p><em>Adding this entire folder to the zip archive will unnecessarily inflate the file size. This will slow down deployments and increase execution time for cold activations. OpenWhisk also has a maximum size for action source code of 48MB.</em></p>
+
+<p>Manually including individual <code>site-packages</code> folders, rather than the entire <code>virtualenv</code> directory, will ensure the archive file only contains packages being used. We must also add the Python script (<code>virtualenv/bin/activate_this.py</code>) executed by OpenWhisk to modify the module search path.</p>
+
+<p><code>
+$ zip -r jokes_small.zip virtualenv/bin/activate_this.py virtualenv/lib/python3.6/site-packages/pyjokes __main__.py
+updating: virtualenv/bin/activate_this.py (deflated 54%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/ (stored 0%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/__init__.py (deflated 20%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_de.py (deflated 29%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_en.py (deflated 61%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_es.py (deflated 40%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/pyjokes.py (deflated 68%)
+updating: __main__.py (deflated 18%)
+$ ls -lh
+total 40984
+-rw-r--r--  1 james  wheel    74B 21 Apr 11:01 __main__.py
+-rw-r--r--  1 james  wheel    20M 21 Apr 11:07 jokes.zip
+-rw-r--r--  1 james  wheel   9.3K 21 Apr 13:36 jokes_small.zip
+drwxr-xr-x  6 james  wheel   204B 21 Apr 11:25 virtualenv
+</code></p>
+
+<p>The archive file is now less than ten kilobytes! 🏃</p>
+
+<h4>With The Serverless Framework</h4>
+
+<p><a href="https://serverless.com/">The Serverless Framework</a> is a popular open-source framework for building serverless applications. This framework handles the configuration, packaging and deployment of your serverless application.</p>
+
+<p>OpenWhisk is supported through a <a href="https://www.npmjs.com/package/serverless-openwhisk">provider plugin</a>. <a href="https://medium.com/openwhisk/serverless-framework-and-openwhisk-plugin-update-v0-6-1339cfdcd2d2">Recent versions</a> of the plugin added support for the Python runtime environment.</p>
+
+<p>Using the <a href="https://serverless.com/framework/docs/providers/openwhisk/guide/serverless.yml/">application configuration file</a> for the framework, users can add <code>include</code> and <code>exclude</code> parameters to control the contents of the archive file before deployment.</p>
+
+<p>Here's an example of the configuration needed to only include the necessary files for the application above.</p>
+
+<p>```yaml
+service: pyjokes</p>
+
+<p>provider:
+  name: openwhisk
+  runtime: python:3</p>
+
+<p>functions:
+  jokes:</p>
+
+<pre><code>handler: handler.joke
+</code></pre>
+
+<p>plugins:
+  - serverless-openwhisk</p>
+
+<p>package:
+  exclude:</p>
+
+<pre><code>- virtualenv/**
+- '!virtualenv/bin/activate_this.py'
+- '!virtualenv/lib/python3.6/site-packages/pyjokes/**'
+</code></pre>
+
+<p>```</p>
+
+<h3>conclusion</h3>
+
+<p>Python has a huge community of third-party packages for everything from parsing JSON, making HTTP requests and even generating jokes. OpenWhisk already provided a number of the most popular packages within the Python runtime.</p>
+
+<p>Users can install additional packages locally using the <code>pip</code> and <code>virtualenv</code> tools. Bundling those files within the deployment archive means they are extracted into the OpenWhisk Python runtime environment.</p>
+
+<p>Recent changes to the Python runtime allows the platform to automatically add local package folders to the module search path.</p>
+
+<p><strong>This means Python functions running on OpenWhisk can now use any third-party library as if it was installed globally.</strong></p>
+
+<p>Hurrah 👌!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Building an SMS Bot for Slack.]]></title>
@@ -744,7 +978,7 @@ $ tree .
 [package]
 name = "action"
 version = "0.1.0"
-authors = ["Me <a href="&#109;&#97;&#x69;&#x6c;&#116;&#x6f;&#x3a;&#109;&#101;&#64;&#x65;&#109;&#x61;&#105;&#x6c;&#46;&#99;&#111;&#109;">&#x6d;&#x65;&#x40;&#x65;&#109;&#x61;&#x69;&#x6c;&#46;&#x63;&#111;&#x6d;</a>"]</p>
+authors = ["Me <a href="&#x6d;&#x61;&#x69;&#108;&#116;&#x6f;&#x3a;&#x6d;&#101;&#x40;&#101;&#109;&#97;&#105;&#x6c;&#46;&#x63;&#x6f;&#x6d;">&#x6d;&#101;&#x40;&#x65;&#109;&#97;&#x69;&#x6c;&#46;&#99;&#111;&#109;</a>"]</p>
 
 <p>[dependencies]
 rustc-serialize = "0.3"
@@ -1006,198 +1240,6 @@ $ wsk action invoke go_test --blocking --result --param name James
 ```</p>
 
 <p>Success 😎.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[OpenWhisk Docker Actions]]></title>
-    <link href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions+%28jamess-mbp-2.hursley.uk.ibm.com%27s+conflicted+copy+2017-02-20%29/"/>
-    <updated>2017-01-16T11:05:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions (jamess-mbp-2.hursley.uk.ibm.com's conflicted copy 2017-02-20)</id>
-    <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
-
-<p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
-
-<p>This makes it much easier to support (<em>almost</em>) any programming language in OpenWhisk. Awesome!</p>
-
-<p>Let's start by explaining how this new feature works...</p>
-
-<h2>Docker Actions</h2>
-
-<p>Docker Actions in OpenWhisk are <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/Dockerfile">built</a> from the following <a href="https://github.com/openwhisk/openwhisk/tree/master/core/actionProxy">repository</a> using the <a href="https://github.com/docker-library/python/blob/693a75332e8ae5ad3bfae6e8399c4d7cc3cb6181/2.7/alpine/Dockerfile">python:2.7.12-alpine</a> base image. This image is available on Docker Hub as <a href="https://hub.docker.com/r/openwhisk/dockerskeleton/"><code>openwhisk/dockerskeleton</code></a>.</p>
-
-<p>The image includes a Python application which <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">implements the HTTP API</a> used to handle platform requests, e.g. <em>invoke the action with these parameters</em>.</p>
-
-<p>This service executes a file (<code>/action/exec</code>) for each invocation. Replacing this file allows us to control the runtime environment.</p>
-
-<p>Request parameters are passed, using a JSON string, as the first command-line argument. Response values are interpreted as JSON written to <code>stdout</code>.</p>
-
-<p>Developers can now include a zip file when creating Docker-based Actions. This archive will be extracted into the <code>/action</code> directory prior to invocations. If the archive contains a file named <code>exec</code> this will replace the exectuable file called by the invocation handler.</p>
-
-<h3>Testing It Out</h3>
-
-<p>Using the <code>wsk</code> command-line, developers can create Actions using this Docker image.</p>
-
-<p>If the archive file is missing, the <code>/action/exec</code> path contains the the following <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">stub file</a>.</p>
-
-<p><code>sh
-$ wsk action create skeleton --docker openwhisk/dockerskeleton
-ok: created action skeleton
-$ wsk action invoke skeleton --blocking --result
-{ "error": "This is a stub action. Replace it with custom logic." }
-</code></p>
-
-<p>Let's update this stub file to return a custom greeting.</p>
-
-<p>``` sh
-$ cat exec</p>
-
-<h1>!/bin/bash</h1>
-
-<p>echo "{ \"hello\": \"ran without a docker pull!\" }"
-$ ./exec
-{ "hello": "ran without a docker pull!" }
-$ zip exec.zip exec
-  adding: exec (stored 0%)
-$ wsk action create custom_docker_action exec.zip --docker
-ok: created action custom_docker_action
-$ wsk action invoke custom_docker_action --blocking --result
-{ "hello": "ran without a docker pull!" }
-```</p>
-
-<p>The archive file could include a static binary, or even a complete runtime, to replace the <code>exec</code> stub.</p>
-
-<p>All files in the archive file will be available under the <code>/action</code> directory.</p>
-
-<h2>Running Locally</h2>
-
-<p>The <code>openwhisk/dockerskeleton</code> image exposes a Python-based HTTP server on port 8080.</p>
-
-<p>Pulling the <code>openwhisk/dockerskeleton</code> image from Docker Hub allows us to run it locally for development.</p>
-
-<p><code>sh
-$ docker pull openwhisk/dockerskeleton
-$ docker run -it -p 8080:8080 openwhisk/dockerskeleton
-</code></p>
-
-<p>The platform uses the following HTTP endpoints to initialise and invoke Actions.</p>
-
-<ul>
-<li><code>POST /init</code> -> Set up Action source from JSON payload.</li>
-<li><code>POST /run</code> -> Invoke Action</li>
-</ul>
-
-
-<h3>Initialising The Environment</h3>
-
-<p>Before invoking Actions using this image, we need to deploy and unpack the archive file into the <code>/action</code> directory.</p>
-
-<p>Reviewing the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py#L47-L80">Python source code</a>, the platform triggers this by sending a HTTP POST with the following JSON to <code>/init</code> endpoint.</p>
-
-<p>``` json
-{
-  "value": {</p>
-
-<pre><code>"binary": true,
-"code": "..."
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p><code>code</code> contains the archive file as a base64 encoded string.</p>
-
-<p>Let's try this out using the action archive we created above.</p>
-
-<p>``` sh
-$ base64 exec.zip  | echo "\"$(cat)\"" | jq '{value: {binary: true, code: .}}' > init.json
-$ cat init.json
-{
-  "value": {</p>
-
-<pre><code>"binary": true,
-"code": "UEsDBAoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABwAZXhlY1VUCQADRcl8WFDJfFh1eAsAAQT1AQAABBQAAAAjIS9iaW4vYmFzaAplY2hvICJ7IFwiaGVsbG9cIjogXCJyYW4gd2l0aG91dCBhIGRvY2tlciBwdWxsIVwiIH0iClBLAQIeAwoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABgAAAAAAAEAAADtgQAAAABleGVjVVQFAANFyXxYdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEASgAAAH8AAAAAAA=="
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p>Now we can issue the HTTP request to push this archive into the container.</p>
-
-<p>``` sh
-$ http post localhost:8080/init &lt; init.json
-HTTP/1.1 200 OK
-Content-Length: 2
-Content-Type: text/html; charset=utf-8
-Date: Mon, 16 Jan 2017 14:11:04 GMT</p>
-
-<p>OK
-```</p>
-
-<p>Accessing the container filesystem allows us to verify the archive has been extracted correctly.</p>
-
-<p>``` sh
-$ docker ps
-CONTAINER ID        IMAGE                         COMMAND                  CREATED             STATUS              PORTS                    NAMES
-b37a7dc1cab1        openwhisk/dockerskeleton      "/bin/bash -c 'cd ..."   About an hour ago   Up About an hour    0.0.0.0:8080->8080/tcp   relaxed_davinci
-$ docker exec -it b37a7dc1cab1 /bin/sh
-/ # cd /action
-/action # ls
-exec
-/action # cat exec</p>
-
-<h1>!/bin/bash</h1>
-
-<p>echo "{ \"hello\": \"ran without a docker pull!\" }"
-```</p>
-
-<h3>Invocation Requests</h3>
-
-<p>Action invocations are triggered by sending a HTTP POST to the <code>/run</code> endpoint.</p>
-
-<p>This endpoint expects the following JSON body.</p>
-
-<p>```
-{
-  "value": {</p>
-
-<pre><code>"foo": "bar"
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p>The inner object parameters under the <code>value</code> property are passed, as a JSON string, to the executable as the first command-line argument.</p>
-
-<p>Sending this request to our container will trigger the shell script from our archive and return the JSON response.</p>
-
-<p>``` sh
-$ echo "{}" | jq '{value: .}' | http post localhost:8080/run
-HTTP/1.1 200 OK
-Content-Length: 44
-Content-Type: application/json
-Date: Mon, 16 Jan 2017 14:17:15 GMT</p>
-
-<p>{</p>
-
-<pre><code>"hello": "ran without a docker pull!"
-</code></pre>
-
-<p>}
-```</p>
-
-<h2>Conclusion</h2>
-
-<p>Recent updates to Docker-based Actions in OpenWhisk make it much easier to customise the runtime environment.</p>
-
-<p>Being able to deploy arbitrary files into the runtime container, prior to invocation, simplifies the process of supporting new runtimes.</p>
-
-<p>Hopefully this blog post has shown you how to get started with this feature.</p>
-
-<p>Over the next few weeks, we're going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates...</p>
 ]]></content>
   </entry>
   

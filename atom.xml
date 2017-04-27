@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-03-28T14:29:45+01:00</updated>
+  <updated>2017-04-27T17:28:16+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,312 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Python Packages in OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/"/>
+    <updated>2017-04-27T17:15:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk&#8217;s Python runtime <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#python-actions">includes popular third-party libraries</a> like requests, scrapy and simplejson. Developers don&#8217;t have to manually install packages to use those libraries.</p>
+
+<p><em>Great, but what about using other libraries that aren&#8217;t pre-installed?</em></p>
+
+<p>In a <a href="./blog/2016/11/28/npm-modules-in-openwhisk/">previous blog post</a>, we showed how to deploy Node.js actions from zip files containing third-party modules. These modules are then made available in the Node.js runtime.</p>
+
+<p><strong><a href="https://github.com/openwhisk/openwhisk/pull/1940">Recent updates</a> to OpenWhisk allow us to use the same approach with the Python runtime!</strong></p>
+
+<h2>Python Packages</h2>
+
+<p>Python packages can be installed using the <a href="https://pypi.python.org/pypi/pip">pip tool</a>. This can be used to install individual packages or a series of dependencies from an external file.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ pip install blah
+</span><span class='line'>$ pip install -r requirements.txt</span></code></pre></td></tr></table></div></figure>
+
+
+<p>pip defaults to installing packages in a global location (<a href="http://stackoverflow.com/questions/31384639/what-is-pythons-site-packages-directory">site-packages</a>) which is shared between all users. This can cause issues when different projects require different versions of the same package.</p>
+
+<h3>virtualenv</h3>
+
+<p><a href="http://python-guide-pt-br.readthedocs.io/en/latest/dev/virtualenvs/">virtualenv</a> is a tool that solves this issue by creating virtual python environments for projects. The virtual environment includes a custom <code>site-packages</code> folder to install packages into.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ virtualenv env
+</span><span class='line'>Using base prefix '/Library/Frameworks/Python.framework/Versions/3.6'
+</span><span class='line'>New python executable in /private/tmp/env/bin/python3.6
+</span><span class='line'>Also creating executable in /private/tmp/env/bin/python
+</span><span class='line'>Installing setuptools, pip, wheel...done.</span></code></pre></td></tr></table></div></figure>
+
+
+<p>OpenWhisk <a href="https://github.com/openwhisk/openwhisk/pull/1940">recently added support</a> for using virtualenv in the Python runtime.</p>
+
+<h3>custom packages on openwhisk</h3>
+
+<p>OpenWhisk actions can be created from a zip file <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">containing source files and other resources</a>.</p>
+
+<p>If the archive includes a virtual Python environment folder, the platform runs the <code>./bin/activate_this.py</code> script before executing Python actions. This script modifies the module search path to include the local <code>site-packages</code> folder.</p>
+
+<p><em>This will only happen during &#8220;cold&#8221; activations.</em></p>
+
+<p><strong>This feature comes with the following restrictions.</strong></p>
+
+<ul>
+<li>Virtual Python environment must be in a folder called <code>virtualenv</code> under the top-level directory.</li>
+<li>Packages must be available for the Python runtime being used in OpenWhisk (2.7 or 3.6).</li>
+</ul>
+
+
+<p>Let&#8217;s look at an example of building an OpenWhisk Python action which uses an external Python package.</p>
+
+<h3>Python Package Example</h3>
+
+<p>The <a href="https://pypi.python.org/pypi/pyjokes">pyjokes</a> package provides a library for generating (terrible) jokes for programmers. Let&#8217;s turn this package into an API (Jokes-as-a-Service!) using the Python runtime on OpenWhisk.</p>
+
+<p>Start by creating a new directory for your project and set up the virtual Python environment.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>mkdir jokes; <span class="nb">cd </span>jokes
+</span><span class='line'><span class="nv">$ </span>virtualenv virtualenv
+</span><span class='line'>Using base prefix <span class="s1">&#39;/Library/Frameworks/Python.framework/Versions/3.6&#39;</span>
+</span><span class='line'>New python executable in /tmp/jokes/virtualenv/bin/python3.6
+</span><span class='line'>Also creating executable in /tmp/jokes/virtualenv/bin/python
+</span><span class='line'>Installing setuptools, pip, wheel...done.
+</span><span class='line'><span class="nv">$ </span><span class="nb">source </span>virtualenv/bin/activate
+</span><span class='line'><span class="o">(</span>virtualenv<span class="o">)</span> <span class="nv">$ </span>pip install pyjokes
+</span><span class='line'>Collecting pyjokes
+</span><span class='line'>  Using cached pyjokes-0.5.0-py2.py3-none-any.whl
+</span><span class='line'>Installing collected packages: pyjokes
+</span><span class='line'>Successfully installed pyjokes-0.5.0
+</span><span class='line'><span class="o">(</span>virtualenv<span class="o">)</span> <span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In the project directory, create a new file (<code>__main__.py</code>) and paste the following code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">pyjokes</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="nf">joke</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">return</span> <span class="p">{</span><span class="s">&quot;joke&quot;</span><span class="p">:</span> <span class="n">pyjokes</span><span class="o">.</span><span class="n">get_joke</span><span class="p">()}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Check the script works with the Python intepreter.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">(</span>virtualenv<span class="o">)</span> <span class="nv">$ </span>python -i .
+</span><span class='line'>&gt;&gt;&gt; joke<span class="o">({})</span>
+</span><span class='line'><span class="o">{</span><span class="s1">&#39;joke&#39;</span>: <span class="s1">&#39;What do you call a programmer from Finland? Nerdic.&#39;</span><span class="o">}</span>
+</span><span class='line'>&gt;&gt;&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Add the <code>virtualenv</code> folder and Python script to a new zip file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip -r jokes.zip virtualenv __main__.py
+</span><span class='line'>  adding: virtualenv/ <span class="o">(</span>stored 0%<span class="o">)</span>
+</span><span class='line'>  adding: virtualenv/.Python <span class="o">(</span>deflated 65%<span class="o">)</span>
+</span><span class='line'>  adding: virtualenv/bin/ <span class="o">(</span>stored 0%<span class="o">)</span>
+</span><span class='line'>  adding: virtualenv/bin/activate <span class="o">(</span>deflated 63%<span class="o">)</span>
+</span><span class='line'>  ...
+</span><span class='line'><span class="nv">$ </span>ls
+</span><span class='line'>__main__.py  jokes.zip   virtualenv
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create a new OpenWhisk action for the Python runtime using the <code>wsk</code> cli.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create jokes --kind python:3 --main joke jokes.zip
+</span><span class='line'>ok: created action jokes
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Invoking our new action will return (bad) jokes on-demand using the third-party Python package.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke jokes --blocking --result
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;joke&quot;</span>: <span class="s2">&quot;Software salesmen and used-car salesmen differ in that the latter know when they are lying.&quot;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Installing Packages With Docker</h3>
+
+<p>In the example above, the Python runtime used in development (v3.6) matched the OpenWhisk runtime environment. Packages installed using <code>virtualenv</code> must be for the same major and minor versions of the Python runtime used by OpenWhisk.</p>
+
+<p>OpenWhisk publishes the runtime environments as <a href="https://hub.docker.com/u/openwhisk/">Docker images on Docker Hub</a>.</p>
+
+<p>Running containers from <a href="https://hub.docker.com/r/openwhisk/python3action/">those runtime images</a> provides a way to download packages for the correct environment.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker run --rm -v <span class="s2">&quot;$PWD:/tmp&quot;</span> openwhisk/python3action sh <span class="se">\</span>
+</span><span class='line'>  -c <span class="s2">&quot;cd tmp; virtualenv virtualenv; source virtualenv/bin/activate; pip install pyjokes;&quot;</span>
+</span><span class='line'>Using base prefix <span class="s1">&#39;/usr/local&#39;</span>
+</span><span class='line'>New python executable in /tmp/virtualenv/bin/python3.6
+</span><span class='line'>Also creating executable in /tmp/virtualenv/bin/python
+</span><span class='line'>Installing setuptools, pip, wheel...done.
+</span><span class='line'>Collecting pyjokes
+</span><span class='line'>  Downloading pyjokes-0.5.0-py2.py3-none-any.whl
+</span><span class='line'>Installing collected packages: pyjokes
+</span><span class='line'>Successfully installed pyjokes-0.5.0
+</span><span class='line'><span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will leave you a <code>virtualenv</code> folder in the current directory with packages for the correct Python runtime.</p>
+
+<h3>Speeding Up Deployments</h3>
+
+<p>Peeking inside the <code>virtualenv</code> folder reveals a huge number of files to set up the virtual Python environment. If we just want to use a third-party package from the local <code>site-packages</code> folder, most of those files are unnecessary.</p>
+
+<p><em>Adding this entire folder to the zip archive will unnecessarily inflate the file size. This will slow down deployments and increase execution time for cold activations. OpenWhisk also has a maximum size for action source code of 48MB.</em></p>
+
+<p>Manually including individual <code>site-packages</code> folders, rather than the entire <code>virtualenv</code> directory, will ensure the archive file only contains packages being used. We must also add the Python script (<code>virtualenv/bin/activate_this.py</code>) executed by OpenWhisk to modify the module search path.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip -r jokes_small.zip virtualenv/bin/activate_this.py virtualenv/lib/python3.6/site-packages/pyjokes __main__.py
+</span><span class='line'>updating: virtualenv/bin/activate_this.py <span class="o">(</span>deflated 54%<span class="o">)</span>
+</span><span class='line'>updating: virtualenv/lib/python3.6/site-packages/pyjokes/ <span class="o">(</span>stored 0%<span class="o">)</span>
+</span><span class='line'>updating: virtualenv/lib/python3.6/site-packages/pyjokes/__init__.py <span class="o">(</span>deflated 20%<span class="o">)</span>
+</span><span class='line'>updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_de.py <span class="o">(</span>deflated 29%<span class="o">)</span>
+</span><span class='line'>updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_en.py <span class="o">(</span>deflated 61%<span class="o">)</span>
+</span><span class='line'>updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_es.py <span class="o">(</span>deflated 40%<span class="o">)</span>
+</span><span class='line'>updating: virtualenv/lib/python3.6/site-packages/pyjokes/pyjokes.py <span class="o">(</span>deflated 68%<span class="o">)</span>
+</span><span class='line'>updating: __main__.py <span class="o">(</span>deflated 18%<span class="o">)</span>
+</span><span class='line'><span class="nv">$ </span>ls -lh
+</span><span class='line'>total 40984
+</span><span class='line'>-rw-r--r--  1 james  wheel    74B 21 Apr 11:01 __main__.py
+</span><span class='line'>-rw-r--r--  1 james  wheel    20M 21 Apr 11:07 jokes.zip
+</span><span class='line'>-rw-r--r--  1 james  wheel   9.3K 21 Apr 13:36 jokes_small.zip
+</span><span class='line'>drwxr-xr-x  6 james  wheel   204B 21 Apr 11:25 virtualenv
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The archive file is now less than ten kilobytes! 🏃</p>
+
+<h4>With The Serverless Framework</h4>
+
+<p><a href="https://serverless.com/">The Serverless Framework</a> is a popular open-source framework for building serverless applications. This framework handles the configuration, packaging and deployment of your serverless application.</p>
+
+<p>OpenWhisk is supported through a <a href="https://www.npmjs.com/package/serverless-openwhisk">provider plugin</a>. <a href="https://medium.com/openwhisk/serverless-framework-and-openwhisk-plugin-update-v0-6-1339cfdcd2d2">Recent versions</a> of the plugin added support for the Python runtime environment.</p>
+
+<p>Using the <a href="https://serverless.com/framework/docs/providers/openwhisk/guide/serverless.yml/">application configuration file</a> for the framework, users can add <code>include</code> and <code>exclude</code> parameters to control the contents of the archive file before deployment.</p>
+
+<p>Here&#8217;s an example of the configuration needed to only include the necessary files for the application above.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">pyjokes</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">runtime</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">python:3</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">jokes</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">handler.joke</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">plugins</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-openwhisk</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">package</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">exclude</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">virtualenv/**</span>
+</span><span class='line'>    <span class="p-Indicator">-</span> <span class="s">&#39;!virtualenv/bin/activate_this.py&#39;</span>
+</span><span class='line'>    <span class="p-Indicator">-</span> <span class="s">&#39;!virtualenv/lib/python3.6/site-packages/pyjokes/**&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>conclusion</h3>
+
+<p>Python has a huge community of third-party packages for everything from parsing JSON, making HTTP requests and even generating jokes. OpenWhisk already provided a number of the most popular packages within the Python runtime.</p>
+
+<p>Users can install additional packages locally using the <code>pip</code> and <code>virtualenv</code> tools. Bundling those files within the deployment archive means they are extracted into the OpenWhisk Python runtime environment.</p>
+
+<p>Recent changes to the Python runtime allows the platform to automatically add local package folders to the module search path.</p>
+
+<p><strong>This means Python functions running on OpenWhisk can now use any third-party library as if it was installed globally.</strong></p>
+
+<p>Hurrah 👌!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Building an SMS Bot for Slack.]]></title>
@@ -2362,7 +2668,7 @@
     <link href="http://jamesthom.as/blog/2016/10/10/openwhisk-workshop/"/>
     <updated>2016-10-10T14:51:00+01:00</updated>
     <id>http://jamesthom.as/blog/2016/10/10/openwhisk-workshop</id>
-    <content type="html"><![CDATA[<p><img src="https://dl.dropboxusercontent.com/u/10404736/serverless_ldn.png" alt="serverless london" /></p>
+    <content type="html"><![CDATA[<p><img src="http://jamesthom.as/images/serverless_ldn.png" alt="serverless london" /></p>
 
 <p><a href="http://serverlessconf.io/">Serverless Conference</a> comes to London <a href="http://london.serverlessconf.io/">later this month</a>.</p>
 
@@ -2408,13 +2714,13 @@
 </pre></td><td class='code'><pre><code class=''><span class='line'>$ openwhisk-workshop</span></code></pre></td></tr></table></div></figure>
 
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/ow_workshop.png" alt="overview" /></p>
+<p><img src="http://jamesthom.as/images/ow_workshop.png" alt="overview" /></p>
 
 <p>The list of exercises will be displayed, along with current completion progress. Using the arrow keys (<kbd>↑</kbd><kbd>↓</kbd>) to navigate the menu, press <kbd>RETURN</kbd> to open an exercise.</p>
 
 <p>On selecting an exercise, the problem challenge will be printed to the terminal.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/challenge.png" alt="exercise" /></p>
+<p><img src="http://jamesthom.as/images/challenge.png" alt="exercise" /></p>
 
 <p>Each exercise comes with a documentation page which explains the concepts behind the challenge. Use the following command to display the exercise documentation in the terminal.</p>
 
@@ -2430,7 +2736,7 @@
 
 <p>If their solution is correct, that task is marked as completed and the utility returns to the list of exercises.  Developers can continue working through the exercises until they have completed them all.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/verify.png" alt="verify" /></p>
+<p><img src="http://jamesthom.as/images/verify.png" alt="verify" /></p>
 
 <h2>feedback</h2>
 
@@ -2470,7 +2776,7 @@
 
 <p>This video shows the updated nodes being used to define a new OpenWhisk Action, invoking it in response to a message from an inject node and then making modifications to the source code.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/NR_and_OW.gif"></p>
+<p><img src="http://jamesthom.as/images/NR_and_OW.gif"></p>
 
 <h3>interested?</h3>
 
@@ -3299,7 +3605,7 @@ the Feed provider can be started on IBM Bluemix using the Containers service.</p
 </span></code></pre></td></tr></table></div></figure>
 
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/create_container.png"></p>
+<p><img src="http://jamesthom.as/images/create_container.png"></p>
 
 <h2>Registering Feeds</h2>
 
@@ -3442,7 +3748,7 @@ conversation sentiment to affect the dialogue.
 Bot responses should be generated based upon both user
 input and conversation sentiment.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/pizza_rage.gif"></p>
+<p><img src="http://jamesthom.as/images/pizza_rage.gif"></p>
 
 <p>Let&#8217;s review both services before looking at how to combine them to create the
 improved pizza bot&#8230;</p>
@@ -3953,12 +4259,12 @@ the editor.</p>
 <p>Using the APIs panel, select the <em>Add</em> button. Provide a title for your
 service.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/API%20Wizard.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/API%20Wizard.png"></p>
 
 <p>Leave the <em>Add to a new product</em> checkbox selected and provide a
 title for the product.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/API_Add.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/API_Add.png"></p>
 
 <p>The editor now shows the Design panel, allowing you to define the external
 public API schema.</p>
@@ -3974,7 +4280,7 @@ to the Paths section.</em></p>
 <p>Add a new path for the endpoint <em>/hello-name</em>. Set a parameter for this path,
 using the identifier <em>name</em> from location as <em>query</em> and type as <em>string</em>.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/paths.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/paths.png"></p>
 
 <p>Move to the <em>Definitions</em> section to define the API response schema. We
 want to return a JSON object with a single property, result, that contains the
@@ -3983,12 +4289,12 @@ JSON object returned from the Action response.</p>
 <p>Add a new Definition, named <em>whisk_response</em> and type as <em>object</em>, with a
 single object property, <em>result</em>.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/definitions.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/definitions.png"></p>
 
 <p>Under the Paths panel, expand the GET operation.
 Set the schema for the 200 response to <em>whisk_response</em>.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/path_response.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/path_response.png"></p>
 
 <p>CORS supported is already enabled by default (under the Lifecycle section).
 Click the <em>Save</em> icon in toolbar and then move to the &#8220;Assemble&#8221; tab.</p>
@@ -4007,7 +4313,7 @@ e.g. Javascript, are not supported.</p>
 <p>The default flow contains a single invoke node. This node type makes HTTP
 requests, passing the result to the next node in the flow.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/invoke.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/invoke.png"></p>
 
 <p>Use this node to execute your OpenWhisk Action by bringing up the editor and changing the URL to the correct endpoint, e.g.
 <em>https://openwhisk.ng.bluemix.net/api/v1/namespaces/YOUR_NAMESPACE/actions/ACTION_ID?blocking=true</em></p>
@@ -4022,7 +4328,7 @@ after invocation starts.</p>
 will save the HTTP response into a context variable we can reference in the
 following map node definition.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/invoke_details.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/invoke_details.png"></p>
 
 <h2>Passing Query Parameters</h2>
 
@@ -4039,7 +4345,7 @@ circle and the invoke node.</p>
 Change the context variable to <em>request.parameters.name</em> with type <em>string</em>.
 This contains the query parameter value we&#8217;re using to pass in action arguments.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/query_parameter_source.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/query_parameter_source.png"></p>
 
 <p>Returning to the map node editor, add a new <em>output</em> parameter. Leave the
 Context variable as <em>message.body</em>. This variable will be used by the invoke
@@ -4068,12 +4374,12 @@ Add the following JSON Schema definition to the editor form.</p>
 </span></code></pre></td></tr></table></div></figure>
 
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/query_parameter_output.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/query_parameter_output.png"></p>
 
 <p>With the input and output formats defined, we can wire the two parameters together.
 Under the <em>Map</em> panel, click the dot next to the input parameter and then click the second dot on the right, next to the <em>name:string</em> label.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/query_parameter.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/query_parameter.png"></p>
 
 <p>Remember to click <em>Save</em> before proceeding.</p>
 
@@ -4138,7 +4444,7 @@ variable.</p>
 input property as the child property of the invoke result. Set the <em>content
 type</em> to <em>application/json</em> and schema to <em>object</em>.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/map_response_source.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/map_response_source.png"></p>
 
 <p>Add a new <em>output</em> property. Leave the context variable as <em>message.body</em>.
 This context variable is used as the response body.</p>
@@ -4146,12 +4452,12 @@ This context variable is used as the response body.</p>
 <p>Set <em>content type</em> to <em>application/json</em> and change the definition to <em>#/definitions/whisk_response</em>.
 This was the JSON schema we created during the external API definition.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/map_response_output.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/map_response_output.png"></p>
 
 <p>Returning to the map overview, wire together the input property to the result
 attribute of the output property.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/map_response.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/map_response.png"></p>
 
 <p>Click the <em>Save</em> icon before making any further changes.</p>
 
@@ -4164,7 +4470,7 @@ Making our API live requires us to deploy the flow definition to IBM Bluemix.</p
 We&#8217;re going to publish to the default <em>Sandbox</em> target. Follow the steps to
 find and add this target to the local editor.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/publish.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/publish.png"></p>
 
 <p>Once you&#8217;ve added <em>Sandbox</em> as the default
 target, select <em>Publish</em> and click the configured catalogue. On the dialog box,
@@ -4184,7 +4490,7 @@ now be live!</p>
 <p>Opening the <a href="https://new-console.ng.bluemix.net/apis/apiconnect">API Connect dashboard</a>,
 the sandbox catalogue should now contain the <em>openwhisk</em> product with the public API we defined using the editor.</p>
 
-<p><img src="https://dl.dropboxusercontent.com/u/10404736/openwhisk_apis/catalogue.png"></p>
+<p><img src="http://jamesthom.as/images/openwhisk_apis/catalogue.png"></p>
 
 <p>We can now verify this API works by making the HTTP request to the endpoint.
 Under the <em>Settings</em> tab, the <em>API Endpoint</em> section contains the <em>Base URL</em>
@@ -4550,31 +4856,6 @@ revert to matching all events.</p>
 <li><a href="https://github.com/andypiper/hubot-cf">Hubot Scripts for Cloud Foundry</a></li>
 </ul>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Updated IBM Watson Nodes for Node-RED]]></title>
-    <link href="http://jamesthom.as/blog/2016/01/04/updated-ibm-watson-nodes/"/>
-    <updated>2016-01-04T15:45:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/01/04/updated-ibm-watson-nodes</id>
-    <content type="html"><![CDATA[<p><img src="http://jamesthom.as/images/node-red-updates.png"></p>
-
-<p>Earlier this year, I made a <a href="http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered/">major upate</a> to the Node-RED nodes for the IBM
-Watson services available through IBM Bluemix. Since then, the IBM Watson team
-has been <a href="https://developer.ibm.com/watson/blog">busy</a>, with lots of changes to APIs. I&#8217;ve recently been working through
-these changes, updating the nodes, to ensure they work against the latest APIs.</p>
-
-<p><strong>Updates to these nodes have now been finished and are available through the
-<a href="https://console.ng.bluemix.net/catalog/starters/node-red-starter/">boilerplate</a> on IBM Bluemix or by installing the <a href="https://github.com/node-red/node-red-bluemix-nodes">IBM Bluemix Nodes</a> package
-locally.</strong></p>
-
-<p>If you have an existing Node-RED instance running in IBM Bluemix, please review
-the <a href="https://www.ng.bluemix.net/docs/#starters/Node-RED/nodered.html#nodered">documentation</a> for upgrade instructions.</p>
-
-<p>If you encounter any issues, please raise a <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issue on Github</a>.</p>
-
-<p><em>For full details on the changes are available in the <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/30">pull request</a>.</em></p>
 ]]></content>
   </entry>
   
