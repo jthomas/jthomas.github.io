@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-06-12T12:10:14+01:00</updated>
+  <updated>2017-06-28T18:00:15+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,456 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Swift with OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/"/>
+    <updated>2017-06-28T10:08:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk</id>
+    <content type="html"><![CDATA[<p>Swift is one of the <a href="https://www.macrumors.com/2017/03/10/apple-swift-programming-language-popularity/">fastest growing programming languages</a> with developers.</p>
+
+<p><img src="http://jamesthom.as/images/serverless_swift/language_rank.png"></p>
+
+<blockquote><p>Swift has reached a Top 15 ranking faster than any other language we have tracked.</p><footer><strong>RedMonk Programming Language Rankings</strong> <cite><a href='http://redmonk.com/sogrady/2017/03/17/language-rankings-1-17/'>redmonk.com/sogrady/2017/03/17/&hellip;</a></cite></footer></blockquote>
+
+
+<p>Created for building mobile applications, the language is now popular with backend development.</p>
+
+<p>But for Swift developers beginning to build backend applications, they now find themselves having to manage computing infrastructure to run their applications in the cloud.</p>
+
+<p><em>Enter serverless cloud platforms… ☁️☁️☁️</em></p>
+
+<p>These services <a href="https://en.wikipedia.org/wiki/Serverless_computing">allow developers to push code</a>, rather than VMs, into the cloud. The platforms allow you to connect external event sources like API requests or message queues to functions in your code. As events occur, your code is instantiated and executed to process each request. Developers are only billed for the milliseconds needed to process each request.</p>
+
+<p>Serverless platforms let you run applications in the cloud without worrying about infrastructure. 😎</p>
+
+<p><strong><a href="http://openwhisk.org">Apache OpenWhisk</a> is currently the only serverless platform to support Swift language functions.</strong></p>
+
+<p><em>Let&#8217;s have a look at how you can use Swift with OpenWhisk before diving into how the platform implements this feature to give us some tips and tricks for Swift on OpenWhisk…</em></p>
+
+<h2>Swift On OpenWhisk</h2>
+
+<h3>Using the CLI</h3>
+
+<p>Create a Swift file with the following source code in.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>func main(args: [String:Any]) -&gt; [String:Any] {
+</span><span class='line'>    if let name = args["name"] as? String {
+</span><span class='line'>        return [ "greeting" : "Hello \(name)!" ]
+</span><span class='line'>    } else {
+</span><span class='line'>        return [ "greeting" : "Hello stranger!" ]
+</span><span class='line'>    }
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-swift-actions">Swift actions</a> must consume and return a dictionary. The dictionary passed as the function argument will contain event parameters. Returned dictionary values must support serialisation to JSON.</p>
+
+<p>Create and invoke a new OpenWhisk action using the command-line utility.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk action create swift action.swift
+</span><span class='line'>ok: created action swift
+</span><span class='line'>$ wsk action invoke swift --result
+</span><span class='line'>{
+</span><span class='line'>    "greeting": "Hello stranger!"
+</span><span class='line'>}
+</span><span class='line'>$ wsk action invoke swift --result --param name World
+</span><span class='line'>{
+</span><span class='line'>    "greeting": "Hello World!"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>result</code> flag will only show the action output in the console rather than the full API response.</p>
+
+<p>The source file must have a function called <code>main</code>. Each invocation executes this function. The function name to invoke can be overridden as shown below.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>func foo(args: [String:Any]) -&gt; [String:Any] {
+</span><span class='line'>    return [ "greeting" : "Hello foo!" ]
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk action create foobar action.swift --main foo
+</span><span class='line'>ok: created action foobar
+</span><span class='line'>$ wsk action invoke foobar --result
+</span><span class='line'>{
+</span><span class='line'>    "greeting": "Hello foo!"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Choosing the runtime for the action can be set using the <code>kind</code> flag. If the source file has the <code>.swift</code> extension this will be automatically set to <code>swift:default</code>.</p>
+
+<p>OpenWhisk uses Swift 3.0.2 that runs on the Linux environment. There are open issues to support <a href="https://github.com/apache/incubator-openwhisk/issues/2079">Swift 3.1</a> and <a href="https://github.com/apache/incubator-openwhisk/issues/2200">Swift 4</a>.</p>
+
+<h3>Using the Serverless Framework</h3>
+
+<p><a href="https://serverless.com/">The Serverless Framework</a> is a popular open-source framework for building serverless applications. It provides CLI tools and a workflow for managing serverless development.</p>
+
+<p>Developers use a YAML file to define their application functions, events and resources. The framework handles deploying the application to their serverless provider.</p>
+
+<p>Having started as a tool for AWS Lambda, the framework recently <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">added multi-provider support</a>. It now also works with Apache OpenWhisk, Azure Functions and Google Cloud Functions.</p>
+
+<p>Let&#8217;s look at an example of using this framework to create a new OpenWhisk Swift application. Using a provider name and runtime, the framework <a href="https://serverless.com/framework/docs/providers/openwhisk/cli-reference/create/">can scaffold a new serverless application</a>.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ serverless create -t openwhisk-swift -p swift-action
+</span><span class='line'>Serverless: Generating boilerplate...
+</span><span class='line'>Serverless: Generating boilerplate in "/home/me/swift-action"
+</span><span class='line'> _______                             __
+</span><span class='line'>|   _   .-----.----.--.--.-----.----|  .-----.-----.-----.
+</span><span class='line'>|   |___|  -__|   _|  |  |  -__|   _|  |  -__|__ --|__ --|
+</span><span class='line'>|____   |_____|__|  \___/|_____|__| |__|_____|_____|_____|
+</span><span class='line'>|   |   |             The Serverless Application Framework
+</span><span class='line'>|       |                           serverless.com, v1.16.0
+</span><span class='line'> -------'
+</span><span class='line'>
+</span><span class='line'>Serverless: Successfully generated boilerplate for template: "openwhisk-swift"
+</span><span class='line'>$ tree swift-action/
+</span><span class='line'>swift-action/
+</span><span class='line'>├── README.md
+</span><span class='line'>├── package.json
+</span><span class='line'>├── ping.swift
+</span><span class='line'>└── serverless.yml
+</span><span class='line'>
+</span><span class='line'>0 directories, 4 files</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>openwhisk-swift</code> directory contains the boilerplate application ready to deploy. It includes a sample action (<code>ping.swift</code>) and the configuration file (<code>serverless.yml</code>).</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>func main(args: [String:Any]) -&gt; [String:Any] {
+</span><span class='line'>    let formatter = DateFormatter()
+</span><span class='line'>    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+</span><span class='line'>    let now = formatter.string(from: Date())
+</span><span class='line'>
+</span><span class='line'>    if let name = args["name"] as? String {
+</span><span class='line'>      return [ "greeting" : "Hello \(name)! The time is \(now)" ]
+</span><span class='line'>    } else {
+</span><span class='line'>      return [ "greeting" : "Hello stranger! The time is \(now)" ]
+</span><span class='line'>    }
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>service: swift-action
+</span><span class='line'>
+</span><span class='line'>provider:
+</span><span class='line'>  name: openwhisk
+</span><span class='line'>  runtime: swift
+</span><span class='line'>
+</span><span class='line'>functions:
+</span><span class='line'>  hello:
+</span><span class='line'>    handler: ping.main
+</span><span class='line'>
+</span><span class='line'>plugins:
+</span><span class='line'>  - serverless-openwhisk</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Install the provider plugin using <code>npm install</code> and type <code>serverless deploy</code> to deploy this application.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ serverless deploy
+</span><span class='line'>Serverless: Packaging service...
+</span><span class='line'>Serverless: Compiling Functions...
+</span><span class='line'>Serverless: Compiling API Gateway definitions...
+</span><span class='line'>Serverless: Compiling Rules...
+</span><span class='line'>Serverless: Compiling Triggers & Feeds...
+</span><span class='line'>Serverless: Deploying Functions...
+</span><span class='line'>Serverless: Deployment successful!
+</span><span class='line'>
+</span><span class='line'>Service Information
+</span><span class='line'>platform: openwhisk.ng.bluemix.net
+</span><span class='line'>namespace:    _
+</span><span class='line'>service:  swift-action
+</span><span class='line'>
+</span><span class='line'>actions:
+</span><span class='line'>swift-action-dev-hello
+</span><span class='line'>...
+</span><span class='line'>$ serverless invoke -f hello
+</span><span class='line'>{
+</span><span class='line'>    "greeting": "Hello stranger! The time is 2017-06-23 10:52:02"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For more information on using the Serverless Framework with OpenWhisk, please see this documentation: <a href="https://serverless.com/framework/docs/providers/openwhisk/">https://serverless.com/framework/docs/providers/openwhisk/</a>.</p>
+
+<h2>How It Works</h2>
+
+<p>Swift is a statically typed compiled language. Unlike JavaScript or Python, Swift source code must be compiled into a binary for execution.</p>
+
+<p>Swift actions in OpenWhisk can be created from Swift source files, rather than binaries, meaning the platform must run this compilation step.</p>
+
+<h3>Swift on Docker</h3>
+
+<p>OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Docker containers</a> to manage the action runtime environments. <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/swift3Action/Dockerfile">This Dockerfile</a> documents the build steps for generating the Swift runtime image used in OpenWhisk.</p>
+
+<p>Images for each of the OpenWhisk runtime environments are <a href="https://hub.docker.com/u/openwhisk/">available on Docker Hub</a>. Creating containers from these images allows you to explore the Swift runtime environment.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker pull openwhisk/swift3action
+</span><span class='line'>$ docker run -it --rm openwhisk/swift3action bash</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>For more information on the API exposed by runtime containers to initialise and invoke actions, please see <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions">this blog post</a>.</em></p>
+
+<h3>Building Swift actions</h3>
+
+<p>Swift runtime environments has a template package available in the <code>/swift3Action/spm-build</code> directory.</p>
+
+<p>All the Swift sources files provided by the user are written into that package&#8217;s <code>main.swift</code> file. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/swift3Action/epilogue.swift">following source code</a> is appended to <code>main.swift</code> to support execution within the OpenWhisk runtime. It parses the input parameters from the environment, invokes the registered function name and returns the computation response as a JSON string.</p>
+
+<p>Dependencies for the following packages are included in the existing <code>Package.swift</code> file. These packages can be used from the action source code without further configuration.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
+</span><span class='line'>
+</span><span class='line'>let package = Package(
+</span><span class='line'>    name: "Action",
+</span><span class='line'>        dependencies: [
+</span><span class='line'>          .Package(url: "https://github.com/IBM-Swift/Kitura-net.git", "1.0.1"),
+</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/SwiftyJSON.git", "14.2.0"),
+</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/swift-watson-sdk.git", "0.4.1")
+</span><span class='line'>        ]
+</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>During initialisation, the Swift build process is executed to generate the action binary.</p>
+
+<p>This artifact (<code>/swift3Action/spm-build/.build/release/Action</code>) will be executed for each invocation received by the platform.</p>
+
+<h3>Container re-use</h3>
+
+<p>Containers used for action runtimes are re-used with subsequent requests. This means any initialisation cost, e.g. compiling Swift source code, will only be incurred once per runtime container.</p>
+
+<p>Runtime containers are evicted from the cache ten minutes after the last activation. Future invocations for that runtime will use a new container and have to run the initialisation step again.</p>
+
+<p>Additionally, runtimes containers cannot process concurrent requests. If a request arrives before the previous one has finished processing, a new environment will need to be initialised.</p>
+
+<h3>Improving cold start time</h3>
+
+<p>Swift build times are <a href="https://thatthinginswift.com/debug-long-compile-times-swift/">not known for being fast</a>.</p>
+
+<p>Build time is included in the request processing time for each new runtime container provisioned.</p>
+
+<p>In an attempt to reduce this delay, OpenWhisk runs the minimum build steps necessary to compile the source code, rather than a full release build.</p>
+
+<p>During the Docker build for the Swift runtime image, the full release build is executed for the empty action package. This generates object files and other intermediary build outputs which are stored in the build cache.</p>
+
+<p>Logs from the build process are parsed to retrieve the individual compilation and linking commands for the <code>main.swift</code> file. These commands are written into a new shell script  (<code>/swift3Action/spm-build/swiftbuildandlink.sh</code>).</p>
+
+<p>When a new Swift runtime container is initialised, the source code for the action is written into the <code>main.swift</code> file. Rather than running a full re-build, the runtime just executes the shell script containing the compilation and linking steps. This re-uses the cached build objects and reduces compilation time.</p>
+
+<h3>Modifying package dependencies</h3>
+
+<p>Swift packages uses a manifest file (<code>Packages.swift</code>) to list <a href="https://swift.org/package-manager/">package dependencies</a>. Dependencies are automatically downloaded and compiling during the package build process.</p>
+
+<p>The Swift environment used by OpenWhisk uses the package manifest shown above. This includes dependencies for JSON and HTTP libraries.</p>
+
+<p>Swift actions can be created from Swift source code or zip files. Zip files are expanded into the package directory (<code>/swift3action/spm-build</code>) before initialisation.</p>
+
+<p>If the zip file contains a new package manifest, this will overwrite the default manifest in the environment.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
+</span><span class='line'>
+</span><span class='line'>let package = Package(
+</span><span class='line'>    name: "Action",
+</span><span class='line'>        dependencies: [
+</span><span class='line'>          .Package(url: "https://github.com/IBM-Swift/Kitura-net.git", "1.0.1"),
+</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/SwiftyJSON.git", "14.2.0"),
+</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/swift-watson-sdk.git", "0.4.1"),
+</span><span class='line'>          .Package(url: "https://github.com/IBM-Swift/swift-html-entities", majorVersion: 3, minor: 0),
+</span><span class='line'>        ]
+</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running a full build will download new package dependencies and make them available for use in our action.</p>
+
+<p>OpenWhisk uses a shell script (<code>swiftbuildandlink.sh</code>) to manage the build process during initialisation. This defaults to only running the compiler and linker commands for the <code>main.swift</code> file, rather than a full release build.</p>
+
+<p>Including a replacement <code>swiftbuildandlink.sh</code> file in the zip file will allow us to modify the build command used, e.g. <code>swift build -v -c release</code>.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>#!/bin/bash
+</span><span class='line'>echo "Release build running..."
+</span><span class='line'>swift build -v -c release
+</span><span class='line'>echo "Release build finished."</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Downloading additional packages will add a significant delay to initialising new runtime containers.</p>
+
+<p>If this is an issue, let&#8217;s look at skipping the compile step entirely…</p>
+
+<h3>Compiling binaries locally</h3>
+
+<p>Swift actions execute a binary that is available at the following path: <code>/swift3action/spm-build/.build/release/Action</code>.</p>
+
+<p>The runtime uses the existence of this binary to control running the build process. If the file does not exist, the build step is executed. It ensures that compilation is only ran once per runtime container.</p>
+
+<p>This also means that developers can include a locally compiled Swift binary inside the action zip file. During initialisation, the existence of this file will stop the build process from running.</p>
+
+<p>If you want to use lots of additional Swift packages, the compile time penalty won&#8217;t have to be incurred during action invocations. This will dramatically speed up invocation times for &#8220;cold&#8221; actions.</p>
+
+<p><strong>Binaries must be compatible with the platform environment they are being executed within. OpenWhisk uses Swift 3.0.2 on Linux.</strong></p>
+
+<p>OpenWhisk publishes the runtime environments as Docker images. Using containers from these images to compile our action binaries will ensure the binary is compatible.</p>
+
+<p>These <a href="https://medium.com/openwhisk/run-swiftly-precompiled-swift-actions-775addae0345">instructions</a> show you how to compile your source code into a compatible platform binary.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'># run an interactive Swift action container
+</span><span class='line'>docker run -it -v `pwd`:/ow openwhisk/swift3action bash
+</span><span class='line'>cd /ow
+</span><span class='line'># now inside the docker shell
+</span><span class='line'># copy the source code and prepare to build it
+</span><span class='line'>cat /swift3Action/epilogue.swift &gt;&gt; main.swift
+</span><span class='line'>echo '_run_main(mainFunction:main)' &gt;&gt; main.swift
+</span><span class='line'># build and link (the expensive step)
+</span><span class='line'>swift build -v -c release
+</span><span class='line'># create the zip archive
+</span><span class='line'>zip action.zip .build/release/Action
+</span><span class='line'># exit the docker shell
+</span><span class='line'>exit</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>action.zip</code> file can then be deployed as a new action using the following command-line.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wsk action create static-swift action.zip --kind swift:3</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Conclusion</h2>
+
+<p>Swift is one of the fastest growing programming languages with developers. People are increasingly using it to develop backend APIs and services. Being able to use Swift on serverless cloud platforms means developers can focus on writing code, rather than managing infrastructure.</p>
+
+<p>Apache OpenWhisk, an open-source serverless platform, supports Swift as a first-class language. Developers can provide Swift source code and have the platform execute these functions in response to external events.</p>
+
+<p>Because OpenWhisk is open-source, we can discover how the platform executes the code using the Swift runtime. Understanding this process allows us to modify the build step to use additional Swift packages within our actions. We can also improve performance by skipping the compilation stage entirely by providing a native binary.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Python Packages in OpenWhisk]]></title>
@@ -4618,31 +5068,6 @@ revert to matching all events.</p>
 <li><a href="https://github.com/andypiper/hubot-cf">Hubot Scripts for Cloud Foundry</a></li>
 </ul>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Updated IBM Watson Nodes for Node-RED]]></title>
-    <link href="http://jamesthom.as/blog/2016/01/04/updated-ibm-watson-nodes/"/>
-    <updated>2016-01-04T15:45:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/01/04/updated-ibm-watson-nodes</id>
-    <content type="html"><![CDATA[<p><img src="http://jamesthom.as/images/node-red-updates.png"></p>
-
-<p>Earlier this year, I made a <a href="http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered/">major upate</a> to the Node-RED nodes for the IBM
-Watson services available through IBM Bluemix. Since then, the IBM Watson team
-has been <a href="https://developer.ibm.com/watson/blog">busy</a>, with lots of changes to APIs. I&#8217;ve recently been working through
-these changes, updating the nodes, to ensure they work against the latest APIs.</p>
-
-<p><strong>Updates to these nodes have now been finished and are available through the
-<a href="https://console.ng.bluemix.net/catalog/starters/node-red-starter/">boilerplate</a> on IBM Bluemix or by installing the <a href="https://github.com/node-red/node-red-bluemix-nodes">IBM Bluemix Nodes</a> package
-locally.</strong></p>
-
-<p>If you have an existing Node-RED instance running in IBM Bluemix, please review
-the <a href="https://www.ng.bluemix.net/docs/#starters/Node-RED/nodered.html#nodered">documentation</a> for upgrade instructions.</p>
-
-<p>If you encounter any issues, please raise a <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issue on Github</a>.</p>
-
-<p><em>For full details on the changes are available in the <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/30">pull request</a>.</em></p>
 ]]></content>
   </entry>
   
