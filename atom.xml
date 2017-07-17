@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-06-28T18:00:15+01:00</updated>
+  <updated>2017-07-17T12:09:16+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,473 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Creating Swift Binaries for OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk/"/>
+    <updated>2017-07-17T12:12:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk</id>
+    <content type="html"><![CDATA[<p>In the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, we explained how to write Serverless Swift functions using <a href="http://openwhisk.incubator.apache.org/">OpenWhisk actions</a>.</p>
+
+<p>Swift sources files are compiled into a binary by the platform before processing requests.</p>
+
+<p>This compilation process adds a delay on the invocation time for &#8220;cold&#8221; runtimes. If the action has not been invoked for a while, the system is under heavy load or multiple invocations are received in parallel, a new runtime will need to be initialised.</p>
+
+<p>Pre-compiled binaries can be deployed to remove this delay. Binaries must be compiled for the correct platform architecture and support execution through the OpenWhisk runtime.</p>
+
+<p><strong>There is now a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> to make the process of building pre-compiled binaries much easier.</strong></p>
+
+<p><em>Let&#8217;s have a look at how this works…</em></p>
+
+<h2>Swift Packages</h2>
+
+<p>Swift introduced a <a href="https://swift.org/package-manager/">package manager</a> in Swift 3.0. The package manager integrates with the build system to <em>&#8220;automate the process of downloading, compiling, and linking dependencies&#8221;.</em></p>
+
+<p>Swift uses a <a href="https://medium.com/@jp_pancake/the-manifest-file-of-the-swift-package-manager-swiftlang-6eedf0f2f805">manifest file</a> (<code>Packages.swift</code>) to define package properties including dependencies.</p>
+
+<h3>Example Swift Package</h3>
+
+<p>Here&#8217;s an <a href="https://github.com/apple/example-package-deckofplayingcards/blob/master/Package.swift">example manifest file</a> from a <a href="https://github.com/apple/example-package-dealer">sample package</a> with external dependencies.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
+</span><span class='line'>
+</span><span class='line'>let package = Package(
+</span><span class='line'>    name: "DeckOfPlayingCards",
+</span><span class='line'>    targets: [],
+</span><span class='line'>    dependencies: [
+</span><span class='line'>        .Package(url: "https://github.com/apple/example-package-fisheryates.git",
+</span><span class='line'>                 majorVersion: 1),
+</span><span class='line'>        .Package(url: "https://github.com/apple/example-package-playingcard.git",
+</span><span class='line'>                 majorVersion: 1),
+</span><span class='line'>    ]
+</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Packages are referenced through a URL which resolves to a Git repository. <a href="http://semver.org/">Semantic versioning</a> conventions are used to control the package version installed.</p>
+
+<p>External packages are downloaded, compiled and linked in the project during the build process.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ swift build
+</span><span class='line'>Fetching https://github.com/apple/example-package-deckofplayingcards.git
+</span><span class='line'>Fetching https://github.com/apple/example-package-fisheryates.git
+</span><span class='line'>Fetching https://github.com/apple/example-package-playingcard.git
+</span><span class='line'>Cloning https://github.com/apple/example-package-fisheryates.git
+</span><span class='line'>Resolving https://github.com/apple/example-package-fisheryates.git at 2.0.3
+</span><span class='line'>Cloning https://github.com/apple/example-package-playingcard.git
+</span><span class='line'>Resolving https://github.com/apple/example-package-playingcard.git at 3.0.2
+</span><span class='line'>Cloning https://github.com/apple/example-package-deckofplayingcards.git
+</span><span class='line'>Resolving https://github.com/apple/example-package-deckofplayingcards.git at 3.0.3
+</span><span class='line'>Compile Swift Module 'PlayingCard' (3 sources)
+</span><span class='line'>Compile Swift Module 'FisherYates' (2 sources)
+</span><span class='line'>Compile Swift Module 'DeckOfPlayingCards' (1 sources)
+</span><span class='line'>Compile Swift Module 'Dealer' (1 sources)
+</span><span class='line'>Linking ./.build/debug/Dealer
+</span><span class='line'>$</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>OpenWhiskAction Package</h2>
+
+<p><a href="https://github.com/jthomas/OpenWhiskAction">OpenWhiskAction</a> is a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> for registering Swift functions as OpenWhisk actions.</p>
+
+<p>It bundles the Swift source files used to <a href="https://github.com/apache/incubator-openwhisk/tree/master/core/swift3Action/spm-build">implement the runtime handler</a> for OpenWhisk as a library. Using this package means developers do not have to manually import those source files into their projects.</p>
+
+<h3>usage</h3>
+
+<p>This package exposes a public function (<code>OpenWhiskAction</code> ) that should be called with a function reference (<code>([String: Any]) -&gt; [String: Any])</code>) as a named parameter (<code>main</code>). The callback will be executed with the invocation parameters. Returned values will be serialised as the invocation response.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>import OpenWhiskAction
+</span><span class='line'>
+</span><span class='line'>func hello(args: [String:Any]) -&gt; [String:Any] {
+</span><span class='line'>    if let name = args["name"] as? String {
+</span><span class='line'>      return [ "greeting" : "Hello \(name)!" ]
+</span><span class='line'>    } else {
+</span><span class='line'>      return [ "greeting" : "Hello stranger!" ]
+</span><span class='line'>    }
+</span><span class='line'>}
+</span><span class='line'>
+</span><span class='line'>OpenWhiskAction(main: hello)</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>example</h3>
+
+<p>Let&#8217;s show an example of using the package to build a pre-compiled Swift action for OpenWhisk.</p>
+
+<h4>create new package</h4>
+
+<p>Create a new directory and use the <code>swift package init</code> command to generate the boilerplate package.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir Action
+</span><span class='line'>$ cd Action/
+</span><span class='line'>$ swift package init
+</span><span class='line'>Creating library package: Action
+</span><span class='line'>Creating Package.swift
+</span><span class='line'>Creating .gitignore
+</span><span class='line'>Creating Sources/
+</span><span class='line'>Creating Sources/Action.swift
+</span><span class='line'>Creating Tests/
+</span><span class='line'>Creating Tests/LinuxMain.swift
+</span><span class='line'>Creating Tests/ActionTests/
+</span><span class='line'>Creating Tests/ActionTests/ActionTests.swift</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>add package dependency</h4>
+
+<p>Add the OpenWhiskAction package as a dependency to the manifest file (<code>Package.swift</code>).</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
+</span><span class='line'>
+</span><span class='line'>let package = Package(
+</span><span class='line'>    name: "Action",
+</span><span class='line'>    dependencies: [
+</span><span class='line'>        .Package(url: "https://github.com/jthomas/OpenWhiskAction.git", majorVersion: 0)
+</span><span class='line'>    ]
+</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>write serverless function</h4>
+
+<p>Create a new <code>main.swift</code> file under the <code>Sources</code> directory containing the following source code.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>import OpenWhiskAction
+</span><span class='line'>
+</span><span class='line'>func hello(args: [String:Any]) -&gt; [String:Any] {
+</span><span class='line'>    if let name = args["name"] as? String {
+</span><span class='line'>      return [ "greeting" : "Hello \(name)!" ]
+</span><span class='line'>    } else {
+</span><span class='line'>      return [ "greeting" : "Hello stranger!" ]
+</span><span class='line'>    }
+</span><span class='line'>}
+</span><span class='line'>
+</span><span class='line'>OpenWhiskAction(main: hello)</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Swift&#8217;s build process will produce an executable if the package contains a <code>main.swift</code> file. That file will be compiled as the package binary.</em></p>
+
+<h4>compiling with docker</h4>
+
+<p>OpenWhisk Swift actions use a <a href="https://github.com/jthomas/OpenWhiskAction/blob/master">custom Docker image</a> as the runtime environment. Compiling application binaries from this image will ensure it is compatible with the platform runtime.</p>
+
+<p>This command will run the <code>swift build</code> command within a container from this image. The host filesystem is mounted into the container at <code>/swift-package</code>. Binaries and other build artifacts will be available in <code>./.build/release/</code> after the command has executed.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>docker run --rm -it -v $(pwd):/swift-package openwhisk/swift3action bash -e -c "cd /swift-package && swift build -v -c release"</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>deploying to openwhisk</h3>
+
+<p>OpenWhisk actions can be created from a zip file containing action artifacts. The zip file will be expanded prior to execution. In the Swift environment, the Swift binary executed by the platform should be at <code>./.build/release/Action</code>.</p>
+
+<p>If an action is deployed from a zip file which contains this file, the runtime will execute this binary rather than compiling a new binary from source code within the zip file.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ zip action.zip .build/release/Action
+</span><span class='line'>  adding: .build/release/Action (deflated 67%)
+</span><span class='line'>$ wsk action create swift-action --kind swift:3 action.zip
+</span><span class='line'>ok: created action swift-action
+</span><span class='line'>$ wsk action invoke --blocking --result -p name "Bernie Sanders" swift-action
+</span><span class='line'>{
+</span><span class='line'>    "greeting": "Hello Bernie Sanders!"
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Using With The Serverless Framework</h2>
+
+<p>As shown in the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, <a href="https://serverless.com/">The Serverless Framework</a> supports the Swift runtime. Actions can either be created from <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---swift">Swift source files</a> or <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---pre-compiled-swift-binaries">pre-compiled binaries</a>.</p>
+
+<p>This <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">example project</a> demonstrates how to integrate pre-compiled binaries into a serverless framework application.</p>
+
+<h3>example project</h3>
+
+<p>The project contains two Swift source files under the <code>Sources</code> directory. Using the <code>main.swift</code> file name means these files will be compiled into separate binaries under the <code>.build/release</code> directory.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ tree .
+</span><span class='line'>.
+</span><span class='line'>├── Package.swift
+</span><span class='line'>├── README.md
+</span><span class='line'>├── Sources
+</span><span class='line'>│   ├── hello
+</span><span class='line'>│   │   └── main.swift
+</span><span class='line'>│   └── welcome
+</span><span class='line'>│       └── main.swift
+</span><span class='line'>├── package.json
+</span><span class='line'>└── serverless.yml
+</span><span class='line'>
+</span><span class='line'>3 directories, 6 files</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The package manifest (<code>Package.swift</code>) contains the <code>OpenWhiskAction</code> dependency.</p>
+
+<h3>serverless.yml</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">swift-packages</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">runtime</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">swift</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">hello</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">.build/release/hello</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">welcome</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">.build/release/welcome</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">custom</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">scripts</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">hooks</span><span class="p-Indicator">:</span>
+</span><span class='line'>      <span class="s">&#39;package:initialize&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">npm run-script compile</span>
+</span><span class='line'><span class="l-Scalar-Plain">plugins</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-openwhisk</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-plugin-scripts</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This configuration file describes two actions (<code>hello</code> and <code>welcome</code>) using the <code>swift</code> runtime. The handler property for those actions refers to a binary, produced by the build process, rather than source file.</p>
+
+<h3>compile during deployment</h3>
+
+<p>Before using <code>serverless deploy</code> command to create our application, we need to compile binaries for the OpenWhisk runtime.</p>
+
+<p>Manually running the Swift build command before each deployment is cumbersome and error-prone.</p>
+
+<p><em>Let&#8217;s automate this process…</em></p>
+
+<p>Using NPM&#8217;s <a href="https://docs.npmjs.com/cli/run-script">scripts feature</a>, the project exports a new command <code>npm run-script compile</code> which triggers the build process using the OpenWhisk Docker runtime for Swift.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;openwhisk-swift-package-with-precompiled-binaries&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Swift packages and pre-compiled binaries on OpenWhisk.&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;handler.js&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;scripts&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;postinstall&quot;</span><span class="p">:</span> <span class="s2">&quot;npm link serverless-openwhisk&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;compile&quot;</span><span class="p">:</span> <span class="s2">&quot;docker run --rm -it -v $(pwd):/swift-package openwhisk/swift3action bash -e -c &#39;cd /swift-package &amp;&amp; swift build -v -c release&#39;&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="nt">&quot;keywords&quot;</span><span class="p">:</span> <span class="p">[</span>
+</span><span class='line'>    <span class="s2">&quot;serverless&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;openwhisk&quot;</span>
+</span><span class='line'>  <span class="p">],</span>
+</span><span class='line'>  <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;serverless-plugin-scripts&quot;</span><span class="p">:</span> <span class="s2">&quot;^1.0.2&quot;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>serverless-plugin-scripts</code> <a href="https://www.npmjs.com/package/serverless-plugin-scripts">plugin</a> provides a mechanism for running shell commands when framework commands are executed. Using this plugin we can use the <code>package:initialize</code> event to execute the <code>npm run-script compile</code> command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">custom</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">scripts</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">hooks</span><span class="p-Indicator">:</span>
+</span><span class='line'>      <span class="s">&#39;package:initialize&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">npm run-script compile</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>package:initialize</code> event is fired when the <code>serverless deploy</code> command executes.</p>
+
+<p><strong>Swift binaries will be compiled prior to deployment without any manual steps from the developer.</strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">$ serverless deploy</span>
+</span><span class='line'><span class="l-Scalar-Plain">&gt; openwhisk-swift-package-with-precompiled-binaries@1.0.0 compile /Users/james/code/bluemix/serverless-examples/openwhisk-swift-precompiled-binaries</span>
+</span><span class='line'><span class="l-Scalar-Plain">&gt; docker run --rm -it -v $(pwd):/swift-package openwhisk/swift3action bash -e -c &#39;cd /swift-package &amp;&amp; swift build -v -c release&#39;</span>
+</span><span class='line'><span class="nn">...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Packaging service...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Functions...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling API Gateway definitions...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Rules...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Triggers &amp; Feeds...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deploying Functions...</span>
+</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deployment successful!</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">Service Information</span>
+</span><span class='line'><span class="l-Scalar-Plain">platform</span><span class="err">:   </span><span class="l-Scalar-Plain">openwhisk.ng.bluemix.net</span>
+</span><span class='line'><span class="l-Scalar-Plain">namespace</span><span class="err">:  </span><span class="l-Scalar-Plain">_</span>
+</span><span class='line'><span class="l-Scalar-Plain">service</span><span class="err">:    </span><span class="l-Scalar-Plain">swift-packages</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">actions</span><span class="p-Indicator">:</span>
+</span><span class='line'><span class="l-Scalar-Plain">swift-packages-dev-hello    swift-packages-dev-welcome</span>
+</span><span class='line'><span class="nn">...</span>
+</span><span class='line'><span class="l-Scalar-Plain">$ serverless invoke -f hello</span>
+</span><span class='line'><span class="l-Scalar-Plain">{</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">&quot;greeting&quot;</span><span class="p-Indicator">:</span> <span class="s">&quot;Hello</span><span class="nv"> </span><span class="s">stranger!&quot;</span>
+</span><span class='line'><span class="err">}</span>
+</span><span class='line'><span class="l-Scalar-Plain">$ serverless invoke -f welcome</span>
+</span><span class='line'><span class="p-Indicator">{</span>
+</span><span class='line'>    <span class="s">&quot;greeting&quot;</span><span class="p-Indicator">:</span> <span class="s">&quot;Welcome</span><span class="nv"> </span><span class="s">stranger!&quot;</span>
+</span><span class='line'><span class="p-Indicator">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Conclusion</h2>
+
+<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-swift-actions">creating Swift actions</a> from source files and pre-compiled binaries. Using binaries <a href="https://medium.com/openwhisk/run-swiftly-precompiled-swift-actions-775addae0345">reduces the startup time</a> for &#8220;cold&#8221; environments. This is important for latency sensitive applications like API endpoints.</p>
+
+<p>Swift binaries for OpenWhisk must be compiled for the correct architecture and support execution through the platform runtime. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-swift-executable">Previous instruction</a> for producing these binaries involved numerous manual and error-prone steps.</p>
+
+<p>This process has now been improved through a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">new Swift package</a> which wraps the runtime handler source files. Adding this dependency into the package manifest file means the downloading, compiling and linking of these source files will be handled by the Swift package manager.</p>
+
+<p><a href="https://github.com/serverless/serverless-openwhisk/releases/tag/v0.8.0">Recent updates</a> to the OpenWhisk provider plugin for The Serverless Framework also added support for pre-compiled Swift binaries. Combined with other plugins, the framework can now <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">completely automate the process of building binaries</a> for the Swift runtime.</p>
+
+<p><strong>Building binaries for Swift OpenWhisk actions has never been easier!</strong> 😎</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Serverless Swift with OpenWhisk]]></title>
@@ -4908,166 +5375,6 @@ remote access.</p>
 
 <p>For more information on the subset of Docker commands supported by IBM
 Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Cloud Foundry Application Monitoring Bot For Slack]]></title>
-    <link href="http://jamesthom.as/blog/2016/01/05/cfbot/"/>
-    <updated>2016-01-05T10:15:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/01/05/cfbot</id>
-    <content type="html"><![CDATA[<p>Cloud Foundry makes it so easy to build, deploy and manage applications that it
-can be a struggle just to keep up with development progress&#8230;</p>
-
-<blockquote><p>&#8220;Who is restarting this application?&#8221;<br/>&#8220;What is this new service instance?&#8221;<br/>&#8220;When did this application instance run out of memory?&#8221;</p></blockquote>
-
-
-<p>Development teams are increasingly using <a href="https://slack.com/">Slack</a> to
-collaborate on projects and using custom bots to manage and monitor
-applications, triggered through the channel messages. This approach,
-popularised by Github, has now become known as
-<a href="https://speakerdeck.com/jnewland/chatops-at-github">&#8220;ChatOps&#8221;</a>. Using group
-chat for development projects gives
-<a href="https://www.pagerduty.com/blog/what-is-chatops/">greater operational visibility to everyone in the team</a>.</p>
-
-<p>Slack has exploded in use over the past two years, recently signing up more
-than a <a href="http://fortune.com/2015/10/27/slack-one-million-connected/">million active users</a>.
-The platform <a href="https://api.slack.com">publishes an API</a> for writing <em>bots</em> that
-respond automatically to messages, allowing users to write custom integrations
-for external services.</p>
-
-<p>Users can register webhooks to receive channel messages, based upon keyword
-triggers, and allow bots to reply with new channel messages. The platform also
-provides a websocket channel with registered bots for real-time communication.</p>
-
-<p><strong><em>Could we write a custom bot for monitoring applications on the Cloud Foundry
-platform?</em></strong></p>
-
-<p>The bot would publish notifications about applications and services into group
-channels, helping keep teams updated with platform events in real-time.</p>
-
-<h2>Cloud Foundry Monitoring APIs</h2>
-
-<p>Cloud Foundry provides access to the platform through a series of <a href="https://apidocs.cloudfoundry.org">RESTful APIs</a>,
-exposed by the <a href="https://docs.cloudfoundry.org/concepts/architecture/cloud-controller.html">Cloud Controller</a>
-component.  User commands from the <a href="https://docs.cloudfoundry.org/devguide/installcf/">CF CLI tool</a> are translated into calls
-to these APIs.</p>
-
-<p><em>Tip: Setting the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/troubleshoot-app-health.html#trace"><em>CF_TRACE</em> environment parameter</a>
-to <strong>true</strong> will show the API calls generated by the CLI commands.</em></p>
-
-<p>Platform user account credentials are used to <a href="https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-Tokens.md">obtain OAuth2 tokens</a>
-for authenticating service calls.</p>
-
-<p>Looking at the documentation, there&#8217;s an <a href="https://apidocs.cloudfoundry.org/226/events/list_all_events.html">endpoint for retrieving all platform events</a>.
-This API is used to retrieve events for an application when using the CF CLI
-<em>events</em> command. Events can be filtered by the application, event type and
-timestamps. Responses include events about changes to applications, services
-and service instances.</p>
-
-<p><em>Polling this API, with timestamp filtering to ignore old events, we can
-retrieve a continuous stream of new platform events.</em></p>
-
-<h2>Slack Integration</h2>
-
-<p>Setting up a <a href="https://my.slack.com/services/new/bot">new bot integration</a> for a Slack group provides you with a token
-you can use to authenticate with the <a href="https://api.slack.com/rtm">Real-Time Messaging API</a>.  Rather than
-having to implement the Websocket-based API handler ourselves, we can use one
-of the many existing <a href="https://api.slack.com/community">community libraries</a>.</p>
-
-<p>Using the <a href="https://github.com/slackhq/node-slack-client">Node.js client library</a>, passing in the authentication token, we just
-need to implement callback handlers for the API events.</p>
-
-<figure class='code'><figcaption><span>Slack Client </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">Slack</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;slack-client&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">var</span> <span class="nx">slackToken</span> <span class="o">=</span> <span class="s1">&#39;xoxb-YOUR-TOKEN-HERE&#39;</span> <span class="err">#</span> <span class="nx">Add</span> <span class="nx">a</span> <span class="nx">bot</span> <span class="nx">at</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//my.slack.com/services/new/bot and copy the token here.</span>
-</span><span class='line'><span class="kd">var</span> <span class="nx">autoReconnect</span> <span class="o">=</span> <span class="kc">true</span> <span class="err">#</span> <span class="nx">Automatically</span> <span class="nx">reconnect</span> <span class="nx">after</span> <span class="nx">an</span> <span class="nx">error</span> <span class="nx">response</span> <span class="nx">from</span> <span class="nx">Slack</span><span class="p">.</span>
-</span><span class='line'><span class="kd">var</span> <span class="nx">autoMark</span> <span class="o">=</span> <span class="kc">true</span> <span class="err">#</span> <span class="nx">Automatically</span> <span class="nx">mark</span> <span class="nx">each</span> <span class="nx">message</span> <span class="nx">as</span> <span class="nx">read</span> <span class="nx">after</span> <span class="nx">it</span> <span class="nx">is</span> <span class="nx">processed</span><span class="p">.</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">var</span> <span class="nx">slack</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Slack</span><span class="p">(</span><span class="nx">slackToken</span><span class="p">,</span> <span class="nx">autoReconnect</span><span class="p">,</span> <span class="nx">autoMark</span><span class="p">)</span>
-</span><span class='line'><span class="nx">slack</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="p">{...})</span>
-</span><span class='line'><span class="nx">slack</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{...})</span>
-</span><span class='line'><span class="nx">slack</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;open&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{})</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">slack</span><span class="p">.</span><span class="nx">login</span><span class="p">()</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When platform events occur, we forward these to any channels the bot is registered in.</p>
-
-<p><em>Plugging together the Cloud Foundry event monitoring code with the Slack bot integration, <a href="https://github.com/jthomas/cfbot">cfbot</a> was born&#8230;</em></p>
-
-<h2>cfbot </h2>
-
-<p><img src="http://jamesthom.as/images/cfbot-events.png"></p>
-
-<p>This <a href="https://github.com/jthomas/cfbot">Cloud Foundry monitoring bot</a> can be deployed to&#8230; Cloud Foundry!</p>
-
-<p>You will need to register the bot with your Slack group to receive an
-authentication token. This token, along with login details for a platform
-account, need to be created as user-provided service credentials. The bot will
-read these service credentials on deployment and start monitoring for events.</p>
-
-<p>Full installation instructions available in the <a href="https://github.com/jthomas/cfbot">project README</a>.</p>
-
-<h2>usage</h2>
-
-<p>cfbot will monitor events from applications in all spaces and organisations that the user account has access to.</p>
-
-<p>Users can filter the applications and events being reported using the apps and
-events commands. Both commands take application or event identifiers that are
-used to match incoming events. The wildcard &#8216;*&#8217; identifier can be used to
-revert to matching all events.</p>
-
-<pre>
-@cf apps // show the currently application filter
-@cf apps app_name // add the 'app_name' to the filter list
-@cf apps * // reset to the filter to wildcard matching
-
-@cf events // show the currently event filter
-@cf events event_type // add the 'event_type' to the filter list
-@cf events * // reset to the filter to wildcard matching
-
-@cf status // show the current bot status message
-
-@cf polling_frequency // show the cf events api polling time in seconds
-@cf polling_frequency 10 // set the cf events api polling time in seconds
-</pre>
-
-
-<p>The following events are currently registered:</p>
-
-<ul>
-<li><em>App Creation and Deletion Events.</em></li>
-<li><em>App Lifecycle Events (start, stop, restart, restage)</em></li>
-<li><em>Instance Crash Events.</em></li>
-<li><em>Service Creation, Deleting and Binding.</em></li>
-<li><em>Scaling (memory, CPU, disk)</em></li>
-<li><em>Routes Changes (map, unmap)</em></li>
-</ul>
-
-
-<h2>Other bots</h2>
-
-<p>Other people have written Cloud Foundry bots before cfbot. Here are the other projects I discovered that might be useful&#8230;</p>
-
-<ul>
-<li><a href="https://github.com/18F/hubot-cf-notifications">Hubot-based Cloud Foundry monitoring bot by 18F</a></li>
-<li><a href="https://github.com/andypiper/hubot-cf">Hubot Scripts for Cloud Foundry</a></li>
-</ul>
-
 ]]></content>
   </entry>
   

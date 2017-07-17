@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-06-28T18:00:22+01:00</updated>
+  <updated>2017-07-17T12:09:16+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,17 +14,373 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Creating Swift Binaries for OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk/"/>
+    <updated>2017-07-17T12:12:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk</id>
+    <content type="html"><![CDATA[<p>In the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, we explained how to write Serverless Swift functions using <a href="http://openwhisk.incubator.apache.org/">OpenWhisk actions</a>.</p>
+
+<p>Swift sources files are compiled into a binary by the platform before processing requests.</p>
+
+<p>This compilation process adds a delay on the invocation time for "cold" runtimes. If the action has not been invoked for a while, the system is under heavy load or multiple invocations are received in parallel, a new runtime will need to be initialised.</p>
+
+<p>Pre-compiled binaries can be deployed to remove this delay. Binaries must be compiled for the correct platform architecture and support execution through the OpenWhisk runtime.</p>
+
+<p><strong>There is now a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> to make the process of building pre-compiled binaries much easier.</strong></p>
+
+<p><em>Let's have a look at how this works…</em></p>
+
+<h2>Swift Packages</h2>
+
+<p>Swift introduced a <a href="https://swift.org/package-manager/">package manager</a> in Swift 3.0. The package manager integrates with the build system to <em>"automate the process of downloading, compiling, and linking dependencies".</em></p>
+
+<p>Swift uses a <a href="https://medium.com/@jp_pancake/the-manifest-file-of-the-swift-package-manager-swiftlang-6eedf0f2f805">manifest file</a> (<code>Packages.swift</code>) to define package properties including dependencies.</p>
+
+<h3>Example Swift Package</h3>
+
+<p>Here's an <a href="https://github.com/apple/example-package-deckofplayingcards/blob/master/Package.swift">example manifest file</a> from a <a href="https://github.com/apple/example-package-dealer">sample package</a> with external dependencies.</p>
+
+<p>```
+import PackageDescription</p>
+
+<p>let package = Package(</p>
+
+<pre><code>name: "DeckOfPlayingCards",
+targets: [],
+dependencies: [
+    .Package(url: "https://github.com/apple/example-package-fisheryates.git",
+             majorVersion: 1),
+    .Package(url: "https://github.com/apple/example-package-playingcard.git",
+             majorVersion: 1),
+]
+</code></pre>
+
+<p>)
+```</p>
+
+<p>Packages are referenced through a URL which resolves to a Git repository. <a href="http://semver.org/">Semantic versioning</a> conventions are used to control the package version installed.</p>
+
+<p>External packages are downloaded, compiled and linked in the project during the build process.</p>
+
+<p><code>
+$ swift build
+Fetching https://github.com/apple/example-package-deckofplayingcards.git
+Fetching https://github.com/apple/example-package-fisheryates.git
+Fetching https://github.com/apple/example-package-playingcard.git
+Cloning https://github.com/apple/example-package-fisheryates.git
+Resolving https://github.com/apple/example-package-fisheryates.git at 2.0.3
+Cloning https://github.com/apple/example-package-playingcard.git
+Resolving https://github.com/apple/example-package-playingcard.git at 3.0.2
+Cloning https://github.com/apple/example-package-deckofplayingcards.git
+Resolving https://github.com/apple/example-package-deckofplayingcards.git at 3.0.3
+Compile Swift Module 'PlayingCard' (3 sources)
+Compile Swift Module 'FisherYates' (2 sources)
+Compile Swift Module 'DeckOfPlayingCards' (1 sources)
+Compile Swift Module 'Dealer' (1 sources)
+Linking ./.build/debug/Dealer
+$
+</code></p>
+
+<h2>OpenWhiskAction Package</h2>
+
+<p><a href="https://github.com/jthomas/OpenWhiskAction">OpenWhiskAction</a> is a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> for registering Swift functions as OpenWhisk actions.</p>
+
+<p>It bundles the Swift source files used to <a href="https://github.com/apache/incubator-openwhisk/tree/master/core/swift3Action/spm-build">implement the runtime handler</a> for OpenWhisk as a library. Using this package means developers do not have to manually import those source files into their projects.</p>
+
+<h3>usage</h3>
+
+<p>This package exposes a public function (<code>OpenWhiskAction</code> ) that should be called with a function reference (<code>([String: Any]) -&gt; [String: Any])</code>) as a named parameter (<code>main</code>). The callback will be executed with the invocation parameters. Returned values will be serialised as the invocation response.</p>
+
+<p>```
+import OpenWhiskAction</p>
+
+<p>func hello(args: [String:Any]) -> [String:Any] {</p>
+
+<pre><code>if let name = args["name"] as? String {
+  return [ "greeting" : "Hello \(name)!" ]
+} else {
+  return [ "greeting" : "Hello stranger!" ]
+}
+</code></pre>
+
+<p>}</p>
+
+<p>OpenWhiskAction(main: hello)
+```</p>
+
+<h3>example</h3>
+
+<p>Let's show an example of using the package to build a pre-compiled Swift action for OpenWhisk.</p>
+
+<h4>create new package</h4>
+
+<p>Create a new directory and use the <code>swift package init</code> command to generate the boilerplate package.</p>
+
+<p><code>
+$ mkdir Action
+$ cd Action/
+$ swift package init
+Creating library package: Action
+Creating Package.swift
+Creating .gitignore
+Creating Sources/
+Creating Sources/Action.swift
+Creating Tests/
+Creating Tests/LinuxMain.swift
+Creating Tests/ActionTests/
+Creating Tests/ActionTests/ActionTests.swift
+</code></p>
+
+<h4>add package dependency</h4>
+
+<p>Add the OpenWhiskAction package as a dependency to the manifest file (<code>Package.swift</code>).</p>
+
+<p>```
+import PackageDescription</p>
+
+<p>let package = Package(</p>
+
+<pre><code>name: "Action",
+dependencies: [
+    .Package(url: "https://github.com/jthomas/OpenWhiskAction.git", majorVersion: 0)
+]
+</code></pre>
+
+<p>)
+```</p>
+
+<h4>write serverless function</h4>
+
+<p>Create a new <code>main.swift</code> file under the <code>Sources</code> directory containing the following source code.</p>
+
+<p>```
+import OpenWhiskAction</p>
+
+<p>func hello(args: [String:Any]) -> [String:Any] {</p>
+
+<pre><code>if let name = args["name"] as? String {
+  return [ "greeting" : "Hello \(name)!" ]
+} else {
+  return [ "greeting" : "Hello stranger!" ]
+}
+</code></pre>
+
+<p>}</p>
+
+<p>OpenWhiskAction(main: hello)
+```</p>
+
+<p><em>Swift's build process will produce an executable if the package contains a <code>main.swift</code> file. That file will be compiled as the package binary.</em></p>
+
+<h4>compiling with docker</h4>
+
+<p>OpenWhisk Swift actions use a <a href="https://github.com/jthomas/OpenWhiskAction/blob/master">custom Docker image</a> as the runtime environment. Compiling application binaries from this image will ensure it is compatible with the platform runtime.</p>
+
+<p>This command will run the <code>swift build</code> command within a container from this image. The host filesystem is mounted into the container at <code>/swift-package</code>. Binaries and other build artifacts will be available in <code>./.build/release/</code> after the command has executed.</p>
+
+<p><code>
+docker run --rm -it -v $(pwd):/swift-package openwhisk/swift3action bash -e -c "cd /swift-package &amp;&amp; swift build -v -c release"
+</code></p>
+
+<h3>deploying to openwhisk</h3>
+
+<p>OpenWhisk actions can be created from a zip file containing action artifacts. The zip file will be expanded prior to execution. In the Swift environment, the Swift binary executed by the platform should be at <code>./.build/release/Action</code>.</p>
+
+<p>If an action is deployed from a zip file which contains this file, the runtime will execute this binary rather than compiling a new binary from source code within the zip file.</p>
+
+<p>```
+$ zip action.zip .build/release/Action
+  adding: .build/release/Action (deflated 67%)
+$ wsk action create swift-action --kind swift:3 action.zip
+ok: created action swift-action
+$ wsk action invoke --blocking --result -p name "Bernie Sanders" swift-action
+{</p>
+
+<pre><code>"greeting": "Hello Bernie Sanders!"
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Using With The Serverless Framework</h2>
+
+<p>As shown in the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, <a href="https://serverless.com/">The Serverless Framework</a> supports the Swift runtime. Actions can either be created from <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---swift">Swift source files</a> or <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---pre-compiled-swift-binaries">pre-compiled binaries</a>.</p>
+
+<p>This <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">example project</a> demonstrates how to integrate pre-compiled binaries into a serverless framework application.</p>
+
+<h3>example project</h3>
+
+<p>The project contains two Swift source files under the <code>Sources</code> directory. Using the <code>main.swift</code> file name means these files will be compiled into separate binaries under the <code>.build/release</code> directory.</p>
+
+<p>```
+$ tree .
+.
+├── Package.swift
+├── README.md
+├── Sources
+│   ├── hello
+│   │   └── main.swift
+│   └── welcome
+│       └── main.swift
+├── package.json
+└── serverless.yml</p>
+
+<p>3 directories, 6 files
+```</p>
+
+<p>The package manifest (<code>Package.swift</code>) contains the <code>OpenWhiskAction</code> dependency.</p>
+
+<h3>serverless.yml</h3>
+
+<p>```yaml
+service: swift-packages</p>
+
+<p>provider:
+  name: openwhisk
+  runtime: swift</p>
+
+<p>functions:
+  hello:</p>
+
+<pre><code>handler: .build/release/hello
+</code></pre>
+
+<p>  welcome:</p>
+
+<pre><code>handler: .build/release/welcome
+</code></pre>
+
+<p>custom:
+  scripts:</p>
+
+<pre><code>hooks:
+  'package:initialize': npm run-script compile
+</code></pre>
+
+<p>plugins:
+  - serverless-openwhisk
+  - serverless-plugin-scripts
+```</p>
+
+<p>This configuration file describes two actions (<code>hello</code> and <code>welcome</code>) using the <code>swift</code> runtime. The handler property for those actions refers to a binary, produced by the build process, rather than source file.</p>
+
+<h3>compile during deployment</h3>
+
+<p>Before using <code>serverless deploy</code> command to create our application, we need to compile binaries for the OpenWhisk runtime.</p>
+
+<p>Manually running the Swift build command before each deployment is cumbersome and error-prone.</p>
+
+<p><em>Let's automate this process…</em></p>
+
+<p>Using NPM's <a href="https://docs.npmjs.com/cli/run-script">scripts feature</a>, the project exports a new command <code>npm run-script compile</code> which triggers the build process using the OpenWhisk Docker runtime for Swift.</p>
+
+<p>```json
+{
+  "name": "openwhisk-swift-package-with-precompiled-binaries",
+  "version": "1.0.0",
+  "description": "Swift packages and pre-compiled binaries on OpenWhisk.",
+  "main": "handler.js",
+  "scripts": {</p>
+
+<pre><code>"postinstall": "npm link serverless-openwhisk",
+"compile": "docker run --rm -it -v $(pwd):/swift-package openwhisk/swift3action bash -e -c 'cd /swift-package &amp;&amp; swift build -v -c release'"
+</code></pre>
+
+<p>  },
+  "keywords": [</p>
+
+<pre><code>"serverless",
+"openwhisk"
+</code></pre>
+
+<p>  ],
+  "dependencies": {</p>
+
+<pre><code>"serverless-plugin-scripts": "^1.0.2"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p>The <code>serverless-plugin-scripts</code> <a href="https://www.npmjs.com/package/serverless-plugin-scripts">plugin</a> provides a mechanism for running shell commands when framework commands are executed. Using this plugin we can use the <code>package:initialize</code> event to execute the <code>npm run-script compile</code> command.</p>
+
+<p>```yaml
+custom:
+  scripts:</p>
+
+<pre><code>hooks:
+  'package:initialize': npm run-script compile
+</code></pre>
+
+<p>```</p>
+
+<p>The <code>package:initialize</code> event is fired when the <code>serverless deploy</code> command executes.</p>
+
+<p><strong>Swift binaries will be compiled prior to deployment without any manual steps from the developer.</strong></p>
+
+<p>```
+$ serverless deploy</p>
+
+<blockquote><p>openwhisk-swift-package-with-precompiled-binaries@1.0.0 compile /Users/james/code/bluemix/serverless-examples/openwhisk-swift-precompiled-binaries
+docker run --rm -it -v $(pwd):/swift-package openwhisk/swift3action bash -e -c 'cd /swift-package &amp;&amp; swift build -v -c release'
+...
+Serverless: Packaging service...
+Serverless: Compiling Functions...
+Serverless: Compiling API Gateway definitions...
+Serverless: Compiling Rules...
+Serverless: Compiling Triggers &amp; Feeds...
+Serverless: Deploying Functions...
+Serverless: Deployment successful!</p></blockquote>
+
+<p>Service Information
+platform:   openwhisk.ng.bluemix.net
+namespace:  _
+service:    swift-packages</p>
+
+<p>actions:
+swift-packages-dev-hello    swift-packages-dev-welcome
+...
+$ serverless invoke -f hello
+{</p>
+
+<pre><code>"greeting": "Hello stranger!"
+</code></pre>
+
+<p>}
+$ serverless invoke -f welcome
+{</p>
+
+<pre><code>"greeting": "Welcome stranger!"
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Conclusion</h2>
+
+<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-swift-actions">creating Swift actions</a> from source files and pre-compiled binaries. Using binaries <a href="https://medium.com/openwhisk/run-swiftly-precompiled-swift-actions-775addae0345">reduces the startup time</a> for "cold" environments. This is important for latency sensitive applications like API endpoints.</p>
+
+<p>Swift binaries for OpenWhisk must be compiled for the correct architecture and support execution through the platform runtime. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-swift-executable">Previous instruction</a> for producing these binaries involved numerous manual and error-prone steps.</p>
+
+<p>This process has now been improved through a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">new Swift package</a> which wraps the runtime handler source files. Adding this dependency into the package manifest file means the downloading, compiling and linking of these source files will be handled by the Swift package manager.</p>
+
+<p><a href="https://github.com/serverless/serverless-openwhisk/releases/tag/v0.8.0">Recent updates</a> to the OpenWhisk provider plugin for The Serverless Framework also added support for pre-compiled Swift binaries. Combined with other plugins, the framework can now <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">completely automate the process of building binaries</a> for the Swift runtime.</p>
+
+<p><strong>Building binaries for Swift OpenWhisk actions has never been easier!</strong> 😎</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[Serverless Swift with OpenWhisk]]></title>
     <link href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/"/>
     <updated>2017-06-28T10:08:00+01:00</updated>
     <id>http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk</id>
     <content type="html"><![CDATA[<p>Swift is one of the <a href="https://www.macrumors.com/2017/03/10/apple-swift-programming-language-popularity/">fastest growing programming languages</a> with developers.</p>
 
-<p>{% img /images/serverless_swift/language_rank.png %}</p>
+<p><img src="/images/serverless_swift/language_rank.png"></p>
 
-<p>{% blockquote RedMonk Programming Language Rankings http://redmonk.com/sogrady/2017/03/17/language-rankings-1-17/ %}
-Swift has reached a Top 15 ranking faster than any other language we have tracked.
-{% endblockquote %}</p>
+<p><blockquote><p>Swift has reached a Top 15 ranking faster than any other language we have tracked.</p><footer><strong>RedMonk Programming Language Rankings</strong> <cite><a href='http://redmonk.com/sogrady/2017/03/17/language-rankings-1-17/'>redmonk.com/sogrady/2017/03/17/&hellip;</a></cite></footer></blockquote></p>
 
 <p>Created for building mobile applications, the language is now popular with backend development.</p>
 
@@ -628,15 +984,11 @@ service: pyjokes</p>
     <id>http://jamesthom.as/blog/2017/03/20/smsbot</id>
     <content type="html"><![CDATA[<p>This is <a href="https://github.com/ibmets/smsbot">smsbot</a>.</p>
 
-<p>{% img /images/smsbot/slack_text_hidden.jpg %}</p>
+<p><img src="/images/smsbot/slack_text_hidden.jpg"></p>
 
 <p>It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their messages posted into the channel. Channel users can respond to the messages and have their response sent back to the sender using SMS.</p>
 
-<p>{% blockquote %}</p>
-
-<p>smsbot was developed in under a few hours and less than one hundred lines of code using a serverless cloud platform.</p>
-
-<p>{% endblockquote %}</p>
+<p><blockquote><p></p></p><p><p>smsbot was developed in under a few hours and less than one hundred lines of code using a serverless cloud platform.</p></p><p><p></p></blockquote></p>
 
 <p>Want to understand how it works? Let's find out…</p>
 
@@ -646,7 +998,7 @@ service: pyjokes</p>
 
 <h2>Twilio</h2>
 
-<p>{% img http://www.timothylutts.com/wp-content/uploads/2016/09/twilio.jpg %}</p>
+<p><img src="http://www.timothylutts.com/wp-content/uploads/2016/09/twilio.jpg"></p>
 
 <p><a href="https://twilio.com">Twilio</a> provides a platform for building SMS, voice and messaging applications using an API.</p>
 
@@ -658,7 +1010,7 @@ service: pyjokes</p>
 
 <h2>Slack</h2>
 
-<p>{% img http://stratejos.ai/img/logos/slack-logo.png %}</p>
+<p><img src="http://stratejos.ai/img/logos/slack-logo.png"></p>
 
 <p><a href="https://slack.com">Slack</a> also provides a webhook-based mechanism to integrate custom bots into the platform. The platform has two different integrations…</p>
 
@@ -678,7 +1030,7 @@ service: pyjokes</p>
 
 <h2>OpenWhisk</h2>
 
-<p>{% img http://openwhisk.org/images/apache-openwhisk.jpg %}</p>
+<p><img src="http://openwhisk.org/images/apache-openwhisk.jpg"></p>
 
 <p><a href="http://openwhisk.org">OpenWhisk</a> is an open-source serverless cloud platform. <a href="https://martinfowler.com/articles/serverless.html">Serverless platforms</a> make it easy to create microservices in the cloud without having to set up or manage any infrastructure.</p>
 
@@ -894,7 +1246,7 @@ const twilml = resp.message('Thanks for letting us know.').toString()</p>
 
 <p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@email.com_dev/default/smsbot-dev-incoming.http</code></p>
 
-<p>{% img /images/smsbot/twilio_sms_webhook.png %}</p>
+<p><img src="/images/smsbot/twilio_sms_webhook.png"></p>
 
 <h3>Slack Outgoing Webhook</h3>
 
@@ -902,7 +1254,7 @@ const twilml = resp.message('Thanks for letting us know.').toString()</p>
 
 <p>Outgoing Webhooks have a configurable trigger word. Channel messages which start with this word are send as HTTP requests to the list of URLs registered for that webhook. We will use <code>smsbot</code> as our trigger word.</p>
 
-<p>{% img /images/smsbot/outgoing_webhook_trigger.png %}</p>
+<p><img src="/images/smsbot/outgoing_webhook_trigger.png"></p>
 
 <h4>Request Parameters</h4>
 
@@ -1024,7 +1376,7 @@ client.messages.create(options, (err, message) =&gt; {
 
 <p><a href="https://github.com/ibmets/smsbot">smsbot</a> is built using <a href="https://serverless.com/">The Serverless Framework</a>.</p>
 
-<p>{% img https://cloud.githubusercontent.com/assets/20538501/24154626/b86ad64a-0e1f-11e7-8e12-979b8d194430.png %}</p>
+<p><img src="https://cloud.githubusercontent.com/assets/20538501/24154626/b86ad64a-0e1f-11e7-8e12-979b8d194430.png"></p>
 
 <p>This framework makes building serverless applications really easy. The tool handles the entire configuration and deployment process for your serverless provider. OpenWhisk <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">recently released integration</a> with the framework through a provider plugin.</p>
 
@@ -1164,7 +1516,7 @@ smsbot-dev-incoming    smsbot-dev-reply</p>
 
 <p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-incoming.http</code></p>
 
-<p>{% img /images/smsbot/twilio_sms_webhook.png %}</p>
+<p><img src="/images/smsbot/twilio_sms_webhook.png"></p>
 
 <h3>Outgoing Webhook</h3>
 
@@ -1174,17 +1526,17 @@ smsbot-dev-incoming    smsbot-dev-reply</p>
 
 <p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-reply.json</code></p>
 
-<p>{% img /images/smsbot/outgoing_webhook_trigger.png %}</p>
+<p><img src="/images/smsbot/outgoing_webhook_trigger.png"></p>
 
 <h3>Test it out!</h3>
 
 <p>Send a text message to the phone number you registered through Twilio. smsbot should post the contents into Slack and send an SMS response with the message "<em>Thanks for letting us know!</em>".</p>
 
-<p>{% img /images/smsbot/slack_text_hidden.jpg %}</p>
+<p><img src="/images/smsbot/slack_text_hidden.jpg"></p>
 
 <p>If you send a channel message starting with the trigger word (<em>smsbot</em>), the phone number should receive a new SMS message with the message text.</p>
 
-<p>{% img /images/smsbot/sms_app.png %}</p>
+<p><img src="/images/smsbot/sms_app.png"></p>
 
 <p>Awesome-sauce 😎.</p>
 
@@ -1211,7 +1563,7 @@ smsbot-dev-incoming    smsbot-dev-reply</p>
 
 <p>OpenWhisk is the first non-AWS serverless provider to complete integration into the framework.</p>
 
-<p>{% img https://cloud.githubusercontent.com/assets/20538501/22434123/748ae372-e6e0-11e6-86d0-38db9941552d.png %}</p>
+<p><img src="https://cloud.githubusercontent.com/assets/20538501/22434123/748ae372-e6e0-11e6-86d0-38db9941552d.png"></p>
 
 <h2>Getting Started</h2>
 
@@ -1243,246 +1595,6 @@ smsbot-dev-incoming    smsbot-dev-reply</p>
 
 
 <p><a href="https://www.twitch.tv/serverlessldn?tt_medium=live_embed&tt_content=text_link" style="padding:2px 0px 4px; display:block; width:345px; font-weight:normal; font-size:10px; text-decoration:underline;">Watch live video from serverlessldn on www.twitch.tv</a></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[OpenWhisk and Rust]]></title>
-    <link href="http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust/"/>
-    <updated>2017-01-18T09:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust</id>
-    <content type="html"><![CDATA[<p><em>This blog post is <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">one of</a> <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">a series</a> looking at using Docker Actions in OpenWhisk to support extra runtimes.</em></p>
-
-<p>Let's look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
-
-<p>{% blockquote %}
-Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
-{% endblockquote %}</p>
-
-<p>Rust has been growing in popularity since it launched in 2010. Rust is a popular language for writing microservices due to the focus on the attention to safety and strong concurrency support.</p>
-
-<p>None of the major serverless platform natively support Rust at the moment. OpenWhisk does not include this as a default runtime. However, <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">recent updates</a> to OpenWhisk provide a path for writing serverless functions with Rust.</p>
-
-<p>Let's re-write <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">the example</a> from the previous post in Rust and see how to get it running using this new approach…</p>
-
-<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
-
-<h2>Rust Language Actions</h2>
-
-<p>Rust has a <a href="http://doc.crates.io/guide.html">build system</a> that supports creating static binaries. These binaries contain the application source code and dependent libraries.</p>
-
-<p>Using the same approach as the <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">Go-based example</a>, bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
-
-<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
-
-<h3>Action Source Code</h3>
-
-<p>Here's a simple Rust function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn't present, it defaults to <code>stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
-
-<p>``` rust
-extern crate rustc_serialize;
-use rustc_serialize::json;
-use rustc_serialize::json::Json;
-use std::env;</p>
-
-<h1>[derive(RustcDecodable, RustcEncodable)]</h1>
-
-<p>pub struct Greeting {</p>
-
-<pre><code>message: String
-</code></pre>
-
-<p>}</p>
-
-<p>fn main() {</p>
-
-<pre><code>let mut name = "stranger".to_string();
-
-// first arg contains JSON parameters
-if let Some(arg1) = env::args().nth(1) {
-    // parse JSON and extract 'name' field
-    let params = Json::from_str(&amp;arg1).unwrap();
-    if let Some(params_obj) = params.as_object() {
-        if let Some(params_name) = params_obj.get("name") {
-            name = params_name.as_string().unwrap().to_string();
-        }
-    }
-};
-
-let greeting = Greeting {
-    message: format!("Hello, {}!", name),
-};
-
-println!("{}", json::encode(&amp;greeting).unwrap());
-</code></pre>
-
-<p>}
-```</p>
-
-<h3>Set Up Project</h3>
-
-<p>Using Rust's package management tool, create a new project for our serverless function.</p>
-
-<p>Add the source code above into the <code>src/main.rs</code> file.</p>
-
-<p>```sh
-$ cargo new action; cd action</p>
-
-<pre><code> Created library `action` project
-</code></pre>
-
-<p>$ mv src/lib.rs src/main.rs
-$ vim src/main.rs
-$ tree .
-.
-├── Cargo.toml
-└── src</p>
-
-<pre><code>└── main.rs
-</code></pre>
-
-<p>1 directory, 2 files
-```</p>
-
-<p>This function uses the <code>rustc-serialize</code> crate to handle parsing and producing JSON.</p>
-
-<p>Add this identifier to the project's dependencies listed in <code>Cargo.toml</code>.</p>
-
-<p>``` sh
-[package]
-name = "action"
-version = "0.1.0"
-authors = ["Me <a href="&#x6d;&#x61;&#105;&#108;&#116;&#x6f;&#58;&#109;&#x65;&#x40;&#101;&#109;&#x61;&#105;&#108;&#x2e;&#x63;&#111;&#x6d;">&#109;&#101;&#x40;&#101;&#x6d;&#x61;&#105;&#x6c;&#x2e;&#x63;&#111;&#x6d;</a>"]</p>
-
-<p>[dependencies]
-rustc-serialize = "0.3"
-```</p>
-
-<p>Build and run the binary to test it works as expected.</p>
-
-<p>```go
-$ cargo run</p>
-
-<pre><code>Updating registry `https://github.com/rust-lang/crates.io-index`
-</code></pre>
-
-<p>   Compiling rustc-serialize v0.3.22
-   Compiling action v0.1.0 (file:///private/tmp/test/action)</p>
-
-<pre><code>Finished debug [unoptimized + debuginfo] target(s) in 7.0 secs
- Running `target/debug/action`
-</code></pre>
-
-<p>{"message":"Hello, stranger!"}
-$ cargo run '{"name": "James"}'</p>
-
-<pre><code>Finished debug [unoptimized + debuginfo] target(s) in 0.0 secs
- Running `target/debug/action {\"name\":\ \"James\"}`
-</code></pre>
-
-<p>{"message":"Hello, James!"}
-```</p>
-
-<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
-
-<h3>Cross-Compiling Locally</h3>
-
-<p>Rust's compiler uses LLVM under the covers, making it possible to generate machine code for different architectures. Cross-compiling for different platforms requires having the correct compiler, linker and libraries for that architecture installed.</p>
-
-<p>Rust <a href="https://blog.rust-lang.org/2016/05/13/rustup.html">recently released</a> a <a href="https://rustup.rs/">toolchain manager</a> to simplify this process.</p>
-
-<p>Install the Rust toolchain for the <code>x86_64-unknown-linux-musl</code> runtime.</p>
-
-<p><code>sh
-$ rustup target add x86_64-unknown-linux-musl
-info: downloading component 'rust-std' for 'x86_64-unknown-linux-musl'
-info: installing component 'rust-std' for 'x86_64-unknown-linux-musl'
-</code></p>
-
-<p>Add the configuration file to set the correct linker for the runtime.</p>
-
-<p><code>sh
-$ cat .cargo/config
-[target.x86_64-unknown-linux-musl]
-linker = "x86_64-linux-musl-gcc"
-</code></p>
-
-<p>We can now cross-compile the binary for the correct environment.</p>
-
-<p>``` sh
-$ cargo build --target=x86_64-unknown-linux-musl --release
-   Compiling rustc-serialize v0.3.22
-   Compiling action v0.1.0 (file:///Users/james/code/bluemix/openwhisk-languages/rust/action)</p>
-
-<pre><code>Finished release [optimized] target(s) in 9.30 secs
-</code></pre>
-
-<p>```</p>
-
-<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
-
-<p><code>sh
-$ file target/x86_64-unknown-linux-musl/release/action
-target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, not stripped
-</code></p>
-
-<h3>Cross-Compiling Using Docker</h3>
-
-<p>If you don't want to install the Rust development toolchain, Docker can be used to start a container with the <a href="https://github.com/emk/rust-musl-builder">environment set up</a>.</p>
-
-<p>```sh
-$ docker pull ekidd/rust-musl-builder
-$ docker run -it -v $(pwd):/home/rust/src ekidd/rust-musl-builder cargo build --release</p>
-
-<pre><code>Updating registry `https://github.com/rust-lang/crates.io-index`
-</code></pre>
-
-<p> Downloading rustc-serialize v0.3.22
-   Compiling action v0.1.0 (file:///home/rust/src)</p>
-
-<pre><code>Finished release [optimized] target(s) in 1.80 secs
-</code></pre>
-
-<p>$ file target/x86_64-unknown-linux-musl/release/action
-target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, not stripped
-```</p>
-
-<h3>Create &amp; Deploy Archive</h3>
-
-<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
-
-<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
-
-<p><code>sh
-$ cp target/x86_64-unknown-linux-musl/release/action exec
-$ zip action.zip exec
-  adding: exec (deflated 64%)
-$ wsk action create rust_test action.zip --docker
-ok: created action rust_test
-</code></p>
-
-<h3>Invoking Action</h3>
-
-<p>Test the action from the command-line to verify it works.</p>
-
-<p>```sh
-$ wsk action invoke rust_test --blocking --result
-{</p>
-
-<pre><code>"msg": "Hello, Stranger!"
-</code></pre>
-
-<p>}
-$ wsk action invoke rust_test --blocking --result --param name James
-{</p>
-
-<pre><code>"msg": "Hello, James!"
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Success 😎.</p>
 ]]></content>
   </entry>
   
