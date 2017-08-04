@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-07-17T12:09:16+01:00</updated>
+  <updated>2017-08-04T15:51:31+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,240 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/"/>
+    <updated>2017-08-04T09:48:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
+
+<blockquote><p>The maximum code size for the action is 48MB.</p><footer><strong>OpenWhisk system details,</strong> <cite><a href='https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb'>github.com/apache/blob/master/&hellip;</a></cite></footer></blockquote>
+
+
+<p>Applications with lots of third-party modules, native libraries or external tools may be soon find themselves running into this limit. Node.js libraries are <a href="https://medium.com/friendship-dot-js/i-peeked-into-my-node-modules-directory-and-you-wont-believe-what-happened-next-b89f63d21558">notorious for having large amounts of dependencies</a>.</p>
+
+<p><em>What if you need to deploy an application larger than this limit to OpenWhisk?</em></p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk/tree/master/sdk/docker">Previous solutions</a> used Docker support in OpenWhisk to build a custom Docker image per action. Source files and dependencies are built into a public image hosted on Docker Hub.</p>
+
+<p>This approach overcomes the limit on deployment size but means application source files will be accessible on Docker Hub. This is not an issue for building samples or open-source projects but not realistic for most applications.</p>
+
+<p><em>So, using an application larger than this limit requires me to make my source files public?</em> 🤔</p>
+
+<p><strong>There&#8217;s now a better solution!</strong> 👏👏👏</p>
+
+<p><strong>OpenWhisk supports creating actions from an archive file AND a custom Docker image.</strong></p>
+
+<p>If we build a custom Docker runtime which includes shared libraries, those dependencies don&#8217;t need including in the archive file. Private source files will still be bundled in the archive and injected at runtime.</p>
+
+<p>Reducing archive file sizes also improves deployment times.</p>
+
+<p><em>Let&#8217;s look at an example…</em></p>
+
+<h2>Using Machine Learning Libraries on OpenWhisk</h2>
+
+<p>Python is a popular language for machine learning and data science. Libraries like <a href="http://pandas.pydata.org/">pandas</a>, <a href="http://scikit-learn.org/stable/">scikit-learn</a> and <a href="http://www.numpy.org/">numpy</a> provide all the tools. Serverless computing is becoming a <a href="https://blog.alexcasalboni.com/serverless-computing-machine-learning-baf52b89e1b0">good choice for machine learning microservices</a>.</p>
+
+<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-python-actions">Python 2 and 3 runtimes</a>.</p>
+
+<p>Popular libraries like flask, requests and beautifulsoup <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#python-actions">are available as global packages</a>. Additional packages can be imported using <code>virutalenv</code> during invocations.</p>
+
+<h3>Python Machine Learning Libraries</h3>
+
+<p>Python packages can be <a href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/">used in OpenWhisk using virtualenv</a>. Developers install the packages locally and include the <code>virutalenv</code> folder in the archive for deployment.</p>
+
+<p>Machine Learning libraries often use numerous shared libraries and compile native dependencies for performance. <strong>This can lead to hundreds of megabytes of dependencies.</strong></p>
+
+<p>Setting up a new <code>virtualenv</code> folder and installing <code>pandas</code> leads to an environment with nearly 100MB of dependencies.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ virtualenv env
+</span><span class='line'>$ source env/bin/activate
+</span><span class='line'>$ pip install pandas
+</span><span class='line'>...
+</span><span class='line'>Installing collected packages: numpy, six, python-dateutil, pytz, pandas
+</span><span class='line'>Successfully installed numpy-1.13.1 pandas-0.20.3 python-dateutil-2.6.1 pytz-2017.2 six-1.10.0
+</span><span class='line'>$ du -h
+</span><span class='line'>...
+</span><span class='line'>84M   . &lt;-- FOLDER SIZE 😱</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Bundling these libraries within an archive file will not be possible due to the file size limit.</strong></p>
+
+<h3>Custom OpenWhisk Runtime Images</h3>
+
+<p>Overcoming this limit can be achieved using a custom runtime image. The runtime will pre-install additional libraries during the build process and make them available during invocations.</p>
+
+<p>OpenWhisk uses <a href="https://www.docker.com/">Docker</a> for the runtime containers. <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Source files for the images</a> are available on Github under the <code>core</code> folder. Here&#8217;s the <code>Dockerfile</code> for the Python runtime: <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile">https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile</a>.</p>
+
+<p>Images for OpenWhisk runtimes are also available on Docker Hub under the <a href="https://hub.docker.com/r/openwhisk/">OpenWhisk organisation</a>.</p>
+
+<p><em>Docker supports building new images from a parent image using the <code>FROM</code> directive. Inheriting from the existing runtime images means the <code>Dockerfile</code> for the new runtime only has to contain commands for installing extra dependencies.</em></p>
+
+<p>Let&#8217;s build a new Python runtime which includes those libraries as shared packages.</p>
+
+<h3>Building Runtimes</h3>
+
+<p>Let&#8217;s create a new <code>Dockerfile</code> which installs additional packages into the OpenWhisk Python runtime.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>FROM openwhisk/python3action
+</span><span class='line'>
+</span><span class='line'># lapack-dev is available in community repo.
+</span><span class='line'>RUN echo "http://dl-4.alpinelinux.org/alpine/edge/community" &gt;&gt; /etc/apk/repositories
+</span><span class='line'>
+</span><span class='line'># add package build dependencies
+</span><span class='line'>RUN apk add --no-cache \
+</span><span class='line'>        g++ \
+</span><span class='line'>        lapack-dev \
+</span><span class='line'>        gfortran
+</span><span class='line'>
+</span><span class='line'># add python packages
+</span><span class='line'>RUN pip install \
+</span><span class='line'>    numpy \
+</span><span class='line'>    pandas \
+</span><span class='line'>    scipy \
+</span><span class='line'>    sklearn</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running the <a href="https://docs.docker.com/engine/reference/commandline/build/">Docker build command</a> will create a new image with these extra dependencies.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker build -t python_ml_runtime .
+</span><span class='line'>Sending build context to Docker daemon  83.01MB
+</span><span class='line'>Step 1/4 : FROM openwhisk/python3action
+</span><span class='line'> ---&gt; 46388e726fae
+</span><span class='line'>...
+</span><span class='line'>Successfully built cfc14a93863e
+</span><span class='line'>Successfully tagged python_ml_runtime:latest</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Hosting images on Docker Hub requires registering a (free) account @ https://hub.docker.com/</em></p>
+
+<p>Create a new tag from the <code>python_ml_runtime</code> image containing the Docker Hub username.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker tag python_ml_runtime &lt;YOUR_USERNAME&gt;/python_ml_test</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Push the image to Docker Hub to make it available to OpenWhisk.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker push &lt;YOUR_USERNAME&gt;/python_ml_test</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Testing It Out</h3>
+
+<p>Create a new Python file (<code>main.py</code>) with the following contents:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">import</span> <span class="nn">numpy</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">pandas</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">sklearn</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">scipy</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+</span><span class='line'>    <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>        <span class="s">&quot;numpy&quot;</span><span class="p">:</span> <span class="n">numpy</span><span class="o">.</span><span class="n">__version__</span><span class="p">,</span>
+</span><span class='line'>        <span class="s">&quot;pandas&quot;</span><span class="p">:</span> <span class="n">pandas</span><span class="o">.</span><span class="n">__version__</span><span class="p">,</span>
+</span><span class='line'>        <span class="s">&quot;sklearn&quot;</span><span class="p">:</span> <span class="n">sklearn</span><span class="o">.</span><span class="n">__version__</span><span class="p">,</span>
+</span><span class='line'>        <span class="s">&quot;scipy&quot;</span><span class="p">:</span> <span class="n">scipy</span><span class="o">.</span><span class="n">__version__</span>
+</span><span class='line'>    <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Create a new OpenWhisk action using the Docker image from above and source file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create lib-versions --docker &lt;YOUR_USERNAME&gt;/openwhisk_python_ml main.py
+</span><span class='line'>ok: created action lib-versions
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> Invoke the action to verify the modules are available and return the versions.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke lib-versions --result
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;numpy&quot;</span>: <span class="s2">&quot;1.13.1&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;pandas&quot;</span>: <span class="s2">&quot;0.20.3&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;scipy&quot;</span>: <span class="s2">&quot;0.19.1&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;sklearn&quot;</span>: <span class="s2">&quot;0.18.2&quot;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Yass. It works. 💃🕺</p>
+
+<p>Serverless Machine Learning here we come…. 😉</p>
+
+<h2>Conclusions</h2>
+
+<p>Using custom runtimes with private source files is an amazing feature of OpenWhisk. It enables developers to run larger applications on the platform but also enables lots of other use cases. <strong>Almost any runtime, library or tool can now be used from the platform.</strong></p>
+
+<p>Here are some examples of where this approach could be used…</p>
+
+<ul>
+<li><em>Installing global libraries to reduce archive file size under 48MB and speed up deployments.</em></li>
+<li><em>Upgrading language runtimes, i.e. using Node.js 8 instead of 6.</em></li>
+<li><em>Adding native dependencies or command-line tools to the environment, e.g. ffmpeg.</em></li>
+</ul>
+
+
+<p>Building new runtimes is really simple using pre-existing base images published on Dockerhub.</p>
+
+<p><strong>The possibilities are endless!</strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Creating Swift Binaries for OpenWhisk]]></title>
@@ -5318,63 +5552,6 @@ remote action and returns a Promise with the service response.</p>
 
 
 <p>This project uses the client library above.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Debugging Live Containers on IBM Bluemix]]></title>
-    <link href="http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/"/>
-    <updated>2016-01-22T16:57:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix</id>
-    <content type="html"><![CDATA[<p>For the last few months, I&#8217;ve been using the <a href="https://www.elastic.co/webinars/introduction-elk-stack">ELK stack</a> to <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">collect logs</a> from my
-Cloud Foundry applications. This service has been deployed on IBM Bluemix using
-a Docker container, previously detailed in <a href="jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">this blog post</a>, and running happily
-until it ran into issues this week.</p>
-
-<p>Trying to load the Kibana web application, the server was returning <em>connection
-refused</em> errors. Looking at the container in the <a href="http://bluemix.net">IBM Bluemix</a> dashboard showed
-no obvious signs of issues. Reviewing the <a href="https://www.ng.bluemix.net/docs/containers/container_ml_ov.html">container log output</a> uncovered nothing
-indicating what had failed.</p>
-
-<p>Hmmm&#8230;</p>
-
-<p><strong>Fixing this issue would require me to start debugging from within the live
-container, but how?</strong></p>
-
-<p>This container image had not included an SSH daemon that would allow remote
-access over SSH.</p>
-
-<p>Looking over the <a href="https://www.ng.bluemix.net/docs/containers/container_index.html">documentation</a> for the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html#container_cli_cfic">IBM Containers plugin</a> for the Cloud
-Foundry CLI, I noticed the <em>exec</em> command.</p>
-
-<blockquote><p>Docker exec allows a user to spawn a process inside their Docker container via<br/>the Docker API and CLI.</p></blockquote>
-
-
-<p>Since Docker 1.3, released in October 2014, the <a href="https://docs.docker.com/engine/reference/commandline/exec/"><em>exec</em> command</a> has allowed users to
-run new commands within existing containers.</p>
-
-<p>The IBM Containers implementation now <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">supports this Docker command</a>.</p>
-
-<p>Using the IBM Containers plugin for the Cloud Foundry CLI, I can find the
-container id for the instance I want to debug and then start a bash shell to
-start resolving my issue.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf ic ps
-</span><span class='line'><span class="nv">$ </span>cf ic <span class="nb">exec</span> -it &lt;container_id&gt; /bin/bash
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>Having a live shell to my container allowed me to resolve the issue within a
-few minutes, without having to affect the running state of the container. This
-command also removes the need to keep an SSH daemon running on containers for
-remote access.</p>
-
-<p>For more information on the subset of Docker commands supported by IBM
-Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
 ]]></content>
   </entry>
   

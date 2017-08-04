@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-07-17T12:09:16+01:00</updated>
+  <updated>2017-08-04T15:51:31+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,202 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/"/>
+    <updated>2017-08-04T09:48:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
+
+<p><blockquote><p>The maximum code size for the action is 48MB.</p><footer><strong>OpenWhisk system details,</strong> <cite><a href='https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb'>github.com/apache/blob/master/&hellip;</a></cite></footer></blockquote></p>
+
+<p>Applications with lots of third-party modules, native libraries or external tools may be soon find themselves running into this limit. Node.js libraries are <a href="https://medium.com/friendship-dot-js/i-peeked-into-my-node-modules-directory-and-you-wont-believe-what-happened-next-b89f63d21558">notorious for having large amounts of dependencies</a>.</p>
+
+<p><em>What if you need to deploy an application larger than this limit to OpenWhisk?</em></p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk/tree/master/sdk/docker">Previous solutions</a> used Docker support in OpenWhisk to build a custom Docker image per action. Source files and dependencies are built into a public image hosted on Docker Hub.</p>
+
+<p>This approach overcomes the limit on deployment size but means application source files will be accessible on Docker Hub. This is not an issue for building samples or open-source projects but not realistic for most applications.</p>
+
+<p><em>So, using an application larger than this limit requires me to make my source files public?</em> 🤔</p>
+
+<p><strong>There's now a better solution!</strong> 👏👏👏</p>
+
+<p><strong>OpenWhisk supports creating actions from an archive file AND a custom Docker image.</strong></p>
+
+<p>If we build a custom Docker runtime which includes shared libraries, those dependencies don't need including in the archive file. Private source files will still be bundled in the archive and injected at runtime.</p>
+
+<p>Reducing archive file sizes also improves deployment times.</p>
+
+<p><em>Let's look at an example…</em></p>
+
+<h2>Using Machine Learning Libraries on OpenWhisk</h2>
+
+<p>Python is a popular language for machine learning and data science. Libraries like <a href="http://pandas.pydata.org/">pandas</a>, <a href="http://scikit-learn.org/stable/">scikit-learn</a> and <a href="http://www.numpy.org/">numpy</a> provide all the tools. Serverless computing is becoming a <a href="https://blog.alexcasalboni.com/serverless-computing-machine-learning-baf52b89e1b0">good choice for machine learning microservices</a>.</p>
+
+<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-python-actions">Python 2 and 3 runtimes</a>.</p>
+
+<p>Popular libraries like flask, requests and beautifulsoup <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#python-actions">are available as global packages</a>. Additional packages can be imported using <code>virutalenv</code> during invocations.</p>
+
+<h3>Python Machine Learning Libraries</h3>
+
+<p>Python packages can be <a href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/">used in OpenWhisk using virtualenv</a>. Developers install the packages locally and include the <code>virutalenv</code> folder in the archive for deployment.</p>
+
+<p>Machine Learning libraries often use numerous shared libraries and compile native dependencies for performance. <strong>This can lead to hundreds of megabytes of dependencies.</strong></p>
+
+<p>Setting up a new <code>virtualenv</code> folder and installing <code>pandas</code> leads to an environment with nearly 100MB of dependencies.</p>
+
+<p><code>
+$ virtualenv env
+$ source env/bin/activate
+$ pip install pandas
+...
+Installing collected packages: numpy, six, python-dateutil, pytz, pandas
+Successfully installed numpy-1.13.1 pandas-0.20.3 python-dateutil-2.6.1 pytz-2017.2 six-1.10.0
+$ du -h
+...
+84M . &lt;-- FOLDER SIZE 😱
+</code></p>
+
+<p><strong>Bundling these libraries within an archive file will not be possible due to the file size limit.</strong></p>
+
+<h3>Custom OpenWhisk Runtime Images</h3>
+
+<p>Overcoming this limit can be achieved using a custom runtime image. The runtime will pre-install additional libraries during the build process and make them available during invocations.</p>
+
+<p>OpenWhisk uses <a href="https://www.docker.com/">Docker</a> for the runtime containers. <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Source files for the images</a> are available on Github under the <code>core</code> folder. Here's the <code>Dockerfile</code> for the Python runtime: <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile">https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile</a>.</p>
+
+<p>Images for OpenWhisk runtimes are also available on Docker Hub under the <a href="https://hub.docker.com/r/openwhisk/">OpenWhisk organisation</a>.</p>
+
+<p><em>Docker supports building new images from a parent image using the <code>FROM</code> directive. Inheriting from the existing runtime images means the <code>Dockerfile</code> for the new runtime only has to contain commands for installing extra dependencies.</em></p>
+
+<p>Let's build a new Python runtime which includes those libraries as shared packages.</p>
+
+<h3>Building Runtimes</h3>
+
+<p>Let's create a new <code>Dockerfile</code> which installs additional packages into the OpenWhisk Python runtime.</p>
+
+<p>```
+FROM openwhisk/python3action</p>
+
+<h1>lapack-dev is available in community repo.</h1>
+
+<p>RUN echo "http://dl-4.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories</p>
+
+<h1>add package build dependencies</h1>
+
+<p>RUN apk add --no-cache \</p>
+
+<pre><code>    g++ \
+    lapack-dev \
+    gfortran
+</code></pre>
+
+<h1>add python packages</h1>
+
+<p>RUN pip install \</p>
+
+<pre><code>numpy \
+pandas \
+scipy \
+sklearn
+</code></pre>
+
+<p>```</p>
+
+<p>Running the <a href="https://docs.docker.com/engine/reference/commandline/build/">Docker build command</a> will create a new image with these extra dependencies.</p>
+
+<p><code>
+$ docker build -t python_ml_runtime .
+Sending build context to Docker daemon  83.01MB
+Step 1/4 : FROM openwhisk/python3action
+ ---&gt; 46388e726fae
+...
+Successfully built cfc14a93863e
+Successfully tagged python_ml_runtime:latest
+</code></p>
+
+<p><em>Hosting images on Docker Hub requires registering a (free) account @ https://hub.docker.com/</em></p>
+
+<p>Create a new tag from the <code>python_ml_runtime</code> image containing the Docker Hub username.</p>
+
+<p><code>
+$ docker tag python_ml_runtime &lt;YOUR_USERNAME&gt;/python_ml_test
+</code></p>
+
+<p>Push the image to Docker Hub to make it available to OpenWhisk.</p>
+
+<p><code>
+$ docker push &lt;YOUR_USERNAME&gt;/python_ml_test
+</code></p>
+
+<h3>Testing It Out</h3>
+
+<p>Create a new Python file (<code>main.py</code>) with the following contents:</p>
+
+<p>```python
+import numpy
+import pandas
+import sklearn
+import scipy</p>
+
+<p>def main(params):</p>
+
+<pre><code>return {
+    "numpy": numpy.__version__,
+    "pandas": pandas.__version__,
+    "sklearn": sklearn.__version__,
+    "scipy": scipy.__version__
+}
+</code></pre>
+
+<p>```</p>
+
+<p>Create a new OpenWhisk action using the Docker image from above and source file.</p>
+
+<p><code>sh
+$ wsk action create lib-versions --docker &lt;YOUR_USERNAME&gt;/openwhisk_python_ml main.py
+ok: created action lib-versions
+</code></p>
+
+<p> Invoke the action to verify the modules are available and return the versions.</p>
+
+<p>```
+$ wsk action invoke lib-versions --result
+{</p>
+
+<pre><code>"numpy": "1.13.1",
+"pandas": "0.20.3",
+"scipy": "0.19.1",
+"sklearn": "0.18.2"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Yass. It works. 💃🕺</p>
+
+<p>Serverless Machine Learning here we come…. 😉</p>
+
+<h2>Conclusions</h2>
+
+<p>Using custom runtimes with private source files is an amazing feature of OpenWhisk. It enables developers to run larger applications on the platform but also enables lots of other use cases. <strong>Almost any runtime, library or tool can now be used from the platform.</strong></p>
+
+<p>Here are some examples of where this approach could be used…</p>
+
+<ul>
+<li><em>Installing global libraries to reduce archive file size under 48MB and speed up deployments.</em></li>
+<li><em>Upgrading language runtimes, i.e. using Node.js 8 instead of 6.</em></li>
+<li><em>Adding native dependencies or command-line tools to the environment, e.g. ffmpeg.</em></li>
+</ul>
+
+
+<p>Building new runtimes is really simple using pre-existing base images published on Dockerhub.</p>
+
+<p><strong>The possibilities are endless!</strong></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Creating Swift Binaries for OpenWhisk]]></title>
@@ -1547,54 +1743,6 @@ smsbot-dev-incoming    smsbot-dev-reply</p>
 <p>Both Slack and Twilio provide webhook integration for developers to use their platforms. Using OpenWhisk Web Actions, we can write serverless functions that act as a bridge between these services. With less than a hundred lines of code, we've created a new slack bot that can connect users to channels using SMS messages.</p>
 
 <p>Pretty cool, huh?! 👏👏👏</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Openwhisk and The Serverless Framework]]></title>
-    <link href="http://jamesthom.as/blog/2017/02/09/openwhisk-and-the-serverless-framework/"/>
-    <updated>2017-02-09T15:04:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/02/09/openwhisk-and-the-serverless-framework</id>
-    <content type="html"><![CDATA[<p><a href="https://serverless.com">The Serverless Framework</a> is the most popular open-source framework for building serverless applications.</p>
-
-<p><a href="https://serverless.com/blog/serverless-v1.6.0/">Recent releases</a> included support for using the framework with non-AWS providers. This feature makes it easier for developers to try different serverless platforms and move applications between providers.</p>
-
-<p>Since last summer, I've been <a href="https://github.com/serverless/serverless-openwhisk">leading the technical effort</a> to provide an <a href="http://openwhisk.org/">OpenWhisk</a> provider plugin for the framework.</p>
-
-<p>OpenWhisk is the first non-AWS serverless provider to complete integration into the framework.</p>
-
-<p><img src="https://cloud.githubusercontent.com/assets/20538501/22434123/748ae372-e6e0-11e6-86d0-38db9941552d.png"></p>
-
-<h2>Getting Started</h2>
-
-<p>Documentation for the provider plugin is available on <a href="https://serverless.com/framework/docs/">The Serverless Framework's website</a>.</p>
-
-<p>Example projects using the framework to build applications for OpenWhisk are now available in <a href="https://github.com/serverless/examples">this repository</a>.</p>
-
-<p>More details on the provider plugin can be found on the <a href="https://github.com/serverless/serverless-openwhisk">project repository</a>.</p>
-
-<p>Found an issue? Feature request? Need help? Please <a href="https://github.com/serverless/serverless-openwhisk/issues">open issues on Github</a>.</p>
-
-<h2>Video Demonstration</h2>
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/GJY10W98Itc" frameborder="0" allowfullscreen></iframe>
-
-
-<h2>Serverless Meetup Presentation</h2>
-
-<p>Last week, I was invited to speak at the <a href="https://www.meetup.com/Serverless-London/events/236664340/">London's Serverless Meetup</a> about building multi-provider serverless applications using this feature.</p>
-
-<p>Slides from the presentation are here:</p>
-
-<script async class="speakerdeck-embed" data-id="592fbd47aceb4fbc9021ae3bf2f6b06c" data-ratio="1.77777777777778" src="http://jamesthom.as//speakerdeck.com/assets/embed.js"></script>
-
-
-<p>There is a (low-fi) video recording from the event here:</p>
-
-<iframe src="https://player.twitch.tv/?video=v119142073&autoplay=false" frameborder="0" allowfullscreen="true" scrolling="no" height="378" width="620"></iframe>
-
-
-<p><a href="https://www.twitch.tv/serverlessldn?tt_medium=live_embed&tt_content=text_link" style="padding:2px 0px 4px; display:block; width:345px; font-weight:normal; font-size:10px; text-decoration:underline;">Watch live video from serverlessldn on www.twitch.tv</a></p>
 ]]></content>
   </entry>
   
