@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2017-08-04T16:17:47+01:00</updated>
+  <updated>2017-10-31T11:55:04+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,464 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[advanced openwhisk alarm schedules]]></title>
+    <link href="http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
+    <updated>2017-10-31T12:00:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
+    <content type="html"><![CDATA[<p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
+
+<p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
+
+<p><strong>Using a <a href="http://crontab.org/">cron-based schedule pattern</a>, running functions once a minute, every two hours or 5pm on Mondays is simple, but what about more complex schedule patterns?</strong> 🤔</p>
+
+<p>What if we need to…</p>
+
+<ul>
+<li>⏰ <em>Fire a <a href="https://stackoverflow.com/questions/45898048/can-i-schedule-a-one-shot-action-in-openwhisk">single one-off event</a> at a specific time in the future?</em></li>
+<li>⏰ <em>Fire events a fixed period of time from an action finishing?</em></li>
+<li>⏰ <em>Fire events on an irregular schedule?</em></li>
+</ul>
+
+
+<p>It is possible to implement all these examples with a few tricks… 🤹‍♂️🤹‍♂️🤹‍♂️.</p>
+
+<p><em>Before we dive into the details, let's review how the alarm feed provider works…</em></p>
+
+<h2>Alarm Trigger Feeds</h2>
+
+<p>OpenWhisk triggers are connected to external event sources <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#creating-and-using-trigger-feeds">using feed providers</a>.</p>
+
+<p>Feed providers listen to event sources, like message queues, <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">firing triggers with event parameters</a> as external events occur.</p>
+
+<p>There are a number of <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#browsing-packages">pre-installed feed providers</a> in the <code>whisk.system</code> namespace. This includes the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarms package</a> which includes a feed provider (<code>/whisk.system/alarms/alarm</code>).</p>
+
+<p><code>
+$ wsk package get /whisk.system/alarms --summary
+package /whisk.system/alarms: Alarms and periodic utility
+   (parameters: *apihost, *cron, *trigger_payload)
+ feed   /whisk.system/alarms/alarm: Fire trigger when alarm occurs
+   (parameters: none defined)
+</code></p>
+
+<h3>feed parameters</h3>
+
+<p>The following parameters are used to configure the feed provider.</p>
+
+<ul>
+<li><code>cron</code> - <em>crontab syntax used to configure timer schedule.</em></li>
+<li><code>trigger_payload</code> - <em>event parameters to fire trigger with.</em></li>
+<li><code>maxTriggers</code> - <em>maximum number of triggers to fire (-1 for no limit).</em></li>
+</ul>
+
+
+<p><code>cron</code> is the parameter which controls when triggers will be fired. It uses the <a href="http://crontab.org/">cron syntax</a> to specify the schedule expression.</p>
+
+<h3>cron schedule format</h3>
+
+<p>Cron schedule values are a string containing sections for the following time fields. Field values can be integers or patterns including wild cards.</p>
+
+<p>```</p>
+
+<h1>┌────────────── second (0 - 59, optional &amp; defaults to 0)</h1>
+
+<h1>│ ┌────────────── minute (0 - 59)</h1>
+
+<h1>│ │ ┌────────────── hour (0 - 23)</h1>
+
+<h1>│ │ │ ┌────────────── day of month (1 - 31)</h1>
+
+<h1>│ │ │ │ ┌────────────── month (0 - 11)</h1>
+
+<h1>│ │ │ │ │ ┌────────────── day of week (0 - 6) (Sunday to Saturday)</h1>
+
+<h1>│ │ │ │ │ │</h1>
+
+<h1>│ │ │ │ │ │</h1>
+
+<h1>* * * * * *</h1>
+
+<p>```</p>
+
+<p><strong><em>NOTE: Month field starts from 0 not 1, 0 is January with December being 11. Day of week also starts from 0. Sunday is first day of the week.</em></strong></p>
+
+<p>The second field is a non-standard cron field and does not need to be used. The Node.js module <a href="https://github.com/kelektiv/node-cron">used to parse the cron schedules</a> supports a value with five or six fields.</p>
+
+<h3>crontab examples</h3>
+
+<p>Here are some example patterns…</p>
+
+<ul>
+<li><code>*/10 * * * * *</code> - run every 10 seconds</li>
+<li><code>* * * * *</code> - run every minute</li>
+<li><code>0 * * * *</code> - run every hour</li>
+<li><code>0 */2 * * *</code> - run every two hours</li>
+<li><code>30 11 * * 1-5</code>  - run Monday to Friday at 11:30AM</li>
+<li><code>0 0 1 * *</code> - run at midnight the first day of the month</li>
+</ul>
+
+
+<p><a href="https://crontab.guru/">https://crontab.guru/</a> is an online editor for generating cron schedule expressions.</p>
+
+<h2>Creating Alarm Triggers</h2>
+
+<p>Using the <code>wsk</code> cli triggers can be created using the <code>alarm</code> feed. Schedule and event parameters are passed in using command-line arguments (<code>-p name value</code>).</p>
+
+<p><code>
+$ wsk trigger create periodic --feed /whisk.system/alarms/alarm -p cron '* * * * * *' -p trigger_payload '{"hello":"world"}'
+ok: invoked /whisk.system/alarms/alarm with id 42ca80fbe7cf47318a80fbe7cff73177
+...
+ok: created trigger feed periodic
+</code></p>
+
+<p>Trigger invocations are recorded in the activation records.</p>
+
+<p>```
+$ wsk activation list periodic
+activations
+d55d15297781474b9d15297781974b92 periodic
+...
+$ wsk activation get d55d15297781474b9d15297781974b92
+ok: got activation d55d15297781474b9d15297781974b92
+{</p>
+
+<pre><code>"namespace": "user@host.com_dev",
+"name": "periodic",
+...
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Deleting the trigger will automatically remove the trigger from the alarm scheduler.</p>
+
+<p><code>
+$ wsk delete periodic
+ok: invoked /whisk.system/alarms/alarm with id 44e8fc5e76c64175a8fc5e76c6c175dd
+...
+ok: deleted trigger periodic
+</code></p>
+
+<h3>Programmatic Creation</h3>
+
+<p>The <a href="https://github.com/apache/incubator-openwhisk-client-js">OpenWhisk JavaScript library</a> can also register and remove triggers with feed providers.</p>
+
+<p><code>javascript
+const params = {cron: '* * * * * *', trigger_payload: {"hello":"world"}}
+const name = '/whisk.system/alarms/alarm'
+const trigger = 'periodic'
+ow.feeds.create({name, trigger, params}).then(package =&gt; {
+  console.log('alarm trigger feed created', package)
+}).catch(err =&gt; {
+  console.error('failed to create alarm trigger', err)
+})
+</code></p>
+
+<p><em>Triggers must already exist before registering with the feed provider using the client library.</em></p>
+
+<p>Using the client library provides a mechanism for actions to dynamically set up scheduled events.</p>
+
+<h2>Advanced Examples</h2>
+
+<p>Having reviewed how the alarm feed works, let's look at some more advanced use-cases for the scheduler…</p>
+
+<h3>Schedule one-off event at a specific time in the future</h3>
+
+<p>Creating one-off events, that fire at a specific date and time, is possible using the <code>cron</code> and <code>maxTriggers</code> parameters together.</p>
+
+<p>Using the minute, hour, day of the month and month fields in the cron parameter, the schedule can be configured to run once a year. The day of the week field will use the wildcard value.</p>
+
+<p>Setting the <code>maxTriggers</code> parameter to 1, the trigger is removed from the scheduler after firing.</p>
+
+<h4>happy new year example</h4>
+
+<p><em>What if we want to fire an event when the New Year starts?</em></p>
+
+<p>Here's the cron schedule for 00:00 on January 1st.</p>
+
+<p>```</p>
+
+<h1>┌───────────── minute (0 - 59)</h1>
+
+<h1>│ ┌───────────── hour (0 - 23)</h1>
+
+<h1>│ │ ┌───────────── day of month (1 - 31)</h1>
+
+<h1>│ │ │ ┌───────────── month (0 - 11)</h1>
+
+<h1>│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)</h1>
+
+<h1>│ │ │ │ │</h1>
+
+<h1>│ │ │ │ │</h1>
+
+<h1>0 0 1 0 *</h1>
+
+<p>```</p>
+
+<p>Here are the cli commands to set up a trigger to run at 01/01/2018 @ 00:00 to celebrate the new year.</p>
+
+<p><code>
+$ wsk trigger create new_year --feed /whisk.system/alarms/alarm -p cron '0 0 1 0 *' -p maxTriggers 1 -p trigger_payload '{"message":"Happy New Year!"}'
+ok: invoked /whisk.system/alarms/alarm with id 754bec0a58b944a68bec0a58b9f4a6c1
+...
+ok: created trigger new_year
+</code></p>
+
+<h3>Firing events a fixed period of time from an action finishing</h3>
+
+<p>Imagine you want to run an action on a loop, with a 60 second delay between invocations. Start times for future invocations are dependent on the finishing time of previous invocations. This means we can't use the alarm feed with a fixed schedule like '<code>* * * * *</code>'.</p>
+
+<p><strong><em>Instead we'll schedule the first invocation as a one-off event and then have the action re-schedule itself using the JavaScript client library!</em></strong></p>
+
+<h4>action code</h4>
+
+<p>Here's the sample JavaScript code for an action which does that….</p>
+
+<p>```js
+const openwhisk = require('openwhisk');</p>
+
+<p>function calculateSchedule() {
+  const now = new Date()
+  const seconds = now.getSeconds()
+  const nextMinute = (now.getMinutes() + 1) % 60
+  return <code>${seconds} ${nextMinute} * * * *</code>
+}</p>
+
+<p>function main(params) {
+  const ow = openwhisk();
+  const params = {cron: calculateSchedule(), maxTriggers: 1}
+  console.log(params)
+  return ow.feeds.delete({name: '/whisk.system/alarms/alarm', trigger: 'delay'}).then(() => {</p>
+
+<pre><code>console.log('delay trigger feed deleted.')
+return ow.feeds.create({name: '/whisk.system/alarms/alarm', trigger: 'delay', params: params})
+}).then(result =&gt; {
+ console.log('delay trigger feed created.')
+})
+.catch(err =&gt; {
+  console.error('failed to create/delete delay trigger', err)
+  console.log("ERROR", err.error.response.result)
+})
+</code></pre>
+
+<p>}
+```</p>
+
+<h4>setting up</h4>
+
+<ul>
+<li>Create an action called <code>reschedule</code> with code from above.</li>
+</ul>
+
+
+<p><code>
+$ wsk action create reschedule reschedule.js
+ok: created action reschedule
+</code></p>
+
+<ul>
+<li>Create a trigger (<code>delay</code>)  using the alarm feed, set to run in the next 60 seconds.</li>
+</ul>
+
+
+<p><code>
+$ wsk trigger create delay --feed /whisk.system/alarms/alarm -p cron '* * * * * *'
+ok: invoked /whisk.system/alarms/alarm with id b3da4de5726b41679a4de5726b0167c8
+...
+ok: created trigger delay
+</code></p>
+
+<ul>
+<li>Connect the action (<code>reschedule</code>) to the trigger (<code>delay</code>) with a rule (<code>reschedule_delay</code>).</li>
+</ul>
+
+
+<p><code>
+$ wsk rule create reschedule_delay delay reschedule
+ok: created rule reschedule_delay
+</code></p>
+
+<p><strong>This action will continue to re-schedule itself indefinitely.</strong></p>
+
+<p>Stop this infinite loop by disabling or removing the rule connecting the action to the trigger.</p>
+
+<p><code>
+$ wsk rule disable reschedule_delay
+ok: disabled rule reschedule_delay
+</code></p>
+
+<h3>Firing events on an irregular schedule</h3>
+
+<p>How can you schedule events to occur from a predictable but irregular pattern, e.g. sending a daily message to users at sunrise?</p>
+
+<p>Sunrise happens at a different time each morning. This schedule cannot be defined using a static cron-based pattern.</p>
+
+<p><em>Using the same approach as above, where actions re-schedule triggers at runtime, events can created to follow an irregular schedule.</em></p>
+
+<h4>sunrise times</h4>
+
+<p>This <a href="https://sunrise-sunset.org/api">external API</a> provides the sunrise times for a location. Retrieving the sunrise times for tomorrow during execution will provide the date time used to re-schedule the action.</p>
+
+<p>```json
+{</p>
+
+<pre><code>"results": {
+    "astronomical_twilight_begin": "5:13:40 AM",
+    "astronomical_twilight_end": "6:48:52 PM",
+    "civil_twilight_begin": "6:14:23 AM",
+    "civil_twilight_end": "5:48:09 PM",
+    "day_length": "10:40:26",
+    "nautical_twilight_begin": "5:43:50 AM",
+    "nautical_twilight_end": "6:18:42 PM",
+    "solar_noon": "12:01:16 PM",
+    "sunrise": "6:41:03 AM",
+    "sunset": "5:21:29 PM"
+},
+"status": "OK"
+</code></pre>
+
+<p>}
+```</p>
+
+<h4>action code</h4>
+
+<p>Here's the sample JavaScript action that will re-schedule itself at sunrise.</p>
+
+<p>```javascript
+const openwhisk = require('openwhisk');
+const request = require('request-promise');</p>
+
+<p>function getNextSunrise(lat, lng, when) {
+  const options = {</p>
+
+<pre><code>uri: 'https://api.sunrise-sunset.org/json',
+qs: { lat: lat, lng: lng, when: when },
+json: true
+</code></pre>
+
+<p>  }</p>
+
+<p>  return request(options)</p>
+
+<pre><code>.then(result =&gt; result.results.sunrise)
+</code></pre>
+
+<p>}</p>
+
+<p>function calculateSchedule(sunrise) {
+  console.log('Next sunrise:', sunrise)
+  const sections = sunrise.split(':')
+  const hour = sections[0], minute = sections[1]
+  return <code>${minute} ${hour} * * *</code>
+}</p>
+
+<p>function scheduleSunriseEvent (sunrise) {
+  const ow = openwhisk();
+  const params = {cron: sunrise, maxTriggers: 1}
+  return ow.feeds.delete({name: '/whisk.system/alarms/alarm', trigger: 'sunrise'}).then(() => {</p>
+
+<pre><code>console.log('trigger feed deleted.')
+return ow.feeds.create({name: '/whisk.system/alarms/alarm', trigger: 'sunrise', params: params})
+</code></pre>
+
+<p>  }).then(result => {</p>
+
+<pre><code>console.log('trigger feed created.')
+</code></pre>
+
+<p>  })
+  .catch(err => {</p>
+
+<pre><code>console.error('failed to create/delete trigger', err)
+console.log("ERROR", err.error.response.result)
+</code></pre>
+
+<p>  })
+}</p>
+
+<p>function main(params) {
+  console.log('GOOD MORNING!')</p>
+
+<p>  return getNextSunrise(params.lat, params.lng, 'tomorrow')</p>
+
+<pre><code>.then(calculateSchedule)
+.then(scheduleSunriseEvent)
+</code></pre>
+
+<p>}
+```</p>
+
+<h4>setting up</h4>
+
+<ul>
+<li>Create an action called <code>wake_up</code> with code from above. <code>lat</code> and <code>lng</code> parameters define location for sunrise.</li>
+</ul>
+
+
+<p><code>
+$ wsk action create wake_up wake_up.js -p lat 51.50 -p lng -0.076
+ok: created action wake_up
+</code></p>
+
+<ul>
+<li>Create a trigger (<code>sunrise</code>)  with the alarm feed, scheduled for the next sunrise.</li>
+</ul>
+
+
+<p><code>
+$ wsk trigger create sunrise --feed /whisk.system/alarms/alarm -p cron '03 41 06 * * *'
+ok: invoked /whisk.system/alarms/alarm with id 606dafe276f24400adafe276f2240082
+...
+ok: created trigger sunrise
+</code></p>
+
+<ul>
+<li>Connect the action (<code>wake_up</code>) to the trigger (<code>sunrise</code>) with a rule (<code>wake_up_at_sunrise</code>).</li>
+</ul>
+
+
+<p><code>
+$ wsk rule create wake_up_at_sunrise sunrise wake_up
+ok: created rule wake_up_at_sunrise
+</code></p>
+
+<p><em>Checking the activation logs the following morning will show the trigger being fired, which invokes the action, which re-schedules the one-off event!</em> 🌅🌅🌅</p>
+
+<h2>Caveats</h2>
+
+<p>Here's a few issues you might encounter using the alarm feed that I ran into….</p>
+
+<ul>
+<li>Month field in cron schedule starts from zero not one. January is 0, December is 11.</li>
+<li>Day of the week field starts from zero. First day of the week is Sunday, not Monday.</li>
+<li>Feeds <a href="https://github.com/apache/incubator-openwhisk/issues/1925">cannot be updated</a> with a new schedule once created. Feeds must be <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">deleted before being re-created</a> to use a different schedule.</li>
+</ul>
+
+
+<h2>Future Plans</h2>
+
+<p>Extending the alarm feed to support even more features and improve the developer experience is in-progress. There are a number of Github issues in the official OpenWhisk repository around this work.</p>
+
+<ul>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/102">Enhancements for startDate, stopDate, fire once, interval (#102)</a></em></li>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/89">Add fire once triggers (#89)</a></em></li>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/pull/101">Support read and updating trigger details (#101)</a></em></li>
+</ul>
+
+
+<p>If you have feature requests, discover bugs with the feed or have other suggestions, please comment on the existing issues or open new ones.</p>
+
+<h2>Conclusion</h2>
+
+<p>Scheduled events are a necessary feature of serverless cloud platforms. Due to the ephemeral nature of runtime environments, scheduling background tasks must be managed by the platform.</p>
+
+<p>In Apache OpenWhisk, the alarm feed allows static events to be generated on a customisable schedule. Using a cron-based schedule pattern, running functions once a minute, every two hours or 5pm on Mondays, is simple but what about more complex schedule patterns?</p>
+
+<p>Using the <code>cron</code> and <code>maxTriggers</code> parameters with the OpenWhisk client library, much more advanced event schedules can be utilised within the platform. In the examples above, we looked at how to schedule one-off events, events using a predictable but irregular schedule and how actions can re-schedule events at runtime. 💯💯💯</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
@@ -1170,579 +1628,6 @@ service: pyjokes</p>
 <p><strong>This means Python functions running on OpenWhisk can now use any third-party library as if it was installed globally.</strong></p>
 
 <p>Hurrah 👌!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Building an SMS Bot for Slack.]]></title>
-    <link href="http://jamesthom.as/blog/2017/03/20/smsbot/"/>
-    <updated>2017-03-20T16:02:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/03/20/smsbot</id>
-    <content type="html"><![CDATA[<p>This is <a href="https://github.com/ibmets/smsbot">smsbot</a>.</p>
-
-<p><img src="/images/smsbot/slack_text_hidden.jpg"></p>
-
-<p>It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their messages posted into the channel. Channel users can respond to the messages and have their response sent back to the sender using SMS.</p>
-
-<p><blockquote><p></p></p><p><p>smsbot was developed in under a few hours and less than one hundred lines of code using a serverless cloud platform.</p></p><p><p></p></blockquote></p>
-
-<p>Want to understand how it works? Let's find out…</p>
-
-<p>The first challenge was how to programmatically send and receive SMS messages.</p>
-
-<p><em><strong>Want to deploy smsbot yourself? Follow the <a href="#Deployment">instructions</a> at the bottom or check out the <a href="https://github.com/ibmets/smsbot">Github repository</a>.</strong></em></p>
-
-<h2>Twilio</h2>
-
-<p><img src="http://www.timothylutts.com/wp-content/uploads/2016/09/twilio.jpg"></p>
-
-<p><a href="https://twilio.com">Twilio</a> provides a platform for building SMS, voice and messaging applications using an API.</p>
-
-<p>Developers can <a href="https://www.twilio.com/console/phone-numbers">register phone numbers</a> through the service that invoke webhooks for incoming calls and SMS messages. Webhooks are passed message details and return a custom markup language (TwilML) to encode the instructions on how to respond to the request.</p>
-
-<p>The platform also provides a REST API to <a href="https://www.twilio.com/sms/api">initiate phone calls and SMS messages</a>.</p>
-
-<p><em>We now have a way to handle text messages for our bot, how do we integrate a new bot in Slack?</em></p>
-
-<h2>Slack</h2>
-
-<p><img src="http://stratejos.ai/img/logos/slack-logo.png"></p>
-
-<p><a href="https://slack.com">Slack</a> also provides a webhook-based mechanism to integrate custom bots into the platform. The platform has two different integrations…</p>
-
-<h3>Incoming Webhooks.</h3>
-
-<p>Provide a way to post messages into Slack from external sources. It provides a custom URL that supports HTTP requests with a JSON payload. These requests are turned into channel messages. The JSON payload is used to control the content and formatting of the message.</p>
-
-<p><a href="https://api.slack.com/incoming-webhooks">https://api.slack.com/incoming-webhooks</a></p>
-
-<h3>Outgoing Webhooks</h3>
-
-<p>Allow you to listen for messages in channels without using the full real-time API. Slack sends HTTP requests to registered URLs when specific trigger words appear in channel messages. The HTTP request body contains the message details.</p>
-
-<p><a href="https://api.slack.com/outgoing-webhooks">https://api.slack.com/outgoing-webhooks</a></p>
-
-<p><em>Now we just need a way to write simple HTTP services to listen for webhook requests…</em></p>
-
-<h2>OpenWhisk</h2>
-
-<p><img src="http://openwhisk.org/images/apache-openwhisk.jpg"></p>
-
-<p><a href="http://openwhisk.org">OpenWhisk</a> is an open-source serverless cloud platform. <a href="https://martinfowler.com/articles/serverless.html">Serverless platforms</a> make it easy to create microservices in the cloud without having to set up or manage any infrastructure.</p>
-
-<p>Developers push their code directly into the platform. The platform will instantiate the runtime and invoke the code on-demand for each request. Serverless functions can be <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">exposed as HTTP endpoints</a> or connected to <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/catalog.md">event sources</a> like <a href="https://github.com/openwhisk/openwhisk-package-kafka/blob/master/README.md">message queues</a> or <a href="https://github.com/openwhisk/openwhisk-package-cloudant/blob/master/README.md">databases</a>.</p>
-
-<p>Serverless platforms make it easy to create simple HTTP services to handle webhook requests.</p>
-
-<h3>Web Actions</h3>
-
-<p><a href="https://medium.com/openwhisk/serverless-http-handlers-with-openwhisk-90a986cc7cdd#.rki6bwjgu">Web Actions</a> are a new feature in OpenWhisk for exposing serverless functions as simple HTTP endpoints. Functions have access to the full HTTP request and can control the HTTP response returned. This method is suitable for simple public endpoints that do not need more enterprise features supported by the <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">API gateway</a>.</p>
-
-<p>Web Actions are available at the following <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">platform API path</a>.</p>
-
-<p><code>
-https://{APIHOST}/api/v1/experimental/web/{USER_NAMESPACE}/{PACKAGE}/{ACTION_NAME}.{TYPE}
-</code></p>
-
-<ul>
-<li><em>APIHOST</em> - platform endpoint e.g. <em>openwhisk.ng.bluemix.net.</em></li>
-<li><em>USER_NAMESPACE</em> - must be explicit and cannot use the default namespace (_).</li>
-<li><em>PACKAGE</em> - action package or <code>default</code>.</li>
-<li><em>ACTION_NAME</em> - function identifier.</li>
-<li><em>TYPE</em> - <code>.json</code>, <code>.html</code>, <code>.text</code> or <code>.http</code>.</li>
-</ul>
-
-
-<h3>Example</h3>
-
-<p>Here's a simple Web Actions that returns HTML content when invoked through the API.</p>
-
-<p>```javascript
-function main(args) {</p>
-
-<pre><code>var msg = "you didn&amp;#39;t tell me who you are."
-if (args.name) {
-    msg = `hello ${args.name}!`
-}
-return {body:
-   `&lt;html&gt;&lt;body&gt;&lt;h3&gt;&lt;center&gt;${msg}&lt;/center&gt;&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;`}
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Actions can be turned into web-accessible actions by setting a custom annotation.</p>
-
-<p><code>
-$ wsk action create greeting source.js --annotation web-export true
-</code></p>
-
-<p>The <code>greeting</code> function can then be invoked through a HTTP request to the following endpoint.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/greeting.http?name=James</code></p>
-
-<p>```sh
-$ http post https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/html_greeting.http?name=James
-HTTP/1.1 200 OK
-...</p>
-
-<p><html><body><h3><center>hello James!</center></h3></body></html>
-```</p>
-
-<h2>Twilio &lt;=> Slack</h2>
-
-<p>OpenWhisk Web Actions are a great solution for creating webhook endpoints. Connecting Twilio to Slack (and vice-versa) can be implemented using two different OpenWhisk Web Actions.</p>
-
-<ul>
-<li><strong>Twilio Webhook.</strong> Invoked for SMS messages. Uses the Slack Incoming Webhook to create a bot messages from content.
-​</li>
-<li><strong>Slack Outgoing Webhook.</strong> Invoked for channel replies. Uses Twilio API to send replies as SMS messages.</li>
-</ul>
-
-
-<p>Let's have a look at the Twilio webhook first…</p>
-
-<h3>Twilio Webhook</h3>
-
-<p>When a new SMS message is received, we want to post this bot message into our Slack channel.</p>
-
-<p>Twilio allows developers to <a href="https://www.twilio.com/docs/api/twiml/sms/twilio_request">configure webhooks</a> for each registered phone number. The webhook endpoint will be invoked for each SMS message that is received. Twilio can either send a HTTP POST request, with parameters in the body, or a HTTP GET request, with URL query parameters.</p>
-
-<p>OpenWhisk Web Actions support both formats. Request parameters will be available as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md#http-context">properties on the function argument</a>.</p>
-
-<p>Here's a simple Web Action that would log the message sender and content for each SMS received.</p>
-
-<p><code>javascript
-function main (params) {
-  console.log(`Text message from ${params.From}: ${params.Body}`)
-}
-</code></p>
-
-<h4>Creating Bot Messages From SMS</h4>
-
-<p>When an SMS message is received, we need to send a HTTP POST to the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook URL</a>. The JSON body of the HTTP request is used to configure the channel message. Using the <code>username</code>, <code>icon_emoji</code> and and <code>text</code> properties allows us to customise our bot message.</p>
-
-<p>OpenWhisk Actions in Node.js have <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#javascript-runtime-environments">numerous popular NPM modules</a> pre-installed in the environment. This includes a <a href="https://github.com/request/request">HTTP client library</a>. This code snippet demonstrates sending the HTTP request to create out bot message. The Slack Webhook URL is bound as a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameter</a> to the action.</p>
-
-<p>```javascript
-const request = require('request')</p>
-
-<p>const slack_message = text => ({
-  username: 'smsbot',
-  icon_emoji: ':phone:',
-  text
-})</p>
-
-<p>function main (params) {<br/>
-  return new Promise(function (resolve, reject) {</p>
-
-<pre><code>request.post({
-  body: slack_message(`Text message from ${params.From}: ${params.Body}`),
-  json: true,
-  url: params.slack.webhook
-}, err =&gt; {
-  if (err) return reject(err);
-  resolve();
-})
-</code></pre>
-
-<p>  })
-}
-```</p>
-
-<p>Returning a Promise ensures the request is completed before the function exits.</p>
-
-<h4>Sending Acknowledgement Message</h4>
-
-<p>Returning <a href="https://www.twilio.com/docs/api/twiml">TwilML</a> content allows us to control the response from Twilio to the incoming message.</p>
-
-<p>This snippet would send an SMS reply to sender with the content "Hello World!".</p>
-
-<p><code>xml
-&lt;?xml version="1.0" encoding="UTF-8"?&gt;
-&lt;Response&gt;
-  &lt;Message&gt;Hello World!&lt;/Message&gt;
-&lt;/Response&gt;
-</code></p>
-
-<p><a href="https://www.npmjs.com/package/twilio">Twilio's client library</a> for Node.js can be used to programatically generate TwilML.</p>
-
-<p><code>javascript
-const twilio = require('twilio')
-const resp = new twilio.TwimlResponse()
-const twilml = resp.message('Thanks for letting us know.').toString()
-</code></p>
-
-<p>Returning XML content as the HTTP response requires us to set the response headers, body and status code in the Web Action.</p>
-
-<p>```javascript
-function main () {
-  const xml = '...'
-  return {</p>
-
-<pre><code>headers: {
-  'Content-Type': 'text/xml'
-},
-code: 200,
-body: xml
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<h4>Web Action Source</h4>
-
-<p>Adding the XML response code into the existing function completes the OpenWhisk Web Action required to handle incoming SMS messages.</p>
-
-<p>```javascript
-const request = require('request')
-const twilio = require('twilio')</p>
-
-<p>const resp = new twilio.TwimlResponse()
-const twilml = resp.message('Thanks for letting us know.').toString()</p>
-
-<p>const response = {
-  headers: {</p>
-
-<pre><code>'Content-Type': 'text/xml'
-</code></pre>
-
-<p>  },
-  code: 200,
-  body: twilml
-}</p>
-
-<p>const slack_message = text => ({
-  username: 'smsbot',
-  icon_emoji: ':phone:',
-  text
-})</p>
-
-<p>function main (params) {<br/>
-  return new Promise(function (resolve, reject) {</p>
-
-<pre><code>request.post({
-  body: slack_message(`Text message from ${params.From}: ${params.Body}`),
-  json: true,
-  url: params.slack.webhook
-}, err =&gt; {
-  if (err) return reject(err);
-  resolve(response);
-})
-</code></pre>
-
-<p>  })
-}
-```</p>
-
-<h4>Register Webhook</h4>
-
-<p>Once we have deployed the Web Action, we can configure the Twilio SMS webhook endpoint to use following URL.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@email.com_dev/default/smsbot-dev-incoming.http</code></p>
-
-<p><img src="/images/smsbot/twilio_sms_webhook.png"></p>
-
-<h3>Slack Outgoing Webhook</h3>
-
-<p>When someone sends a channel message to the bot, smsbot should send that content as an SMS message to the last person who sent an SMS to the channel. An <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> will be used to trigger the bot.</p>
-
-<p>Outgoing Webhooks have a configurable trigger word. Channel messages which start with this word are send as HTTP requests to the list of URLs registered for that webhook. We will use <code>smsbot</code> as our trigger word.</p>
-
-<p><img src="/images/smsbot/outgoing_webhook_trigger.png"></p>
-
-<h4>Request Parameters</h4>
-
-<p>Slack sends the following parameters for each channel message.</p>
-
-<p><code>
-token=XXXXXXXXXXXXXXXXXX
-team_id=T0001
-team_domain=example
-channel_id=C2147483705
-channel_name=test
-timestamp=1355517523.000005
-user_id=U2147483697
-user_name=Steve
-text=googlebot: What is the air-speed velocity of an unladen swallow?
-trigger_word=googlebot:
-</code></p>
-
-<p>In OpenWhisk Web Actions, these parameters will be available on the function argument object.</p>
-
-<p>Here's a simple Web Action that would parse and log the message contents when the webhook is fired.</p>
-
-<p><code>javascript
-function main (params) {
-  const msg = params.text.slice(params.trigger_word.length + 1)
-  console.log('channel message:', msg)
-}
-</code></p>
-
-<p>When this webhook is fired, we need to add code to send an SMS message with the channel message.</p>
-
-<h4>Sending SMS Messages</h4>
-
-<p><a href="https://www.twilio.com/docs/api/rest">Twilio's API</a> allows us to programatically <a href="https://www.twilio.com/docs/api/rest/sending-messages">send SMS messages</a> from our registered numbers.</p>
-
-<p>This snippet shows you how to use their <a href="http://npmjs.com/package/twilio">Node.js client library</a> to send sample message.</p>
-
-<p>```javascript
-const twilio = require('twilio')
-const creds = { account: '...', auth: '...' }</p>
-
-<p>const client = twilio(creds.account, creds.auth)
-const callback = (err, message) => {
-  if (err) return console.log(err)
-  console.log('sent sms message.')
-}</p>
-
-<p>client.messages.create({ to: '...', from: '...', body: 'hello world' }, callback)
-```</p>
-
-<p>The webhook should use this client library to send a message to the last person who send us an incoming message.</p>
-
-<h4>Reply to Message Sender</h4>
-
-<p>How can we determine who was the last person who sent a message to our bot? The Web Action processing the incoming messages is a separate service to the Web Action sending SMS messages.</p>
-
-<p>Rather than setting up a database to share application state, the service can use Twilio's API to retrieve the received message details.</p>
-
-<p>```javascript
-const twilio = require('twilio')
-const creds = { account: '...', auth: '...' }
-const client = twilio(creds.account, creds.auth)</p>
-
-<p>client.messages.list({to: '+44....'}, (err, data) => {
-  const last = data.messages[0]
-  console.log(<code>last message from: ${last.from}</code>)
-})
-```</p>
-
-<h4>SMSBot Channel Response</h4>
-
-<p><a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhooks</a> which respond with a JSON body will generate a new channel message.</p>
-
-<p><code>json
-{
-  "username": "smsbot",
-  "icon_emoji": ":phone:",
-  "text": "sms sent to ..."
-}
-</code></p>
-
-<h4>Web Action Source</h4>
-
-<p>Combing the channel message parsing code with the snippets for sending SMS messages and obtaining the last message sender completes the Web Action needed to handle the Outgoing Webhook.</p>
-
-<p>```javascript
-const twilio = require('twilio')</p>
-
-<p>const slack_message = text => ({
-  username: 'smsbot',
-  icon_emoji: ':phone:',
-  text
-})</p>
-
-<p>function reply (params) {
-  const client = twilio(params.twilio.account, params.twilio.auth)
-  return new Promise((resolve, reject) => {</p>
-
-<pre><code>client.messages.list({to: params.twilio.number}, (err, data) =&gt; {
-if (err) return Promise.reject(err)
-
-const last = data.messages[0]
-const msg = params.text.slice(params.trigger_word.length + 1)
-const options = { to: last.from, from: last.to, body: msg }
-client.messages.create(options, (err, message) =&gt; {
-    if (err) return Promise.reject(err)
-    resolve(slack_message(`sms reply sent to ${last.from}`))
-  })
-})
-</code></pre>
-
-<p>  })
-}
-```</p>
-
-<p>Twilio account credentials are bound as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameters</a> to the Web Action during deployment.</p>
-
-<h2>Deployment</h2>
-
-<p><a href="https://github.com/ibmets/smsbot">smsbot</a> is built using <a href="https://serverless.com/">The Serverless Framework</a>.</p>
-
-<p><img src="https://cloud.githubusercontent.com/assets/20538501/24154626/b86ad64a-0e1f-11e7-8e12-979b8d194430.png"></p>
-
-<p>This framework makes building serverless applications really easy. The tool handles the entire configuration and deployment process for your serverless provider. OpenWhisk <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">recently released integration</a> with the framework through a provider plugin.</p>
-
-<p><strong><em>Let's look at how to use the framework to deploy our serverless application…</em></strong></p>
-
-<h3>OpenWhisk</h3>
-
-<p>Register for an account with an OpenWhisk provider, e.g. <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>.</p>
-
-<p><a href="https://console.ng.bluemix.net/openwhisk/learn/cli">Set up</a> the <code>wsk</code> CLI and run the command to authenticate against the platform endpoint.</p>
-
-<p><code>
-wsk property set --apihost openwhisk.ng.bluemix.net --auth SECRET
-</code></p>
-
-<h3>Serverless Framework</h3>
-
-<p>Install the <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/serverless/serverless-openwhisk">OpenWhisk provider plugin</a>.</p>
-
-<p><code>
-npm install --global serverless serverless-openwhisk
-</code></p>
-
-<h3>Source Code</h3>
-
-<p>Download the <a href="https://github.com/jthomas/smsbot">source code</a> from Github and install the project dependencies.</p>
-
-<p><code>
-$ git clone https://github.com/ibmets/smsbot.git
-$ cd smsbot
-$ npm install
-</code></p>
-
-<p>Create a new file called <code>credentials.yml</code> with the following content.</p>
-
-<p>```yaml
-twilio:</p>
-
-<pre><code>account:
-auth:
-number:
-</code></pre>
-
-<p>numbers:
-slack:</p>
-
-<pre><code>webhook:
-</code></pre>
-
-<p>```</p>
-
-<h3>Twilio</h3>
-
-<p>Register an account with Twilio and provision <a href="https://www.twilio.com/console/phone-numbers/search">a new phone number</a>. Make a note of the phone number. Retrieve the account identifier and auth token from the <a href="https://www.twilio.com/console">Twilio console</a>.</p>
-
-<p>Fill in the account identifier, auth token and phone number in the <code>credentials.yml</code> file.</p>
-
-<p>```yaml
-twilio:</p>
-
-<pre><code>account: AC_USER_ID
-auth: AUTH_TOKEN
-number: '+441234567890'
-</code></pre>
-
-<p>```</p>
-
-<p><em>Important: the <code>twilio.number</code> property value must be a quoted string.</em></p>
-
-<h3>Phone Numbers</h3>
-
-<p>During Twilio's free trial, you will need <a href="https://support.twilio.com/hc/en-us/articles/223136107-How-does-Twilio-s-Free-Trial-work-">manually verify each phone number</a> that you want to send messages to.</p>
-
-<p>Fill in all verified numbers in <code>credentials.yml</code>.</p>
-
-<p>```yaml
-numbers:</p>
-
-<pre><code>'+441234567890': Joe Smith
-'+441234567891': Jane Smith
-</code></pre>
-
-<p><code>``
-*Important: the</code>numbers` property values must be a quoted strings.*</p>
-
-<h3>Incoming Webhook</h3>
-
-<p>Create a new <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook</a> integration for the Slack channel messages should appear in.</p>
-
-<p>Fill in the <code>slack.webhook</code> property in <code>credentials.yml</code> with this url.</p>
-
-<p>```yaml
-slack:</p>
-
-<pre><code>webhook: https://hooks.slack.com/services/XXXX/YYYY/ZZZZ
-</code></pre>
-
-<p>```</p>
-
-<h3>Deploy Application</h3>
-
-<p>Use The Serverless Framework to deploy your application.</p>
-
-<p>```
-$ serverless deploy
-Serverless: Packaging service...
-Serverless: Compiling Functions...
-Serverless: Compiling API Gateway definitions...
-Serverless: Compiling Rules...
-Serverless: Compiling Triggers &amp; Feeds...
-Serverless: Deploying Functions...
-Serverless: Deployment successful!</p>
-
-<p>Service Information
-platform:   openwhisk.ng.bluemix.net
-namespace:  _
-service:    smsbot</p>
-
-<p>actions:
-smsbot-dev-incoming    smsbot-dev-reply</p>
-
-<p>triggers:
-<strong>no triggers deployed</strong></p>
-
-<p>rules:
-<strong>no rules deployed</strong></p>
-
-<p>endpoints:
-<strong>no routes deployed</strong>
-```</p>
-
-<h3>Twilio Webhook</h3>
-
-<p>On the <a href="https://www.twilio.com/console/phone-numbers/incoming">Phone Numbers</a> page in the Twilio console, configure the "<em>Messaging</em>" webhook URL.</p>
-
-<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-incoming.http</code></p>
-
-<p><img src="/images/smsbot/twilio_sms_webhook.png"></p>
-
-<h3>Outgoing Webhook</h3>
-
-<p>Create a new <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> integration for the Slack channel messages should appear in. Use <code>smsbot</code> as the <em>Trigger Word</em>.</p>
-
-<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-reply.json</code></p>
-
-<p><img src="/images/smsbot/outgoing_webhook_trigger.png"></p>
-
-<h3>Test it out!</h3>
-
-<p>Send a text message to the phone number you registered through Twilio. smsbot should post the contents into Slack and send an SMS response with the message "<em>Thanks for letting us know!</em>".</p>
-
-<p><img src="/images/smsbot/slack_text_hidden.jpg"></p>
-
-<p>If you send a channel message starting with the trigger word (<em>smsbot</em>), the phone number should receive a new SMS message with the message text.</p>
-
-<p><img src="/images/smsbot/sms_app.png"></p>
-
-<p>Awesome-sauce 😎.</p>
-
-<h2>Conclusions</h2>
-
-<p><a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">OpenWhisk Web Actions</a> provide a convenient way to expose serverless functions as simple HTTP APIs. This feature is ideal for implementing webhook endpoints.</p>
-
-<p>Both Slack and Twilio provide webhook integration for developers to use their platforms. Using OpenWhisk Web Actions, we can write serverless functions that act as a bridge between these services. With less than a hundred lines of code, we've created a new slack bot that can connect users to channels using SMS messages.</p>
-
-<p>Pretty cool, huh?! 👏👏👏</p>
 ]]></content>
   </entry>
   
