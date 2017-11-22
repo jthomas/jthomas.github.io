@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Apache OpenWhisk supports a cron-based alarm package for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, &hellip;">
+  <meta name="description" content="Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,94 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2017/11/21/openwhisk-logstash-forwarder/">Openwhisk Logstash Forwarder</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-11-21T17:15:00+00:00" pubdate data-updated="true">Nov 21<span>st</span>, 2017</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/kibana_copy.png" title="Kibana Dashboard with OpenWhisk Logs" alt="Kibana Dashboard" /></p>
+
+<p>Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing into the machine and attaching a debugger to a process or using strace to dump system calls.</p>
+
+<p>Storing, searching and analysing serverless application logs is crucial to diagnosing and fixing bugs on serverless platforms.</p>
+
+<p>The &#8221;<a href="https://www.oreilly.com/ideas/understanding-the-elk-stack">ELK Stack</a>&#8221; has become a popular solution for managing applications logs. Combining three open-source projects (<a href="https://github.com/elastic/elasticsearch">ElasticSearch</a>, <a href="https://github.com/elastic/logstash">Logstash</a> and <a href="https://github.com/elastic/kibana">Kibana</a>), this solution provides a scalable platform for importing, storing and searching application logs.</p>
+
+<p><strong><em>How can we use the ELK stack to manage logs for serverless applications running on Apache OpenWhisk?</em></strong></p>
+
+<h3>ELK and OpenWhisk</h3>
+
+<p>In traditional application runtimes, like a VM or a Docker container, a <a href="https://michael.bouvy.net/blog/en/2013/12/06/use-lumberjack-logstash-forwarder-to-forward-logs-logstash/">background agent</a> is used to automatically forward application and system logs to the ingestion service for the ELK stack.</p>
+
+<p>However, serverless applications run in an <a href="https://martinfowler.com/articles/serverless.html">ephemeral environment</a>. Runtimes are instantiated on-demand per request and destroyed after the function returns. These runtimes do not support the use of background agents.</p>
+
+<p>One solution for this is the <a href="https://github.com/jthomas/logstash-input-openwhisk">custom OpenWhisk plugin</a> for Logstash. This plugin polls the platform for new logs and automatically ingests them into ElasticSearch.</p>
+
+<p><strong><em>But what if you are using a hosted ELK service that does not support installing custom plugins?</em></strong></p>
+
+<h3>OpenWhisk Logstash Forwarder</h3>
+
+<p>&#8220;<a href="https://github.com/jthomas/openwhisk-logstash-forwarder">OpenWhisk Logstash Forwarder</a>&#8221; is designed for this scenario. It can ingest logs into ElasticSearch using standard Logstash input plugins.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-logstash-forwarder">https://github.com/jthomas/openwhisk-logstash-forwarder</a></p>
+
+<p>This project contains an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">OpenWhisk action</a> which acts as a &#8220;serverless&#8221; version of the logstash-forwarder agent. When the action executes, it retrieves all new logs from a user-provided list of actions to monitor. Log messages are pushed into Logstash using the <a href="https://www.elastic.co/guide/en/logstash/current/plugins-inputs-lumberjack.html">Lumberjack protocol</a>.</p>
+
+<p>The action is connected to an <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a> with a <a href="https://github.com/apache/incubator-openwhisk-package-alarms#firing-a-trigger-event-periodically">customisable schedule</a>. This event source will ensure all logs are forwarded on a regular schedule.</p>
+
+<h3>Demo</h3>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/demo.gif" title="OpenWhisk Logs with ElasticSearch Demo" alt="Demo" /></p>
+
+<p>In this example, the developer has the serverless logstash forwarder agent deployed in their workspace. The agent is configured to monitor logs from the <code>forecast</code> action. The alarm trigger feed is connected to the monitoring action and runs once per minute.</p>
+
+<p>Invoking the <code>forecast</code> action generates log messages to be ingested.</p>
+
+<p>When the alarm trigger feed next fires, the monitoring action is executed. It retrieves log messages generated by new <code>forecast</code> activations and pushes those logs into the configured ELK instance.</p>
+
+<p>Opening Kibana and refreshing the monitoring dashboard, new log messages are shown as individual documents. Selecting the individual documents shows the log message contents with activation record details.</p>
+
+<h3>Source Code</h3>
+
+<p>The source code for this project is now available on Github:</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-logstash-forwarder">https://github.com/jthomas/openwhisk-logstash-forwarder</a></p>
+
+<p>See the <a href="https://github.com/jthomas/openwhisk-logstash-forwarder#installation">installation instructions</a> for how to deploy this project on an OpenWhisk platform.</p>
+
+<p>This project needs an instance of OpenWhisk platform and an ELK-stack service accessible on a public IP address.</p>
+
+<p>This project can be deployed using <a href="https://serverless.com/">The Serverless Framework</a> or the <a href="https://github.com/apache/incubator-openwhisk-cli">OpenWhisk CLI</a>.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3584,271 +3672,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2017/01/16/openwhisk-docker-actions/">OpenWhisk Docker Actions</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2017-01-16T11:05:00+00:00" pubdate data-updated="true">Jan 16<span>th</span>, 2017</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
-
-<p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
-
-<p>This makes it much easier to support (<em>almost</em>) any programming language in OpenWhisk. Awesome!</p>
-
-<p>Let&#8217;s start by explaining how this new feature works&#8230;</p>
-
-<h2>Docker Actions</h2>
-
-<p>Docker Actions in OpenWhisk are <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/Dockerfile">built</a> from the following <a href="https://github.com/openwhisk/openwhisk/tree/master/core/actionProxy">repository</a> using the <a href="https://github.com/docker-library/python/blob/693a75332e8ae5ad3bfae6e8399c4d7cc3cb6181/2.7/alpine/Dockerfile">python:2.7.12-alpine</a> base image. This image is available on Docker Hub as <a href="https://hub.docker.com/r/openwhisk/dockerskeleton/"><code>openwhisk/dockerskeletion</code></a>.</p>
-
-<p>The image includes a Python application which <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">implements the HTTP API</a> used to handle platform requests, e.g. <em>invoke the action with these parameters</em>.</p>
-
-<p>This service executes a file (<code>/action/exec</code>) for each invocation. Replacing this file allows us to control the runtime environment.</p>
-
-<p>Request parameters are passed, using a JSON string, as the first command-line argument. Response values are interpreted as JSON written to <code>stdout</code>.</p>
-
-<p>Developers can now include a zip file when creating Docker-based Actions. This archive will be extracted into the <code>/action</code> directory prior to invocations. If the archive contains a file named <code>exec</code> this will replace the exectuable file called by the invocation handler.</p>
-
-<h3>Testing It Out</h3>
-
-<p>Using the <code>wsk</code> command-line, developers can create Actions using this Docker image.</p>
-
-<p>If the archive file is missing, the <code>/action/exec</code> path contains the the following <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">stub file</a>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create skeleton --docker openwhisk/dockerskeleton
-</span><span class='line'>ok: created action skeleton
-</span><span class='line'><span class="nv">$ </span>wsk action invoke skeleton --blocking --result
-</span><span class='line'><span class="o">{</span> <span class="s2">&quot;error&quot;</span>: <span class="s2">&quot;This is a stub action. Replace it with custom logic.&quot;</span> <span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Let&#8217;s update this stub file to return a custom greeting.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cat <span class="nb">exec</span>
-</span><span class='line'><span class="c">#!/bin/bash</span>
-</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;{ \&quot;hello\&quot;: \&quot;ran without a docker pull!\&quot; }&quot;</span>
-</span><span class='line'><span class="nv">$ </span>./exec
-</span><span class='line'><span class="o">{</span> <span class="s2">&quot;hello&quot;</span>: <span class="s2">&quot;ran without a docker pull!&quot;</span> <span class="o">}</span>
-</span><span class='line'><span class="nv">$ </span>zip exec.zip <span class="nb">exec</span>
-</span><span class='line'><span class="nb">  </span>adding: <span class="nb">exec</span> <span class="o">(</span>stored 0%<span class="o">)</span>
-</span><span class='line'><span class="nv">$ </span>wsk action create custom_docker_action exec.zip --docker
-</span><span class='line'>ok: created action custom_docker_action
-</span><span class='line'><span class="nv">$ </span>wsk action invoke custom_docker_action --blocking --result
-</span><span class='line'><span class="o">{</span> <span class="s2">&quot;hello&quot;</span>: <span class="s2">&quot;ran without a docker pull!&quot;</span> <span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The archive file could include a static binary, or even a complete runtime, to replace the <code>exec</code> stub.</p>
-
-<p>All files in the archive file will be available under the <code>/action</code> directory.</p>
-
-<h2>Running Locally</h2>
-
-<p>The <code>openwhisk/dockerskeleton</code> image exposes a Python-based HTTP server on port 8080.</p>
-
-<p>Pulling the <code>openwhisk/dockerskeleton</code> image from Docker Hub allows us to run it locally for development.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull openwhisk/dockerskeleton
-</span><span class='line'><span class="nv">$ </span>docker run -it -p 8080:8080 openwhisk/dockerskeleton
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The platform uses the following HTTP endpoints to initialise and invoke Actions.</p>
-
-<ul>
-<li><code>POST /init</code> -> Set up Action source from JSON payload.</li>
-<li><code>POST /run</code> -> Invoke Action</li>
-</ul>
-
-
-<h3>Initialising The Environment</h3>
-
-<p>Before invoking Actions using this image, we need to deploy and unpack the archive file into the <code>/action</code> directory.</p>
-
-<p>Reviewing the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py#L47-L80">Python source code</a>, the platform triggers this by sending a HTTP POST with the following JSON to <code>/init</code> endpoint.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;binary&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;code&quot;</span><span class="p">:</span> <span class="s2">&quot;...&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>code</code> contains the archive file as a base64 encoded string.</p>
-
-<p>Let&#8217;s try this out using the action archive we created above.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>base64 exec.zip  | <span class="nb">echo</span> <span class="s2">&quot;\&quot;$(cat)\&quot;&quot;</span> | jq <span class="s1">&#39;{value: {binary: true, code: .}}&#39;</span> &gt; init.json
-</span><span class='line'><span class="nv">$ </span>cat init.json
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>  <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;binary&quot;</span>: <span class="nb">true</span>,
-</span><span class='line'>    <span class="s2">&quot;code&quot;</span>: <span class="s2">&quot;UEsDBAoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABwAZXhlY1VUCQADRcl8WFDJfFh1eAsAAQT1AQAABBQAAAAjIS9iaW4vYmFzaAplY2hvICJ7IFwiaGVsbG9cIjogXCJyYW4gd2l0aG91dCBhIGRvY2tlciBwdWxsIVwiIH0iClBLAQIeAwoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABgAAAAAAAEAAADtgQAAAABleGVjVVQFAANFyXxYdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEASgAAAH8AAAAAAA==&quot;</span>
-</span><span class='line'>  <span class="o">}</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we can issue the HTTP request to push this archive into the container.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http post localhost:8080/init &lt; init.json
-</span><span class='line'>HTTP/1.1 200 OK
-</span><span class='line'>Content-Length: 2
-</span><span class='line'>Content-Type: text/html; <span class="nv">charset</span><span class="o">=</span>utf-8
-</span><span class='line'>Date: Mon, 16 Jan 2017 14:11:04 GMT
-</span><span class='line'>
-</span><span class='line'>OK
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Accessing the container filesystem allows us to verify the archive has been extracted correctly.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker ps
-</span><span class='line'>CONTAINER ID        IMAGE                         COMMAND                  CREATED             STATUS              PORTS                    NAMES
-</span><span class='line'>b37a7dc1cab1        openwhisk/dockerskeleton      <span class="s2">&quot;/bin/bash -c &#39;cd ...&quot;</span>   About an hour ago   Up About an hour    0.0.0.0:8080-&gt;8080/tcp   relaxed_davinci
-</span><span class='line'><span class="nv">$ </span>docker <span class="nb">exec</span> -it b37a7dc1cab1 /bin/sh
-</span><span class='line'>/ <span class="c"># cd /action</span>
-</span><span class='line'>/action <span class="c"># ls</span>
-</span><span class='line'><span class="nb">exec</span>
-</span><span class='line'>/action <span class="c"># cat exec</span>
-</span><span class='line'><span class="c">#!/bin/bash</span>
-</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;{ \&quot;hello\&quot;: \&quot;ran without a docker pull!\&quot; }&quot;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Invocation Requests</h3>
-
-<p>Action invocations are triggered by sending a HTTP POST to the <code>/run</code> endpoint.</p>
-
-<p>This endpoint expects the following JSON body.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">{</span>
-</span><span class='line'>  <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;foo&quot;</span>: <span class="s2">&quot;bar&quot;</span>
-</span><span class='line'>  <span class="o">}</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The inner object parameters under the <code>value</code> property are passed, as a JSON string, to the executable as the first command-line argument.</p>
-
-<p>Sending this request to our container will trigger the shell script from our archive and return the JSON response.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">echo</span> <span class="s2">&quot;{}&quot;</span> | jq <span class="s1">&#39;{value: .}&#39;</span> | http post localhost:8080/run
-</span><span class='line'>HTTP/1.1 200 OK
-</span><span class='line'>Content-Length: 44
-</span><span class='line'>Content-Type: application/json
-</span><span class='line'>Date: Mon, 16 Jan 2017 14:17:15 GMT
-</span><span class='line'>
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;hello&quot;</span>: <span class="s2">&quot;ran without a docker pull!&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Conclusion</h2>
-
-<p>Recent updates to Docker-based Actions in OpenWhisk make it much easier to customise the runtime environment.</p>
-
-<p>Being able to deploy arbitrary files into the runtime container, prior to invocation, simplifies the process of supporting new runtimes.</p>
-
-<p>Hopefully this blog post has shown you how to get started with this feature.</p>
-
-<p>Over the next few weeks, we&#8217;re going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates&#8230;</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -3864,6 +3687,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2017/11/21/openwhisk-logstash-forwarder/">Openwhisk Logstash Forwarder</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2017/10/31/openwhisk-alarm-trigger-schedules/">advanced openwhisk alarm schedules</a>
       </li>
     
@@ -3877,10 +3704,6 @@
     
       <li class="post">
         <a href="/blog/2017/06/28/serverless-swift-with-openwhisk/">Serverless Swift with OpenWhisk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2017/04/27/python-packages-in-openwhisk/">Python Packages in OpenWhisk</a>
       </li>
     
   </ul>
