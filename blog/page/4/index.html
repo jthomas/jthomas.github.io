@@ -9,7 +9,8 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="I&#8217;ve recently been working on a number of updates to the Node-RED nodes for the IBM Bluemix platform&#8230; Highlights below: New AlchemyAPI &hellip;">
+  <meta name="description" content="Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -49,7 +50,7 @@
   <header role="banner"><hgroup>
   <h1><a href="/">James Thomas</a></h1>
   
-    <h2>Notes on JavaScript</h2>
+    <h2>Notes on software.</h2>
   
 </hgroup>
 
@@ -77,6 +78,548 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry/">Running One-off Tasks in Cloud Foundry</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-09-01T16:07:00+01:00" pubdate data-updated="true">Sep 1<span>st</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often administrative
+tasks that needed to be carried out for an application to run correctly.</p>
+
+<p>These tasks usually need finishing before starting the application and should not be
+executed more than once.</p>
+
+<p>Previously, the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> provided commands, <em>tunnel</em> and <em>console</em>, to help running
+one-off tasks manually. These commands were
+<a href="http://stackoverflow.com/questions/32332319/exposing-ports-502-and-1002-from-nodejs-using-bluemix/32333386#32333386">deprecated</a>
+with the upgrade from <em>v5</em> to <em>v6</em>
+to discourage <a href="http://martinfowler.com/bliki/SnowflakeServer.html">snowflake environments</a>.</p>
+
+<p>It is still possible, with a bit of hacking, to run one-off tasks manually from the application
+container.</p>
+
+<p>A better way is to describe <em>tasks as code</em> and run them automatically during normal
+deployments. This results in applications that can be recreated without
+manual intervention.</p>
+
+<p>We&#8217;ll look at both options before introducing a new library, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a>, that automates
+running administration tasks for Node.js applications.</p>
+
+<h2>Running Tasks Manually</h2>
+
+<h2>Local Environment</h2>
+
+<p>Rather than running administrative tasks from the application console, we can
+run them from a local development environment by remotely connecting to
+the bound services.</p>
+
+<p>This will be dependent on the provisioned services allowing remote access.
+Many &#8220;built-in&#8221; platform services, e.g. MySQL, Redis, do not allow this.</p>
+
+<p>Third-party services generally do.</p>
+
+<p>Using the <em>cf env</em> command we can list service credentials for an application.
+These authentication details can often be used locally by connecting through a client
+library running in a local development environment.</p>
+
+<p>For example, to access a provisioned Cloudant instance locally, we can grab the credentials
+and use with a Node.js client library.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>15:48:22 ~/code/sample<span class="o">]</span><span class="nv">$ </span>cf env sample-demo-app
+</span><span class='line'>Getting env variables <span class="k">for </span>app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>System-Provided:
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'> <span class="s2">&quot;VCAP_SERVICES&quot;</span>: <span class="o">{</span>
+</span><span class='line'>  <span class="s2">&quot;cloudantNoSQLDB&quot;</span>: <span class="o">[</span>
+</span><span class='line'>   <span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;credentials&quot;</span>: <span class="o">{</span>
+</span><span class='line'>     <span class="s2">&quot;host&quot;</span>: <span class="s2">&quot;1234-bluemix.cloudant.com&quot;</span>,
+</span><span class='line'>     <span class="s2">&quot;password&quot;</span>: <span class="s2">&quot;sample_password&quot;</span>,
+</span><span class='line'>     <span class="s2">&quot;port&quot;</span>: 443,
+</span><span class='line'>     <span class="s2">&quot;url&quot;</span>: <span class="s2">&quot;https://1234-bluemix:sample_password@1234-bluemix.cloudant.com&quot;</span>,
+</span><span class='line'>     <span class="s2">&quot;username&quot;</span>: <span class="s2">&quot;1234-bluemix&quot;</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>....
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>15:48:22 ~/code/sample<span class="o">]</span><span class="nv">$ </span>cat connect.js
+</span><span class='line'>var <span class="nv">Cloudant</span> <span class="o">=</span> require<span class="o">(</span><span class="s1">&#39;cloudant&#39;</span><span class="o">)</span>;
+</span><span class='line'>
+</span><span class='line'>var <span class="nv">me</span> <span class="o">=</span> <span class="s1">&#39;1234-bluemix&#39;</span>;
+</span><span class='line'>var <span class="nv">password</span> <span class="o">=</span> <span class="s1">&#39;sample_password&#39;</span>;
+</span><span class='line'>
+</span><span class='line'>// Initialize the library with my account.
+</span><span class='line'>var <span class="nv">cloudant</span> <span class="o">=</span> Cloudant<span class="o">({</span>account:me, password:password<span class="o">})</span>;
+</span><span class='line'>
+</span><span class='line'>cloudant.db.list<span class="o">(</span><span class="k">function</span><span class="o">(</span>err, allDbs<span class="o">)</span> <span class="o">{</span>
+</span><span class='line'>  console.log<span class="o">(</span><span class="s1">&#39;All my databases: %s&#39;</span>, allDbs.join<span class="o">(</span><span class="s1">&#39;, &#39;</span><span class="o">))</span>
+</span><span class='line'>  // Run administrative tasks
+</span><span class='line'><span class="o">})</span>;
+</span><span class='line'><span class="o">[</span>15:48:22 ~/code/sample<span class="o">]</span><span class="nv">$ </span>node connect.js
+</span><span class='line'>All my databases: example_db, jasons_stuff, scores
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Remote Environment</h2>
+
+<p>When provisioned services don&#8217;t allow external access, the
+<a href="https://github.com/cloudfoundry-community/cf-ssh">cf-ssh</a> project creates SSH
+access to application containers running within Cloud Foundry.</p>
+
+<p><strong>How does this work?!</strong></p>
+
+<blockquote><p>cf-ssh deploys a new Cloud Foundry application, containing the same bits as your target application, with the same bound services.<br/>This new application&#8217;s container does not start your web application as per normal. Instead, it starts an outbound reverse SSH tunnel to a public proxy.<br/>The local cf-ssh client then launches an interactive ssh connect to the public proxy, which tunnels through to the application container.</p><footer><strong>Dr. Nic</strong> <cite><a href='https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/'>blog.starkandwayne.com/2014/10/&hellip;</a></cite></footer></blockquote>
+
+
+<p></p>
+
+<p>See the explanation <a href="https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/">here</a> for full details.</p>
+
+<p>This approach will let you connect to services from within the Cloud Foundry platform environment.</p>
+
+<p>This video from <a href="https://starkandwayne.com/">Stark &amp; Wayne&#8217;s</a> <a href="http://drnicwilliams.com/">Dr. Nic</a> shows the command in action&#8230;</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/eWJCfAa1_x8" frameborder="0" allowfullscreen></iframe>
+
+
+<h2>IBM Bluemix Console (Java and Node.js)</h2>
+
+<p><em>This technique is only for the IBM Bluemix platform.</em></p>
+
+<p>If you are deploying Node.js and Java applications on <a href="https://bluemix.net">IBM Bluemix</a>, the platform provides
+the following tools to assist with <a href="https://www.ng.bluemix.net/docs/#manageapps/app_management.html#appmanagement">application management</a>.</p>
+
+<ul>
+<li><em>proxy</em>: Minimal application management that serves as a proxy between your application and Bluemix.</li>
+<li><em>devconsole</em>: Enables the development console utility.</li>
+<li><em>shell</em>: Enables a web-based shell.</li>
+<li><em>trace</em>: (Node.js only) Dynamically set trace levels if your application is using log4js, ibmbluemix, or bunyan logging modules.</li>
+<li><em>inspector</em>: (Node.js only) Enables node inspector debugger.</li>
+<li><em>debug</em>: (Liberty only) Enables clients to establish a remote debugging session with the application.</li>
+<li><em>jmx</em>: (Liberty only) Enables the JMX REST Connector to allow connections from remote JMX clients</li>
+</ul>
+
+
+<p>The tools are enabled by setting the environment variable (<em>BLUEMIX_APP_MGMT_ENABLE</em>) with the
+desired utilities.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf <span class="nb">set</span>-env myApp BLUEMIX_APP_MGMT_ENABLE devconsole+shell+trace
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Applications must be restarted for the changes to take effect.</p>
+
+<p>If we enable the <em>shell</em> utility, the following web-based console will be available at https://your-app-name.mybluemix.net/bluemix-debug/shell.</p>
+
+<p><img src="https://developer.ibm.com/bluemix/wp-content/uploads/sites/20/2015/06/shell.jpg"></p>
+
+<h2>Cloud Foundry Diego Runtime</h2>
+
+<p><a href="http://www.activestate.com/blog/2014/09/cloud-foundry-diego-explained-onsi-fakhouri">Diego</a> is the next-generation
+runtime that will power upcoming versions of Cloud Foundry. Diego will provide many benefits
+over the existing runtime, e.g. Docker support, including enabling SSH access to containers without the workarounds needed above.</p>
+
+<p><strong>Yay!</strong></p>
+
+<p>Follow the instructions <a href="https://github.com/cloudfoundry-incubator/diego-design-notes/blob/master/ssh-access-and-policy.md">here</a>
+for details on SSH access to applications running on the new runtime.</p>
+
+<p><em>Access to this feature will be dependent on your Cloud Foundry provider migrating to the new runtime.</em></p>
+
+<h2>Running Tasks Automatically </h2>
+
+<p>Manually running one-off administrative tasks for Cloud Foundry applications is a <a href="http://martinfowler.com/bliki/SnowflakeServer.html">bad idea</a>.</p>
+
+<p>It affects your ability to do continuous delivery and encourages snowflake environments.</p>
+
+<p>Alternatively, defining <em>tasks as code</em> means they can run automatically during normal deployments.
+No more manual steps are required to deploy applications.</p>
+
+<p>There are <a href="http://flywaydb.org/">many</a> <a href="https://github.com/ruby/rake">different</a> <a href="https://github.com/seomoz/shovel">libraries</a>
+for <a href="https://phinx.org/">every</a> <a href="https://github.com/mattes/migrate">language</a> to help you programmatically define, manage and run tasks.</p>
+
+<p>With <em>tasks defined as code</em>, you need to configure your <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html">application manifest</a>
+to run these automatically during deployments.</p>
+
+<p>Cloud Foundry uses the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#start-commands"><em>command</em> parameter</a>,
+set in the manifest or through the
+command-line, to allow applications to specify a custom start command. We can
+use this parameter to execute the task library command during deployment.</p>
+
+<p>The Cloud Foundry documentation also details these approaches, with slightly different
+implementations <a href="https://docs.cloudfoundry.org/devguide/services/migrate-db.html">here</a>
+and specifically for Ruby developers <a href="https://docs.cloudfoundry.org/buildpacks/ruby/ruby-tips.html#rake">here</a>.</p>
+
+<h2>Temporary Task Deploy</h2>
+
+<p>For applications which only need occasional administrative tasks, it&#8217;s often
+easier to push a temporary deploy with a custom start command. This deploy
+runs your tasks without then starting your application. Once the tasks have
+completed, redeploy your application normally, destroying the task instance.</p>
+
+<p>The following command will deploy a temporary instance for this purpose:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -c <span class="s1">&#39;YOUR_TASK_LIB_COMMAND &amp;&amp; sleep infinity&#39;</span> -i 1 --no-route
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>We&#8217;re overriding the default start command, setting it to run the command for
+our task library, e.g. rake db:migrate.</p>
+
+<p>The <em>sleep infinity</em> command stops the application exiting once the task runner
+has finished. If this happens, the platform will assume that application has
+crashed and restart it.</p>
+
+<p>Also, the task runner will not be binding to a port so
+we need to use the <em>&#8211;no-route</em> argument to stop the platform assuming the
+deploy has timed out.</p>
+
+<p>Setting the deploy to a single instance stops the command being executed more than once.</p>
+
+<p>Checking the logs to verify the task runner has finished correctly, we can now
+redeploy our application. Using the <em>null</em> start command will force the platform to use the buildpack default
+rather than our previous option.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -c <span class="s1">&#39;null&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Running Tasks Before Startup</h2>
+
+<p>If we&#8217;re regularly running administrative tasks, we should incorporate the
+task execution into our normal application startup. Once the
+task command has finished successfully, we start the application as normal.</p>
+
+<p>Applications may have multiple instances running, we need to ensure
+the tasks are only executed by one instance.</p>
+
+<p>The following custom start command will execute tasks during startup,
+using the CF_INSTANCE_ID environment variable to enforce execution at most-once.</p>
+
+<pre>
+[ $CF_INSTANCE_INDEX -eq 0 ]] && node lib/tasks/runner.js; node app.js
+</pre>
+
+
+<p>With this approach, tasks will be automatically executed during regular deployments
+without any manual intervention.</p>
+
+<p><strong>Hurrah!</strong></p>
+
+<h2>Managing tasks for Node.js applications</h2>
+
+<p>If you&#8217;re running Node.js applications on Cloud Foundry, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a> is a task library that helps
+you define <em>tasks as code</em> and integrates with the Cloud Foundry runtime. The module handles
+all the complexities with automating tasks during deployments across multi-instance applications.</p>
+
+<blockquote><p>oneoff provides the following features&#8230;</p><p>* ensure tasks are completed before application startup<br/>* coordinating app instances to ensure at-most once task execution<br/>* automagically discovering tasks from the task directory<br/>* dependency ordering, ensure task a completes before task b starts<br/>* parallel task execution<br/>* ignore completed tasks in future deployments</p></blockquote>
+
+
+<p>Check it out to help make writing <em>tasks as code</em> for Node.js applications much easier!</p>
+
+<p>Full details on usage are available in the <a href="https://github.com/IBM-Bluemix/oneoff/blob/master/README.md">README</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>Running one-off tasks for application configuration is a normal part of any development project.</p>
+
+<p>Carrying out these tasks manually used to be the norm, but with the devops movement we now prefer
+automated configuration rather manual intervention. Relying on manual configuration steps to deploy applications restricts
+our ability to implement continuous delivery.</p>
+
+<p>Cloud Foundry is an opinionated platform, actively discouraging the creation of snowflake environments.</p>
+
+<p>Whilst it is still possible to manually run administrative tasks, either by connecting to bound services locally or using
+a remote console, it&#8217;s preferable to describe our tasks as code and let the platform handle it.</p>
+
+<p>Using custom start commands, we can deploy applications which run tasks automatically during their normal startup procedure.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/16/geopix-live-photos/">GeoPix Live Photos</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-16T13:26:00+01:00" pubdate data-updated="true">Jul 16<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+
+
+<blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online. </p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote>
+
+
+<p>I&#8217;ve been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement&#8230;</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features&#8230;</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: &#8220;now&#8221;</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">Cloudant</span><span class="p">({</span><span class="nx">account</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">username</span><span class="p">,</span> <span class="nx">password</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">password</span><span class="p">},</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">cloudant</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">geopix</span> <span class="o">=</span> <span class="nx">cloudant</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">database</span><span class="p">);</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">feed</span> <span class="o">=</span> <span class="nx">geopix</span><span class="p">.</span><span class="nx">follow</span><span class="p">({</span><span class="nx">include_docs</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="nx">since</span><span class="o">:</span> <span class="s2">&quot;now&quot;</span><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="c1">// ....we can now send this data to the web pages</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">follow</span><span class="p">();</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>&#8230;</p>
+
+<blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote>
+
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">express</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;express&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">express</span><span class="p">();</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">server</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;http&#39;</span><span class="p">).</span><span class="nx">Server</span><span class="p">(</span><span class="nx">app</span><span class="p">);</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">io</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;socket.io&#39;</span><span class="p">)(</span><span class="nx">server</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ...snipped out the app routes for express</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">io</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connection&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">socket</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;New Client WSS Connection.&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">port</span> <span class="o">=</span> <span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">VCAP_APP_PORT</span> <span class="o">||</span> <span class="mi">3000</span><span class="p">);</span>
+</span><span class='line'><span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="nx">port</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">io</span><span class="p">.</span><span class="nx">sockets</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="nx">change</span><span class="p">);</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Now we&#8217;re sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we&#8217;ve included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We&#8217;re sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">socket</span> <span class="o">=</span> <span class="nx">io</span><span class="p">();</span> <span class="c1">// TIP: io() with no args does auto-discovery</span>
+</span><span class='line'><span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;WSS Connected&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">image</span><span class="p">)</span> <span class="p">{</span> <span class="c1">// TIP: you can avoid listening on `connect` and listen on events directly too!</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">attachment</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_attachments</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s2">&quot;/image/&quot;</span> <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_id</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="nx">attachment</span><span class="p">;</span>
+</span><span class='line'>        <span class="nx">add_new_image</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">clientDate</span><span class="p">,</span> <span class="s1">&#39;latitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">latitude</span> <span class="o">+</span> <span class="s1">&#39;, longitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">longitude</span> <span class="o">+</span> <span class="s1">&#39;, altitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">altitude</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>&#8230;and that&#8217;s it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB&#8217;s <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2294,463 +2837,6 @@ applications:
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/02/27/doctor-watson/">Doctor Watson</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2015-02-27T15:01:00+00:00" pubdate data-updated="true">Feb 27<span>th</span>, 2015</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><img src="/images/doctor_watson.png"></p>
-
-<p><a href="http://doctor-watson.mybluemix.net/">Doctor Watson</a> is an IBM Bluemix application to answer medical questions over the phone, using IBM Watson and Twilio.</p>
-
-<p>Ringing an external phone number, the application will answer and ask for a medical question to help with. Translating your speech into text and using IBM Watson&#8217;s Question and Answer service, Doctor Watson will query the medical corpus.</p>
-
-<p>Top rated answers will be converted to speech and used as a response over the phone. Users can continue to ask more questions for further information.</p>
-
-<p><em>Putting together this complex application, with voice recognition, telephony handling and a medical knowledge base, was incredibly simple using the IBM Bluemix platform.</em></p>
-
-<p>Source code for the application: <a href="https://github.com/jthomas/doctor-watson">https://github.com/jthomas/doctor-watson</a></p>
-
-<p>Fork and deploy the repository to have your own version of Doctor Watson!</p>
-
-<p><a href="https://bluemix.net/deploy?repository=https://github.com/jthomas/doctor-watson" target="_blank"><img src="http://bluemix.net/deploy/button.png" alt="Bluemix button" /></a></p>
-
-<p><strong>Want to know how the project was built? Read on&#8230;</strong></p>
-
-<h2>Overview</h2>
-
-<p>Doctor Watson is a NodeJS application using <a href="http://expressjs.com/">Express</a>, a framework for building web applications, to handle serving static content and creating REST APIs.</p>
-
-<p>The front page gives an overview of the application, served from static HTML files with templating to inject the phone number at runtime.</p>
-
-<p>HTTP endpoints handle the incoming messages from Twilio as users make new phone calls. The application&#8217;s public URL will be bound to a phone number using Twilio&#8217;s account administration.</p>
-
-<p>Services for IBM Watson are exposed for the application using the IBM Bluemix platform. Text to Speech and Question and Answer services are used during phone call handling.</p>
-
-<p>The application can be deployed on IBM Bluemix, IBM&#8217;s public hosted Cloud Foundry platform.</p>
-
-<h2>Handling phone calls</h2>
-
-<p><a href="https://www.twilio.com/">Twilio</a> provides &#8220;telephony-as-a-service&#8221;, making applications able to respond to telephone calls and text messages using a REST API.</p>
-
-<p>Twilio has been made available on the IBM Bluemix platform. Binding this service to your application will provide the authentication credentials to use with the Twilio <a href="http://twilio.github.io/twilio-node/">client library</a>.</p>
-
-<p>Users register external phone numbers through the service, which are bound to  external web addresses controlled by the user. When a person dials that number, the service makes a HTTP call with the details to the application. HTTP responses dictates how to handle the phone call, allowing you to record audio from the user, redirect to another number, play an audio file and much more.</p>
-
-<p>We&#8217;re using ExpressJS to expose the HTTP endpoints used to handle incoming Twilio messages. Twilio&#8217;s client libraries abstract the low-level network requests behind a JavaScript interface.</p>
-
-<p>This code snippet shows the outline for message processing.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">app</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/some/path&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// req.body -&gt; XML body parsed to JS object</span>
-</span><span class='line'>  <span class="c1">// do some processing</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
-</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">command</span><span class="p">(...);</span> <span class="c1">// where command is a &#39;verb&#39; from TwilML</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
-</span><span class='line'><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>TwilML is <a href="https://www.twilio.com/docs/api/twiml">Twilio Markup Language</a>, an XML message with instructions you can use to tell Twilio how to handle incoming phone calls and SMS messages.</p>
-
-<p>TwimlResponse instances generate the XML message responses. Primary verbs from the TwilML specification are available as chainable function calls on the class instance.</p>
-
-<h3>Doctor Watson Call Flow</h3>
-
-<p>When the user first calls the phone number, Twilio sends a TwilML message over a HTTP POST request to http://doctor-watson.mybluemix.net/calls.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">log</span><span class="p">.</span><span class="nx">info</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">CallSid</span> <span class="o">+</span> <span class="s2">&quot;-&gt; calls/&quot;</span><span class="p">);</span>
-</span><span class='line'>  <span class="nx">log</span><span class="p">.</span><span class="nx">debug</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
-</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s1">&#39;Hello this is Doctor Watson, how can I help you? Press any key after you have finished speaking&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">,</span> <span class="nx">action</span><span class="o">:</span> <span class="s2">&quot;/calls/recording&quot;</span><span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>We&#8217;re using the TwilML response to give the user information on asking a question. Recording their response, the audio file with their question will be sent in another request to the &#8216;/calls/recording&#8217; location.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/recording&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">enqueue_question</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s2">&quot;Let me think about that.&quot;</span><span class="p">).</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">&quot;/calls/holding&quot;</span><span class="p">);</span>
-</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using the audio file with the user&#8217;s question, available as the request body, we now schedule a call to the Watson services.</p>
-
-<p>With the question answering request in-progress, we redirect the user into a holding loop.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/holding&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
-</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">pause</span><span class="p">({</span><span class="nx">length</span><span class="o">:</span> <span class="mi">5</span><span class="p">})</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s2">&quot;I&#39;m still thinking&quot;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">&quot;/calls/holding&quot;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
-</span><span class='line'><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Every five seconds, we relay a message over the phone call until the answer has been returned.</p>
-
-<p>Within the callback for the Question and Answer service, we have the following code.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">forward_to</span> <span class="o">=</span> <span class="nx">cfenv</span><span class="p">.</span><span class="nx">getAppEnv</span><span class="p">().</span><span class="nx">url</span> <span class="o">+</span> <span class="s2">&quot;/calls/answer&quot;</span><span class="p">;</span>
-</span><span class='line'><span class="nx">client</span><span class="p">.</span><span class="nx">calls</span><span class="p">(</span><span class="nx">call_ssid</span><span class="p">).</span><span class="nx">update</span><span class="p">({</span><span class="nx">url</span><span class="o">:</span> <span class="nx">forward_to</span><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This uses the Twilio client to update the location for a live call, redirecting to the location which returns the answer.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/answer&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="nx">answers</span><span class="p">[</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">CallSid</span><span class="p">])</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s2">&quot;Do you have another question?&quot;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">,</span> <span class="nx">action</span><span class="o">:</span> <span class="s2">&quot;/calls/recording&quot;</span><span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we&#8217;ve shown how to handle phone calls, let&#8217;s dig into the Watson services&#8230;</p>
-
-<h2>Using the Watson Services</h2>
-
-<p>IBM Bluemix continues to roll out <a href="https://developer.ibm.com/watson/blog/2015/02/04/new-watson-services-available/">more services</a> to the Watson catalogue. There are now fifteen services to help you create cognitive applications.</p>
-
-<p>Doctor Watson uses <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/speech-to-text.html">Speech to Text</a> and <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/question-answer.html">Question and Answer</a>.</p>
-
-<p>All services come with <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">great documentationn</a> to get help get you started, with sample code, API definitions and client libraries for different languages.</p>
-
-<p>We&#8217;re using the <a href="https://www.npmjs.com/package/watson-developer-cloud">NodeJS client library</a> in Doctor Watson.</p>
-
-<h3>Converting audio recording to text</h3>
-
-<p>When we have a new audio recording containing the user question, this needs converting into text to query the Watson Q&amp;A service.</p>
-
-<p>Twilio makes the recording available at any external URL as a WAV file with an 8Khz sample rate. Watson&#8217;s Speech to Text services has a minimum sample rate for audio input for 16Khz.</p>
-
-<p>Before sending the file to the service, we need to up-sample the audio.</p>
-
-<p>Searching for a Node package that might help, uncovered this <a href="https://www.npmjs.com/package/sox">library</a>. Using the SOX audio processing library, we can easily convert audio files between sample rates.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">job</span> <span class="o">=</span> <span class="nx">sox</span><span class="p">.</span><span class="nx">transcode</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="nx">output</span><span class="p">,</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">sampleRate</span><span class="o">:</span> <span class="mi">16000</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">format</span><span class="o">:</span> <span class="s1">&#39;wav&#39;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">channelCount</span><span class="o">:</span> <span class="mi">1</span>
-</span><span class='line'>  <span class="p">});</span>
-</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">);</span>
-</span><span class='line'>  <span class="p">});</span>
-</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;progress&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">amountDone</span><span class="p">,</span> <span class="nx">amountTotal</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">debug</span><span class="p">(</span><span class="s2">&quot;progress&quot;</span><span class="p">,</span> <span class="nx">amountDone</span><span class="p">,</span> <span class="nx">amountTotal</span><span class="p">);</span>
-</span><span class='line'>  <span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;end&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">debug</span><span class="p">(</span><span class="s2">&quot;Transcoding finished.&quot;</span><span class="p">);</span>
-</span><span class='line'>  <span class="p">});</span>
-</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">start</span><span class="p">();</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This package relies on the SOX C library, which isn&#8217;t installed on the default host environment in IBM Bluemix. Overcoming this hurdle meant creating a <a href="https://github.com/jthomas/nodejs-buildpack">custom NodeJS buildpack</a> which installed the pre-built binaries into the application runtime. I&#8217;m saving the details of this for another blog post&#8230;</p>
-
-<p>Using the Watson client library, we can send this audio to the external service for converting to text.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">speech_to_text</span> <span class="o">=</span> <span class="nx">watson</span><span class="p">.</span><span class="nx">speech_to_text</span><span class="p">({</span>
-</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="nx">USERNAME</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">password</span><span class="o">:</span> <span class="nx">PASSWORD</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">version</span><span class="o">:</span> <span class="s1">&#39;v1&#39;</span>
-</span><span class='line'><span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">audio</span><span class="o">:</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">createReadStream</span><span class="p">(</span><span class="nx">audio</span><span class="p">),</span>
-</span><span class='line'>  <span class="nx">content_type</span><span class="o">:</span> <span class="s1">&#39;audio/l16; rate=16000&#39;</span>
-</span><span class='line'><span class="p">};</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">speech_to_text</span><span class="p">.</span><span class="nx">recognize</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">question</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">results</span><span class="p">[</span><span class="nx">res</span><span class="p">.</span><span class="nx">result_index</span><span class="p">],</span>
-</span><span class='line'><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>&#8230; which we can now use to query the healthcare corpus for the Watson Q&amp;A service.</p>
-
-<h3>Getting answers</h3>
-
-<p>When asking questions, we need to set the correct corpus to query for answers.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">question_and_answer_healthcare</span> <span class="o">=</span> <span class="nx">watson</span><span class="p">.</span><span class="nx">question_and_answer</span><span class="p">({</span>
-</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="nx">USERNAME</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">password</span><span class="o">:</span> <span class="nx">PASSWORD</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">version</span><span class="o">:</span> <span class="s1">&#39;v1&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">dataset</span><span class="o">:</span> <span class="s1">&#39;healthcare&#39;</span>
-</span><span class='line'><span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">ask</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">question</span><span class="p">,</span> <span class="nx">cb</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">question_and_answer_healthcare</span><span class="p">.</span><span class="nx">ask</span><span class="p">({</span> <span class="nx">text</span><span class="o">:</span> <span class="nx">question</span><span class="p">},</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">response</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="p">;</span>
-</span><span class='line'>
-</span><span class='line'>      <span class="kd">var</span> <span class="nx">first_answer</span> <span class="o">=</span> <span class="nx">response</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">question</span><span class="p">.</span><span class="nx">evidencelist</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">text</span><span class="p">;</span>
-</span><span class='line'>      <span class="nx">cb</span><span class="p">(</span><span class="nx">first_answer</span><span class="p">);</span>
-</span><span class='line'>  <span class="p">});</span>
-</span><span class='line'><span class="p">};</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This triggers the callback we&#8217;ve registered with the first answer in the returned results. Answers are stored as values in a map, with the key as the call ssid, before triggering the redirect to the &#8216;/calls/answer&#8217; location shown above.</p>
-
-<h2>Deploying to Bluemix</h2>
-
-<p>Hosting the application on IBM Bluemix uses the following manifest file to configure the application at runtime.</p>
-
-<pre>
----
-applications:
-- name: doctor-watson
-  memory: 256M 
-  buildpack: https://github.com/jthomas/nodejs-buildpack.git
-  command: node app.js
-  services:
-  - twilio
-  - speech_to_text
-  - question_and_answer
-</pre>
-
-
-<p>We&#8217;re binding the services to the application and specifying the custom buildpack to expose the SOX library at runtime.</p>
-
-<p>Following this&#8230;</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push // and Doctor Watson is live!
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Check out the source code here for further details. You can even run your own version of the application, follow the instructions in the README.md</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2014/07/22/zero-downtime-deployments-using-bluemix/">Zero Downtime Deployments Using IBM Bluemix</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2014-07-22T14:42:00+01:00" pubdate data-updated="true">Jul 22<span>nd</span>, 2014</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Here&#8217;s a video I&#8217;ve made showing you how to deploy new versions of an
-application on IBM Bluemix without the end-user having to suffer any down time:</p>
-
-<iframe width="420" height="315" src="//www.youtube.com/embed/yfLi2hLfgSU" frameborder="0" allowfullscreen></iframe>
-
-
-<p>Utilising the <a href="http://martinfowler.com/bliki/BlueGreenDeployment.html">Blue Green deployment pattern</a>, we deploy the
-new version to a separate host within the production environment, rather than
-taking down and updating the existing application. The HTTP router in front of
-the applications controls tunnelling application requests between the different
-versions. Once we verified the new version is working correctly, we can turn
-off the previous version and transfer all traffic to the new instance.</p>
-
-<p><strong>This complex deployment pattern is automatically supported by the Cloud Foundry
-technology underpinning IBM Bluemix</strong>.</p>
-
-<p><em>Staging multiple versions of an application, bound to the same external address, with automatic load balancing is handled transparently by the platform.</em></p>
-
-<p><em>This works for any language or
-runtime without any modifications to your application.</em></p>
-
-<p>There are a few <a href="https://www.ng.%20bluemix.net/docs/#manageapps/index-gentopic3.html#d2e1">different ways</a>
-to achieve this deployment approach using the
-platform. The example in the video only uses three commands
-with the ‘cf’ tool.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>// Rename the existing application to allow staging a new instance without
-</span><span class='line'>// overwriting existing version.
-</span><span class='line'><span class="nv">$ </span>cf rename app old_app
-</span><span class='line'>
-</span><span class='line'>// Deploy the updated application, which will be bound to the same external
-</span><span class='line'>// address. HTTP traffic is load balanced between the two versions automatically.
-</span><span class='line'><span class="nv">$ </span>cf push
-</span><span class='line'>
-</span><span class='line'>// Verify the new application is working and <span class="k">then </span>turn off the old instance.
-</span><span class='line'><span class="nv">$ </span>cf stop old_app
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Amazing!</strong></p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/5/">&larr; Older</a>
@@ -2768,6 +2854,14 @@ with the ‘cf’ tool.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">Monitoring Serverless Applications Metrics</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2017/11/21/openwhisk-logstash-forwarder/">Openwhisk Logstash Forwarder</a>
       </li>
     
@@ -2777,14 +2871,6 @@ with the ‘cf’ tool.</p>
     
       <li class="post">
         <a href="/blog/2017/08/04/large-applications-on-openwhisk/">Large Applications on OpenWhisk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2017/07/17/creating-swift-binaries-for-openwhisk/">Creating Swift Binaries for OpenWhisk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2017/06/28/serverless-swift-with-openwhisk/">Serverless Swift with OpenWhisk</a>
       </li>
     
   </ul>
