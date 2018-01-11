@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
-  <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
-  <link href="http://jamesthom.as/"/>
-  <updated>2018-01-03T12:40:37+00:00</updated>
-  <id>http://jamesthom.as/</id>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/openwhisk/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-01-11T16:17:08+00:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
     
@@ -14,10 +14,733 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Visualising Serverless Metrics With Grafana Dashboards]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/"/>
+    <updated>2018-01-05T15:40:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards</id>
+    <content type="html"><![CDATA[<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
+
+<p><em>This blog post is part three of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+
+<p>Having <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
+applications, monitoring incoming metric values will alert us to problems.</p>
+
+<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
+
+<p><blockquote><p>Grafana is an open source metric analytics &amp; visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote></p>
+
+<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
+
+<p>Let's review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
+before we start setting up the serverless monitoring dashboards…</p>
+
+<h2>Grafana Basics</h2>
+
+<h3>Metric Data Values</h3>
+
+<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
+</code></p>
+
+<p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
+
+<ul>
+<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
+<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
+<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
+<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration</code></em></li>
+</ul>
+
+
+<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
+
+<h3>Templates</h3>
+
+<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
+
+<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
+
+<p><img src="/images/grafana_dashboards/templating.png"></p>
+
+<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
+
+<h3>Common Tasks</h3>
+
+<h4>How to create a new dashboard?</h4>
+
+<ul>
+<li>Open the dashboard menu by clicking the drop-down menu.</li>
+<li>Click the "Create New" button.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/new_dashboard.png"></p>
+
+<h4>How to set the dashboard name?</h4>
+
+<ul>
+<li>Select the "Manage Dashboard" menu option.</li>
+<li>Click "Settings" to open the dashboard options panel.</li>
+<li>Change the "General -> Details -> Name" configuration value.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/dashboard_name.png"></p>
+
+<h4>How to set dashboard template variables?</h4>
+
+<ul>
+<li>Select the "Manage Dashboard" menu option.</li>
+<li>Click "Templating" to open the templating variables configuration panel.</li>
+<li>Click "New" button to define template variables.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/dashboard_template_menu.png"></p>
+
+<ul>
+<li>Fill in the name field with the template identifier.</li>
+<li>Select "IBM Cloud Monitoring" as the data source.</li>
+<li>Fill in the query field with chosen metric query.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/dashboard_template_details.png"></p>
+
+<h4>How to add new row to dashboard?</h4>
+
+<ul>
+<li>Click the "Add Row" button beneath the last row.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/add_row.png"></p>
+
+<h4>How to add new chart to row?</h4>
+
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the "Add Panel" menu item.</li>
+<li>Choose a chart type from the panel menu.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
+
+<h4>How to set and display row name?</h4>
+
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the "Row Options" menu item.</li>
+<li>Fill in the "Title" field. Click the "Show" checkbox.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
+
+<h4>How to edit chart parameters?</h4>
+
+<ul>
+<li>Click the panel title to open the panel options dialog.</li>
+<li>Select the "Edit" button.</li>
+<li>Graph options dialog opens below the chart panel.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/panel_details_more.png"></p>
+
+<h4>How to choose time range for metric values?</h4>
+
+<ul>
+<li>Click the clock icon on the right-hand side of the menu bar.</li>
+<li>Define time ranges manually or by selecting options from the "Quick Ranges" examples.</li>
+<li>Auto-update can be enabled using the "Refresh" drop-down menu.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/time_range_menu.png"></p>
+
+<h2>Dashboards</h2>
+
+<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
+
+<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
+
+<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
+for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
+
+<h3>Overview Dashboard</h3>
+
+<p>This is an example of the first dashboard we want to create.</p>
+
+<p><img src="/images/grafana_dashboards/overview-dashboard.gif"></p>
+
+<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
+
+<h4>setup</h4>
+
+<ol>
+<li>Create a new dashboard named "Overview".</li>
+<li>Set the following template variables.
+
+<ul>
+<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
+</ul>
+</li>
+</ol>
+
+
+<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
+
+<h4>invocations graph</h4>
+
+<p><img src="/images/grafana_dashboards/overview-invocations.png"></p>
+
+<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
+
+<p><em>How can we calculate total invocations from the metric values?</em></p>
+
+<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
+
+<p><em>Let's implement this now…</em></p>
+
+<ul>
+<li>Set and display default row name as <em>"Invocations"</em>.</li>
+<li>Add new <em>"Graph"</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error
+.scale(0).offset(1).groupByNode(5, sum)
+</code></p>
+
+<ul>
+<li>Set the following options to true.
+
+<ul>
+<li><em>Legend->Options->Show</em></li>
+<li><em>Display->Draw Modes->Bars</em></li>
+<li><em>Display->Stacking &amp; Null value->Stack</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation types</h4>
+
+<p><img src="/images/grafana_dashboards/overview-invocation-types.png"></p>
+
+<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
+
+<p>Calculating the sum for all invocations recorded will use the same "scale &amp; offset" trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
+
+<p><strong><u>all count</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>"Invocation Types"</em>.</li>
+<li>Add a new <em>"Single Stat"</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = All</em></li>
+<li><em>Options -> Value -> Stat = total</em></li>
+<li><em>Options -> Coloring -> Background = true</em></li>
+<li><em>Options -> Coloring -> Thresholds = 0,100000</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>success count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"All"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Success</em></li>
+<li><em>Options -> Coloring -> Colors = Make green the last threshold colour.</em></li>
+<li><em>Options -> Coloring -> Thresholds = 0,0</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>errors count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Success"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Errors</em></li>
+<li><em>Options-> Coloring -> Colors = Make red the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>cold start count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Errors"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Cold Start</em></li>
+<li><em>Options-> Coloring -> Colors = Make blue the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation durations</h4>
+
+<p><img src="/images/grafana_dashboards/overview-invocation-durations.png"></p>
+
+<p>This row will contain counts for the total, mean and range of all invocations.</p>
+
+<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
+
+<p><strong><u>total duration</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>"Invocation Durations"</em>.</li>
+<li>Add a new <em>"Single Stat"</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Total</em></li>
+<li><em>Options -> Value -> Stat = total</em></li>
+<li><em>Options -> Value -> Unit = milliseconds</em></li>
+<li><em>Options -> Coloring -> Background = true</em></li>
+<li><em>Options -> Coloring -> Thresholds = 100000000,100000000</em></li>
+<li><em>Options -> Coloring -> Colors = Make grey the first threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>average duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Total"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Average</em></li>
+<li><em>Options -> Value -> Stat = avg</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>range duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Average"</em> chart in the row.</li>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Range</em></li>
+<li><em>Options -> Value -> Stat = range</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation details table</h4>
+
+<p><img src="/images/grafana_dashboards/overview-tables.png"></p>
+
+<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
+
+<p><strong><u>all invocations table</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>"Invocations Per Action"</em>.</li>
+<li>Add a <em>"Table"</em> panel to the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error
+.scale(0).offset(1).groupByNode(5, sum)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (All)</em></li>
+<li><em>Options -> Data -> Table Transform = Time series aggregations</em></li>
+<li><em>Options -> Data -> Columns = Total</em></li>
+<li><em>Options -> Column Styles -> Decimals = 0</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>error invocations table</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Invocations (All)"</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (Errors)</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>duration statistics table</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Invocations (Errors)"</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (Duration)</em></li>
+<li><em>Options -> Data -> Columns = Avg, Min, Max</em></li>
+<li><em>Options -> Column Styles -> Decimals = Milliseconds</em></li>
+<li><em>Options -> Column Styles -> Decimals = 2</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
+
+<p><em>Let's move onto the second dashboard, which will give us more in-depth statistics for individual actions...</em></p>
+
+<h3>Action Dashboard</h3>
+
+<p>This is an example of the second dashboard we want to create.</p>
+
+<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
+
+<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
+
+<h4>setup</h4>
+
+<ul>
+<li>Create a new dashboard named <em>"Action Details"</em>.</li>
+<li>Set the following template variables.
+
+<ul>
+<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
+<li><strong>$actions</strong> => <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
+</ul>
+</li>
+</ul>
+
+
+<p><em>Replace &lt;action> with the name of an action you are monitoring.</em></p>
+
+<h4>invocations</h4>
+
+<p><img src="/images/grafana_dashboards/action-invocations.png"></p>
+
+<p>Action invocations are shown this first dashboard row. Bar charts display
+successful versus failed invocations and cold versus warm starts.</p>
+
+<p>Failed invocations and cold starts are recorded as metric values. Using the
+<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
+and warm starts from these properties.</p>
+
+<ul>
+<li>Set and display default row name as <em>"Invocations"</em>.</li>
+<li>Add new <em>"Graph"</em> chart to row.</li>
+<li><p>Configure two metric queries for the chart:
+<code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.error
+.scale(0).offset(1).groupByNode(5, sum).alias(success)
+</code>
+<code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.error
+.groupByNode(5, sum).alias(failure)
+</code></p></li>
+<li><p>Set the following options to true.</p>
+
+<ul>
+<li><em>Legend->Options->Show</em></li>
+<li><em>Display->Draw Modes->Bars</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation types</h4>
+
+<p><img src="/images/grafana_dashboards/action-invocation-types.png"></p>
+
+<p>This row replicates the <em>"Invocation Types"</em> row from the <em>"Overview"</em> dashboard.</p>
+
+<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
+
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+
+<h4>invocation durations</h4>
+
+<p><img src="/images/grafana_dashboards/action-invocation-durations.png"></p>
+
+<p>This row uses an extended version of the durations row from the <em>"Overview"</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
+
+<p><strong>Repeat the instructions from above to add the <em>"Total"</em> and <em>"Average"</em> panels.</strong></p>
+
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+
+<p><strong><u>minimum duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Total"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Min</em></li>
+<li><em>Options -> Value -> Stat = min</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>maximum duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Minimum"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Min</em></li>
+<li><em>Options -> Value -> Stat = max</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>percentiles graph</u></strong></p>
+
+<ul>
+<li>Add a <em>"Table"</em> panel to the row.</li>
+<li>Configure this metric query for the chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
+.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)
+</code></p>
+
+<ul>
+<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Durations (Percentiles)</em></li>
+<li><em>Axes -> Left Y -> Unit = Milliseconds</em></li>
+<li><em>Legend -> Options -> Show = True</em></li>
+<li><em>Legend -> Values -> Avg = True</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>cpu usage</h4>
+
+<p><img src="/images/grafana_dashboards/action-cpu-usage.png"></p>
+
+<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>"CPU Usage"</em>.</li>
+<li>Add new <em>"Graph"</em> panel to row.</li>
+<li>Configure two metric queries for the chart.</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
+.groupByNode(5, avg).alias(user-time)
+</code></p>
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
+.groupByNode(5, avg).alias(system-time)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>Axes -> Left Y -> Unit = Microseconds</em></li>
+<li><em>Legend -> Values -> Avg = true</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>memory usage</h4>
+
+<p><img src="/images/grafana_dashboards/action-memory-usage.png"></p>
+
+<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>"Memory Usage"</em>.</li>
+<li>Add new <em>"Graph"</em> panel to row.</li>
+<li>Configure four metric queries for the chart using this template.</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
+.groupByNode(5, avg).alias(&lt;label&gt;)
+</code></p>
+
+<p><strong>Replace &lt;label> with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>Axes -> Left Y -> Unit = bytes</em></li>
+<li><em>Legend -> Values -> Avg = true</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>Having finished all the charts for the action details example, you should now
+have dashboards which look like the examples above!</strong> 📈📊📉</p>
+
+<h2>conclusion</h2>
+
+<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
+
+<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
+are a perfect solution for this problem. Building custom dashboards allows us
+to monitor incoming data values live.</p>
+
+<p>In the next blog post, we're going to finish off <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values...</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[Capturing Runtime Metrics For OpenWhisk Applications]]></title>
-    <link href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/"/>
     <updated>2017-12-18T09:21:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications</id>
     <content type="html"><![CDATA[<p><em>This blog post is part one of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
 
 <p>Serverless platforms pose a unique challenge for collecting application metrics. Runtime environments are <a href="https://martinfowler.com/articles/serverless.html">ephemeral</a>, existing only to process requests.</p>
@@ -395,9 +1118,9 @@ $ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.
   
   <entry>
     <title type="html"><![CDATA[Monitoring Serverless Applications Metrics]]></title>
-    <link href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring/"/>
     <updated>2017-12-15T10:53:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring</id>
     <content type="html"><![CDATA[<p>Serverless applications are not "No Ops", <a href="https://thenewstack.io/serverless-computing-growing-quickly/">despite the meme</a>. 🙄</p>
 
 <p>Monitoring runtime metrics is <a href="https://hackernoon.com/how-we-monitor-serverless-apps-with-hundreds-of-functions-d0f1fa938d1e">still crucial for serverless applications</a>. Identifying, diagnosing and resolving issues in production requires data on execution durations, errors thrown, resource usage statistics amongst other metrics.</p>
@@ -418,7 +1141,7 @@ $ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.
 
 <ul>
 <li>Part 1: <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a></li>
-<li>Part 2: Visualising Metrics WIth Grafana Dashboards</li>
+<li>Part 2: <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a></li>
 <li>Part 3: Configuring Alert Notifications Based on Metric Rules</li>
 </ul>
 
@@ -454,9 +1177,9 @@ $ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.
   
   <entry>
     <title type="html"><![CDATA[Openwhisk Logstash Forwarder]]></title>
-    <link href="http://jamesthom.as/blog/2017/11/21/openwhisk-logstash-forwarder/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/11/21/openwhisk-logstash-forwarder/"/>
     <updated>2017-11-21T17:15:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/11/21/openwhisk-logstash-forwarder</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/11/21/openwhisk-logstash-forwarder</id>
     <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/kibana_copy.png" title="Kibana Dashboard with OpenWhisk Logs" alt="Kibana Dashboard" /></p>
 
 <p>Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing into the machine and attaching a debugger to a process or using strace to dump system calls.</p>
@@ -515,9 +1238,9 @@ $ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.
   
   <entry>
     <title type="html"><![CDATA[advanced openwhisk alarm schedules]]></title>
-    <link href="http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
     <updated>2017-10-31T12:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
     <content type="html"><![CDATA[<p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
 
 <p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
@@ -968,202 +1691,6 @@ ok: created rule wake_up_at_sunrise
 <p>In Apache OpenWhisk, the alarm feed allows static events to be generated on a customisable schedule. Using a cron-based schedule pattern, running functions once a minute, every two hours or 5pm on Mondays, is simple but what about more complex schedule patterns?</p>
 
 <p>Using the <code>cron</code> and <code>maxTriggers</code> parameters with the OpenWhisk client library, much more advanced event schedules can be utilised within the platform. In the examples above, we looked at how to schedule one-off events, events using a predictable but irregular schedule and how actions can re-schedule events at runtime. 💯💯💯</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/"/>
-    <updated>2017-08-04T09:48:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk</id>
-    <content type="html"><![CDATA[<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
-
-<p><blockquote><p>The maximum code size for the action is 48MB.</p><footer><strong>OpenWhisk system details,</strong> <cite><a href='https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb'>github.com/apache/blob/master/&hellip;</a></cite></footer></blockquote></p>
-
-<p>Applications with lots of third-party modules, native libraries or external tools may be soon find themselves running into this limit. Node.js libraries are <a href="https://medium.com/friendship-dot-js/i-peeked-into-my-node-modules-directory-and-you-wont-believe-what-happened-next-b89f63d21558">notorious for having large amounts of dependencies</a>.</p>
-
-<p><em>What if you need to deploy an application larger than this limit to OpenWhisk?</em></p>
-
-<p><a href="https://github.com/apache/incubator-openwhisk/tree/master/sdk/docker">Previous solutions</a> used Docker support in OpenWhisk to build a custom Docker image per action. Source files and dependencies are built into a public image hosted on Docker Hub.</p>
-
-<p>This approach overcomes the limit on deployment size but means application source files will be accessible on Docker Hub. This is not an issue for building samples or open-source projects but not realistic for most applications.</p>
-
-<p><em>So, using an application larger than this limit requires me to make my source files public?</em> 🤔</p>
-
-<p><strong>There's now a better solution!</strong> 👏👏👏</p>
-
-<p><strong>OpenWhisk supports creating actions from an archive file AND a custom Docker image.</strong></p>
-
-<p>If we build a custom Docker runtime which includes shared libraries, those dependencies don't need including in the archive file. Private source files will still be bundled in the archive and injected at runtime.</p>
-
-<p>Reducing archive file sizes also improves deployment times.</p>
-
-<p><em>Let's look at an example…</em></p>
-
-<h2>Using Machine Learning Libraries on OpenWhisk</h2>
-
-<p>Python is a popular language for machine learning and data science. Libraries like <a href="http://pandas.pydata.org/">pandas</a>, <a href="http://scikit-learn.org/stable/">scikit-learn</a> and <a href="http://www.numpy.org/">numpy</a> provide all the tools. Serverless computing is becoming a <a href="https://blog.alexcasalboni.com/serverless-computing-machine-learning-baf52b89e1b0">good choice for machine learning microservices</a>.</p>
-
-<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-python-actions">Python 2 and 3 runtimes</a>.</p>
-
-<p>Popular libraries like flask, requests and beautifulsoup <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#python-actions">are available as global packages</a>. Additional packages can be imported using <code>virutalenv</code> during invocations.</p>
-
-<h3>Python Machine Learning Libraries</h3>
-
-<p>Python packages can be <a href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/">used in OpenWhisk using virtualenv</a>. Developers install the packages locally and include the <code>virutalenv</code> folder in the archive for deployment.</p>
-
-<p>Machine Learning libraries often use numerous shared libraries and compile native dependencies for performance. <strong>This can lead to hundreds of megabytes of dependencies.</strong></p>
-
-<p>Setting up a new <code>virtualenv</code> folder and installing <code>pandas</code> leads to an environment with nearly 100MB of dependencies.</p>
-
-<p><code>
-$ virtualenv env
-$ source env/bin/activate
-$ pip install pandas
-...
-Installing collected packages: numpy, six, python-dateutil, pytz, pandas
-Successfully installed numpy-1.13.1 pandas-0.20.3 python-dateutil-2.6.1 pytz-2017.2 six-1.10.0
-$ du -h
-...
-84M . &lt;-- FOLDER SIZE 😱
-</code></p>
-
-<p><strong>Bundling these libraries within an archive file will not be possible due to the file size limit.</strong></p>
-
-<h3>Custom OpenWhisk Runtime Images</h3>
-
-<p>Overcoming this limit can be achieved using a custom runtime image. The runtime will pre-install additional libraries during the build process and make them available during invocations.</p>
-
-<p>OpenWhisk uses <a href="https://www.docker.com/">Docker</a> for the runtime containers. <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Source files for the images</a> are available on Github under the <code>core</code> folder. Here's the <code>Dockerfile</code> for the Python runtime: <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile">https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile</a>.</p>
-
-<p>Images for OpenWhisk runtimes are also available on Docker Hub under the <a href="https://hub.docker.com/r/openwhisk/">OpenWhisk organisation</a>.</p>
-
-<p><em>Docker supports building new images from a parent image using the <code>FROM</code> directive. Inheriting from the existing runtime images means the <code>Dockerfile</code> for the new runtime only has to contain commands for installing extra dependencies.</em></p>
-
-<p>Let's build a new Python runtime which includes those libraries as shared packages.</p>
-
-<h3>Building Runtimes</h3>
-
-<p>Let's create a new <code>Dockerfile</code> which installs additional packages into the OpenWhisk Python runtime.</p>
-
-<p>```
-FROM openwhisk/python3action</p>
-
-<h1>lapack-dev is available in community repo.</h1>
-
-<p>RUN echo "http://dl-4.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories</p>
-
-<h1>add package build dependencies</h1>
-
-<p>RUN apk add --no-cache \</p>
-
-<pre><code>    g++ \
-    lapack-dev \
-    gfortran
-</code></pre>
-
-<h1>add python packages</h1>
-
-<p>RUN pip install \</p>
-
-<pre><code>numpy \
-pandas \
-scipy \
-sklearn
-</code></pre>
-
-<p>```</p>
-
-<p>Running the <a href="https://docs.docker.com/engine/reference/commandline/build/">Docker build command</a> will create a new image with these extra dependencies.</p>
-
-<p><code>
-$ docker build -t python_ml_runtime .
-Sending build context to Docker daemon  83.01MB
-Step 1/4 : FROM openwhisk/python3action
- ---&gt; 46388e726fae
-...
-Successfully built cfc14a93863e
-Successfully tagged python_ml_runtime:latest
-</code></p>
-
-<p><em>Hosting images on Docker Hub requires registering a (free) account @ https://hub.docker.com/</em></p>
-
-<p>Create a new tag from the <code>python_ml_runtime</code> image containing the Docker Hub username.</p>
-
-<p><code>
-$ docker tag python_ml_runtime &lt;YOUR_USERNAME&gt;/python_ml_test
-</code></p>
-
-<p>Push the image to Docker Hub to make it available to OpenWhisk.</p>
-
-<p><code>
-$ docker push &lt;YOUR_USERNAME&gt;/python_ml_test
-</code></p>
-
-<h3>Testing It Out</h3>
-
-<p>Create a new Python file (<code>main.py</code>) with the following contents:</p>
-
-<p>```python
-import numpy
-import pandas
-import sklearn
-import scipy</p>
-
-<p>def main(params):</p>
-
-<pre><code>return {
-    "numpy": numpy.__version__,
-    "pandas": pandas.__version__,
-    "sklearn": sklearn.__version__,
-    "scipy": scipy.__version__
-}
-</code></pre>
-
-<p>```</p>
-
-<p>Create a new OpenWhisk action using the Docker image from above and source file.</p>
-
-<p><code>sh
-$ wsk action create lib-versions --docker &lt;YOUR_USERNAME&gt;/openwhisk_python_ml main.py
-ok: created action lib-versions
-</code></p>
-
-<p> Invoke the action to verify the modules are available and return the versions.</p>
-
-<p>```
-$ wsk action invoke lib-versions --result
-{</p>
-
-<pre><code>"numpy": "1.13.1",
-"pandas": "0.20.3",
-"scipy": "0.19.1",
-"sklearn": "0.18.2"
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Yass. It works. 💃🕺</p>
-
-<p>Serverless Machine Learning here we come…. 😉</p>
-
-<h2>Conclusions</h2>
-
-<p>Using custom runtimes with private source files is an amazing feature of OpenWhisk. It enables developers to run larger applications on the platform but also enables lots of other use cases. <strong>Almost any runtime, library or tool can now be used from the platform.</strong></p>
-
-<p>Here are some examples of where this approach could be used…</p>
-
-<ul>
-<li><em>Installing global libraries to reduce archive file size under 48MB and speed up deployments.</em></li>
-<li><em>Upgrading language runtimes, i.e. using Node.js 8 instead of 6.</em></li>
-<li><em>Adding native dependencies or command-line tools to the environment, e.g. ffmpeg.</em></li>
-</ul>
-
-
-<p>Building new runtimes is really simple using pre-existing base images published on Dockerhub.</p>
-
-<p><strong>The possibilities are endless!</strong></p>
 ]]></content>
   </entry>
   

@@ -2,10 +2,10 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
 
   <title><![CDATA[James Thomas]]></title>
-  <link href="http://jamesthom.as/atom.xml" rel="self"/>
-  <link href="http://jamesthom.as/"/>
-  <updated>2018-01-03T12:40:37+00:00</updated>
-  <id>http://jamesthom.as/</id>
+  <link href="http://jthomas.github.com/jthomas/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-01-11T16:17:08+00:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
     
@@ -14,11 +14,751 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Visualising Serverless Metrics With Grafana Dashboards]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/"/>
+    <updated>2018-01-05T15:40:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards</id>
+    <content type="html"><![CDATA[<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-dashboard.gif"></p>
+
+<p><em>This blog post is part three of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+
+<p>Having <a href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
+applications, monitoring incoming metric values will alert us to problems.</p>
+
+<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
+
+<blockquote><p>Grafana is an open source metric analytics & visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote>
+
+
+<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
+
+<p>Let&#8217;s review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
+before we start setting up the serverless monitoring dashboards…</p>
+
+<h2>Grafana Basics</h2>
+
+<h3>Metric Data Values</h3>
+
+<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
+
+<ul>
+<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
+<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
+<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
+<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration</code></em></li>
+</ul>
+
+
+<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
+
+<h3>Templates</h3>
+
+<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
+
+<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/templating.png"></p>
+
+<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
+
+<h3>Common Tasks</h3>
+
+<h4>How to create a new dashboard?</h4>
+
+<ul>
+<li>Open the dashboard menu by clicking the drop-down menu.</li>
+<li>Click the &#8220;Create New&#8221; button.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/new_dashboard.png"></p>
+
+<h4>How to set the dashboard name?</h4>
+
+<ul>
+<li>Select the &#8220;Manage Dashboard&#8221; menu option.</li>
+<li>Click &#8220;Settings&#8221; to open the dashboard options panel.</li>
+<li>Change the &#8220;General -> Details -> Name&#8221; configuration value.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/dashboard_name.png"></p>
+
+<h4>How to set dashboard template variables?</h4>
+
+<ul>
+<li>Select the &#8220;Manage Dashboard&#8221; menu option.</li>
+<li>Click &#8220;Templating&#8221; to open the templating variables configuration panel.</li>
+<li>Click &#8220;New&#8221; button to define template variables.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/dashboard_template_menu.png"></p>
+
+<ul>
+<li>Fill in the name field with the template identifier.</li>
+<li>Select &#8220;IBM Cloud Monitoring&#8221; as the data source.</li>
+<li>Fill in the query field with chosen metric query.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/dashboard_template_details.png"></p>
+
+<h4>How to add new row to dashboard?</h4>
+
+<ul>
+<li>Click the &#8220;Add Row&#8221; button beneath the last row.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/add_row.png"></p>
+
+<h4>How to add new chart to row?</h4>
+
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the &#8220;Add Panel&#8221; menu item.</li>
+<li>Choose a chart type from the panel menu.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/add_row_panel.png"></p>
+
+<h4>How to set and display row name?</h4>
+
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the &#8220;Row Options&#8221; menu item.</li>
+<li>Fill in the &#8220;Title&#8221; field. Click the &#8220;Show&#8221; checkbox.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/add_row_panel.png"></p>
+
+<h4>How to edit chart parameters?</h4>
+
+<ul>
+<li>Click the panel title to open the panel options dialog.</li>
+<li>Select the &#8220;Edit&#8221; button.</li>
+<li>Graph options dialog opens below the chart panel.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/panel_details_more.png"></p>
+
+<h4>How to choose time range for metric values?</h4>
+
+<ul>
+<li>Click the clock icon on the right-hand side of the menu bar.</li>
+<li>Define time ranges manually or by selecting options from the &#8220;Quick Ranges&#8221; examples.</li>
+<li>Auto-update can be enabled using the &#8220;Refresh&#8221; drop-down menu.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/time_range_menu.png"></p>
+
+<h2>Dashboards</h2>
+
+<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
+
+<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
+
+<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
+for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
+
+<h3>Overview Dashboard</h3>
+
+<p>This is an example of the first dashboard we want to create.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/overview-dashboard.gif"></p>
+
+<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
+
+<h4>setup</h4>
+
+<ol>
+<li>Create a new dashboard named &#8220;Overview&#8221;.</li>
+<li>Set the following template variables.
+
+<ul>
+<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
+</ul>
+</li>
+</ol>
+
+
+<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
+
+<h4>invocations graph</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/overview-invocations.png"></p>
+
+<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
+
+<p><em>How can we calculate total invocations from the metric values?</em></p>
+
+<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
+
+<p><em>Let&#8217;s implement this now…</em></p>
+
+<ul>
+<li>Set and display default row name as <em>&#8220;Invocations&#8221;</em>.</li>
+<li>Add new <em>&#8220;Graph&#8221;</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error
+</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options to true.
+
+<ul>
+<li><em>Legend->Options->Show</em></li>
+<li><em>Display->Draw Modes->Bars</em></li>
+<li><em>Display->Stacking &amp; Null value->Stack</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation types</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/overview-invocation-types.png"></p>
+
+<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
+
+<p>Calculating the sum for all invocations recorded will use the same &#8220;scale &amp; offset&#8221; trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
+
+<p><strong><u>all count</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>&#8220;Invocation Types&#8221;</em>.</li>
+<li>Add a new <em>&#8220;Single Stat&#8221;</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = All</em></li>
+<li><em>Options -> Value -> Stat = total</em></li>
+<li><em>Options -> Coloring -> Background = true</em></li>
+<li><em>Options -> Coloring -> Thresholds = 0,100000</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>success count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;All&#8221;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Success</em></li>
+<li><em>Options -> Coloring -> Colors = Make green the last threshold colour.</em></li>
+<li><em>Options -> Coloring -> Thresholds = 0,0</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>errors count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Success&#8221;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Errors</em></li>
+<li><em>Options-> Coloring -> Colors = Make red the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>cold start count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Errors&#8221;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Cold Start</em></li>
+<li><em>Options-> Coloring -> Colors = Make blue the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation durations</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/overview-invocation-durations.png"></p>
+
+<p>This row will contain counts for the total, mean and range of all invocations.</p>
+
+<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
+
+<p><strong><u>total duration</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>&#8220;Invocation Durations&#8221;</em>.</li>
+<li>Add a new <em>&#8220;Single Stat&#8221;</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Total</em></li>
+<li><em>Options -> Value -> Stat = total</em></li>
+<li><em>Options -> Value -> Unit = milliseconds</em></li>
+<li><em>Options -> Coloring -> Background = true</em></li>
+<li><em>Options -> Coloring -> Thresholds = 100000000,100000000</em></li>
+<li><em>Options -> Coloring -> Colors = Make grey the first threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>average duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Total&#8221;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Average</em></li>
+<li><em>Options -> Value -> Stat = avg</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>range duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Average&#8221;</em> chart in the row.</li>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Range</em></li>
+<li><em>Options -> Value -> Stat = range</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation details table</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/overview-tables.png"></p>
+
+<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
+
+<p><strong><u>all invocations table</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>&#8220;Invocations Per Action&#8221;</em>.</li>
+<li>Add a <em>&#8220;Table&#8221;</em> panel to the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error
+</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (All)</em></li>
+<li><em>Options -> Data -> Table Transform = Time series aggregations</em></li>
+<li><em>Options -> Data -> Columns = Total</em></li>
+<li><em>Options -> Column Styles -> Decimals = 0</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>error invocations table</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Invocations (All)&#8221;</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (Errors)</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>duration statistics table</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Invocations (Errors)&#8221;</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (Duration)</em></li>
+<li><em>Options -> Data -> Columns = Avg, Min, Max</em></li>
+<li><em>Options -> Column Styles -> Decimals = Milliseconds</em></li>
+<li><em>Options -> Column Styles -> Decimals = 2</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
+
+<p><em>Let&#8217;s move onto the second dashboard, which will give us more in-depth statistics for individual actions&#8230;</em></p>
+
+<h3>Action Dashboard</h3>
+
+<p>This is an example of the second dashboard we want to create.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-dashboard.gif"></p>
+
+<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
+
+<h4>setup</h4>
+
+<ul>
+<li>Create a new dashboard named <em>&#8220;Action Details&#8221;</em>.</li>
+<li>Set the following template variables.
+
+<ul>
+<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
+<li><strong>$actions</strong> => <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
+</ul>
+</li>
+</ul>
+
+
+<p><em>Replace &lt;action> with the name of an action you are monitoring.</em></p>
+
+<h4>invocations</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-invocations.png"></p>
+
+<p>Action invocations are shown this first dashboard row. Bar charts display
+successful versus failed invocations and cold versus warm starts.</p>
+
+<p>Failed invocations and cold starts are recorded as metric values. Using the
+<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
+and warm starts from these properties.</p>
+
+<ul>
+<li>Set and display default row name as <em>&#8220;Invocations&#8221;</em>.</li>
+<li>Add new <em>&#8220;Graph&#8221;</em> chart to row.</li>
+<li>Configure two metric queries for the chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.error
+</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum).alias(success)</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.error
+</span><span class='line'>.groupByNode(5, sum).alias(failure)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options to true.
+
+<ul>
+<li><em>Legend->Options->Show</em></li>
+<li><em>Display->Draw Modes->Bars</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation types</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-invocation-types.png"></p>
+
+<p>This row replicates the <em>&#8220;Invocation Types&#8221;</em> row from the <em>&#8220;Overview&#8221;</em> dashboard.</p>
+
+<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
+
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+
+<h4>invocation durations</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-invocation-durations.png"></p>
+
+<p>This row uses an extended version of the durations row from the <em>&#8220;Overview&#8221;</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
+
+<p><strong>Repeat the instructions from above to add the <em>&#8220;Total&#8221;</em> and <em>&#8220;Average&#8221;</em> panels.</strong></p>
+
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+
+<p><strong><u>minimum duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Total&#8221;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Min</em></li>
+<li><em>Options -> Value -> Stat = min</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>maximum duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>&#8220;Minimum&#8221;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Min</em></li>
+<li><em>Options -> Value -> Stat = max</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>percentiles graph</u></strong></p>
+
+<ul>
+<li>Add a <em>&#8220;Table&#8221;</em> panel to the row.</li>
+<li>Configure this metric query for the chart:</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
+</span><span class='line'>.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Durations (Percentiles)</em></li>
+<li><em>Axes -> Left Y -> Unit = Milliseconds</em></li>
+<li><em>Legend -> Options -> Show = True</em></li>
+<li><em>Legend -> Values -> Avg = True</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>cpu usage</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-cpu-usage.png"></p>
+
+<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>&#8220;CPU Usage&#8221;</em>.</li>
+<li>Add new <em>&#8220;Graph&#8221;</em> panel to row.</li>
+<li>Configure two metric queries for the chart.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
+</span><span class='line'>.groupByNode(5, avg).alias(user-time)</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
+</span><span class='line'>.groupByNode(5, avg).alias(system-time)</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>Axes -> Left Y -> Unit = Microseconds</em></li>
+<li><em>Legend -> Values -> Avg = true</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>memory usage</h4>
+
+<p><img src="http://jthomas.github.com/jthomas/images/grafana_dashboards/action-memory-usage.png"></p>
+
+<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>&#8220;Memory Usage&#8221;</em>.</li>
+<li>Add new <em>&#8220;Graph&#8221;</em> panel to row.</li>
+<li>Configure four metric queries for the chart using this template.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
+</span><span class='line'>.groupByNode(5, avg).alias(&lt;label&gt;)</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Replace &lt;label> with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>Axes -> Left Y -> Unit = bytes</em></li>
+<li><em>Legend -> Values -> Avg = true</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>Having finished all the charts for the action details example, you should now
+have dashboards which look like the examples above!</strong> 📈📊📉</p>
+
+<h2>conclusion</h2>
+
+<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
+
+<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
+are a perfect solution for this problem. Building custom dashboards allows us
+to monitor incoming data values live.</p>
+
+<p>In the next blog post, we&#8217;re going to finish off <a href="http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values&#8230;</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[Capturing Runtime Metrics For OpenWhisk Applications]]></title>
-    <link href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/"/>
     <updated>2017-12-18T09:21:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications</id>
-    <content type="html"><![CDATA[<p><em>This blog post is part one of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+    <id>http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications</id>
+    <content type="html"><![CDATA[<p><em>This blog post is part one of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
 
 <p>Serverless platforms pose a unique challenge for collecting application metrics. Runtime environments are <a href="https://martinfowler.com/articles/serverless.html">ephemeral</a>, existing only to process requests.</p>
 
@@ -493,9 +1233,9 @@
   
   <entry>
     <title type="html"><![CDATA[Monitoring Serverless Applications Metrics]]></title>
-    <link href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring/"/>
     <updated>2017-12-15T10:53:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring</id>
     <content type="html"><![CDATA[<p>Serverless applications are not &#8220;No Ops&#8221;, <a href="https://thenewstack.io/serverless-computing-growing-quickly/">despite the meme</a>. 🙄</p>
 
 <p>Monitoring runtime metrics is <a href="https://hackernoon.com/how-we-monitor-serverless-apps-with-hundreds-of-functions-d0f1fa938d1e">still crucial for serverless applications</a>. Identifying, diagnosing and resolving issues in production requires data on execution durations, errors thrown, resource usage statistics amongst other metrics.</p>
@@ -508,20 +1248,20 @@
 
 <p><em>Here&#8217;s a sneak peak of some of the dashboards we&#8217;ll be creating from serverless application metrics…</em></p>
 
-<p><img src="http://jamesthom.as/images/serverless_metrics/action-metrics.gif"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/serverless_metrics/action-metrics.gif"></p>
 
 <h2>blog posts</h2>
 
 <p>Here are the links to the blog posts in the series…</p>
 
 <ul>
-<li>Part 1: <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a></li>
-<li>Part 2: Visualising Metrics WIth Grafana Dashboards</li>
+<li>Part 1: <a href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a></li>
+<li>Part 2: <a href="http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a></li>
 <li>Part 3: Configuring Alert Notifications Based on Metric Rules</li>
 </ul>
 
 
-<p>You can start now with the <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">first blog post</a>, other blog posts will follow soon….</p>
+<p>You can start now with the <a href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">first blog post</a>, other blog posts will follow soon….</p>
 
 <h2>tldr?</h2>
 
@@ -552,9 +1292,9 @@
   
   <entry>
     <title type="html"><![CDATA[Openwhisk Logstash Forwarder]]></title>
-    <link href="http://jamesthom.as/blog/2017/11/21/openwhisk-logstash-forwarder/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/11/21/openwhisk-logstash-forwarder/"/>
     <updated>2017-11-21T17:15:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/11/21/openwhisk-logstash-forwarder</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/11/21/openwhisk-logstash-forwarder</id>
     <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/kibana_copy.png" title="Kibana Dashboard with OpenWhisk Logs" alt="Kibana Dashboard" /></p>
 
 <p>Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing into the machine and attaching a debugger to a process or using strace to dump system calls.</p>
@@ -613,9 +1353,9 @@
   
   <entry>
     <title type="html"><![CDATA[advanced openwhisk alarm schedules]]></title>
-    <link href="http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
     <updated>2017-10-31T12:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
     <content type="html"><![CDATA[<p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
 
 <p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
@@ -1173,9 +1913,9 @@
   
   <entry>
     <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/08/04/large-applications-on-openwhisk/"/>
     <updated>2017-08-04T09:48:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/08/04/large-applications-on-openwhisk</id>
     <content type="html"><![CDATA[<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
 
 <blockquote><p>The maximum code size for the action is 48MB.</p><footer><strong>OpenWhisk system details,</strong> <cite><a href='https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb'>github.com/apache/blob/master/&hellip;</a></cite></footer></blockquote>
@@ -1407,9 +2147,9 @@
   
   <entry>
     <title type="html"><![CDATA[Creating Swift Binaries for OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/07/17/creating-swift-binaries-for-openwhisk/"/>
     <updated>2017-07-17T12:12:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/07/17/creating-swift-binaries-for-openwhisk</id>
     <content type="html"><![CDATA[<p>In the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, we explained how to write Serverless Swift functions using <a href="http://openwhisk.incubator.apache.org/">OpenWhisk actions</a>.</p>
 
 <p>Swift sources files are compiled into a binary by the platform before processing requests.</p>
@@ -1874,12 +2614,12 @@
   
   <entry>
     <title type="html"><![CDATA[Serverless Swift with OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/06/28/serverless-swift-with-openwhisk/"/>
     <updated>2017-06-28T10:08:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/06/28/serverless-swift-with-openwhisk</id>
     <content type="html"><![CDATA[<p>Swift is one of the <a href="https://www.macrumors.com/2017/03/10/apple-swift-programming-language-popularity/">fastest growing programming languages</a> with developers.</p>
 
-<p><img src="http://jamesthom.as/images/serverless_swift/language_rank.png"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/serverless_swift/language_rank.png"></p>
 
 <blockquote><p>Swift has reached a Top 15 ranking faster than any other language we have tracked.</p><footer><strong>RedMonk Programming Language Rankings</strong> <cite><a href='http://redmonk.com/sogrady/2017/03/17/language-rankings-1-17/'>redmonk.com/sogrady/2017/03/17/&hellip;</a></cite></footer></blockquote>
 
@@ -2324,9 +3064,9 @@
   
   <entry>
     <title type="html"><![CDATA[Python Packages in OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/04/27/python-packages-in-openwhisk/"/>
     <updated>2017-04-27T17:15:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/04/27/python-packages-in-openwhisk</id>
     <content type="html"><![CDATA[<p>OpenWhisk&#8217;s Python runtime <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#python-actions">includes popular third-party libraries</a> like requests, scrapy and simplejson. Developers don&#8217;t have to manually install packages to use those libraries.</p>
 
 <p><em>Great, but what about using other libraries that aren&#8217;t pre-installed?</em></p>
@@ -2630,12 +3370,12 @@
   
   <entry>
     <title type="html"><![CDATA[Building an SMS Bot for Slack.]]></title>
-    <link href="http://jamesthom.as/blog/2017/03/20/smsbot/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/03/20/smsbot/"/>
     <updated>2017-03-20T16:02:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/03/20/smsbot</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/03/20/smsbot</id>
     <content type="html"><![CDATA[<p>This is <a href="https://github.com/ibmets/smsbot">smsbot</a>.</p>
 
-<p><img src="http://jamesthom.as/images/smsbot/slack_text_hidden.jpg"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/slack_text_hidden.jpg"></p>
 
 <p>It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their messages posted into the channel. Channel users can respond to the messages and have their response sent back to the sender using SMS.</p>
 
@@ -2969,7 +3709,7 @@
 
 <p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@email.com_dev/default/smsbot-dev-incoming.http</code></p>
 
-<p><img src="http://jamesthom.as/images/smsbot/twilio_sms_webhook.png"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/twilio_sms_webhook.png"></p>
 
 <h3>Slack Outgoing Webhook</h3>
 
@@ -2977,7 +3717,7 @@
 
 <p>Outgoing Webhooks have a configurable trigger word. Channel messages which start with this word are send as HTTP requests to the list of URLs registered for that webhook. We will use <code>smsbot</code> as our trigger word.</p>
 
-<p><img src="http://jamesthom.as/images/smsbot/outgoing_webhook_trigger.png"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/outgoing_webhook_trigger.png"></p>
 
 <h4>Request Parameters</h4>
 
@@ -3329,7 +4069,7 @@
 
 <p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-incoming.http</code></p>
 
-<p><img src="http://jamesthom.as/images/smsbot/twilio_sms_webhook.png"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/twilio_sms_webhook.png"></p>
 
 <h3>Outgoing Webhook</h3>
 
@@ -3339,17 +4079,17 @@
 
 <p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-reply.json</code></p>
 
-<p><img src="http://jamesthom.as/images/smsbot/outgoing_webhook_trigger.png"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/outgoing_webhook_trigger.png"></p>
 
 <h3>Test it out!</h3>
 
 <p>Send a text message to the phone number you registered through Twilio. smsbot should post the contents into Slack and send an SMS response with the message &#8221;<em>Thanks for letting us know!</em>&#8221;.</p>
 
-<p><img src="http://jamesthom.as/images/smsbot/slack_text_hidden.jpg"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/slack_text_hidden.jpg"></p>
 
 <p>If you send a channel message starting with the trigger word (<em>smsbot</em>), the phone number should receive a new SMS message with the message text.</p>
 
-<p><img src="http://jamesthom.as/images/smsbot/sms_app.png"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/smsbot/sms_app.png"></p>
 
 <p>Awesome-sauce 😎.</p>
 
@@ -3365,9 +4105,9 @@
   
   <entry>
     <title type="html"><![CDATA[Openwhisk and The Serverless Framework]]></title>
-    <link href="http://jamesthom.as/blog/2017/02/09/openwhisk-and-the-serverless-framework/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/02/09/openwhisk-and-the-serverless-framework/"/>
     <updated>2017-02-09T15:04:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/02/09/openwhisk-and-the-serverless-framework</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/02/09/openwhisk-and-the-serverless-framework</id>
     <content type="html"><![CDATA[<p><a href="https://serverless.com">The Serverless Framework</a> is the most popular open-source framework for building serverless applications.</p>
 
 <p><a href="https://serverless.com/blog/serverless-v1.6.0/">Recent releases</a> included support for using the framework with non-AWS providers. This feature makes it easier for developers to try different serverless platforms and move applications between providers.</p>
@@ -3399,7 +4139,7 @@
 
 <p>Slides from the presentation are here:</p>
 
-<script async class="speakerdeck-embed" data-id="592fbd47aceb4fbc9021ae3bf2f6b06c" data-ratio="1.77777777777778" src="http://jamesthom.as//speakerdeck.com/assets/embed.js"></script>
+<script async class="speakerdeck-embed" data-id="592fbd47aceb4fbc9021ae3bf2f6b06c" data-ratio="1.77777777777778" src="http://jthomas.github.com/jthomas//speakerdeck.com/assets/embed.js"></script>
 
 
 <p>There is a (low-fi) video recording from the event here:</p>
@@ -3413,9 +4153,9 @@
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk and Rust]]></title>
-    <link href="http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/01/18/openwhisk-and-rust/"/>
     <updated>2017-01-18T09:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/01/18/openwhisk-and-rust</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/01/18/openwhisk-and-rust</id>
     <content type="html"><![CDATA[<p><em>This blog post is <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">one of</a> <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">a series</a> looking at using Docker Actions in OpenWhisk to support extra runtimes.</em></p>
 
 <p>Let&#8217;s look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
@@ -3708,9 +4448,9 @@
   
   <entry>
     <title type="html"><![CDATA[Openwhisk and Go]]></title>
-    <link href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/01/17/openwhisk-and-go/"/>
     <updated>2017-01-17T09:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/01/17/openwhisk-and-go</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/01/17/openwhisk-and-go</id>
     <content type="html"><![CDATA[<p><a href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/">In an earlier blog post</a>, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for each serverless function and hosting them on Docker Hub.</p>
 
 <p><a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">Recent updates</a>  to Docker-based Actions have made this process much simpler. Developers don&#8217;t need to build and expose public images anymore.</p>
@@ -3876,9 +4616,9 @@
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk Docker Actions]]></title>
-    <link href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/01/16/openwhisk-docker-actions/"/>
     <updated>2017-01-16T11:05:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions</id>
+    <id>http://jthomas.github.com/jthomas/blog/2017/01/16/openwhisk-docker-actions</id>
     <content type="html"><![CDATA[<p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
 
 <p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
@@ -4114,9 +4854,9 @@
   
   <entry>
     <title type="html"><![CDATA[NPM Modules in OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/11/28/npm-modules-in-openwhisk/"/>
     <updated>2016-11-28T14:03:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk</id>
+    <id>http://jthomas.github.com/jthomas/blog/2016/11/28/npm-modules-in-openwhisk</id>
     <content type="html"><![CDATA[<p>OpenWhisk now <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">supports creating Node.js Actions from a zip file</a>. The archive file will be extracted into the runtime environment by the platform. This allows us to split microservice logic across multiple files, use third-party <a href="https://www.npmjs.com/">NPM modules</a> or include non-JavaScript assets (configuration files, images, HTML files).</p>
 
 <h2>&#8220;Hello World&#8221; Example</h2>
@@ -4440,9 +5180,9 @@
   
   <entry>
     <title type="html"><![CDATA[Serverless Logs With Elasticsearch]]></title>
-    <link href="http://jamesthom.as/blog/2016/10/31/serverless-logs-with-elasticsearch/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/10/31/serverless-logs-with-elasticsearch/"/>
     <updated>2016-10-31T10:39:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2016/10/31/serverless-logs-with-elasticsearch</id>
+    <id>http://jthomas.github.com/jthomas/blog/2016/10/31/serverless-logs-with-elasticsearch</id>
     <content type="html"><![CDATA[<p><a href="http://martinfowler.com/articles/serverless.html">Serverless platforms</a> can seem like magic.</p>
 
 <p>Taking your code and turning it into scalable microservices in the cloud without having to set up or manage any infrastructure.</p>
@@ -4736,10 +5476,10 @@
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk Workshop]]></title>
-    <link href="http://jamesthom.as/blog/2016/10/10/openwhisk-workshop/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/10/10/openwhisk-workshop/"/>
     <updated>2016-10-10T14:51:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/10/10/openwhisk-workshop</id>
-    <content type="html"><![CDATA[<p><img src="http://jamesthom.as/images/serverless_ldn.png" alt="serverless london" /></p>
+    <id>http://jthomas.github.com/jthomas/blog/2016/10/10/openwhisk-workshop</id>
+    <content type="html"><![CDATA[<p><img src="http://jthomas.github.com/jthomas/images/serverless_ldn.png" alt="serverless london" /></p>
 
 <p><a href="http://serverlessconf.io/">Serverless Conference</a> comes to London <a href="http://london.serverlessconf.io/">later this month</a>.</p>
 
@@ -4785,13 +5525,13 @@
 </pre></td><td class='code'><pre><code class=''><span class='line'>$ openwhisk-workshop</span></code></pre></td></tr></table></div></figure>
 
 
-<p><img src="http://jamesthom.as/images/ow_workshop.png" alt="overview" /></p>
+<p><img src="http://jthomas.github.com/jthomas/images/ow_workshop.png" alt="overview" /></p>
 
 <p>The list of exercises will be displayed, along with current completion progress. Using the arrow keys (<kbd>↑</kbd><kbd>↓</kbd>) to navigate the menu, press <kbd>RETURN</kbd> to open an exercise.</p>
 
 <p>On selecting an exercise, the problem challenge will be printed to the terminal.</p>
 
-<p><img src="http://jamesthom.as/images/challenge.png" alt="exercise" /></p>
+<p><img src="http://jthomas.github.com/jthomas/images/challenge.png" alt="exercise" /></p>
 
 <p>Each exercise comes with a documentation page which explains the concepts behind the challenge. Use the following command to display the exercise documentation in the terminal.</p>
 
@@ -4807,7 +5547,7 @@
 
 <p>If their solution is correct, that task is marked as completed and the utility returns to the list of exercises.  Developers can continue working through the exercises until they have completed them all.</p>
 
-<p><img src="http://jamesthom.as/images/verify.png" alt="verify" /></p>
+<p><img src="http://jthomas.github.com/jthomas/images/verify.png" alt="verify" /></p>
 
 <h2>feedback</h2>
 
@@ -4826,9 +5566,9 @@
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk and Node-RED]]></title>
-    <link href="http://jamesthom.as/blog/2016/09/26/node-red-and-openwhisk/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/09/26/node-red-and-openwhisk/"/>
     <updated>2016-09-26T15:16:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/09/26/node-red-and-openwhisk</id>
+    <id>http://jthomas.github.com/jthomas/blog/2016/09/26/node-red-and-openwhisk</id>
     <content type="html"><![CDATA[<p><a href="https://www.npmjs.com/package/node-red-node-openwhisk">Node-RED nodes for OpenWhisk</a> were initially released earlier this year. The nodes allowed users to manually invoke existing Actions and Triggers. This month, a <a href="https://github.com/node-red/node-red-node-openwhisk/releases/tag/0.3.0">new version of the package</a> has been released providing a huge improvement in the functionality…</p>
 
 <h3>features</h3>
@@ -4847,7 +5587,7 @@
 
 <p>This video shows the updated nodes being used to define a new OpenWhisk Action, invoking it in response to a message from an inject node and then making modifications to the source code.</p>
 
-<p><img src="http://jamesthom.as/images/NR_and_OW.gif"></p>
+<p><img src="http://jthomas.github.com/jthomas/images/NR_and_OW.gif"></p>
 
 <h3>interested?</h3>
 
@@ -4857,12 +5597,12 @@
   
   <entry>
     <title type="html"><![CDATA[Microservices Without Servers]]></title>
-    <link href="http://jamesthom.as/blog/2016/09/08/microservices-without-servers/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/09/08/microservices-without-servers/"/>
     <updated>2016-09-08T16:17:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/09/08/microservices-without-servers</id>
+    <id>http://jthomas.github.com/jthomas/blog/2016/09/08/microservices-without-servers</id>
     <content type="html"><![CDATA[<p>…is the title of my presentation about building serverless applications using OpenWhisk.</p>
 
-<script async class="speakerdeck-embed" data-id="387717983473473bb9eed49d50e6e279" data-ratio="1.77777777777778" src="http://jamesthom.as//speakerdeck.com/assets/embed.js"></script>
+<script async class="speakerdeck-embed" data-id="387717983473473bb9eed49d50e6e279" data-ratio="1.77777777777778" src="http://jthomas.github.com/jthomas//speakerdeck.com/assets/embed.js"></script>
 
 
 <h2>Abstract</h2>
@@ -4889,9 +5629,9 @@
   
   <entry>
     <title type="html"><![CDATA[Node-RED Docker Images]]></title>
-    <link href="http://jamesthom.as/blog/2016/07/27/node-red-docker-images/"/>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/07/27/node-red-docker-images/"/>
     <updated>2016-07-27T15:24:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/07/27/node-red-docker-images</id>
+    <id>http://jthomas.github.com/jthomas/blog/2016/07/27/node-red-docker-images</id>
     <content type="html"><![CDATA[<p>This week, I&#8217;ve been helping create and publish official <a href="https://www.docker.com/">Docker</a> images for the
 <a href="http://nodered.org/">Node-RED</a> project. Users can start Node-RED instances from these images using the following command.</p>
 
@@ -5088,389 +5828,6 @@ published with the <em>rpi</em> tag, means users can now start Node-RED on the R
 </pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:rpi
 </span></code></pre></td></tr></table></div></figure>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Serverless Go Actions]]></title>
-    <link href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/"/>
-    <updated>2016-06-21T17:01:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2016/06/21/serverless-go-actions</id>
-    <content type="html"><![CDATA[<p><strong>There&#8217;s now a better way to do this! See here: <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/</a></strong></p>
-
-<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless
-platform, provides the ability to invoke custom
-<a href="https://www.docker.com/">Docker</a> containers as serverless functions.</p>
-
-<p>Developers can create new
-<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">Actions</a>,
-referencing public images on <a href="https://dockerhub.com">Dockerhub</a>. OpenWhisk
-manages creating and executing containers using these images per invocation
-request.</p>
-
-<p>Using this feature, developers can write serverless functions using the
-<a href="https://golang.org/">Go language</a>. Compiled Go language binaries are embedded
-within custom Docker images and pushed into the platform.</p>
-
-<p><strong>So, how do we start?</strong></p>
-
-<p><em>This blog post will explain how to get your Go language functions running as
-&#8220;serverless functions&#8221; on OpenWhisk. If you&#8217;re impatient to get to the code,
-this <a href="https://github.com/jthomas/openwhisk_go_action">repository</a> contains the
-examples for everything discussed below.</em></p>
-
-<p>OpenWhisk helps developers create custom Actions using Docker through an SDK&#8230;</p>
-
-<h2>OpenWhisk Docker SDK</h2>
-
-<p>Using the
-<a href="https://new-console.ng.bluemix.net/docs/openwhisk/index.html"><em>wsk</em> command-line utility</a>,
-developers can install the
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> into the
-current directory.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk sdk install docker</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The SDK provides the <a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">source for a custom Docker image</a>, which executes a custom
-binary in response to invocation requests. The default SDK copies the
-executable file, located at the <em>client/action</em>, into the image during the
-build process. Users build the image locally before pushing this to Dockerhub.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker build -t &lt;dockerhub_user&gt;/docker_action .
-</span><span class='line'><span class="nv">$ </span>docker push &lt;dockerhub_user&gt;/docker_action
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using the command-line utility, users can then create a new Action referencing
-this public Docker image. When this Action is invoked, the platform will spin
-up a new container from this custom image.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create docker_action --docker &lt;dockerhub_user&gt;/docker_action
-</span><span class='line'><span class="nv">$ </span>wsk action invoke --blocking --result docker_action
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>OpenWhisk Docker Action </h2>
-
-<p>OpenWhisk SDK&#8217;s Docker image uses a Node.js
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker/server">application</a>
-to handle the JSON invocation request from the platform and spawns a process to
-execute the binary. Invocation parameters are passed as a JSON string through a
-command-line argument to the binary. The executable must write the JSON
-response to stdout, the handler will return this to the platform.</p>
-
-<p>Containers used to run OpenWhisk Actions must be expose a HTTP API on port 8080
-with two paths, <em>/init</em> and <em>/run</em>. The platform sends HTTP POST requests to
-these paths to initialise the Action and schedule invocations.</p>
-
-<p>The <em>/init</em> path is used to provide the Action source for languages which
-support runtime evaluation. <strong>User-provided Docker images do not need to
-implement this method, other than returning a non-error HTTP response.</strong></p>
-
-<p>The <em>/run</em> path is called by the platform for each invocation request.
-Parameters for the invocation are passed as the <em>value</em> property of the JSON
-request body. Any non-empty JSON response will be interpreted as the invocation
-result.</p>
-
-<h2>Go Actions using the Docker SDK</h2>
-
-<p>Using Go binaries with the Docker SDK requires the developer to cross-compile
-the source for the platform architecture and copy the binary to the
-<em>client/action</em> path.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nb">export </span><span class="nv">GOARCH</span><span class="o">=</span>386
-</span><span class='line'><span class="nb">export </span><span class="nv">GOOS</span><span class="o">=</span>linux
-</span><span class='line'>go build -o action
-</span><span class='line'>mv action client/action
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The Go code must parse the invocation parameters as a JSON string from the
-command-line argument. Data written to <em>stdout</em> will be parsed as JSON and
-returned as the Action response.</p>
-
-<p>This sample Go source demonstrates using this method to implement a &#8220;reverse
-string&#8221; Action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-<span class='line-number'>44</span>
-<span class='line-number'>45</span>
-<span class='line-number'>46</span>
-<span class='line-number'>47</span>
-<span class='line-number'>48</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;os&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;encoding/json&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;log&quot;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Params</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">Payload</span> <span class="kt">string</span> <span class="s">`json:&quot;payload&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Result</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">Reversed</span> <span class="kt">string</span> <span class="s">`json:&quot;reversed&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// extract invocation parameters, passed as JSON string argument on command-line.</span>
-</span><span class='line'><span class="kd">func</span> <span class="nx">params</span><span class="p">()</span> <span class="nx">Params</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">params</span> <span class="nx">Params</span>
-</span><span class='line'>  <span class="nx">source</span> <span class="o">:=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">Args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>  <span class="nx">buf</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">source</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">if</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">(</span><span class="nx">buf</span><span class="p">,</span> <span class="o">&amp;</span><span class="nx">params</span><span class="p">);</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">params</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// convert struct back to JSON for response</span>
-</span><span class='line'><span class="kd">func</span> <span class="nx">return_result</span><span class="p">(</span><span class="nx">result</span> <span class="nx">Result</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">buf</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">Fatal</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="nx">os</span><span class="p">.</span><span class="nx">Stdout</span><span class="p">.</span><span class="nx">Write</span><span class="p">(</span><span class="nx">buf</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">input</span> <span class="o">:=</span> <span class="nx">params</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="c1">// reverse the string passed from invocation parameters</span>
-</span><span class='line'>  <span class="nx">chars</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">rune</span><span class="p">(</span><span class="nx">input</span><span class="p">.</span><span class="nx">Payload</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">for</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">j</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="p">=</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="nx">result</span> <span class="o">:=</span> <span class="nx">Result</span><span class="p">{</span>
-</span><span class='line'>    <span class="nx">Reversed</span><span class="p">:</span> <span class="nb">string</span><span class="p">(</span><span class="nx">chars</span><span class="p">),</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="nx">return_result</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Docker SDK Base Image</h2>
-
-<p>Building a base image from the OpenWhisk Docker SDK and publishing on Dockerhub
-simplifies the process of building a Docker-based Action. Developers can now
-use the following image
-(<a href="https://hub.docker.com/r/jamesthomas/openwhisk_docker_action/">jamesthomas/openwhisk_docker_action</a>),
-without having to install the SDK locally.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">FROM</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">openwhisk_docker_action</span>
-</span><span class='line'><span class="nx">COPY</span> <span class="nx">action</span> <span class="o">/</span><span class="nx">blackbox</span><span class="o">/</span><span class="nx">action</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This base image includes the Node.js handler to manage the platform HTTP
-requests. An executable file at <em>/blackbox/action</em> will be called for each
-invocation. JSON parameters and responses are still passed using command-line
-arguments and stdout.</p>
-
-<h2>Custom Go Handler </h2>
-
-<p>Using the Docker SDK for OpenWhisk relies on a Node.js application to handle
-the platform HTTP requests, spawning a process to execute the user binary file.</p>
-
-<p>Implementing the HTTP API, described above, in Go would allow us to remove the
-Node.js handler from the image. Compiling the Go Action source with the HTTP
-API handler into a single binary and using an Alpine Linux base image will
-dramatically reduce the image size.</p>
-
-<p>This should improve execution performance, by removing the Node.js VM process,
-and cold start-up time, through having a smaller Docker image.</p>
-
-<p><strong>Using this Go package, <a href="https://github.com/jthomas/ow">jthomas/ow</a>, users can
-automate the process of creating Go-based Actions.</strong></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="k">go</span> <span class="nx">get</span> <span class="nx">jthomas</span><span class="o">/</span><span class="nx">ow</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>The package provides a method for registering Action callbacks and implements
-the HTTP endpoints for handling platform requests.</em></p>
-
-<p><em>Invocation parameters are passed using a function parameter, rather than a raw
-JSON string. Returned interface values will be automatically serialised to JSON
-as the Action response.</em></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">openwhisk</span><span class="p">.</span><span class="nx">RegisterAction</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">value</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">)</span> <span class="p">(</span><span class="kd">interface</span><span class="p">{},</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>   <span class="o">...</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Re-writing the &#8220;reverse string&#8221; Action above to use this package is shown here.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="p">(</span>
-</span><span class='line'>    <span class="s">&quot;encoding/json&quot;</span>
-</span><span class='line'>    <span class="s">&quot;github.com/jthomas/ow&quot;</span>
-</span><span class='line'><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Params</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">Payload</span> <span class="kt">string</span> <span class="s">`json:&quot;payload&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">type</span> <span class="nx">Result</span> <span class="kd">struct</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">Reversed</span> <span class="kt">string</span> <span class="s">`json:&quot;reversed&quot;`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">reverse_string</span><span class="p">(</span><span class="nx">to_reverse</span> <span class="kt">string</span><span class="p">)</span> <span class="kt">string</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">chars</span> <span class="o">:=</span> <span class="p">[]</span><span class="nb">rune</span><span class="p">(</span><span class="nx">to_reverse</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">for</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">j</span><span class="p">;</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">j</span> <span class="p">=</span> <span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nx">j</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">]</span> <span class="p">=</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">j</span><span class="p">],</span> <span class="nx">chars</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>    <span class="k">return</span> <span class="nb">string</span><span class="p">(</span><span class="nx">chars</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">ow</span><span class="p">.</span><span class="nx">RegisterAction</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="nx">value</span> <span class="nx">json</span><span class="p">.</span><span class="nx">RawMessage</span><span class="p">)</span> <span class="p">(</span><span class="kd">interface</span><span class="p">{},</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="kd">var</span> <span class="nx">params</span> <span class="nx">Params</span>
-</span><span class='line'>        <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="o">&amp;</span><span class="nx">params</span><span class="p">)</span>
-</span><span class='line'>        <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
-</span><span class='line'>            <span class="k">return</span> <span class="kc">nil</span><span class="p">,</span> <span class="nx">err</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>        <span class="k">return</span> <span class="nx">Result</span><span class="p">{</span><span class="nx">Reversed</span><span class="p">:</span> <span class="nx">reverse_string</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">Payload</span><span class="p">)},</span> <span class="kc">nil</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Cross-compiling the Action source, bundling this package, creates a single
-lightweight binary.</p>
-
-<p>Embedding this file within a Docker image, using a minimal base image, creates
-a tiny image (&lt;10MB). Containers from these images only execute a single
-process to handle both the HTTP requests and running the Action source.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="nx">FROM</span> <span class="nx">alpine</span><span class="p">:</span><span class="mf">3.4</span>
-</span><span class='line'><span class="nx">COPY</span> <span class="nx">action</span> <span class="o">/</span><span class="nx">action</span>
-</span><span class='line'><span class="nx">EXPOSE</span> <span class="mi">8080</span>
-</span><span class='line'><span class="nx">CMD</span> <span class="p">[</span><span class="s">&quot;./action&quot;</span><span class="p">]</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Pushing the local image to Dockerhub and then using it to create an Action
-follows the same instructions above.</p>
-
-<h2>Conclusion</h2>
-
-<p>Running OpenWhisk Actions from user-provided Docker images allows developers to
-execute &#8220;serverless functions&#8221; using any language. This is a fantastic feature
-not currently supported by many of the other serverless providers.</p>
-
-<p>OpenWhisk provides an
-<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> letting
-users build a local Docker image which executes their Action and handles the
-HTTP requests from the platform. Using this with <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/docker_sdk">Go-based Actions</a> requires us
-to cross-compile our binary for the platform and handle passing JSON through
-command-line arguments and stdout.</p>
-
-<p>Re-writing the HTTP handler <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/go_handler">natively in Go</a>
-means the Docker image can contain and execute a single binary for both tasks.
-Using this <a href="https://github.com/jthomas/ow">Go package</a> provides an interface for registering Actions and handles
-the HTTP requests automatically.</p>
-
-<p><strong>This <a href="https://github.com/jthomas/openwhisk_go_action">project</a> contains
-examples for the &#8220;reverse string&#8221; Action using both the Docker SDK and Go-based
-handler detailed above.</strong></p>
 ]]></content>
   </entry>
   
