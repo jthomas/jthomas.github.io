@@ -1,0 +1,738 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: mvc | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/mvc/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-01-11T16:17:08+00:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Part 3: Controllers]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/05/26/dojomvc-controllers/"/>
+    <updated>2012-05-26T00:00:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/05/26/dojomvc-controllers</id>
+    <content type="html"><![CDATA[<p>In the final article of this series, we'll be looking at creating an MVC Controller for our sample todo
+application.</p>
+
+<p>We've already shown how to <a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">define our application model</a>,
+creating a domain-specific todo model
+backed by localStorage, along with <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">our view template</a>,
+using widget templating to render our tasks into the page.</p>
+
+<p><blockquote><p>The controller translates user input into operations on the model.</p><footer><strong>Model View Controller Pattern</strong> <cite><a href='http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller'>Wikipedia</a></cite></footer></blockquote></p>
+
+<p>For our application, we need to handle the user actions to allow adding, removing and completing tasks. We already have a binding between a task's completed state
+and our View, using the <a href="https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/form/CheckBox.js">todo.form.CheckBox</a>, allowing changes to flow back to the model without explicitly needing logic in the controller.</p>
+
+<p>Let's look more closely at the remaining tasks...</p>
+
+<h2>Adding Tasks</h2>
+
+<p>The View template, discussed in the <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">second article</a>,
+renders the HTML elements needed to allow the user to any new tasks. Once a user has finished
+typing in their new task, signalled by pressing the enter key, we need to retrieve their text and add it to the model.</p>
+
+<p>Using Dojo's <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html#dijit-templatedmixin">declarative programming model</a>,
+the View template includes the custom element attribute needed to connect the "onkeypress" DOM event to an event handler within our controller. When our
+widget is rendered in the page, by the Dojo parser, those connections are created automatically.</p>
+
+<p><code>html Declarative event handling https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.html#L4 Source Link
+&lt;input id="new-todo" data-dojo-attach-event="onkeypress:onKeyPress"
+ placeholder="What needs to be done?" type="text" autofocus&gt;
+</code></p>
+
+<p>Inside our controller, each time an event is fired, the following function is executed:</p>
+
+<p>``` javascript Controller event handler https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150 Source Link
+onKeyPress: function (event) {</p>
+
+<pre><code>if (event.keyCode !== keys.ENTER) return;
+
+this.addToModel(event.target.value, false);
+event.target.value = "";
+dojo_event.stop(event);
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Unless the user has pressed the enter key, we ignore the normal user input event. Once this happens, we extract the new
+task text from the event argument and call the following convenience function to create the new task in the model.</p>
+
+<p>``` javascript New model task https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150 Source Link
+addToModel: function (content, isDone) {</p>
+
+<pre><code>var insert = mvc.newStatefulModel({
+    data: {todo_text: content, isDone: isDone}
+});
+
+this.model.todos.add(this.model.todos.length, insert);
+</code></pre>
+
+<p>}
+```</p>
+
+<p>This function creates a new Model node, containing the task text and its
+completed state, adding the result to the list of tasks. When inserting new
+entries into the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/StatefulModel.html">DojoX MVC Model</a> array, the insertion position must be
+specified explicitly. By using the current length of the list as the position,
+we always add new items at the end.</p>
+
+<p>Once the model has been modified, the View will automatically update to display the new item. We don't need to manually
+update the rendered HTML template or even trigger re-loading of the View. By using widgets from the DojoX MVC package, changes to
+the Model are always reflected in our View in real-time.</p>
+
+<h2>Removing Tasks</h2>
+
+<p>Removing tasks begins with the user clicking the destroy icon, displayed on the right-hand side of each task. Once this happens, the Controller
+needs to trap the event, figure out which task to remove and update the Model. As the tasks' list
+can be updated during the application, having an individual event connection for each task would require handling the setting up and tearing down
+every time the list changed.</p>
+
+<p>Instead, we can use "Event Delegation", introduced by the new Dojo event module, <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/on.html">dojo/on</a>,
+to listen for any remove events with a single connection.</p>
+
+<p>Once the widget has been rendered, signalled by the <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html#lifecycle">"postCreate"</a>
+function being called, we start listening for all click events on the destroy icons. Any events captured are passed through to our event hander, "onRemove", to delete the associated task from the Model.</p>
+
+<p>``` javascript Event Delegation https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L61-64 Source Link
+postCreate: function () {</p>
+
+<pre><code>on(this.domNode, ".destroy:click", lang.hitch(this, "onRemove"));
+this.onItemStatusUpdate();
+</code></pre>
+
+<p>},</p>
+
+<p>onRemove: function (event) {</p>
+
+<pre><code>this.model.todos.remove(domAttr.get(event.target, "data-model-id"));
+</code></pre>
+
+<p>}
+```</p>
+
+<p>With one event handler for all the remove events, the Controller won't directly know which task within the Model the user
+has chosen to remove. To overcome this, the repeating View template for the task uses a HTML5 data attribute to store the unique task index
+on the rendered DOM element for the remove icon.</p>
+
+<p>During rendering of a <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">DojoX MVC Repeat widget</a>,
+the "index" attribute on the instance refers to the current
+position within the bound list. This index value can then easily be retrieved from the event generated and used to remove the correct task from the Model.</p>
+
+<p><code>html
+&lt;button class="destroy" data-model-id="#{this.index}"&gt;
+&lt;/button&gt;
+</code></p>
+
+<p>Once again, when the Model is changed, the View automatically updates. There's no action needed from the Controller in modifying the rendering HTML template.</p>
+
+<h2>Clearing Completed Tasks</h2>
+
+<p>Once a user has completed a series of tasks, they will eventually want to remove them. Rather than having to
+remove each task individually, the application provides the ability to clear all completed tasks from the list.</p>
+
+<p>Again, we've used declarative programming in the View template to connect our event hander, removeCompletedItems, to the DOM event
+triggered when the user clicks the "Clear Completed" button.</p>
+
+<p><code>html
+&lt;button id="clear-completed" data-dojo-attach-event="onclick:removeCompletedItems"&gt;
+&lt;/button&gt;
+</code></p>
+
+<p>When our handler is fired, we need to iterate over the existing tasks'
+list, removing any with the correct completed state. Removing items from the Model will left-shift the remaining items, so we need to
+take care to iterate correctly over the remaining items.</p>
+
+<p>``` javascript Clearing Completed Items https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L80-97 Source Link
+removeCompletedItems: function () {</p>
+
+<pre><code>var len = this.model.todos.length, idx = 0;
+
+while (idx &lt; len) {
+    if (this.model.todos[idx].isDone.value) {
+        this.model.todos.remove(idx);
+        len--;
+        continue;
+    }
+    idx++;
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>When the event handler has finished executing, the View will be updated to clear out those completed tasks.</p>
+
+<h2>Conclusion</h2>
+
+<p>In the final part of this series, we've looked at how to define an MVC
+Controller, responsible for mediating between user actions and model
+operations. Using declarative Dojo programming in our View template, we set up
+bindings between DOM events and event handlers in our Controller.</p>
+
+<p>When user
+actions triggered those events, our handlers were responsible for adding and
+removing todo tasks from the MVC Model class, StatefulModel, we've been using
+to store our application data. These changes then flowed back to the View,
+which automatically re-renders when it detects an updated Model.</p>
+
+<p>Dojo's new MVC package, dojox.mvc, offers great capabilities for building dynamic
+JavaScript applications using the MVC programming pattern. Although it's still maturing, hopefully this series
+has been able to demonstrate that for most applications it's more than capable of providing the features
+developers expect in a modern JavaScript MVC library.</p>
+
+<p>If you have any further questions, feel free to leave comments below, send me an email or a tweet. The source
+code for the application is available on Github, allowing you to run the examples above and compare it against other frameworks.</p>
+
+<h3>What's Next?</h3>
+
+<p>This series of articles was based upon the version of DojoX MVC present in the 1.7.0 release of The Dojo Toolkit. My experiences, good and bad,
+building this application were <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-January/026434.html">fed back into the community</a> to
+help improve the package in the future. With the upcoming 1.8 release of The Dojo Toolkit,
+there has been some <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-February/026811.html">major improvements</a> to the MVC package, resolving many of the issues I raised.</p>
+
+<p>When that version of the toolkit is available, I'll re-visit the application and show how those changes would make writing this application even simpler.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Part 2: Views]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/04/13/dojomvc-views/"/>
+    <updated>2012-04-13T00:00:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/04/13/dojomvc-views</id>
+    <content type="html"><![CDATA[<p>In the previous article, we looked at defining our application Model using the
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">Dojo MVC</a> package. The
+model contained a list of todo tasks, each with a description and finished
+state, along with composite values representing the total completed and
+remaining task counts.</p>
+
+<p>Dojo's MVC package provides a series of widgets (<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">Group</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">Output</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">Repeat</a>,
+<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Generate.html">Generate</a>) that assist the rendering of model attributes in our View, which
+automatically update when model values change. We're going to look at using
+these widgets to build our TodoMVC Application View...</p>
+
+<h2>Defining a View template</h2>
+
+<p>For a long time, Dojo has had excellent support for creating widgets with HTML
+templates using modules from the Dijit package. Defining a new widget simply
+requires inheriting from a base class (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html">_WidgetBase</a>), adding in mixins for
+template support (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html">_TemplatedMixin</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetsInTemplateMixin.html">_WidgetsInTemplateMixin</a>) and providing
+a HTML template file that will be automatically rendered in the page by the Dojo
+parser. In our application, we've created a new templated widget <a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo">todo.app</a>,
+present in <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js">app.js</a> along with a template file <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html">app.html</a>.</p>
+
+<p>The basic outline of this module is shown below.</p>
+
+<p>``` javascript Templated TodoMVC Widget https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js Source Link
+define(["dojo/_base/declare",</p>
+
+<pre><code>    // Parent classes
+    "dijit/_WidgetBase", "dijit/_TemplatedMixin", "dijit/_WidgetsInTemplateMixin",
+    // Widget template
+    "dojo/text!./app.html",
+    ...
+function(declare, _WidgetBase, _TemplatedMixin, _WidgetsInTemplateMixin, template) {
+    return declare("todo.app", [_WidgetBase, _TemplatedMixin, _WidgetsInTemplateMixin], {
+        templateString: template,
+    });
+}
+</code></pre>
+
+<p>);
+```</p>
+
+<p>Defining our application as a templated widget lets us annotate HTML elements,
+using the data-dojo-type attribute, in the application page to be automatically
+instantiated into corresponding widgets at runtime by the <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/parser.html">Dojo parser</a>. When this
+occurs, the view template will replace the annotated HTML element in the page
+and any child widgets in the view will be recursively created.</p>
+
+<p>The HTML snippet below shows how we load Dojo, the parser, our application and turn on the automatic parsing on load to render
+our Todo widget within the page.</p>
+
+<p>``` html Loading TodoMVC App Within The Page https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/index.html Source Link</p>
+
+<script data-dojo-config="async:true, parseOnLoad:true, paths:{'todo':'../../todo'}, 
+    deps:['dojo/parser', 'todo/app']" src="./js/dtk/dojo/dojo.js"></script>
+
+
+<p>...</p>
+
+<div class="content" data-dojo-type="todo.app"></div>
+
+
+<p>```</p>
+
+<p>This templated widget is rendered within the page and represents our view. The view has three main
+tasks:</p>
+
+<p>** Display the list of todo items
+* Allow a user to enter more tasks
+* Show statistics for the number of completed and remaining tasks.</p>
+
+<p>We'll look at each individually to see how we implemented those features using
+the Dojo MVC package.</p>
+
+<h2>Displaying Todo Tasks</h2>
+
+<p>We've used the &lt;ul&gt; element to represent the container for our todo tasks, each task being an &lt;li&gt; element
+with the same HTML template populated with different values. The content for each task and the number of tasks
+needs to be dynamically generated based upon the values in the model.</p>
+
+<p>Dojo MVC provides a widget for this pattern, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>,
+letting the user specify an array in the model for binding to with a HTML
+template to be repeated for each element.</p>
+
+<p>The HTML template for the repeating todo tasks is shown below.</p>
+
+<p>``` html Rendering Todo Tasks https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L7-20 Source Link</p>
+
+<ul class="todo-list" data-dojo-attach-point="todo_list" data-dojo-type="dojox.mvc.Repeat" data-dojo-props="ref: this.model.todos, exprchar: '#'">
+    <li data-dojo-type="dojox.mvc.Group" data-dojo-props="ref: '#{this.index}'">
+        <div class="todo">
+            <input class="check" data-dojo-type="todo.form.CheckBox" data-dojo-props='ref: "isDone"'>
+            <div class="todo-content dijitInline" data-dojo-type="dijit.InlineEditBox"
+                data-dojo-props='ref: "todo_text", editor:"dijit.form.TextBox", autosave:true, width:"420px", style:"width:420px;"'></div>
+            <span class="todo-destroy" data-model-id="#{this.index}">
+            </span>
+        </div>
+    </li>
+</ul>
+
+
+<p>```</p>
+
+<h3>Repeating View Templates</h3>
+
+<p>In the template, the containing &lt;ul&gt; element is registered as the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>
+widget using the data-dojo-type attribute. Using the data-dojo-props
+attribute, we can pass widget parameters to the newly created widget when it's instantiated by the parser.</p>
+
+<p>The first parameter, ref, provides a variable name
+for the model attribute to bind to. We're using the model available on the widget instance, "this.model", with the "todos" attribute, which contains
+an array of task objects. The second parameter, exprchar, is the character to use for substitution expressions in declarative child widget attributes. By default,
+this value is the '$' character. As we're using the declarative programming style, these expressions would be confused with normal template value substitutions and we
+use the '#' character instead.</p>
+
+<p>Under the &lt;ul&gt; element, we have the HTML template for each todo task, represented by the &lt;li&gt; element. Here we are using the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">dojox.mvc.Group</a> widget, which provides
+the parent model context for any child widgets which use substituion expressions and references to access model values. Registering the parent context as an individual
+item within the model "todos" array is achieved by using the "#{this.index}" reference, this will be automatically incremented by the parent Repeat widget as it iterates
+through the model array.</p>
+
+<h3>Binding UI Controls</h3>
+
+<p>Each todo task has three UI controls, the task text (either as a read-only
+value or an inline edit box for modification), a checkbox representing the
+completed state of the widget and an icon to allow the removal of the task. Our
+chosen UI controls (<a href="http://dojotoolkit.org/reference-guide/dijit/InlineEditBox.html">InlineEditBox</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/form/CheckBox.html">CheckBox</a>) are bound to model values by
+providing a "ref" attribute with the attribute name. These widgets will
+automatically be populated with the current model values during rendering.</p>
+
+<p>This binding between the view and the model is bi-directional, changes to the
+model will automatically propagate to the view widgets and changes to the view
+widgets will flow back to the model.</p>
+
+<p>When a user wants to remove a task, the "click" event generated by the icon in the view
+will be intercepted by the Controller. Allowing the controller to determine which todo task
+to remove from the model is provided by setting the current item index as a custom parameter on the HTML
+element. We will be looking at the code to perform the removal in a later article.</p>
+
+<h2>Showing Completed &amp; Remaining Counts</h2>
+
+<p>Along with the todo tasks, we need to display stats for the number of completed
+and remaining tasks. These attributes are composite model values, being
+automatically calculated from other model attributes. The displayed values need
+to be updated live as the other model attributes change but won't be directly
+modifable by the user. The code snippet below shows the HTML template in the
+view for this component.</p>
+
+<p>``` html Showing Task Stats https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L22-33 Source Link</p>
+
+<div class="todo-stats" data-dojo-attach-point="todo_stats">
+    <span class="todo-count">
+        <span data-dojo-type="dojox.mvc.Output" data-dojo-props="ref: this.model.incomplete" class="number"></span>
+        <span class="word">items</span> left.
+    </span>
+    <span class="todo-clear">
+        <a href="#" data-dojo-attach-event="onclick:removeCompletedItems">
+            Clear 
+            <span class="number-done" data-dojo-type="dojox.mvc.Output" data-dojo-props="ref: this.model.complete" ></span>
+            completed items
+        </a>
+    </span>
+</div>
+
+
+<p>```</p>
+
+<p>We've used simple HTML elements to display the values, rather than Dijit widgets, due to the
+lack of user interaction needed. Binding a HTML element to a Model property can be achieved using the
+<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">dojox.mvc.Output</a> widget.
+Again, we use the "ref" attribute to specify which model property the "innerHTML"
+value on the HTML element should be linked with.</p>
+
+<h2>Adding New Tasks</h2>
+
+<p>Finally, we need to let the user add new tasks. Using a normal HTML input
+field, we connect the "onkeypress" event to an internal event handler to allow
+the app to access the new tasks.</p>
+
+<p>``` html Adding New Tasks https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L2-5 Source Link</p>
+
+<div class="create-todo">
+    <input class="new-todo" data-dojo-attach-event="onkeypress:onKeyPress" placeholder="What needs to be done?" type="text"/>
+    <span class="ui-tooltip-top" style="display:none;">Press Enter to save this task</span>
+</div>
+
+
+<p>```</p>
+
+<p>The application controller is responsible for
+handling the generated events, retrieving the new tasks and adding them into
+the model. We'll be looking at exactly how this works in the next article. When
+new tasks are added, the task list in the view will be automatically
+re-rendered.</p>
+
+<h2>Conclusion</h2>
+
+<p>Following on from the first article, we've now looked at how the View component
+of our MVC application works. Using Dojo MVC widgets, we've been able to
+bind simple HTML elements and full Dijit widgets to show model values. This
+dynamic binding allows Model updates to automatically flow through to the View controls.
+Secondly, any user modified values automatically update the Model.</p>
+
+<p>The dojox.mvc.Output widget was used to display Model attributes are
+read-only values in normal HTML elements. We also used the dojox.mvc.Repeat
+and dojox.mvc.Group widgets to generate a repeated view template for the
+todo tasks. Connecting user events from the view to the Controller used Dojo's
+templated widget mixins.</p>
+
+<p>In the final article, we'll look at the last component the MVC pattern,
+Controllers. This includes adding new tasks to the Model, removing individual
+and completed tasks along with controlling the view components being displayed.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Part 1: Models]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/02/26/dojomvc-models/"/>
+    <updated>2012-02-26T10:33:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/02/26/dojomvc-models</id>
+    <content type="html"><![CDATA[<p>In this first article, we going to look at using <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> to define our
+application Models, showing the use of the new <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a> class. Later in
+the series, we'll look at binding our defined Model to a View template, rendering
+the HTML output and hooking into user events.</p>
+
+<h2>Introducing StatefulModels</h2>
+
+<p><a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> uses a specific class for representing Models in the MVC pattern,
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a>. By using or extending this class, applications have access to a
+native JavaScript data model that integrates with all the classes under the MVC
+package. StatefulModel extends the <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html">Dojo Stateful</a> class, introduced in Dojo 1.6
+to provide a way to monitor widget property changes, to support more complex
+behaviour, such as binding to and updating View component, validating of model
+values and much more.</p>
+
+<p>StatefulModels are instantiated from a plain JavaScript object, representing the initial data structure
+for the model, or even from a Dojo Store (with support for both synchronous and asynchronous results). To assist the conversion of complex JavaScript objects, a factory function is provided
+that will traverse the source data, recursively converting all data properties to use the
+StatefulModel class.</p>
+
+<p>Further details on the StatefulModel class can be found <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">here</a>.</p>
+
+<h2>Defining a Model</h2>
+
+<p>Reviewing the <a href="https://github.com/addyosmani/todomvc/wiki/Todo-Application-Specification">TodoMVC specification</a>,
+our application Model needs to contain a list of todo tasks, each one
+containing a description and that task's completed state. The task's
+description will be provided by the user and can later be modified. As the task
+is completed, the task's internal state must be updated. Representing the todo
+tasks as an array of objects will allow binding to a <a href="http://livedocs.dojotoolkit.org/dojox/mvc/Repeat">Repeat View</a>, having a HTML template
+rendered for each task in the Model.</p>
+
+<p>Looking at the application, there's two additional properties in the View that are derived from
+other Model attributes, counts for the completed and remaining tasks. To allow automatic binding of these
+values into our View template, we're going to represent these directly in our model. Later on, we'll
+set up binding between Model values to allow those composite values to be calculated automatically.</p>
+
+<p>``` javascript
+var data = {</p>
+
+<pre><code>todos: [
+    {
+        text: "Must write this blog article"
+        isDone: false
+    }
+],
+remaining: 0,
+complete: 0
+</code></pre>
+
+<p>}</p>
+
+<p>var model = dojox.mvc.newStatefulModel({data: data})
+```</p>
+
+<p>Once we've defined our Model as a native JavaScript object, we can use the
+StatefulModel factory to perform the conversion to StatefulModel classes, as
+shown in the sample above. The result of this function is our application
+Model, which we can then bind to our View and interact with via the Controller.</p>
+
+<p>The StatefulModel class supports any native JavaScript type, we're using
+strings for the description, booleans for the completed state and numbers for
+the computed totals.</p>
+
+<h2>Binding to Model changes</h2>
+
+<p>Once you've defined a model, you'll want to be notified of any attribute changes.
+Using Dojo Stateful's <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html#watch">"watch"</a> method, we can register a function to be executed
+whenever that model's attributes are modified using the getter &amp; setter pattern.</p>
+
+<p><code>javascript
+model.watch("attribute", function (attribute, new_value, old_value) {
+});
+</code></p>
+
+<p>The <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Bind.html">dojox.mvc.Bind</a> module extends this functionality to cover two common patterns,
+listening to changes on a series of attributes and binding model properties together.
+The "bindInputs" function allows an array of model attributes to be passed in, executing a callback
+whenever any of the attributes change.</p>
+
+<p><code>javascript
+mvc.bindInputs([model.first_attr, model.second_attr, ...], function (attribute, new_value, old_value) {
+});
+</code></p>
+
+<p>More usefully, the "bind" function sets up a one way coupling between a source and destination model attribute.
+Whenever the source attribute value changes, the destination model attribute will be automatically updated with
+the same result. If you want to transform the source value before it's updated in the destination model, an optional
+function callback can be passed in. This will be called with the new attribute
+value and the return value used to update the destination model.</p>
+
+<p>``` javascript
+mvc.bind(source_model, "attr", dest_model, "attr", function (attribute, new_value, old_value) {</p>
+
+<pre><code>// Return transformed value to update dest_model with
+</code></pre>
+
+<p>});
+```</p>
+
+<h2>Creating composite model values</h2>
+
+<p>In the TodoMVC application our model has two attributes, "remaining" &amp; "completed", that need to computed
+automatically from other model values.</p>
+
+<p>Calculating the "completed" total is performed by looping through the "todos" array and counting
+the tasks which have an "isDone" attribute as true. Whenever a task's "isDone" value changes
+we want to re-calculate and update the "completed" total. Whenever a new task is added, we
+automatically bind the new item to our calculating function, which updates the composite value
+with the new count if any of our model tasks are modified.</p>
+
+<p>``` javascript
+bindIsDone: function (item) {</p>
+
+<pre><code>mvc.bindInputs([item.isDone], lang.hitch(this, "updateTotalItemsLeft"));
+</code></pre>
+
+<p>},</p>
+
+<p>updateTotalItemsLeft: function () {</p>
+
+<pre><code>this.remaining.set("value", array.filter(this.todos, function (item) {
+    return item &amp;&amp; !item.isDone.value;
+}).length);
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Once we have the "completed" total, the "remaining" attribute can be easily calculated
+if we know the total number of tasks. Using the "bind" method ensures this happens automatically,
+using optional transform function to create the new composite value.</p>
+
+<p>``` javascript
+mvc.bind(this.remaining, "value", this.complete, "value", lang.hitch(this, function (value) {</p>
+
+<pre><code>return this.todos.get("length") - value;
+</code></pre>
+
+<p>}));
+```</p>
+
+<h2>Extending StatefulModel</h2>
+
+<p>Defining our Model requires application code to declare the composite (completed, remaining) attributes, bind to changes on the
+current (and future) todo tasks and deal with persisting data to local storage. Rather than having this code in the application
+controller, we can extend the StatefulModel class to encapsulate all this
+logic. Using Dojo's <a href="http://dojotoolkit.org/reference-guide/dojo/declare.html">Declare</a> module, we can create a new
+class which extends StatefulModel, allowing us to set the initial model properties as class attributes rather than having to call
+the dojox.mvc.newStatefulModel() factory manually. The skeleton outline for our StatefulModel extension is shown below, we've removed
+some internal methods for brevity.</p>
+
+<p>``` javascript
+define(["dojo/_base/declare", "dojox/mvc/StatefulModel", "todo/store/LocalStorage", "dojox/mvc"],</p>
+
+<pre><code>function(declare, StatefulModel, LocalStorage, mvc) {
+
+return declare([StatefulModel], {
+    data: {
+        id: "local_storage_todos",
+        todos : [],
+        remaining: 0,
+        complete: 0
+    },
+
+    store: new LocalStorage(),
+
+    constructor: function () {
+        var data = this.store.get(this.data.id) || this.data;
+        this._createModel(data);
+
+        this.setUpModelBinding();
+        this.updateTotalItemsLeft();
+    },
+
+    setUpModelBinding: function () {
+        mvc.bind(this.incomplete, "value", this.complete, "value", lang.hitch(this, function (value) {
+            return this.todos.get("length") - value;
+        }));
+        array.forEach(this.todos, lang.hitch(this, "bindIsDone"));
+        this.todos.watch(lang.hitch(this, "onTodosModelChange"));
+    },
+
+    updateTotalItemsLeft: function () {
+        this.incomplete.set("value", array.filter(this.todos, function (item) {
+            return item &amp;&amp; !item.isDone.value;
+        }).length);
+    }
+});
+</code></pre>
+
+<p>);
+```</p>
+
+<p>The internal "data" and "store" attributes correspond to properties on the base
+StatefulModel class. StatefulModel's constructor will automatically transform raw
+JavaScript objects, set via the "data" property, into the corresponding
+StatefulModels.</p>
+
+<p>Unfortunately, it doesn't contain code for automatically
+populating the initial model from the "store" property, this is handled in the
+"dojox.mvc.newStatefulModel" factory. Therefore, we manually construct the
+initial model values from the store, if available, and re-call the "_createModel" function
+in our constructor.</p>
+
+<p>Once the model has been instantiated, we can declare and initialise our composite model bindings
+as well as binding to the initial todo tasks pulled from persistent storage.</p>
+
+<p>You can see the source code for the final version of the TodoModel class
+<a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo/model">here</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>In this first article, we've reviewed how to use DojoX MVC's StatefulModel
+class to create application Models that we can later bind to Views within the
+application. Using the StatefulModel class, we can bind to model properties,
+having callbacks executed when one or more attribute values changed.</p>
+
+<p>Taking this further, we can bind model properties together, creating dynamic
+models whose properties automatically update as others change. Combining this
+functionality, we defined composite model attributes for the "completed" and
+"remaining" properties that were automatically calculated as the todo tasks'
+state changed, wrapping this code within an extension of the StatefulModel
+class.</p>
+
+<p>Next time, we'll be looking at another component of the MVC pattern, Views. Using the TodoMVC application
+as our example, we'll show how to define View templates, bind our Model with the View to generate the application's HTML and
+ensure user interactions with the todo tasks automatically update the Model.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Creating Todo MVC in Dojo - Overview]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/01/28/dojomvc_overview/"/>
+    <updated>2012-01-28T21:10:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/01/28/dojomvc_overview</id>
+    <content type="html"><![CDATA[<p>Before Christmas, <a href="http://addyosmani.com/blog/">Addy Osmani</a>
+sent out the following
+tweet asking for a Dojo-version of the TodoMVC application.</p>
+
+<blockquote class="twitter-tweet"><p>
+Quick updates: Added ExtJS and MVC-less Todo apps to the current dev version of TodoMVC. Want to get a Dojo version in there before 0.3.
+</p>&mdash; Addy Osmani (@addy_osmani) <a
+href="https://twitter.com/addy_osmani/status/134641372367032321"
+data-datetime="2011-11-10T20:21:07+00:00">November10, 2011</a></blockquote>
+
+
+<script src="http://jthomas.github.com/jthomas//platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p></p>
+
+<p>Reviewing their <a href="https://github.com/addyosmani/todomvc">Github page</a>, the
+project aims to allow developers to compare MVC frameworks by providing
+implementations of a sample Todo application using different toolkit's MVC
+support. They currently have over a <a href="http://addyosmani.github.com/todomvc/">dozen entries</a> for toolkits, including
+Backbone, JavascriptMVC and Spine with more coming soon but, unfortunately, no
+entry for The Dojo Toolkit.</p>
+
+<h2>Introducing DojoX MVC</h2>
+
+<p>With the 1.6 release, The Dojo Toolkit introduced a new DojoX module that
+experimented with <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">better MVC support</a>, utilising
+recent features that provide automatic
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">widget property</a>
+<a href="http://dojotoolkit.org/features/1.6/widget-watch">monitoring</a>.
+The module goes beyond simple data binding between models and views, including <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Generate.html#dojox-mvc-generate">mapping model attributes to appropriate UI controls</a>, <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">model data validation</a>,
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">data store integration</a>
+and others. Further improvements were introduced in the recent 1.7 release of
+The Dojo Toolkit and it is still under active development. For full details on DojoX MVC, see the <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">reference guide</a>.</p>
+
+<p>I've been wanting to play with this module for a while and taking up Addy's
+challenge provided an ideal opportunity. With help from <a href="https://github.com/edchat">Ed Chatelain</a> and others,
+we created and refined our entry over the past two months, ready in time for
+the 0.3 release of the project.</p>
+
+<p>Being a new part of the toolkit, there weren't many examples of using the module for building
+non-trivial applications. Dojo's TodoMVC entry should provide a good starting point for developers who
+want to explore DojoX MVC and compare its approach to other toolkits.</p>
+
+<h2>Walk-through series</h2>
+
+<p>Over the coming weeks, I'm going to walk-through building of the TodoMVC
+application using DojoX MVC in a series of articles. It will cover defining a
+model with composite attributes, generating views from the model, binding user
+actions to model attributes and using local storage for persisting items
+offline. I'll also cover some common issues that developers might encounter
+when using the module.</p>
+
+<p><del>Check back soon for the first part....</del></p>
+
+<h3><em>Update (26/05/12)</em></h3>
+
+<p><em>All articles are now available and the links are below...</em></p>
+
+<ul>
+<li><a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">Part One: Models</a></li>
+<li><a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">Part Two: Views</a></li>
+<li><a href="http://jamesthom.as/blog/2012/05/26/dojomvc-controllers/">Part Three: Controllers</a></li>
+</ul>
+
+
+<h2>Can't wait?</h2>
+
+<p>If you want to dive straight in, the finished application is in my <a href="https://github.com/jthomas/todomvc">fork of the TodoMVC project</a>, under the "todo-example/dojo" directory.
+The entry's <a href="https://github.com/addyosmani/todomvc/pull/54">pull request</a> has a good discussion about issues encountered, re-factoring, enhancements, etc.</p>
+]]></content>
+  </entry>
+  
+</feed>

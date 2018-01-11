@@ -1,0 +1,1071 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: javascript | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/javascript/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-01-11T16:17:08+00:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Playing With OpenWhisk]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2016/04/22/openwhisk/"/>
+    <updated>2016-04-22T15:36:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2016/04/22/openwhisk</id>
+    <content type="html"><![CDATA[<p>IBM recently launched <a href="https://developer.ibm.com/openwhisk/">OpenWhisk</a>,
+their new <a href="https://www.quora.com/What-is-Serverless-Computing">"serverless"</a>
+compute platform.</p>
+
+<p>This service allows developers to register small bits of
+code that are executed on-demand in response to external events. The
+"serverless" stack started in 2014, when Amazon launched
+<a href="https://aws.amazon.com/lambda/">Lambda</a>, but is now set to be a major
+technology trend in 2016 with IBM, Microsoft and Google all launching their own
+solutions.</p>
+
+<p>OpenWhisk is the first <a href="https://github.com/openwhisk/openwhisk">open-source "serverless" platform</a>. It supports running registered
+actions in Node.js, Swift and even executing custom Docker containers.</p>
+
+<p>Playing around with the technology recently, I've created two projects using the platform.</p>
+
+<h2>OpenWhisk Client Library</h2>
+
+<p>OpenWhisk exposes a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#rest-api">RESTful API</a>
+for interacting with the service. Wrapping this API with a
+<a href="https://github.com/openwhisk/openwhisk-client-js">small client library</a> makes it easy for developers to interact with the service from JavaScript.</p>
+
+<p>This library has been donated back to the OpenWhisk project and is <a href="https://www.npmjs.com/package/openwhisk">available through NPM</a>.</p>
+
+<p><code>javascript
+const openwhisk = require('openwhisk')
+const ow = openwhisk({api: 'https://openwhisk.ng.bluemix.net/api/v1/', api_key: '...', namespace: '...'})
+ow.actions.invoke({actionName: 'action'}).then(result =&gt; {
+  // result is service response
+})
+</code></p>
+
+<h2>Whiskify</h2>
+
+<p>This <a href="https://github.com/jthomas/whiskify">project</a>, available through <a href="https://www.npmjs.com/package/openwhisk">NPM</a>, makes it easy to run arbitary JavaScript
+functions as OpenWhisk actions.  Passing a reference to a JavaScript function
+into the module, an OpenWhisk action is created using the function source.  The
+module returns a new JavaScript function, that when executed, will call the
+remote action and returns a Promise with the service response.</p>
+
+<p>``` javascript
+const whiskify = require('whiskify')({api: 'https://', api_key: '...', namespace: '...'})
+const action = whiskify(function (item) { return item + 1; })</p>
+
+<p>action(1).then(function (result) {
+  // == 2
+})</p>
+
+<p>action.map([1, 2, 3, 4]).then(function (result) {
+ // == [2, 3, 4, 5]
+})</p>
+
+<p>action.delete()
+```</p>
+
+<p>This project uses the client library above.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[GeoPix Live Photos]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2015/07/16/geopix-live-photos/"/>
+    <updated>2015-07-16T13:26:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2015/07/16/geopix-live-photos</id>
+    <content type="html"><![CDATA[<p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+<p><blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.</p></p><p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote></p>
+
+<p>I've been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement...</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features...</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: "now"</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<p>``` javascript
+Cloudant({account:credentials.username, password:credentials.password}, function(err, cloudant) {</p>
+
+<pre><code>var geopix = cloudant.use(database);
+var feed = geopix.follow({include_docs: true, since: "now"});
+
+feed.on('change', function (change) {
+  // ....we can now send this data to the web pages
+});
+
+feed.follow();
+</code></pre>
+
+<p>})
+```</p>
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>...</p>
+
+<p><blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote></p>
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<p>``` javascript
+var express = require('express');
+var app = express();
+var server = require('http').Server(app);
+var io = require('socket.io')(server);</p>
+
+<p>// ...snipped out the app routes for express</p>
+
+<p>io.on('connection', function (socket) {</p>
+
+<pre><code>console.log('New Client WSS Connection.')
+</code></pre>
+
+<p>});</p>
+
+<p>var port = (process.env.VCAP_APP_PORT || 3000);
+server.listen(port);
+```</p>
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<p>``` javascript
+feed.on('change', function (change) {</p>
+
+<pre><code>io.sockets.emit('image', change);
+</code></pre>
+
+<p>});
+```</p>
+
+<p><strong>Now we're sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we've included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We're sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<p>``` javascript
+var socket = io(); // TIP: io() with no args does auto-discovery
+socket.on('connect', function () {</p>
+
+<pre><code>console.log('WSS Connected');
+
+socket.on('image', function (image) { // TIP: you can avoid listening on `connect` and listen on events directly too!
+    var attachment = Object.keys(image.doc._attachments)[0]
+    var url = "/image/" + image.doc._id + "/" + attachment;
+    add_new_image(url, image.doc.clientDate, 'latitude: '
+        + image.doc.latitude + ', longitude: '
+        + image.doc.longitude + ', altitude: '
+        + image.doc.altitude);
+});
+</code></pre>
+
+<p>});
+```</p>
+
+<p>...and that's it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB's <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Server Side Dijit]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2013/01/15/server-side-dijit/"/>
+    <updated>2013-01-15T10:08:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2013/01/15/server-side-dijit</id>
+    <content type="html"><![CDATA[<p>Modern Dojo applications often use declarative programming, annotating HTML
+elements with custom attributes containing module identifiers, to declare widgets
+and use client-side rendering with HTML templates to convert web pages into
+JavaScript applications.</p>
+
+<p><strong>Client-side rendering often comes with a major complaint, the dreaded
+"pop-up effect".</strong></p>
+
+<p><img src="/images/white_screen.png"></p>
+
+<p>This happens because the HTML initially displayed
+does not contain widget templates until after client-side rendering has
+finished. Essentially, the application has to load twice, once to download all
+the JS, CSS and HTML resources, then again, to render widgets client-side.</p>
+
+<p>Usually this is hidden behind an overlay screen, which becomes especially
+annoying in multi-page applications.</p>
+
+<p><strong>So, what can we do?</strong></p>
+
+<p>Templated widgets provide a good pattern for building re-usable application modules but client-side rendering can
+provide a less ideal user experience.</p>
+
+<p>Reading an article about the <a href="http://anyasq.com/79-im-a-technical-lead-on-the-google+-team">technology stack behind Google+</a>, Google
+were using page widgets with templates supported by the <a href="https://developers.google.com/closure/library/">Closure framework</a>. However, they had
+an interesting idea to overcome the client-side rendering issue...</p>
+
+<p><blockquote><p>We often render our Closure templates server-side<br/>so the page renders before any JavaScript is loaded, then the JavaScript finds<br/>the right DOM nodes and hooks up event handlers, etc. to make it responsive.</p><footer><strong>Joseph Smarr</strong> <cite><a href='http://anyasq.com/79-im-a-technical-lead-on-the-google+-team'>anyasq.com/&hellip;</a></cite></footer></blockquote></p>
+
+<p><strong>Could we use the same server-side rendering technique in Dojo applications?</strong></p>
+
+<p>Doing a little investigation, Dojo's abstractions around widget rendering made it perfect
+for server-side rendering.</p>
+
+<p><strong>Tl;DR? Project source code is available on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.</strong></p>
+
+<h2>Dijit Widget Lifecycle</h2>
+
+<p>Dojo widgets inherit from the following base class,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetBase.html">dijit/_WidgetBase</a>,
+which provides the widget lifecycle, which can be extended with custom implementations.</p>
+
+<ul>
+<li><strong>constructor</strong></li>
+<li><strong>parameters</strong> are mixed into the widget instance</li>
+<li><strong>postMixInProperties</strong> - Invoked before rendering occurs, and before any DOM nodes are created.</li>
+<li><strong>buildRendering</strong> - Used to define the widget's DOM nodes</li>
+<li><strong>setters are called</strong> - Custom attribute setters are called</li>
+<li><strong>postCreate</strong> - Widget has been rendered.</li>
+<li><strong>startup</strong> - Parsing and creation of any child widgets completed.</li>
+</ul>
+
+
+<p>All lifecycle methods are executed in linear order for each new widget instance.
+Having clear abstractions around where and when the widget rendering
+occurs in the lifecycle (buildRendering) makes extending simple.</p>
+
+<p>Rendering widget templates is provided by an additional mixin,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_TemplatedMixin.html">dijit/_TemplatedMixin</a>.</p>
+
+<p>There's also a further extension, <a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetsInTemplateMixin.html">dijit/_WidgetsInTemplateMixin</a>,
+for ensuring child widgets within the template are instantiated correctly during rendering.</p>
+
+<p>If we provide a pre-rendered template within the page, the client-side
+renderer will hook up that DOM node as the widget's DOM node, using a
+custom lifecycle extension, rather than attempting to construct the HTML
+template client-side.</p>
+
+<p>We only need to modify the <em>buildRendering</em> phase, every
+other lifecycle phase will run normally.</p>
+
+<h2>Rendering Templates Server-Side</h2>
+
+<p>Now we know where to hook up a pre-rendered template, how would we render the templates server-side?</p>
+
+<p>We want to support server-side rendering with only minimal changes to an application.</p>
+
+<h3> Running Dojo on NodeJS</h3>
+
+<p>With the recent popularity of NodeJS, we have an excellent server-side
+JavaScript environment. If we configure Dojo to run within this platform, we
+should be able to construct page widgets server-side, delegating template
+rendering to the same lifecycle used client-side.</p>
+
+<p>This code below shows how to configure Dojo on NodeJS.</p>
+
+<p>``` javascript Loading Dojo on NodeJS</p>
+
+<pre><code>dojoConfig = {
+    packages: [
+        {name: "dojo", location: "./lib/dojo"},
+        {name: "dijit", location: "./lib/dijit"}
+    ],
+};
+
+require("./lib/dojo/dojo.js");
+</code></pre>
+
+<p>```</p>
+
+<p>Once we've evaluated the dojo.js file within NodeJS, the AMD loader (<em>require/define</em>) is available through properties on the
+<em>global</em> object. We can use these functions to load additional DTK or custom AMD modules. Accessing
+page widgets using the AMD loader, we can execute the lifecycle methods to trigger template rendering, read the
+rendered template and include the output within the application's HTML pages.</p>
+
+<p><strong>Unfortunately, there's one thing missing... access to the DOM!</strong></p>
+
+<h3>Simulating a Browser </h3>
+
+<p>Dojo widgets need access to the <a href="http://en.wikipedia.org/wiki/Document_Object_Model">DOM</a> when rendering the static HTML template into live DOM nodes.
+Running inside a NodeJS instance, rather than a browser, this API is missing.</p>
+
+<p>Luckily, there's a pure-JavaScript implementation of a DOM, which can be executed within NodeJS, called <a href="https://github.com/tmpvar/jsdom">JSDOM</a>.</p>
+
+<p>Importing this package within our application simulates those APIs, allowing page widgets to render normally and, more importantly, letting
+us access the live DOM nodes which result from widget rendering.</p>
+
+<p>Finally, creating Dojo widgets within our fake browser environment triggered a
+few issues, due to the configuration used with the NodeJS loader.</p>
+
+<p>The code snippet below shows how we initialise a server-side DOM and fix those configuration issues.</p>
+
+<p>``` javascript Server-Side DOM with Dojo
+var jsdom = require("jsdom").jsdom,</p>
+
+<pre><code>document = jsdom("&lt;html&gt;&lt;/html&gt;"),
+window = document.createWindow();
+</code></pre>
+
+<p>var has = global.require("dojo/has"),</p>
+
+<pre><code>win = global.require("dojo/_base/window"),
+</code></pre>
+
+<p>// Manually add event listener test as this was only included in
+// the "host-browser" profile.
+has.add("dom-addeventlistener", !!document.addEventListener);
+has.add("dom-attributes-explicit", true);</p>
+
+<p>// Fix global property to point to "window"
+win.global = window;
+```</p>
+
+<p><em>Now we can successfully create widgets on the server-side, how do we know which
+widgets to create for an application?</em></p>
+
+<h3>Declarative Dojo Applications</h3>
+
+<p>Dojo provides a mechanism to convert HTML elements, annotated with module identifiers, into page widgets at runtime.</p>
+
+<p>Using the <a href="http://dojotoolkit.org/reference-guide/1.8/dojo/parser.html">dojo/parser</a>
+module, once the page has loaded, it will automatically instantiate the widgets, passing in
+parameters and other attributes defined in the markup.</p>
+
+<p>An example of declarative widget declaration is shown below.</p>
+
+<p>``` html Declarative widgets
+<select name="state" data-dojo-type="dijit/form/Select"></p>
+
+<pre><code>&lt;option value="TN"&gt;Tennessee&lt;/option&gt;
+&lt;option value="VA" selected="selected"&gt;Virginia&lt;/option&gt;
+&lt;option value="WA"&gt;Washington&lt;/option&gt;
+&lt;option value="FL"&gt;Florida&lt;/option&gt;
+&lt;option value="CA"&gt;California&lt;/option&gt;
+</code></pre>
+
+<p></select>
+```</p>
+
+<p>Application pages using declarative markup can easily be scanned to find application widgets that are needed. As we're able to
+run AMD modules server-side, we can simply use the existing Dojo parser with our server-side DOM to do the hard work for us!</p>
+
+<h3>Server-side Parsing</h3>
+
+<p>For a sample page we want to pre-render, we inject the HTML source into our DOM and run the parser over the current instance. Once the parser
+has finished, the server-side DOM will contain the rendered templates for each widget.</p>
+
+<p>``` javascript Using dojo/parser with JSDOM
+var parser = global.require("dojo/parser"),</p>
+
+<pre><code>source = "... page html goes here ...";
+</code></pre>
+
+<p>// Overwrite finished document contents
+// with new source and run parser over the DOM.
+document.write(source);
+parser.parse(document);</p>
+
+<p>source = document.innerHTML;
+```</p>
+
+<p>Using JSDOM like this, script tags within the page aren't evaluated, letting us handle the module loading
+and parsing externally in NodeJS.</p>
+
+<p>However, this presented a challenge as module dependencies declared in these
+script tags were ignored, leaving the parser to instantiate declarative widgets from modules which hadn't been loaded.</p>
+
+<p><em>Luckily, in the Dojo 1.8 release, the parser was enhanced to automatically load any missing module dependencies during the parsing phase.
+Phew...</em></p>
+
+<p>Finally, once a widget's template has been rendered, any other operations
+performed by the parser are unnecessary.  Creating a "lite" parser which
+removed these code paths, which also provided a place for the extensions
+described later, was started from a copy of the existing parser.</p>
+
+<p>Using the AMD "aliases" configuration, this module transparently replaced the existing parser during server-side rendering.</p>
+
+<h3>Mixins For Pre-Rendering</h3>
+
+<p>Rendering widgets server-side, using NodeJS and JSDOM, works for simple widgets but what happens when you use
+layout widgets, which rely on accessing the browser's layout properties? What if you have separate code paths for different browsers
+which affect the template string?</p>
+
+<p>There are numerous scenarios where we rely on data that's impractical to simulate
+within our fake browser.</p>
+
+<p><em>So, how do we pre-render these widgets? We don't!</em></p>
+
+<p>Ignoring these widgets, which leaves them to render normally client-side.</p>
+
+<p>Identifying widgets to render server-side takes advantage of a new declarative
+parameter used by the parser since 1.8, <em>data-dojo-mixins</em>. This parameter
+allows additional modules to be mixed into the declarative class instance by
+the parser.</p>
+
+<p>Using this parameter with a custom module,
+<em>server_side/_TemplatedMixin</em>, on widgets to be pre-rendered, as shown below,
+make identification easy. Additionally, this class
+will contain the lifecycle extensions that modifies client-side rendering.</p>
+
+<p>``` html Custom Declarative Mixins</p>
+
+<div data-dojo-type="dijit/CalendarLite" data-dojo-mixins="server_side/_TemplatedMixin"></div>
+
+
+<p>```</p>
+
+<h3>Automating Rendering</h3>
+
+<p><strong>Now we've identified the mechanism for server-side rendering, how can we automate this process
+for all application pages?</strong></p>
+
+<p><a href="https://github.com/senchalabs/connect">Connect</a> is <em>"an extensible HTTP server framework for
+node, providing high performance plugins known as middleware"</em>.</p>
+
+<p>Using this framework as our HTTP server means we can write a custom middleware plugin
+that will automatically parse, pre-render and serve all our application pages.</p>
+
+<p>Connect plugins are functions that accept three parameters, the request and
+response objects, along with a callback to signal this plugin's work has
+finished. Each registered plugin will be executed for each request.</p>
+
+<p>We've decomposed the library into two files, server_side.js, which exposes a
+valid express plugin, and render.js, which provides a simple interface for the
+server-side rendering, described above. The complete version of the code for both modules is included below.</p>
+
+<p>``` javascript server_side.js
+var render = require('./render.js');</p>
+
+<p>module.exports = function (config) {</p>
+
+<pre><code>// Create AMD packages from module configuration.
+var page = render({
+    dojo: config.dojo + "/dojo",
+    dijit: config.dojo + "/dijit",
+    server_side: __dirname + "/../public/js/server_side"
+});
+
+return function (req, res, next) {
+    var ignore = function (accept) {
+        return accept.indexOf("text/html") === -1;
+    };
+
+    // Only hook into text/html requests....
+    if (ignore(req.headers.accept)) {
+        return next();
+    }
+
+    var write = res.write,
+        end = res.end,
+        buffer = "";
+
+    // We need entire page contents, not just the chunks.
+    // Proxy original methods while we're buffering.
+    res.write = function (chunk, encoding) {
+        buffer = buffer.concat(chunk);
+        return true;
+    };
+
+    res.end = function (chunk, encoding) {
+        if (chunk) {
+            res.write(chunk);
+        }
+
+        // Fix content-length, we now have more data to send.
+        var rendered = page(buffer);
+        res.setHeader("Content-Length", rendered.length);
+
+        return end.call(res, rendered, encoding);
+    };
+
+    next();
+};
+</code></pre>
+
+<p>};
+```</p>
+
+<p>``` javascript render.js
+var jsdom = require("jsdom").jsdom,</p>
+
+<pre><code>document = jsdom("&lt;html&gt;&lt;/html&gt;"),
+window = document.createWindow();
+</code></pre>
+
+<p>module.exports = function (packages) {</p>
+
+<pre><code>// Fix window objects in global scope.
+global.document = document;
+global.navigator = window.navigator;
+global.window = window;
+
+var amd_packages = Object.keys(packages).map(function (key) {
+    return { name: key, location: packages[key] };
+});
+
+// Deliberately create global "dojoConfig" variable.
+dojoConfig = {
+    packages: amd_packages,
+    // _WidgetsInTemplateMixin call parser directly to instantiate children. 
+    // We need it to use our custom parser so use AMD-remapping magic!
+    aliases: [["dojo/parser", "server_side/parser"]],
+    deps: ["server_side/parser", "dojo/has", "dojo/_base/window", "server_side/registry"]
+};
+
+require(packages.dojo + "/dojo.js");
+
+// Once Dojo has been evalulated, require &amp; define methods 
+// from AMD API as exposed as properties on "global" object.
+
+var has = global.require("dojo/has"),
+    win = global.require("dojo/_base/window"),
+    registry = global.require("server_side/registry"),
+    parser = global.require("server_side/parser");
+
+// Now we need to manually fix a few things to make Dojo 
+// simulate running in a browser.
+
+// Manually add event listener test as this was only included in 
+// the "host-browser" profile.
+has.add("dom-addeventlistener", !!document.addEventListener);
+has.add("dom-attributes-explicit", true);
+
+// Fix global property to point to "window" 
+win.global = window;
+
+return function (source) {
+    // Clear any previously rendered widgets from registry,
+    // simulate fresh page load.
+    registry.reset();
+
+    // Overwrite finished document contents
+    // with new source and run parser over the DOM.
+    document.write(source);
+    parser.parse(document);
+
+    return document.innerHTML;
+};
+</code></pre>
+
+<p>};
+```</p>
+
+<p>Using this new plugin in an application is demonstrated in the code below, which
+serves the "public" directory as the application's source root.</p>
+
+<p>``` javascript Server-side Rendering Application
+var connect = require('connect'),</p>
+
+<pre><code>server_side = require('../lib/server_side');
+</code></pre>
+
+<p>var app = connect()
+  .use(connect.directory(<strong>dirname + '/public', { icons: true }))
+  .use(server_side({dojo: process.env.DOJO_SOURCE}))
+  .use("/dojo", connect.static(process.env.DOJO_SOURCE))
+  .use("/server_side", connect.static(</strong>dirname + '/../public/js/server_side'))
+  .use(connect.static(__dirname + '/public'))
+  .listen(3000);
+```</p>
+
+<h2>Using Server-Side Rendered Templates</h2>
+
+<p>Once the pre-rendered page has been returned to the browser, the normal client-side
+parsing will take place to instantiate the page widgets. For widgets whose templates are
+included within the page, we need to ensure the normal client-side rendering is bypassed.</p>
+
+<p>In this scenario, we connect the widget's <em>domNode</em> property to the DOM node that the
+declarative widget was instantiated from.</p>
+
+<h3>Extending buildRendering</h3>
+
+<p>Adding a HTML template to your widget is achieved by inheriting from
+<em>dijit/_TemplatedMixin</em>, which provides the "buildRendering" implementation to
+convert a HTML string stored under "templateString" into live DOM nodes.</p>
+
+<p>Although we want to skip creating DOM nodes from the template, there are other steps, e.g. attaching event handlers, which must be ran normally.
+Using a custom mixin to identify declarative widgets for server-side rendering, <em>server_side/_TemplatedMixin</em>, also provides
+the extension point to modify the rendering process.</p>
+
+<p>Overwriting the default implementation of "buildRendering" through this mixin led
+to unresolvable issues.</p>
+
+<p>We're forced to call any super-class "buildRendering" implementations, through
+"this.inherited(arguments)", to ensure any custom code paths that also extend this method are executed.
+However, this will reach the original <em>dijit/_TemplatedMixin</em> module, which we need to skip.</p>
+
+<p>Monkey-patching the _TemplatedMixin prototype became the easiest solution.</p>
+
+<p>Once our custom mixin is loaded,
+we overwrite "buildRendering" which a new implementation. Using a custom flag, provided by our mixin, we check
+whether to continue with the normal code path for client-side rendering, otherwise we run our stripped down version.</p>
+
+<p>``` javascript Monkey-patching _TemplatedMixin</p>
+
+<pre><code>var br = _TemplatedMixin.prototype.buildRendering,
+    fc = _TemplatedMixin.prototype._fillContent;
+
+// Stripped down of the original function source below.
+_TemplatedMixin.prototype.buildRendering = function () {
+    if (!this.serverSide) {
+        return br.call(this);
+    }
+
+    // Source DOM node already the pre-rendered template nodes.
+    var node = this.srcNodeRef;
+
+    node.removeAttribute("data-dojo-type");
+
+    // Call down to _Widget.buildRendering() to get base classes assigned
+    _WidgetBase.prototype.buildRendering.call(this);
+
+    this._attachTemplateNodes(node, function(n,p){ return n.getAttribute(p); });
+
+    this._beforeFillContent();      // hook for _WidgetsInTemplateMixin
+
+    // Don't pass srcRefNode reference as it doesn't exist.
+    this._fillContent();
+};
+
+// Override to turn into a no-op, we don't want to attach source
+// ref nodes client side as it's been done on the server.
+_TemplatedMixin.prototype._fillContent = function () {
+    if (!this.serverSide) {
+        return fc.apply(this, arguments);
+    }
+};
+</code></pre>
+
+<p>```</p>
+
+<p>We performed the same trick for the <em>fillContent</em> method due to similar issues, along with a new implementation
+of <em>attachTemplateNodes</em> in the mixin.</p>
+
+<p>With this minimal change to the client-side rendering process, widgets pick up their templates from the existing page and are
+instantiated normally. Hooking up template nodes as properties on the parent, attaching event handlers and setting data bindings
+behaves as expected.</p>
+
+<h3>Putting It Together</h3>
+
+<p><strong>Using our custom middleware for server-side rendering, along with our client-side rendering modifications,
+users accessing pages will see the templated widgets straight away, removing the "double-rendering" effect
+and the need for loading screens.</strong></p>
+
+<p><img src="/images/pre_rendered.png"></p>
+
+<p><em>This image above the same widgets rendered client-side and server-side when the page loads, but before
+client-side rendering has finished.</em></p>
+
+<p>Server-side rendering also comes with client-side performance benefits,
+reducing the number of costly DOM operations performed during application loading.
+This may be especially useful for low-power devices with mobile browsers.</p>
+
+<p>Extending, rather than replacing, the normal Dojo rendering lifecycle allows us to transparently delegate rendering
+to the client-side for unsupported widgets. Excellent abstractions already provided for the lifecycle in the toolkit make
+the extension conceptually simple.</p>
+
+<p>There are restrictions that come with this implementation, discussed below, but working within these
+constraints it is possible for the majority of templated widgets to be rendered server-side.</p>
+
+<h2>Source Code</h2>
+
+<p>All source code for the project lives on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.
+Feel free to file issues, patches and comments at the project home page.</p>
+
+<p>Once you have checked out the project code, run the following command to
+start a test application comparing client-side and server-side rendering side
+by side.</p>
+
+<p><code>sh
+$ export DOJO_SOURCE=/path/to/dojo-release-1.8.0-src
+$ npm start
+</code></p>
+
+<p>Once the server has started, visit <a href="http://localhost:3000">http://localhost:3000</a>.</p>
+
+<p>You can also install the module as an NPM package, <a href="https://npmjs.org/package/server_side_dijit">server_side_dijit</a>,
+and use the plugin within your existing Connect application.</p>
+
+<h2>Issues</h2>
+
+<p>We've already mentioned potential pitfalls which restrict server-side
+rendering. These include widgets that use browser dimensions to dynamically
+calculate sizing e.g. layout managers, use client-side resources to construct
+templates e.g. reading cookie data, expect access to remote resources e.g
+XHR'ing session details, and many, many more.</p>
+
+<p>Letting those widgets default to client-side template rendering provides a safe fallback.</p>
+
+<p>Discovering which existing Dojo widgets can support server-side rendering requires manual
+testing. Within the project directory, under the "/test/public" location, we've started
+collecting test pages which demonstrate those widgets which are known to work. Looking at those
+pages should provide a good indication of the current level of support.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[London JS - Watson]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/10/22/london-js/"/>
+    <updated>2012-10-22T16:43:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/10/22/london-js</id>
+    <content type="html"><![CDATA[<p>Last month, I was invited to speak at LondonJS on the machine learning and artificial intelligence behind IBM Watson.</p>
+
+<p>I jokingly said the talk would win the prize for the "least amount of JavaScript-related content in a LondonJS talk".</p>
+
+<p>The idea was to introduce the audience to topics (machine learning) that might be relevant in the future and IBM Watson was a
+great example that people love hearing about.</p>
+
+<p>Slides for the event are now posted online, check them out <a href="https://speakerdeck.com/u/jthomas/p/a-computer-called-watson">here</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Olympic Bubbles]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2012/08/08/olympic-bubbles/"/>
+    <updated>2012-08-08T08:44:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2012/08/08/olympic-bubbles</id>
+    <content type="html"><![CDATA[<p>Introducing <strong>Olympic Bubbles</strong>, an experiment visualising mentions of the
+London 2012 Olympics sports on Twitter in real-time.</p>
+
+<p><img src="/images/olympic_bubbles.png"></p>
+
+<p>With the London 2012 Olympics having multiple events running concurrently, Twitter's become invaluable
+for catching up on the day's action, deciding what to watch and getting real-time insight into current events.</p>
+
+<p>Having recently started to play with a JavaScript visualisation library (<a href="http://d3js.org/">D3</a>), this seemed like a great opportunity
+to connect the two activities and automate the analysis of Twitter to visualise the most talked about Olympic sports.</p>
+
+<p>Before we can visualise the data, we needed a way to filter the Twitter firehose for tweets mentioning the Olympic games...</p>
+
+<h2>Analysing tweets for Olympic sports</h2>
+
+<p>Twitter provides a <a href="https://dev.twitter.com/docs/streaming-apis/streams/public">public API</a> for filtering their
+stream, based on keyword matching, but there are two issues with this service:</p>
+
+<ul>
+<li><strong>No access to the firehose.</strong> Results don't represent the full set of matches from the Twitter "firehose", only a sample are returned.</li>
+<li><strong>Polling, not real-time.</strong> No support for receiving results in real-time, the client has to manually poll for new results over HTTP.</li>
+</ul>
+
+
+<p>These problems made Twitter's API unsuitable and an alternative was needed...</p>
+
+<p>Enter <a href="http://datasift.com">DataSift.</a></p>
+
+<p><blockquote><p>DataSift is a real-time media curation platform, allowing you to mine the<br/>Twitter Firehose for tweets matching the specific criteria of your choice.<br/>DataSift's custom Curation Stream Definition Language allows you to filter<br/>based on any meta data within a tweet</p><footer><strong>Twitter</strong> <cite><a href='https://dev.twitter.com/docs/twitter-data-providers'>Partner Providers of Twitter Data</a></cite></footer></blockquote></p>
+
+<p>DataSift are one of only two companies with unrestricted access to the Twitter "firehose". They provide a free
+trial account, with enough credit to mine 10,000 tweets.</p>
+
+<h3>Write a custom stream filter</h3>
+
+<p>DataSift provides a custom query language, <a href="http://dev.datasift.com/csdl">CSDL (Curated Stream Definition Language)</a>,
+for defining stream filters that can match messages based upon text, location, users and much more.</p>
+
+<p>Defining a new filter, we're interested in all messages that contain references to the London 2012 Olympics along with a sport.
+Matching all tweets containing key words can be performed using the <em>contains</em> <a href="http://dev.datasift.com/docs/operators">operator</a>
+on the <em>content</em> <a href="http://dev.datasift.com/docs/targets/common-interaction">property</a> of the <em>interaction</em> <a href="http://dev.datasift.com/docs/targets/common-interaction">instance</a>.
+Each <em>interaction</em> represents a single tweet from the Twitter Firehose.</p>
+
+<p>The example below shows how to match any tweets which mention the word
+<strong>olympic</strong> but ignore those without a valid sport, using the
+<em>conjunction</em> and <em>contains_any</em> operator to make sure those matched messages
+also contain one of the pre-defined keywords for the sports.</p>
+
+<p>``` javascript Olympic Sports Filter
+interaction.content contains "olympic"
+AND
+interaction.content contains_any "</p>
+
+<pre><code>Archery,
+Athletics,
+Badminton,
+...
+Volleyball,
+Water Polo,
+Weightlifting,
+Wrestling"
+</code></pre>
+
+<p>```</p>
+
+<p>Looking over the CSDL documentation, there was a feature that allowed user generated
+<a href="http://dev.datasift.com/docs/advanced/tag-keyword">tags</a> to be appended to filtered messages.
+Rather than having the client-side code manually
+parse each message to determine which sports were referenced, we can append a tag during
+the filtering process, as shown below.</p>
+
+<p>``` javascript Tagging Sports
+tag "archery" {
+  interaction.content contains "archery"
+}</p>
+
+<p>tag "athletics" {
+  interaction.content contains "athletics"
+}</p>
+
+<p>tag "badminton" {
+  interaction.content contains "badminton"
+}
+```</p>
+
+<p>Once the stream has been defined, making it public allows any user to access the
+stream results. You can see the full stream definition and view a preview of the results
+<a href="http://datasift.com/stream/27473/olympics-2012#app1-preview">here</a>.</p>
+
+<h3>Real-time results</h3>
+
+<p>Now we have a stream defined, we need to access the results in the browser in real-time.
+Along with a traditional REST API, DataSift also provides a streaming API using <a href="https://developer.mozilla.org/en-US/docs/WebSockets">WebSockets</a>.
+WebSockets provide a <strong>bi-directional channel for messages between a client and server, without having to poll for replies</strong>. Using their streaming endpoint,
+we receive messages from our filtered firehose in real-time.</p>
+
+<p>Setting up the connection and monitoring for new messages was extremely simple, as shown below. Each time a new message arrives,
+we increment the frequency count for each of the pre-defined sports based on the interaction tag.</p>
+
+<p>``` javascript DataSift Streaming API http://dev.datasift.com/docs/streaming-api/websockets-streaming Documentation
+var ws = new WebSocket('ws://websocket.datasift.com/<hash>?username=<username>&amp;api_key=<api_key>');</p>
+
+<p>ws.onmessage = function(evt) {</p>
+
+<pre><code>var msg = JSON.parse(evt.data),
+    tags = stats.interaction.tags;
+
+tags.forEach(function (tag) {
+    // now publish notification of new tagged messages...
+});
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Visualising The Tweets</h2>
+
+<p><em>Now we have the data, how should we visualise the results?</em></p>
+
+<p>There are hundreds of <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/charting.html">different</a>
+<a href="http://www.highcharts.com/">charting</a> <a href="http://code.google.com/p/flot/">libraries</a>
+for JavaScript but
+rather than drawing a static histogram of the sport frequencies, we want to incorporate
+the real-time aspect into the visualisation. As new messages are received, the visualisation
+should grow and morph, tied to the transitional nature of the data.</p>
+
+<p><a href="http://d3js.org">D3</a> is a JavaScript visualisation library which provides just that capability.</p>
+
+<p><blockquote><p>D3.js is a JavaScript library for manipulating documents based on data, allowing<br/>you to bind arbitrary data to a Document Object Model (DOM), and then apply data-driven transformations to the document.</p></blockquote></p>
+
+<p>Developed by <a href="http://bost.ocks.org/mike/">Mike Bostock</a> of the Stanford Visualisation Group, the library has fantastic
+<a href="https://github.com/mbostock/d3/wiki">documentation</a> along with an extensive <a href="https://github.com/mbostock/d3/wiki/Gallery">examples gallery</a>,
+which provides a great starting point for developers.</p>
+
+<h3>Creating Bubbles</h3>
+
+<p>Reviewing the gallery, the <a href="http://mbostock.github.com/d3/ex/bubble.html"><strong>Bubble</strong></a> example seemed like a good starting point.
+Each bubble would represent a single sport and the size would be proportional to the frequency of tweets for that sport.</p>
+
+<p><em>Given a list of sports and frequencies, how do we know where to render the nodes and what size they should be?</em></p>
+
+<p>D3 provides a series of algorithms for converting data series into visual layouts, the Bubble example uses
+<a href="https://github.com/mbostock/d3/wiki/Pack-Layout">Pack</a>. This layout turns a hierarchical data structure into
+<em>"enclosure diagrams using containment (nesting) to represent the hierarchy"</em>.</p>
+
+<p>Running our data through this function, shown below, produces a series of
+position values (coordinate location pairs with radius) to construct
+our bubbles from.</p>
+
+<p>``` javascript Generating Bubble Positions
+var sports = {</p>
+
+<pre><code>archery: 1,
+athletics: 2,
+badminton: 3
+... 
+</code></pre>
+
+<p>};</p>
+
+<p>var layout = d3.layout.pack().sort(null).size([this.width, this.height]);</p>
+
+<pre><code>positions = layout.nodes({children: d3.entries(sports)}
+</code></pre>
+
+<p>```</p>
+
+<p>Using the position information, we need to bind these values to appropriate
+DOM elements. Following the example code, we're going to render an SVG <a href="https://developer.mozilla.org/en-US/docs/SVG/Element/g">Group</a> node
+to contain the <a href="https://developer.mozilla.org/en-US/docs/SVG/Element/circle">Circle</a> element with a
+<a href="https://developer.mozilla.org/en-US/docs/SVG/Element/text">Text</a> node (displaying the sport's label). The example
+below shows the code needed for this.</p>
+
+<p>``` javascript Rendering Bubble Nodes
+var vis = d3.select(this.node).append("svg")</p>
+
+<pre><code>        .attr("width", width)
+        .attr("height", height);
+</code></pre>
+
+<p>var chart = vis.selectAll("g.node")</p>
+
+<pre><code>           .data(this.layout.nodes(data))
+           .enter().append("g")
+           .attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
+</code></pre>
+
+<p>// Append circle with radius from layout and fill with arbitary colour
+chart.append("circle")</p>
+
+<pre><code> .attr("r", function (d) { return d.r; })
+ .style("fill", function (d) { return fill(d.key) });
+</code></pre>
+
+<p>// Add text label to bubble.
+chart.append("text")</p>
+
+<pre><code> .attr("text-anchor", "middle")
+ .attr("dy", ".3em");
+</code></pre>
+
+<p>```</p>
+
+<p>Choosing an arbitrary colour for the bubble uses the <a href="https://github.com/mbostock/d3/wiki/Ordinal-Scales#wiki-category20c">d3.scale.category20c</a> method,
+referenced here by <em>fill()</em>, to produce a mapping between our category labels and a series of twenty colours.</p>
+
+<p>The example above is a slightly condensed version of the actual code, ignoring the handling of multi-lined labels and that font-sizes are relative
+to the bubble size, due to brevity.</p>
+
+<h3>Animating Bubbles</h3>
+
+<p><em>What happens when our data changes?</em></p>
+
+<p>As we receive more messages, the relative frequencies of the sports will change and the bubble layout will need updating.
+Using D3, we want to visually transition the bubbles to their new positions, watching them grow and shrink in real-time.</p>
+
+<p>Re-calculating the layout simply needs us to re-run the pack algorithm with the updated values, binding the new data
+to the existing chart.</p>
+
+<p><code>javascript Binding Updated Layout
+chart.data(layout.nodes({children: d3.entries(sports)}));
+</code></p>
+
+<p>Now, we just need to use the <a href="https://github.com/mbostock/d3/wiki/Transitions"><em>transition</em></a>
+method to translate the old properties
+to the new values, over a three second period. As we move the parent group node for
+each bubble, we need also update the bubble radius and label font size to make them
+proportional to the parent.</p>
+
+<p>``` javascript Transitioning Bubbles
+// Move bubble node to new position
+var trans = this.chart</p>
+
+<pre><code>.transition()
+.duration(3000)
+.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+.attr("r", function(d) { return d.r; });
+</code></pre>
+
+<p>// ... update circle radius
+trans.select("circle")</p>
+
+<pre><code> .transition()
+ .attr("r", function(d) { return d.r; });
+</code></pre>
+
+<p>// ... update text size
+trans.select("text")</p>
+
+<pre><code> .transition()
+ .attr("font-size", function (d) { return ((d.r / 50)) + "em"; });
+</code></pre>
+
+<p>```</p>
+
+<p><strong>...and that's it!</strong></p>
+
+<p>Each time new messages flow in from the backend, the data values
+change, which triggers a new transition. With a real-time stream of new messages
+constantly arriving, the visualisation is constantly morphing and changing.</p>
+
+<h2>Live Demo</h2>
+
+<p>If you want to see this demo in action, there's a hosted version at
+<a href="http://datasift.jamesthom.as">http://datasift.jamesthom.as</a>. You'll need to sign up
+for a free DataSift account <a href="https://datasift.com/auth/register/">here</a>
+and use your authentication credentials to allow us to access the Twitter firehose.</p>
+
+<p>Source code for the demo is available on Github <a href="http://github.com/jthomas/olympic_bubbles">here</a>.</p>
+
+<h2>Finally...</h2>
+
+<p><em>Why Olympic Bubbles?</em></p>
+
+<p>It's a terrible name but as the quote goes...</p>
+
+<p><blockquote><p>“There are only two hard things in Computer Science: cache invalidation and naming things”.</p></blockquote></p>
+
+<p>...and writing this demo was easier than coming up with a sensible name!</p>
+]]></content>
+  </entry>
+  
+</feed>

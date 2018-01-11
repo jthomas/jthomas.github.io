@@ -1,0 +1,1202 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="What happens when you&#8217;ve got an error occurring only in the minified version of
+your Dojo application? No matter how fantastic your debugging &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jthomas.github.com/jthomas/blog/page/6/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jthomas.github.com/jthomas" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div class="blog-index">
+  
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/04/22/debugging-optimised-dojo-apps/">Debugging Optimised Dojo Applications</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-04-22T15:49:00+01:00" pubdate data-updated="true">Apr 22<span>nd</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>What happens when you&#8217;ve got an error occurring only in the minified version of
+your Dojo application?</p>
+
+<p>No matter how fantastic your debugging tool, there&#8217;s
+not much it can do with an optimised JavaScript source file with all the code
+on a single line. Usually, you resort to the frustrating experience of &#8220;black
+boxing&#8221; the issue, interrogating objects in the console and trying to reverse
+engineer the meaning of their renamed variables.</p>
+
+<p>Luckily, there&#8217;s a better way to debug minified JavaScript files&#8230; <strong>Source Maps</strong>.</p>
+
+<h2>Introducing Source Maps</h2>
+
+<blockquote><p>Source maps provide a way to map a combined/minified file back to an unbuilt<br/>state. When you build for production, along with minifying and combining your<br/>JavaScript files, you generate a source map which holds information about your<br/>original files.  When you query a certain line and column number in your<br/>generated JavaScript you can do a lookup in the source map which returns the<br/>original location.  Developer tools can parse the source map automatically and<br/>make it appear as though you&#8217;re running unminified and uncombined files.</p></blockquote>
+
+
+<p>There&#8217;s an fantastic overview of the technology <a href="http://www.html5rocks.com/en/tutorials/developertools/sourcemaps/">here</a>,
+showing you how to enable support in your browser and generate the necessary files using Google&#8217;s Closure compiler.</p>
+
+<h2>Generating Source Maps For Dojo</h2>
+
+<p>The Dojo Toolkit&#8217;s build system supports using the Closure compiler for
+minification, making it an obvious next step to enable automatic generation of
+source mappings. Working on this over the weekend, I&#8217;ve been able to enhance
+the build system to generate source maps for each layer file when using the
+following command line parameter.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sh build.sh <span class="nv">bin</span><span class="o">=</span>node <span class="nv">action</span><span class="o">=</span>release <span class="nv">profile</span><span class="o">=</span>my_profile <span class="nv">layerOptimize</span><span class="o">=</span>closure
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For more details on the implementation, along with the patch, see the
+associated <a href="http://bugs.dojotoolkit.org/ticket/15232">ticket</a> that&#8217;s been
+opened to track adding this feature into Dojo.</p>
+
+<p>When you&#8217;ve enabled source maps in your browser, switching to the scripts tab
+in Chrome&#8217;s Developer Tools now displays the unminified versions of any built layer
+files. This can be seen in action on the following
+<a href="http://public.jamesthom.as/source_maps/">page</a>.</p>
+
+<p><em>Please note, this feature is only enabled when using NodeJS
+as the build runtime and requires an upgrade of the Closure compiler
+to the latest version.</em></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/04/13/upcoming-talks/">Upcoming Talks</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-04-13T18:45:00+01:00" pubdate data-updated="true">Apr 13<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Next month I&#8217;ll be presenting at <a href="http://www-01.ibm.com/software/websphere/events/impact/">IBM IMPACT 2012</a>, IBM&#8217;s premier
+customer conference in Las Vegas from April 29th until May 4th. I&#8217;ve had three
+sessions accepted, full details below.  If you&#8217;re attending the conference and
+want to say hello, please let me know.</p>
+
+<p>This week I was invited to present a preview of the joint session I&#8217;m doing with
+<a href="https://twitter.com/#!/dylans">Dylan Schiemann</a> at IMPACT for <a href="http://londonajax.com/">London AJAX</a>. There
+was a really great crowd of over seventy developers waiting to hear all about AMD. The talk was recorded and can
+now be viewed online <a href="http://skillsmatter.com/podcast/ajax-ria/amd-depth">here</a>. Due to an unexpected travel delay
+I was delayed by 30 minutes, you can see my appearance after that. Thanks for Dylan for carrying the show until I
+arrived!</p>
+
+<p>During this year&#8217;s IBM IMPACT conference, there&#8217;s an official &#8220;unconference&#8221; running on the Wendesday. Anyone can submit
+ideas for talks, from full sessions to lightning talks, with the community voting on what they would like to see. I&#8217;ve submitted
+an idea for a lightning talk titled &#8221;<a href="http://websphere.uservoice.com/forums/100171-websphere-unconference/suggestions/2672597-javascript-anti-patterns-moving-from-java-to-jav">JavaScript Anti-Patterns - Moving from Java to JavaScript</a>&#8221;. If you want to see this talk, visit
+the link and vote for the idea.</p>
+
+<p>Once the conference has finished I&#8217;ll make all of the material available externally.</p>
+
+<p>See you all in Vegas!</p>
+
+<h3>IBM IMPACT Schedule</h3>
+
+<ul>
+<li><p>TDW-2292: Optimizing Your Dojo Application Using The Dojo Build System</p>
+
+<ul>
+<li>Session Type:  Lecture</li>
+<li>Date/Time:  Tue, 1/May, 03:15 PM - 04:30 PM</li>
+<li>Room:  Venetian - Marcello 4401A</li>
+</ul>
+</li>
+<li><p>TDW-1537: Moving to Dojo 1.7 and the Path to 2.0</p>
+
+<ul>
+<li>Session Type:  Lecture</li>
+<li>Date/Time:  Thu, 3/May, 10:30 AM - 11:45 AM</li>
+<li>Room:  Venetian - Marcello 4402</li>
+</ul>
+</li>
+<li><p>TDW-2286: Beyond Dojo: The Rise of Asynchronous Module Definition (AMD)</p>
+
+<ul>
+<li>Session Type:  Lecture</li>
+<li>Date/Time:  Thu, 3/May, 08:45 AM - 10:00 AM</li>
+<li>Room:  Venetian - Marcello 4403</li>
+</ul>
+</li>
+</ul>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/04/13/dojomvc-views/">Creating Todo MVC in Dojo - Part 2: Views</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-04-13T00:00:00+01:00" pubdate data-updated="true">Apr 13<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In the previous article, we looked at defining our application Model using the
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">Dojo MVC</a> package. The
+model contained a list of todo tasks, each with a description and finished
+state, along with composite values representing the total completed and
+remaining task counts.</p>
+
+<p>Dojo&#8217;s MVC package provides a series of widgets (<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">Group</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">Output</a>, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">Repeat</a>,
+<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Generate.html">Generate</a>) that assist the rendering of model attributes in our View, which
+automatically update when model values change. We&#8217;re going to look at using
+these widgets to build our TodoMVC Application View&#8230;</p>
+
+<h2>Defining a View template</h2>
+
+<p>For a long time, Dojo has had excellent support for creating widgets with HTML
+templates using modules from the Dijit package. Defining a new widget simply
+requires inheriting from a base class (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html">_WidgetBase</a>), adding in mixins for
+template support (<a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html">_TemplatedMixin</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetsInTemplateMixin.html">_WidgetsInTemplateMixin</a>) and providing
+a HTML template file that will be automatically rendered in the page by the Dojo
+parser. In our application, we&#8217;ve created a new templated widget <a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo">todo.app</a>,
+present in <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js">app.js</a> along with a template file <a href="https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html">app.html</a>.</p>
+
+<p>The basic outline of this module is shown below.</p>
+
+<figure class='code'><figcaption><span>Templated TodoMVC Widget</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.js'>Source Link </a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">define</span><span class="p">([</span><span class="s2">&quot;dojo/_base/declare&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="c1">// Parent classes</span>
+</span><span class='line'>        <span class="s2">&quot;dijit/_WidgetBase&quot;</span><span class="p">,</span> <span class="s2">&quot;dijit/_TemplatedMixin&quot;</span><span class="p">,</span> <span class="s2">&quot;dijit/_WidgetsInTemplateMixin&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="c1">// Widget template</span>
+</span><span class='line'>        <span class="s2">&quot;dojo/text!./app.html&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="p">...</span>
+</span><span class='line'>    <span class="kd">function</span><span class="p">(</span><span class="nx">declare</span><span class="p">,</span> <span class="nx">_WidgetBase</span><span class="p">,</span> <span class="nx">_TemplatedMixin</span><span class="p">,</span> <span class="nx">_WidgetsInTemplateMixin</span><span class="p">,</span> <span class="nx">template</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nx">declare</span><span class="p">(</span><span class="s2">&quot;todo.app&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nx">_WidgetBase</span><span class="p">,</span> <span class="nx">_TemplatedMixin</span><span class="p">,</span> <span class="nx">_WidgetsInTemplateMixin</span><span class="p">],</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">templateString</span><span class="o">:</span> <span class="nx">template</span><span class="p">,</span>
+</span><span class='line'>        <span class="p">});</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Defining our application as a templated widget lets us annotate HTML elements,
+using the data-dojo-type attribute, in the application page to be automatically
+instantiated into corresponding widgets at runtime by the <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/parser.html">Dojo parser</a>. When this
+occurs, the view template will replace the annotated HTML element in the page
+and any child widgets in the view will be recursively created.</p>
+
+<p>The HTML snippet below shows how we load Dojo, the parser, our application and turn on the automatic parsing on load to render
+our Todo widget within the page.</p>
+
+<figure class='code'><figcaption><span>Loading TodoMVC App Within The Page</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/index.html'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;script </span><span class="na">data-dojo-config=</span><span class="s">&quot;async:true, parseOnLoad:true, paths:{&#39;todo&#39;:&#39;../../todo&#39;}, </span>
+</span><span class='line'><span class="s">    deps:[&#39;dojo/parser&#39;, &#39;todo/app&#39;]&quot;</span> <span class="na">src=</span><span class="s">&quot;./js/dtk/dojo/dojo.js&quot;</span><span class="nt">&gt;&lt;/script&gt;</span>
+</span><span class='line'>
+</span><span class='line'>...
+</span><span class='line'>
+</span><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;content&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;todo.app&quot;</span><span class="nt">&gt;&lt;/div&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This templated widget is rendered within the page and represents our view. The view has three main
+tasks:</p>
+
+<p>** Display the list of todo items
+* Allow a user to enter more tasks
+* Show statistics for the number of completed and remaining tasks.</p>
+
+<p>We&#8217;ll look at each individually to see how we implemented those features using
+the Dojo MVC package.</p>
+
+<h2>Displaying Todo Tasks</h2>
+
+<p>We&#8217;ve used the &lt;ul&gt; element to represent the container for our todo tasks, each task being an &lt;li&gt; element
+with the same HTML template populated with different values. The content for each task and the number of tasks
+needs to be dynamically generated based upon the values in the model.</p>
+
+<p>Dojo MVC provides a widget for this pattern, <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>,
+letting the user specify an array in the model for binding to with a HTML
+template to be repeated for each element.</p>
+
+<p>The HTML template for the repeating todo tasks is shown below.</p>
+
+<figure class='code'><figcaption><span>Rendering Todo Tasks</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L7-20'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;ul</span> <span class="na">class=</span><span class="s">&quot;todo-list&quot;</span> <span class="na">data-dojo-attach-point=</span><span class="s">&quot;todo_list&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Repeat&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.todos, exprchar: &#39;#&#39;&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;li</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Group&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: &#39;#{this.index}&#39;&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="nt">&lt;input</span> <span class="na">class=</span><span class="s">&quot;check&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;todo.form.CheckBox&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&#39;ref: &quot;isDone&quot;&#39;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo-content dijitInline&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit.InlineEditBox&quot;</span>
+</span><span class='line'>                <span class="na">data-dojo-props=</span><span class="s">&#39;ref: &quot;todo_text&quot;, editor:&quot;dijit.form.TextBox&quot;, autosave:true, width:&quot;420px&quot;, style:&quot;width:420px;&quot;&#39;</span><span class="nt">&gt;&lt;/div&gt;</span>
+</span><span class='line'>            <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-destroy&quot;</span> <span class="na">data-model-id=</span><span class="s">&quot;#{this.index}&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            <span class="nt">&lt;/span&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;/div&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/li&gt;</span>
+</span><span class='line'><span class="nt">&lt;/ul&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h3>Repeating View Templates</h3>
+
+<p>In the template, the containing &lt;ul&gt; element is registered as the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">dojox.mvc.Repeat</a>
+widget using the data-dojo-type attribute. Using the data-dojo-props
+attribute, we can pass widget parameters to the newly created widget when it&#8217;s instantiated by the parser.</p>
+
+<p>The first parameter, ref, provides a variable name
+for the model attribute to bind to. We&#8217;re using the model available on the widget instance, &#8220;this.model&#8221;, with the &#8220;todos&#8221; attribute, which contains
+an array of task objects. The second parameter, exprchar, is the character to use for substitution expressions in declarative child widget attributes. By default,
+this value is the &#8216;$&#8217; character. As we&#8217;re using the declarative programming style, these expressions would be confused with normal template value substitutions and we
+use the &#8216;#&#8217; character instead.</p>
+
+<p>Under the &lt;ul&gt; element, we have the HTML template for each todo task, represented by the &lt;li&gt; element. Here we are using the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Group.html">dojox.mvc.Group</a> widget, which provides
+the parent model context for any child widgets which use substituion expressions and references to access model values. Registering the parent context as an individual
+item within the model &#8220;todos&#8221; array is achieved by using the &#8220;#{this.index}&#8221; reference, this will be automatically incremented by the parent Repeat widget as it iterates
+through the model array.</p>
+
+<h3>Binding UI Controls</h3>
+
+<p>Each todo task has three UI controls, the task text (either as a read-only
+value or an inline edit box for modification), a checkbox representing the
+completed state of the widget and an icon to allow the removal of the task. Our
+chosen UI controls (<a href="http://dojotoolkit.org/reference-guide/dijit/InlineEditBox.html">InlineEditBox</a> &amp; <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/form/CheckBox.html">CheckBox</a>) are bound to model values by
+providing a &#8220;ref&#8221; attribute with the attribute name. These widgets will
+automatically be populated with the current model values during rendering.</p>
+
+<p>This binding between the view and the model is bi-directional, changes to the
+model will automatically propagate to the view widgets and changes to the view
+widgets will flow back to the model.</p>
+
+<p>When a user wants to remove a task, the &#8220;click&#8221; event generated by the icon in the view
+will be intercepted by the Controller. Allowing the controller to determine which todo task
+to remove from the model is provided by setting the current item index as a custom parameter on the HTML
+element. We will be looking at the code to perform the removal in a later article.</p>
+
+<h2>Showing Completed &amp; Remaining Counts</h2>
+
+<p>Along with the todo tasks, we need to display stats for the number of completed
+and remaining tasks. These attributes are composite model values, being
+automatically calculated from other model attributes. The displayed values need
+to be updated live as the other model attributes change but won&#8217;t be directly
+modifable by the user. The code snippet below shows the HTML template in the
+view for this component.</p>
+
+<figure class='code'><figcaption><span>Showing Task Stats</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L22-33'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;todo-stats&quot;</span> <span class="na">data-dojo-attach-point=</span><span class="s">&quot;todo_stats&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-count&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;span</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Output&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.incomplete&quot;</span> <span class="na">class=</span><span class="s">&quot;number&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;word&quot;</span><span class="nt">&gt;</span>items<span class="nt">&lt;/span&gt;</span> left.
+</span><span class='line'>    <span class="nt">&lt;/span&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;todo-clear&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;#&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onclick:removeCompletedItems&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>            Clear
+</span><span class='line'>            <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;number-done&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dojox.mvc.Output&quot;</span> <span class="na">data-dojo-props=</span><span class="s">&quot;ref: this.model.complete&quot;</span> <span class="nt">&gt;&lt;/span&gt;</span>
+</span><span class='line'>            completed items
+</span><span class='line'>        <span class="nt">&lt;/a&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/span&gt;</span>
+</span><span class='line'><span class="nt">&lt;/div&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We&#8217;ve used simple HTML elements to display the values, rather than Dijit widgets, due to the
+lack of user interaction needed. Binding a HTML element to a Model property can be achieved using the
+<a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Output.html">dojox.mvc.Output</a> widget.
+Again, we use the &#8220;ref&#8221; attribute to specify which model property the &#8220;innerHTML&#8221;
+value on the HTML element should be linked with.</p>
+
+<h2>Adding New Tasks</h2>
+
+<p>Finally, we need to let the user add new tasks. Using a normal HTML input
+field, we connect the &#8220;onkeypress&#8221; event to an internal event handler to allow
+the app to access the new tasks.</p>
+
+<figure class='code'><figcaption><span>Adding New Tasks</span><a href='https://github.com/jthomas/todomvc/blob/master/todo-example/dojo/js/todo/app.html#L2-5'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">&quot;create-todo&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;input</span> <span class="na">class=</span><span class="s">&quot;new-todo&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onkeypress:onKeyPress&quot;</span> <span class="na">placeholder=</span><span class="s">&quot;What needs to be done?&quot;</span> <span class="na">type=</span><span class="s">&quot;text&quot;</span><span class="nt">/&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;span</span> <span class="na">class=</span><span class="s">&quot;ui-tooltip-top&quot;</span> <span class="na">style=</span><span class="s">&quot;display:none;&quot;</span><span class="nt">&gt;</span>Press Enter to save this task<span class="nt">&lt;/span&gt;</span>
+</span><span class='line'><span class="nt">&lt;/div&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>The application controller is responsible for
+handling the generated events, retrieving the new tasks and adding them into
+the model. We&#8217;ll be looking at exactly how this works in the next article. When
+new tasks are added, the task list in the view will be automatically
+re-rendered.</p>
+
+<h2>Conclusion</h2>
+
+<p>Following on from the first article, we&#8217;ve now looked at how the View component
+of our MVC application works. Using Dojo MVC widgets, we&#8217;ve been able to
+bind simple HTML elements and full Dijit widgets to show model values. This
+dynamic binding allows Model updates to automatically flow through to the View controls.
+Secondly, any user modified values automatically update the Model.</p>
+
+<p>The dojox.mvc.Output widget was used to display Model attributes are
+read-only values in normal HTML elements. We also used the dojox.mvc.Repeat
+and dojox.mvc.Group widgets to generate a repeated view template for the
+todo tasks. Connecting user events from the view to the Controller used Dojo&#8217;s
+templated widget mixins.</p>
+
+<p>In the final article, we&#8217;ll look at the last component the MVC pattern,
+Controllers. This includes adding new tasks to the Model, removing individual
+and completed tasks along with controlling the view components being displayed.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/26/dojomvc-models/">Creating Todo MVC in Dojo - Part 1: Models</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-02-26T10:33:00+00:00" pubdate data-updated="true">Feb 26<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In this first article, we going to look at using <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> to define our
+application Models, showing the use of the new <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a> class. Later in
+the series, we&#8217;ll look at binding our defined Model to a View template, rendering
+the HTML output and hooking into user events.</p>
+
+<h2>Introducing StatefulModels</h2>
+
+<p><a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> uses a specific class for representing Models in the MVC pattern,
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a>. By using or extending this class, applications have access to a
+native JavaScript data model that integrates with all the classes under the MVC
+package. StatefulModel extends the <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html">Dojo Stateful</a> class, introduced in Dojo 1.6
+to provide a way to monitor widget property changes, to support more complex
+behaviour, such as binding to and updating View component, validating of model
+values and much more.</p>
+
+<p>StatefulModels are instantiated from a plain JavaScript object, representing the initial data structure
+for the model, or even from a Dojo Store (with support for both synchronous and asynchronous results). To assist the conversion of complex JavaScript objects, a factory function is provided
+that will traverse the source data, recursively converting all data properties to use the
+StatefulModel class.</p>
+
+<p>Further details on the StatefulModel class can be found <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">here</a>.</p>
+
+<h2>Defining a Model</h2>
+
+<p>Reviewing the <a href="https://github.com/addyosmani/todomvc/wiki/Todo-Application-Specification">TodoMVC specification</a>,
+our application Model needs to contain a list of todo tasks, each one
+containing a description and that task&#8217;s completed state. The task&#8217;s
+description will be provided by the user and can later be modified. As the task
+is completed, the task&#8217;s internal state must be updated. Representing the todo
+tasks as an array of objects will allow binding to a <a href="http://livedocs.dojotoolkit.org/dojox/mvc/Repeat">Repeat View</a>, having a HTML template
+rendered for each task in the Model.</p>
+
+<p>Looking at the application, there&#8217;s two additional properties in the View that are derived from
+other Model attributes, counts for the completed and remaining tasks. To allow automatic binding of these
+values into our View template, we&#8217;re going to represent these directly in our model. Later on, we&#8217;ll
+set up binding between Model values to allow those composite values to be calculated automatically.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">todos</span><span class="o">:</span> <span class="p">[</span>
+</span><span class='line'>        <span class="p">{</span>
+</span><span class='line'>            <span class="nx">text</span><span class="o">:</span> <span class="s2">&quot;Must write this blog article&quot;</span>
+</span><span class='line'>            <span class="nx">isDone</span><span class="o">:</span> <span class="kc">false</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>    <span class="p">],</span>
+</span><span class='line'>    <span class="nx">remaining</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">complete</span><span class="o">:</span> <span class="mi">0</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">dojox</span><span class="p">.</span><span class="nx">mvc</span><span class="p">.</span><span class="nx">newStatefulModel</span><span class="p">({</span><span class="nx">data</span><span class="o">:</span> <span class="nx">data</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once we&#8217;ve defined our Model as a native JavaScript object, we can use the
+StatefulModel factory to perform the conversion to StatefulModel classes, as
+shown in the sample above. The result of this function is our application
+Model, which we can then bind to our View and interact with via the Controller.</p>
+
+<p>The StatefulModel class supports any native JavaScript type, we&#8217;re using
+strings for the description, booleans for the completed state and numbers for
+the computed totals.</p>
+
+<h2>Binding to Model changes</h2>
+
+<p>Once you&#8217;ve defined a model, you&#8217;ll want to be notified of any attribute changes.
+Using Dojo Stateful&#8217;s <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html#watch">&#8220;watch&#8221;</a> method, we can register a function to be executed
+whenever that model&#8217;s attributes are modified using the getter &amp; setter pattern.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">model</span><span class="p">.</span><span class="nx">watch</span><span class="p">(</span><span class="s2">&quot;attribute&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">attribute</span><span class="p">,</span> <span class="nx">new_value</span><span class="p">,</span> <span class="nx">old_value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>The <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Bind.html">dojox.mvc.Bind</a> module extends this functionality to cover two common patterns,
+listening to changes on a series of attributes and binding model properties together.
+The &#8220;bindInputs&#8221; function allows an array of model attributes to be passed in, executing a callback
+whenever any of the attributes change.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">mvc</span><span class="p">.</span><span class="nx">bindInputs</span><span class="p">([</span><span class="nx">model</span><span class="p">.</span><span class="nx">first_attr</span><span class="p">,</span> <span class="nx">model</span><span class="p">.</span><span class="nx">second_attr</span><span class="p">,</span> <span class="p">...],</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">attribute</span><span class="p">,</span> <span class="nx">new_value</span><span class="p">,</span> <span class="nx">old_value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>More usefully, the &#8220;bind&#8221; function sets up a one way coupling between a source and destination model attribute.
+Whenever the source attribute value changes, the destination model attribute will be automatically updated with
+the same result. If you want to transform the source value before it&#8217;s updated in the destination model, an optional
+function callback can be passed in. This will be called with the new attribute
+value and the return value used to update the destination model.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">mvc</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="nx">source_model</span><span class="p">,</span> <span class="s2">&quot;attr&quot;</span><span class="p">,</span> <span class="nx">dest_model</span><span class="p">,</span> <span class="s2">&quot;attr&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">attribute</span><span class="p">,</span> <span class="nx">new_value</span><span class="p">,</span> <span class="nx">old_value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// Return transformed value to update dest_model with</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h2>Creating composite model values</h2>
+
+<p>In the TodoMVC application our model has two attributes, &#8220;remaining&#8221; &amp; &#8220;completed&#8221;, that need to computed
+automatically from other model values.</p>
+
+<p>Calculating the &#8220;completed&#8221; total is performed by looping through the &#8220;todos&#8221; array and counting
+the tasks which have an &#8220;isDone&#8221; attribute as true. Whenever a task&#8217;s &#8220;isDone&#8221; value changes
+we want to re-calculate and update the &#8220;completed&#8221; total. Whenever a new task is added, we
+automatically bind the new item to our calculating function, which updates the composite value
+with the new count if any of our model tasks are modified.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">bindIsDone</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">item</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">mvc</span><span class="p">.</span><span class="nx">bindInputs</span><span class="p">([</span><span class="nx">item</span><span class="p">.</span><span class="nx">isDone</span><span class="p">],</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;updateTotalItemsLeft&quot;</span><span class="p">));</span>
+</span><span class='line'><span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">updateTotalItemsLeft</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">remaining</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">array</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">item</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nx">item</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">item</span><span class="p">.</span><span class="nx">isDone</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}).</span><span class="nx">length</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once we have the &#8220;completed&#8221; total, the &#8220;remaining&#8221; attribute can be easily calculated
+if we know the total number of tasks. Using the &#8220;bind&#8221; method ensures this happens automatically,
+using optional transform function to create the new composite value.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">mvc</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">remaining</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">complete</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s2">&quot;length&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="nx">value</span><span class="p">;</span>
+</span><span class='line'><span class="p">}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Extending StatefulModel</h2>
+
+<p>Defining our Model requires application code to declare the composite (completed, remaining) attributes, bind to changes on the
+current (and future) todo tasks and deal with persisting data to local storage. Rather than having this code in the application
+controller, we can extend the StatefulModel class to encapsulate all this
+logic. Using Dojo&#8217;s <a href="http://dojotoolkit.org/reference-guide/dojo/declare.html">Declare</a> module, we can create a new
+class which extends StatefulModel, allowing us to set the initial model properties as class attributes rather than having to call
+the dojox.mvc.newStatefulModel() factory manually. The skeleton outline for our StatefulModel extension is shown below, we&#8217;ve removed
+some internal methods for brevity.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">define</span><span class="p">([</span><span class="s2">&quot;dojo/_base/declare&quot;</span><span class="p">,</span> <span class="s2">&quot;dojox/mvc/StatefulModel&quot;</span><span class="p">,</span> <span class="s2">&quot;todo/store/LocalStorage&quot;</span><span class="p">,</span> <span class="s2">&quot;dojox/mvc&quot;</span><span class="p">],</span>
+</span><span class='line'>    <span class="kd">function</span><span class="p">(</span><span class="nx">declare</span><span class="p">,</span> <span class="nx">StatefulModel</span><span class="p">,</span> <span class="nx">LocalStorage</span><span class="p">,</span> <span class="nx">mvc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">declare</span><span class="p">([</span><span class="nx">StatefulModel</span><span class="p">],</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">data</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">id</span><span class="o">:</span> <span class="s2">&quot;local_storage_todos&quot;</span><span class="p">,</span>
+</span><span class='line'>            <span class="nx">todos</span> <span class="o">:</span> <span class="p">[],</span>
+</span><span class='line'>            <span class="nx">remaining</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>            <span class="nx">complete</span><span class="o">:</span> <span class="mi">0</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">store</span><span class="o">:</span> <span class="k">new</span> <span class="nx">LocalStorage</span><span class="p">(),</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">constructor</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">store</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span> <span class="o">||</span> <span class="k">this</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">_createModel</span><span class="p">(</span><span class="nx">data</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">setUpModelBinding</span><span class="p">();</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">updateTotalItemsLeft</span><span class="p">();</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">setUpModelBinding</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">mvc</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">incomplete</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">complete</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s2">&quot;length&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="nx">value</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}));</span>
+</span><span class='line'>            <span class="nx">array</span><span class="p">.</span><span class="nx">forEach</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;bindIsDone&quot;</span><span class="p">));</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">watch</span><span class="p">(</span><span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;onTodosModelChange&quot;</span><span class="p">));</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">updateTotalItemsLeft</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">incomplete</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">array</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">item</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="k">return</span> <span class="nx">item</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">item</span><span class="p">.</span><span class="nx">isDone</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}).</span><span class="nx">length</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>The internal &#8220;data&#8221; and &#8220;store&#8221; attributes correspond to properties on the base
+StatefulModel class. StatefulModel&#8217;s constructor will automatically transform raw
+JavaScript objects, set via the &#8220;data&#8221; property, into the corresponding
+StatefulModels.</p>
+
+<p>Unfortunately, it doesn&#8217;t contain code for automatically
+populating the initial model from the &#8220;store&#8221; property, this is handled in the
+&#8220;dojox.mvc.newStatefulModel&#8221; factory. Therefore, we manually construct the
+initial model values from the store, if available, and re-call the &#8220;_createModel&#8221; function
+in our constructor.</p>
+
+<p>Once the model has been instantiated, we can declare and initialise our composite model bindings
+as well as binding to the initial todo tasks pulled from persistent storage.</p>
+
+<p>You can see the source code for the final version of the TodoModel class
+<a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo/model">here</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>In this first article, we&#8217;ve reviewed how to use DojoX MVC&#8217;s StatefulModel
+class to create application Models that we can later bind to Views within the
+application. Using the StatefulModel class, we can bind to model properties,
+having callbacks executed when one or more attribute values changed.</p>
+
+<p>Taking this further, we can bind model properties together, creating dynamic
+models whose properties automatically update as others change. Combining this
+functionality, we defined composite model attributes for the &#8220;completed&#8221; and
+&#8220;remaining&#8221; properties that were automatically calculated as the todo tasks&#8217;
+state changed, wrapping this code within an extension of the StatefulModel
+class.</p>
+
+<p>Next time, we&#8217;ll be looking at another component of the MVC pattern, Views. Using the TodoMVC application
+as our example, we&#8217;ll show how to define View templates, bind our Model with the View to generate the application&#8217;s HTML and
+ensure user interactions with the todo tasks automatically update the Model.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/01/28/dojomvc_overview/">Creating Todo MVC in Dojo - Overview</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-01-28T21:10:00+00:00" pubdate data-updated="true">Jan 28<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Before Christmas, <a href="http://addyosmani.com/blog/">Addy Osmani</a>
+sent out the following
+tweet asking for a Dojo-version of the TodoMVC application.</p>
+
+<blockquote class="twitter-tweet"><p>
+Quick updates: Added ExtJS and MVC-less Todo apps to the current dev version of TodoMVC. Want to get a Dojo version in there before 0.3.
+</p>&mdash; Addy Osmani (@addy_osmani) <a
+href="https://twitter.com/addy_osmani/status/134641372367032321"
+data-datetime="2011-11-10T20:21:07+00:00">November10, 2011</a></blockquote>
+
+
+<script src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p></p>
+
+<p>Reviewing their <a href="https://github.com/addyosmani/todomvc">Github page</a>, the
+project aims to allow developers to compare MVC frameworks by providing
+implementations of a sample Todo application using different toolkit&#8217;s MVC
+support. They currently have over a <a href="http://addyosmani.github.com/todomvc/">dozen entries</a> for toolkits, including
+Backbone, JavascriptMVC and Spine with more coming soon but, unfortunately, no
+entry for The Dojo Toolkit.</p>
+
+<h2>Introducing DojoX MVC</h2>
+
+<p>With the 1.6 release, The Dojo Toolkit introduced a new DojoX module that
+experimented with <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">better MVC support</a>, utilising
+recent features that provide automatic
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">widget property</a>
+<a href="http://dojotoolkit.org/features/1.6/widget-watch">monitoring</a>.
+The module goes beyond simple data binding between models and views, including <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Generate.html#dojox-mvc-generate">mapping model attributes to appropriate UI controls</a>, <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">model data validation</a>,
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">data store integration</a>
+and others. Further improvements were introduced in the recent 1.7 release of
+The Dojo Toolkit and it is still under active development. For full details on DojoX MVC, see the <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">reference guide</a>.</p>
+
+<p>I&#8217;ve been wanting to play with this module for a while and taking up Addy&#8217;s
+challenge provided an ideal opportunity. With help from <a href="https://github.com/edchat">Ed Chatelain</a> and others,
+we created and refined our entry over the past two months, ready in time for
+the 0.3 release of the project.</p>
+
+<p>Being a new part of the toolkit, there weren&#8217;t many examples of using the module for building
+non-trivial applications. Dojo&#8217;s TodoMVC entry should provide a good starting point for developers who
+want to explore DojoX MVC and compare its approach to other toolkits.</p>
+
+<h2>Walk-through series</h2>
+
+<p>Over the coming weeks, I&#8217;m going to walk-through building of the TodoMVC
+application using DojoX MVC in a series of articles. It will cover defining a
+model with composite attributes, generating views from the model, binding user
+actions to model attributes and using local storage for persisting items
+offline. I&#8217;ll also cover some common issues that developers might encounter
+when using the module.</p>
+
+<p><del>Check back soon for the first part&#8230;.</del></p>
+
+<h3><em>Update (26/05/12)</em></h3>
+
+<p><em>All articles are now available and the links are below&#8230;</em></p>
+
+<ul>
+<li><a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">Part One: Models</a></li>
+<li><a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">Part Two: Views</a></li>
+<li><a href="http://jamesthom.as/blog/2012/05/26/dojomvc-controllers/">Part Three: Controllers</a></li>
+</ul>
+
+
+<h2>Can&#8217;t wait?</h2>
+
+<p>If you want to dive straight in, the finished application is in my <a href="https://github.com/jthomas/todomvc">fork of the TodoMVC project</a>, under the &#8220;todo-example/dojo&#8221; directory.
+The entry&#8217;s <a href="https://github.com/addyosmani/todomvc/pull/54">pull request</a> has a good discussion about issues encountered, re-factoring, enhancements, etc.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2011/12/18/the_path/">Moving to Dojo 1.7 and the Path to 2.0</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2011-12-18T21:10:00+00:00" pubdate data-updated="true">Dec 18<span>th</span>, 2011</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="http://dojotoolkit.org/blog/dojo-1-7-released">Dojo 1.7</a> was released this
+month, giving users early access to lots of features that are going to be
+standard in Dojo 2.0, due late 2012. We&#8217;ve already been using early releases of
+Dojo 1.7 since the summer in my day-to-day role with IBM working on Watson, as
+we wanted to take advantage of the new module format, better mobile support and
+much more. With 1.7 now available, I wanted to share my experiences using it on
+a real project, showing developers what new features are available, how they
+can use them and what advantages this brings.</p>
+
+<p>Last week I gave an hour long presentation inside IBM to colleagues from the
+European and US Development Laboratories, sharing my experiences with Dojo 1.7
+on the Watson project. The extended version of the slides are now available on
+<a href="http://www.slideshare.net/jthomas/moving-to-dojo-17-and-the-path-to-20">slideshare</a>.</p>
+
+<p>The theme of the talk was that Dojo 1.7 provided an opportunity to
+start upgrading your project to use these (optional) new features today,
+migrating away from older features that are now deprecated and will be
+unsupported in 2.0. By beginning to move your codebase across now, the
+upgrade path to 2.0 will be straightforward and painless.</p>
+
+<div style="width:425px" id="__ss_10497435"> <strong style="display:block;margin:12px 0 4px"><a href="http://www.slideshare.net/jthomas/moving-to-dojo-17-and-the-path-to-20" title="Moving to Dojo 1.7 and the path to 2.0" target="_blank">Moving to Dojo 1.7 and the path to 2.0</a></strong> <iframe src="http://www.slideshare.net/slideshow/embed_code/10497435" width="425" height="355" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe> <div style="padding:5px 0 12px"> View more <a href="http://www.slideshare.net/" target="_blank">presentations</a> from <a href="http://www.slideshare.net/jthomas" target="_blank">James Thomas</a> </div> </div>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2011/10/22/dojoconf/">DojoConf 2011 - Building Dojo in the Cloud</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2011-10-22T15:08:00+01:00" pubdate data-updated="true">Oct 22<span>nd</span>, 2011</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>September saw this year&#8217;s <a href="http://dojoconf.com/">Dojo Conference</a> hit
+Washington, D.C for two days. Attending as one of this year&#8217;s speakers, I was
+given the second slot on Saturday morning to talk about the <a href="http://build.dojotoolkit.org">Dojo Web Builder</a>.
+The presentation covered why we built the tool, what it can do (including a live demo), a high-level overview of the
+architecture and finished looking at how users have been using the tool since
+it launched in April.</p>
+
+<p>The slides are now available on
+<a href="http://www.slideshare.net/jthomas/building-dojo-in-the-cloud">slideshare</a> and
+the audio will soon follow. I&#8217;ve also uploaded other recent presentations,
+including <a href="http://www.slideshare.net/jthomas/debugging-mobile-apps">Debugging Mobile Web Apps</a>
+from London AJAX Mini-Conf in July.</p>
+
+<div style="margin: 0 auto; width:425px" id="__ss_9299215"> <strong style="display:block;margin:12px 0 4px"><a href="http://www.slideshare.net/jthomas/building-dojo-in-the-cloud" title="Building Dojo in the Cloud" target="_blank">Building Dojo in the Cloud</a></strong> <iframe src="http://www.slideshare.net/slideshow/embed_code/9299215" width="425" height="355" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe> <div style="padding:5px 0 12px"> View more <a href="http://www.slideshare.net/" target="_blank">presentations</a> from <a href="http://www.slideshare.net/jthomas" target="_blank">jthomas</a> </div></div>
+
+
+<p>Both Dojo Conf and CapitolJS, which followed the next day, were fantastic,
+undoubtedly due to the enormous hardwork of the organisers -
+<a href="http://twitter.com/voodootikigod">Chris</a> and <a href="http://twitter.com/lwilliams">Laura Williams</a> (JSConf).
+I&#8217;m looking forward to DojoConf 2012 already&#8230;</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  <div class="pagination">
+    
+    <a href="/blog/archives">Blog Archives</a>
+    
+    <a class="next" href="/blog/page/5/">Newer &rarr;</a>
+    
+  </div>
+</div>
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">Monitoring Serverless Applications Metrics</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/11/21/openwhisk-logstash-forwarder/">Openwhisk Logstash Forwarder</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/10/31/openwhisk-alarm-trigger-schedules/">advanced openwhisk alarm schedules</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating&#8230;</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll&#8230;</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2018 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        var disqus_script = 'count.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

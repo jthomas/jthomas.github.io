@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: continuous delivery | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/continuous-delivery/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-01-11T16:17:08+00:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Continuous Delivery for Phonebot]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot/"/>
+    <updated>2015-06-11T16:08:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2015/06/11/continuous-delivery-for-phonebot</id>
+    <content type="html"><![CDATA[<p><img src="/images/Phonebot_Pipeline.png"></p>
+
+<p>Since creating <a href="http://jamesthom.as/blog/2015/05/29/phonebot/">Phonebot</a> last month,
+I've been working on setting up a fully-automated build and deploy for the project.
+Using <a href="http://hub.jazz.net">IBM DevOps Services</a>, Phonebot now has
+"<a href="http://en.wikipedia.org/wiki/Continuous_delivery">Continuous Delivery</a>" enabled.</p>
+
+<p><strong>When new code is commited to the <a href="https://github.com/IBM-Bluemix/phonebot">external Github repository</a>,
+the build service will perform the following tasks.</strong></p>
+
+<ul>
+<li><em>Run Unit Tests and Code Lint Tools</em></li>
+<li><em>Deploy To Test Server</em></li>
+<li><em>Run Integration Tests Against Test Server</em></li>
+<li><em>Deploy To Production</em></li>
+</ul>
+
+
+<p>Each stage will only be executed if the following stage passes.</p>
+
+<p>In the following post, I'll explain how to set up each stage and share tips making it easy to
+replicate this setup for your projects...</p>
+
+<h2>Writing Tests for Phonebot</h2>
+
+<p>Phonebot comes with a comprehensive <a href="https://github.com/IBM-Bluemix/phonebot/tree/master/test">test suite</a>.
+I've used the <a href="http://mochajs.org">Mocha</a> test framework for creating unit and integration tests. Test
+assertions use NodeJS' <a href="https://nodejs.org/api/assert.html">built-in library</a>. The <a href="https://github.com/mfncooper/mockery">mockery</a>
+library is used to replace module dependencies with mock objects.</p>
+
+<p>Setting up the <a href="https://docs.npmjs.com/misc/scripts"><em>scripts</em></a> field in
+<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/package.json"><em>package.json</em></a> allows us to use NPM to run our tests.</p>
+
+<p>NPM will look into the "<em>node_modules/.bin</em>" directory for binaries when running scripts. This means we don't need Mocha installed
+on the deployment host to run tests. The "<em>devDependencies</em>" field includes modules we rely on during development
+but not production.</p>
+
+<p>```
+"devDependencies": {</p>
+
+<pre><code>"mocha": "^2.2.5",
+"mocha-eslint": "^0.1.7",
+"mockery": "^1.4.0"
+</code></pre>
+
+<p>},
+"scripts": {</p>
+
+<pre><code>"test": "mocha test/unit",
+"integration-test": "mocha test/integration",
+"start": "node app.js"
+</code></pre>
+
+<p>  },
+```</p>
+
+<p>Running the following commands will run the unit and integration tests.</p>
+
+<p><code>
+$ npm test  // defaults to 'run test'
+$ npm run integration-test
+</code></p>
+
+<h3>Running Code Linters</h3>
+
+<p>Along with unit tests, we want to run 'code linters' to catch any errors in our JavaScript code.
+We're using the <a href="https://github.com/eslint/eslint">eslint</a> tool with the following
+<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/.eslintrc">configuration</a>. Using this <a href="https://www.npmjs.com/package/mocha-eslint">module</a>,
+we're setting up the eslint tool as a <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/test/unit/eslint.js">test case</a>.</p>
+
+<p>This test will
+be automatically run in the unit test phase and errors incorporated into the test report.</p>
+
+<h3>Mocking Services In Integration Tests</h3>
+
+<p>When the unit tests have passed, we're going to deploy a test instance of the application.
+Integration tests will make HTTP requests to simulate user activity, capture the responses
+and then verify the application is behaving as expected.</p>
+
+<p>Phonebot uses external services, provisioned through IBM Bluemix, to make phone calls, translate
+speech to text and communicate with Slack channels. Services configuration parameters, e.g. username, password, host,
+are passed into the application using <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">environment variables</a>.</p>
+
+<p><strong><em>During integration tests, we want to capture all requests to external services and provide hardcoded HTTP responses to be returned.
+With service parameters coming from environment properties, rather than hardcoded in the application, we can simply replace
+the bound services configuration with our own values. This application will pick up these new values, pointing to our stub server, at runtime
+without any changes needed to the code.</em></strong></p>
+
+<p>This <a href="https://gist.github.com/jthomas/f573cb94de20b0e95940">stub server</a> has
+been created to capture all incoming HTTP requests and make them available at a
+custom HTTP endpoint. We're also configured HTTP routes to simulate each of the
+external services and return hardcoded responses.</p>
+
+<p>Deploying our test server in a different <a href="http://docs.cloudfoundry.org/concepts/roles.html#spaces">space</a> to production means we can have custom
+credentials set up without having to modify the service configuration in the production environment.</p>
+
+<p>The following commands will show the existing configuration values that we can replicate in the test environment.</p>
+
+<p><code>
+$ cf env phonebot
+$ cf create-space test
+$ cf target -s test
+$ cf cups twilio -p "accountSID, authToken, url"
+$ cf cups speech_to_text -p "username, password, url"
+$ cf cups slack_webhooks -p "slackbot-testing"
+</code></p>
+
+<p>With the test credentials created, we can deploy the application to the "test" space without modifications.</p>
+
+<h2>Setting up Build and Deploy Pipeline</h2>
+
+<p>We're going to use <a href="http://hub.jazz.net">IBM DevOps Services</a> to build and manage the "Continuous Delivery" pipeline.
+From the home page, click the <em>"Create Project"</em> button to import our existing Github project into the workspace.</p>
+
+<p><img src="/images/create_project.png"></p>
+
+<p>The <em>"Create Project"</em> page allows us to link an existing project from Github to the new project.
+Changes to the external repository will be automatically pushed through to our project.</p>
+
+<p><img src="/images/create_phonebot.png"></p>
+
+<p>Selecting the <em>"Make a Bluemix project"</em> option will automatically configure deploying to the Bluemix platform.</p>
+
+<p><img src="/images/import_phonebot_bm.png"></p>
+
+<p>When the project has finished importing, we can access the "Build and Deploy" pipeline...</p>
+
+<p><img src="/images/build_and_deploy.png"></p>
+
+<p>... which will currently be empty. Clicking the <em>"Add Stage"</em> button will allow
+us to start configuring the build, test and deploy jobs for our pipeline.</p>
+
+<p><img src="/images/add_stage.png"></p>
+
+<h3>Running Unit Tests and Code Lint Tools</h3>
+
+<p>The first stage in our pipeline will run the unit tests when a new commit is published
+to the Phonebot repository on Github.</p>
+
+<p>Using the <em>"Input"</em> tab, we're configuring the stage to pick up all changes in the <em>"master"</em> branch
+of the <a href="https://github.com/jthomas/phonebot.git">https://github.com/jthomas/phonebot.git</a> repository.
+The input for a stage can also be the build artifacts from a previous stage.</p>
+
+<p><img src="/images/unit_test_input.png"></p>
+
+<p>On the <em>"Jobs"</em> tab, we can configure multiple tasks to be executed when triggered by the stage input.
+For the unit tests, we're using a simple shell script to install the project dependencies and run
+the NPM task.</p>
+
+<p><img src="/images/unit_tests.png"></p>
+
+<h3>Deploy Test Server</h3>
+
+<p>Adding a second stage to the pipeline after the unit tests, we will use it to deploy our test server.
+This stage will only be executed if the first stage completes successfully.</p>
+
+<p>Using the <em>"Deploy"</em> rather than <em>"Test"</em> job, presents us with a configuration
+panel to set up the deployment parameters. The <em>"test"</em> space which contains our
+test configuration for our mock services. Choosing a different application name
+means our test server won't clash with the existing production host already
+deployed.</p>
+
+<p><img src="/images/deploy_test.png"></p>
+
+<h3>Running Integration Tests Against Test Server</h3>
+
+<p>Once the test server has been deployed, we can trigger the pipeline stage to run
+integration tests against this host.</p>
+
+<p>Using Mocha to run out integration tests means we can follow the setup
+as the unit test stage. Defining a "test" job, we install the project dependencies
+and then run the test harness.</p>
+
+<p><img src="/images/integration_tests.png"></p>
+
+<p>Phonebot's integration tests use environment variables to define the test
+and stub server locations. We can define these through the stage setup page, as
+shown below.</p>
+
+<p><img src="/images/environment_props.png"></p>
+
+<h3>Deploy To Production</h3>
+
+<p>Finally, provided all the previous stages were successfully, the last stage will
+deploy our application into production.</p>
+
+<p>Configuring a <em>"Deploy"</em> task, this time we use the production space <em>"dev"</em> and use the
+proper application name.</p>
+
+<p><img src="/images/deploy_production.png"></p>
+
+<h2>...and that's it!</h2>
+
+<p>With our "Continuous Delivery" pipeline now configured, new versions of
+Phonebot will be automatically deployed to production without any manual work.</p>
+
+<p><img src="/images/deploy_success.png"></p>
+
+<p>For testing, each stage can be triggered manually. Logs are available in to diagnose any issues that may occur.</p>
+
+<p><strong>Using IBM DevOps Services, we rapidly created a build and deploy pipeline linked to a project on Github without having to manually
+configure build systems, test servers or anything else you would expect.</strong></p>
+
+<p>Our example was relatively simple, the service can be configured for far more complicated build and deploy tasks. The <a href="https://hub.jazz.net/docs">documentation</a>
+gives full details on the capabilities of that platform. If you have any issues, please use the <a href="https://developer.ibm.com/answers/smartspace/devops-services/">IBM Answers support forum</a> to post questions and get answers from the development team.</p>
+]]></content>
+  </entry>
+  
+</feed>

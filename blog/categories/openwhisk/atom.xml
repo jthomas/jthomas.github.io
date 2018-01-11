@@ -1,0 +1,1697 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: openwhisk | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/openwhisk/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-01-11T16:17:08+00:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Visualising Serverless Metrics With Grafana Dashboards]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/"/>
+    <updated>2018-01-05T15:40:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards</id>
+    <content type="html"><![CDATA[<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
+
+<p><em>This blog post is part three of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+
+<p>Having <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
+applications, monitoring incoming metric values will alert us to problems.</p>
+
+<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
+
+<p><blockquote><p>Grafana is an open source metric analytics &amp; visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote></p>
+
+<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
+
+<p>Let's review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
+before we start setting up the serverless monitoring dashboards…</p>
+
+<h2>Grafana Basics</h2>
+
+<h3>Metric Data Values</h3>
+
+<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
+</code></p>
+
+<p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
+
+<ul>
+<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
+<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
+<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
+<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration</code></em></li>
+</ul>
+
+
+<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
+
+<h3>Templates</h3>
+
+<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
+
+<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
+
+<p><img src="/images/grafana_dashboards/templating.png"></p>
+
+<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
+
+<h3>Common Tasks</h3>
+
+<h4>How to create a new dashboard?</h4>
+
+<ul>
+<li>Open the dashboard menu by clicking the drop-down menu.</li>
+<li>Click the "Create New" button.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/new_dashboard.png"></p>
+
+<h4>How to set the dashboard name?</h4>
+
+<ul>
+<li>Select the "Manage Dashboard" menu option.</li>
+<li>Click "Settings" to open the dashboard options panel.</li>
+<li>Change the "General -> Details -> Name" configuration value.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/dashboard_name.png"></p>
+
+<h4>How to set dashboard template variables?</h4>
+
+<ul>
+<li>Select the "Manage Dashboard" menu option.</li>
+<li>Click "Templating" to open the templating variables configuration panel.</li>
+<li>Click "New" button to define template variables.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/dashboard_template_menu.png"></p>
+
+<ul>
+<li>Fill in the name field with the template identifier.</li>
+<li>Select "IBM Cloud Monitoring" as the data source.</li>
+<li>Fill in the query field with chosen metric query.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/dashboard_template_details.png"></p>
+
+<h4>How to add new row to dashboard?</h4>
+
+<ul>
+<li>Click the "Add Row" button beneath the last row.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/add_row.png"></p>
+
+<h4>How to add new chart to row?</h4>
+
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the "Add Panel" menu item.</li>
+<li>Choose a chart type from the panel menu.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
+
+<h4>How to set and display row name?</h4>
+
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the "Row Options" menu item.</li>
+<li>Fill in the "Title" field. Click the "Show" checkbox.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
+
+<h4>How to edit chart parameters?</h4>
+
+<ul>
+<li>Click the panel title to open the panel options dialog.</li>
+<li>Select the "Edit" button.</li>
+<li>Graph options dialog opens below the chart panel.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/panel_details_more.png"></p>
+
+<h4>How to choose time range for metric values?</h4>
+
+<ul>
+<li>Click the clock icon on the right-hand side of the menu bar.</li>
+<li>Define time ranges manually or by selecting options from the "Quick Ranges" examples.</li>
+<li>Auto-update can be enabled using the "Refresh" drop-down menu.</li>
+</ul>
+
+
+<p><img src="/images/grafana_dashboards/time_range_menu.png"></p>
+
+<h2>Dashboards</h2>
+
+<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
+
+<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
+
+<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
+for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
+
+<h3>Overview Dashboard</h3>
+
+<p>This is an example of the first dashboard we want to create.</p>
+
+<p><img src="/images/grafana_dashboards/overview-dashboard.gif"></p>
+
+<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
+
+<h4>setup</h4>
+
+<ol>
+<li>Create a new dashboard named "Overview".</li>
+<li>Set the following template variables.
+
+<ul>
+<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
+</ul>
+</li>
+</ol>
+
+
+<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
+
+<h4>invocations graph</h4>
+
+<p><img src="/images/grafana_dashboards/overview-invocations.png"></p>
+
+<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
+
+<p><em>How can we calculate total invocations from the metric values?</em></p>
+
+<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
+
+<p><em>Let's implement this now…</em></p>
+
+<ul>
+<li>Set and display default row name as <em>"Invocations"</em>.</li>
+<li>Add new <em>"Graph"</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error
+.scale(0).offset(1).groupByNode(5, sum)
+</code></p>
+
+<ul>
+<li>Set the following options to true.
+
+<ul>
+<li><em>Legend->Options->Show</em></li>
+<li><em>Display->Draw Modes->Bars</em></li>
+<li><em>Display->Stacking &amp; Null value->Stack</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation types</h4>
+
+<p><img src="/images/grafana_dashboards/overview-invocation-types.png"></p>
+
+<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
+
+<p>Calculating the sum for all invocations recorded will use the same "scale &amp; offset" trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
+
+<p><strong><u>all count</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>"Invocation Types"</em>.</li>
+<li>Add a new <em>"Single Stat"</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = All</em></li>
+<li><em>Options -> Value -> Stat = total</em></li>
+<li><em>Options -> Coloring -> Background = true</em></li>
+<li><em>Options -> Coloring -> Thresholds = 0,100000</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>success count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"All"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Success</em></li>
+<li><em>Options -> Coloring -> Colors = Make green the last threshold colour.</em></li>
+<li><em>Options -> Coloring -> Thresholds = 0,0</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>errors count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Success"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Errors</em></li>
+<li><em>Options-> Coloring -> Colors = Make red the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>cold start count</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Errors"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Cold Start</em></li>
+<li><em>Options-> Coloring -> Colors = Make blue the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation durations</h4>
+
+<p><img src="/images/grafana_dashboards/overview-invocation-durations.png"></p>
+
+<p>This row will contain counts for the total, mean and range of all invocations.</p>
+
+<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
+
+<p><strong><u>total duration</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>"Invocation Durations"</em>.</li>
+<li>Add a new <em>"Single Stat"</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Total</em></li>
+<li><em>Options -> Value -> Stat = total</em></li>
+<li><em>Options -> Value -> Unit = milliseconds</em></li>
+<li><em>Options -> Coloring -> Background = true</em></li>
+<li><em>Options -> Coloring -> Thresholds = 100000000,100000000</em></li>
+<li><em>Options -> Coloring -> Colors = Make grey the first threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>average duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Total"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Average</em></li>
+<li><em>Options -> Value -> Stat = avg</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>range duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Average"</em> chart in the row.</li>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Range</em></li>
+<li><em>Options -> Value -> Stat = range</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation details table</h4>
+
+<p><img src="/images/grafana_dashboards/overview-tables.png"></p>
+
+<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
+
+<p><strong><u>all invocations table</u></strong></p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>"Invocations Per Action"</em>.</li>
+<li>Add a <em>"Table"</em> panel to the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error
+.scale(0).offset(1).groupByNode(5, sum)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (All)</em></li>
+<li><em>Options -> Data -> Table Transform = Time series aggregations</em></li>
+<li><em>Options -> Data -> Columns = Total</em></li>
+<li><em>Options -> Column Styles -> Decimals = 0</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>error invocations table</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Invocations (All)"</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (Errors)</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>duration statistics table</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Invocations (Errors)"</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Invocations (Duration)</em></li>
+<li><em>Options -> Data -> Columns = Avg, Min, Max</em></li>
+<li><em>Options -> Column Styles -> Decimals = Milliseconds</em></li>
+<li><em>Options -> Column Styles -> Decimals = 2</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
+
+<p><em>Let's move onto the second dashboard, which will give us more in-depth statistics for individual actions...</em></p>
+
+<h3>Action Dashboard</h3>
+
+<p>This is an example of the second dashboard we want to create.</p>
+
+<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
+
+<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
+
+<h4>setup</h4>
+
+<ul>
+<li>Create a new dashboard named <em>"Action Details"</em>.</li>
+<li>Set the following template variables.
+
+<ul>
+<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
+<li><strong>$actions</strong> => <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
+</ul>
+</li>
+</ul>
+
+
+<p><em>Replace &lt;action> with the name of an action you are monitoring.</em></p>
+
+<h4>invocations</h4>
+
+<p><img src="/images/grafana_dashboards/action-invocations.png"></p>
+
+<p>Action invocations are shown this first dashboard row. Bar charts display
+successful versus failed invocations and cold versus warm starts.</p>
+
+<p>Failed invocations and cold starts are recorded as metric values. Using the
+<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
+and warm starts from these properties.</p>
+
+<ul>
+<li>Set and display default row name as <em>"Invocations"</em>.</li>
+<li>Add new <em>"Graph"</em> chart to row.</li>
+<li><p>Configure two metric queries for the chart:
+<code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.error
+.scale(0).offset(1).groupByNode(5, sum).alias(success)
+</code>
+<code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.error
+.groupByNode(5, sum).alias(failure)
+</code></p></li>
+<li><p>Set the following options to true.</p>
+
+<ul>
+<li><em>Legend->Options->Show</em></li>
+<li><em>Display->Draw Modes->Bars</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>invocation types</h4>
+
+<p><img src="/images/grafana_dashboards/action-invocation-types.png"></p>
+
+<p>This row replicates the <em>"Invocation Types"</em> row from the <em>"Overview"</em> dashboard.</p>
+
+<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
+
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+
+<h4>invocation durations</h4>
+
+<p><img src="/images/grafana_dashboards/action-invocation-durations.png"></p>
+
+<p>This row uses an extended version of the durations row from the <em>"Overview"</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
+
+<p><strong>Repeat the instructions from above to add the <em>"Total"</em> and <em>"Average"</em> panels.</strong></p>
+
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+
+<p><strong><u>minimum duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Total"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Min</em></li>
+<li><em>Options -> Value -> Stat = min</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>maximum duration</u></strong></p>
+
+<ul>
+<li>Duplicate the <em>"Minimum"</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Min</em></li>
+<li><em>Options -> Value -> Stat = max</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong><u>percentiles graph</u></strong></p>
+
+<ul>
+<li>Add a <em>"Table"</em> panel to the row.</li>
+<li>Configure this metric query for the chart:</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
+.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)
+</code></p>
+
+<ul>
+<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
+<li>Set the following options.
+
+<ul>
+<li><em>General -> Info -> Title = Durations (Percentiles)</em></li>
+<li><em>Axes -> Left Y -> Unit = Milliseconds</em></li>
+<li><em>Legend -> Options -> Show = True</em></li>
+<li><em>Legend -> Values -> Avg = True</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>cpu usage</h4>
+
+<p><img src="/images/grafana_dashboards/action-cpu-usage.png"></p>
+
+<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>"CPU Usage"</em>.</li>
+<li>Add new <em>"Graph"</em> panel to row.</li>
+<li>Configure two metric queries for the chart.</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
+.groupByNode(5, avg).alias(user-time)
+</code></p>
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
+.groupByNode(5, avg).alias(system-time)
+</code></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>Axes -> Left Y -> Unit = Microseconds</em></li>
+<li><em>Legend -> Values -> Avg = true</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<h4>memory usage</h4>
+
+<p><img src="/images/grafana_dashboards/action-memory-usage.png"></p>
+
+<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
+
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>"Memory Usage"</em>.</li>
+<li>Add new <em>"Graph"</em> panel to row.</li>
+<li>Configure four metric queries for the chart using this template.</li>
+</ul>
+
+
+<p><code>
+ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
+.groupByNode(5, avg).alias(&lt;label&gt;)
+</code></p>
+
+<p><strong>Replace &lt;label> with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
+
+<ul>
+<li>Set the following options.
+
+<ul>
+<li><em>Axes -> Left Y -> Unit = bytes</em></li>
+<li><em>Legend -> Values -> Avg = true</em></li>
+<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
+<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><strong>Having finished all the charts for the action details example, you should now
+have dashboards which look like the examples above!</strong> 📈📊📉</p>
+
+<h2>conclusion</h2>
+
+<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
+
+<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
+are a perfect solution for this problem. Building custom dashboards allows us
+to monitor incoming data values live.</p>
+
+<p>In the next blog post, we're going to finish off <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values...</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Capturing Runtime Metrics For OpenWhisk Applications]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/"/>
+    <updated>2017-12-18T09:21:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications</id>
+    <content type="html"><![CDATA[<p><em>This blog post is part one of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+
+<p>Serverless platforms pose a unique challenge for collecting application metrics. Runtime environments are <a href="https://martinfowler.com/articles/serverless.html">ephemeral</a>, existing only to process requests.</p>
+
+<p>Using a background process to capture and export metrics to an external service is impossible. With such a restricted runtime environment, we have to look at other options… 🤔</p>
+
+<h2>exporting serverless runtime metrics</h2>
+
+<h3>console logs with alarm trigger</h3>
+
+<p>Apache OpenWhisk captures console logs written to stdout or stderr by actions. Logs are available in <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#activation-record">activation records</a> through the <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/apiv1swagger.json">platform API</a>.</p>
+
+<p>Runtime metrics written to the console will be saved in the activation records.</p>
+
+<p>An additional action, triggered from the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm package</a>, can be scheduled to collect these values from the logs and forward to the metrics service.</p>
+
+<p><em>This approach is simple and does not interfere with request processing. However, it does add a delay to the metric values being available in the collection service. This delay is dependent on the schedule chosen for the alarm trigger feed.</em></p>
+
+<h3>send before returning</h3>
+
+<p>Another option is to instrument the serverless functions to automatically collect and push metrics to the metric service before returning from the function.</p>
+
+<p>The function will have to wait for the external metrics service to respond before returning.</p>
+
+<p><em>This method pushes metric values into the collection service in real-time. There is no waiting for the background collection action to run. The disadvantage of this approach is that it adds a delay to each request. This delay is dependent on the response time from the collection service.</em></p>
+
+<h2>capturing runtime metrics</h2>
+
+<p>Metric values will have to be captured using a runtime library, due to the restrictions on running background processes.</p>
+
+<p>The library should automatically capture registered metrics during each invocation. Values will be forwarded to the collection service using the configured forwarding method.</p>
+
+<h3>openwhisk-metrics</h3>
+
+<p>There is a Node.js library to ease the process of capturing runtime metrics for OpenWhisk actions.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-metrics">https://github.com/jthomas/openwhisk-metrics</a></p>
+
+<p>Node.js actions are wrapped with a proxy to automate recording metrics during invocations.</p>
+
+<p>Metric values for <code>cpu</code>, <code>memory</code>, <code>time</code>, <code>error</code> and <code>coldstart</code> are collected by default. It supports adding custom metric collectors.</p>
+
+<h4>usage</h4>
+
+<p>Wrap action handlers with the metrics library.</p>
+
+<p>```javascript
+const metrics = require('openwhisk-metrics')</p>
+
+<p>const main = params => {
+  return { message: "Hello World" }
+}</p>
+
+<p>module.exports.main = metrics(main)
+```</p>
+
+<p>Metrics values are logged to stdout for each invocation of the serverless function.</p>
+
+<p><code>
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.rss 53018624 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.heapTotal 34463744 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.heapUsed 16955224 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.external 987361 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.error 0 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.coldstart 0 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.cpu.user 177 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.cpu.system 2 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.start 1511605588388 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.end 1511605588468 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.duration 80 1512489781
+</code></p>
+
+<p>Once you are collecting metrics, you need a monitoring service to forward them to…</p>
+
+<h2>monitoring service</h2>
+
+<p>We're going to look at collecting and visualising metrics using the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring Service</a>.</p>
+
+<blockquote><p>Use the IBM® Cloud Monitoring service to expand your collection and retention capabilities when working with metrics, and to be able to define rules and alerts that notify you of conditions that require attention.</p></blockquote>
+
+<p><a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a> comes with a metric collection service, Grafana-based visualisation dashboard and an alerting system.</p>
+
+<p>Let's demonstrate how to use the approaches listed above for exporting metrics to the IBM Cloud Monitoring service.</p>
+
+<p>There's an <a href="https://github.com/jthomas/cloud-functions-metrics-service">additional Node.js library</a> to integrate the <a href="https://github.com/jthomas/openwhisk-metrics">OpenWhisk Metrics</a> library with the IBM Cloud Monitoring Service. This can forward metrics in real-time or batches (using a schedule action from a timer).</p>
+
+<h3>provisioning</h3>
+
+<p>An instance of the service must be provisioned before being used.</p>
+
+<p><em>The service is available in <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">multiple regions</a>. Choose the same region as the IBM Cloud Functions instance for best performance.</em></p>
+
+<p>Instances can be provisioned through the <a href="https://console.bluemix.net">IBM Cloud dashboard</a> or the <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">IBM Cloud CLI</a> tool.</p>
+
+<p><code>
+ $ bx cf create-service Monitoring lite my_monitoring_svc
+</code></p>
+
+<p>For more details on provisioning instances of this service, please see the documentation: <a href="https://console.bluemix.net/docs/services/cloud-monitoring/how-to/provision.html#provision">https://console.bluemix.net/docs/services/cloud-monitoring/how-to/provision.html#provision</a></p>
+
+<h3>authentication</h3>
+
+<p>IBM Cloud Monitoring supports the following authentication methods: <em>API Key, UAA Token or IAM Token.</em></p>
+
+<p>An API key will be used to provide authentication credentials in the examples below.</p>
+
+<p>Keys can be created through the <a href="https://console.bluemix.net">IBM Cloud dashboard</a> or the <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">IBM Cloud CLI</a> tool.</p>
+
+<p><code>
+$ bx iam api-key-create metrics-key -d "API Key For Serverless Metrics"
+</code></p>
+
+<p><strong>Note:</strong> <em>The API key is only shown at the time of creation. If the API key is lost, you must create a new API key.</em></p>
+
+<p>For more details on creating API keys, please see the documentation here: <a href="https://console.bluemix.net/docs/services/cloud-monitoring/security/auth_api_key.html#auth_api_key">https://console.bluemix.net/docs/services/cloud-monitoring/security/auth_api_key.html#auth_api_key</a></p>
+
+<h3>space domain</h3>
+
+<p>The GUID of the <a href="https://console.bluemix.net/docs/admin/orgs_spaces.html#orgsspacesusers">account space</a> is also required to use the metrics service.</p>
+
+<p>Retrieve this value using the IBM Cloud CLI tool. Replace <code>SpaceName</code> with the name of the space.</p>
+
+<p><code>
+bx iam space SpaceName --guid
+</code></p>
+
+<p>The GUID for the space is returned.</p>
+
+<p><code>
+$ bx iam space dev --guid
+667fadfc-jhtg-1234-9f0e-cf4123451095
+</code></p>
+
+<p><strong>Note:</strong> <em>Space GUIDs must be prefixed with <code>s-</code> when being using with the monitoring service.</em></p>
+
+<p><code>
+"667fadfc-jhtg-1234-9f0e-cf4123451095" =&gt; "s-667fadfc-jhtg-1234-9f0e-cf4123451095"
+</code></p>
+
+<h2>example (real-time forwarding)</h2>
+
+<p>Let's start with an example of using real-time forwarding of metrics values. Metric values will be automatically collected by the runtime library. Before each invocation finishes, the library will send the values to the external collection service.</p>
+
+<p><em>This example assumes you already have the CLI tool for IBM Cloud Functions installed and configured. If you need to do this, please follow the instructions <a href="https://console.bluemix.net/openwhisk/learn/cli">here</a>.</em></p>
+
+<h3>create new directory</h3>
+
+<p><code>
+$ mkdir hello-world
+$ cd hello-world
+</code></p>
+
+<h3>initialise npm package</h3>
+
+<p><code>
+$ npm init -y
+</code></p>
+
+<h3>install libraries</h3>
+
+<p><code>
+$ npm install openwhisk-metrics cloud-functions-metrics-service
+</code></p>
+
+<h3>update action handler source</h3>
+
+<p>Create a file called <code>index.js</code> with following code.</p>
+
+<p>```javascript
+const metrics = require('openwhisk-metrics')
+const service = require('cloud-functions-metrics-service')</p>
+
+<p>metrics.service = service.client({<br/>
+  host: 'metrics.&lt;???>.bluemix.net',
+  scope: 's-&lt;???>',
+  api_key: '&lt;???>'
+})</p>
+
+<p>const main = params => {</p>
+
+<pre><code>return { message: "Hello World" }
+</code></pre>
+
+<p>}</p>
+
+<p>module.exports.main = metrics(main)
+```</p>
+
+<p>Replace the <code>host</code>, <code>scope</code> and <code>api_key</code> parameters custom values. Host names for the regional monitoring service endpoints are listed <a href="https://console.bluemix.net/docs/services/cloud-monitoring/send_retrieve_metrics_ov.html#endpoints">here</a>.</p>
+
+<p><em>Space GUIDs must be prefixed with <code>s-</code> to identify a space in the <code>scope</code> parameter.</em></p>
+
+<h3>create new action</h3>
+
+<p><code>
+$ zip -r action.zip index.js package.json node_modules
+$ wsk action create hello-world --kind nodejs:8 action.zip
+</code></p>
+
+<h3>invoke action</h3>
+
+<p><code>
+$ wsk action invoke hello-world -b
+ok: invoked /_/hello-world with id 74add543b3b94bbbadd543b3b9dbbb17
+</code></p>
+
+<h3>use api to list metrics</h3>
+
+<p>Use <code>curl</code> to manually list the ingested metric labels for IBM Cloud Functions.</p>
+
+<p><strong>Replace the <code>&lt;???&gt;</code> values in the command with configuration values from above.</strong></p>
+
+<p><code>
+$ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.public.cloud-functions.*.*.*.*' --header 'x-auth-scope-id: s-&lt;???&gt;' --header 'X-Auth-User-Token: apikey &lt;???&gt;'
+[{
+  "leaf": 0,
+  "context": {},
+  "text": "72df4bc809c04fae9f4bc809c01fae77",
+  "expandable": 1,
+  "id": "ibm.public.cloud-functions.*.*.*.72df4bc809c04fae9f4bc809c01fae77",
+  "allowChildren": 1
+}]
+</code></p>
+
+<p>Each activation identifier should be listed as a label value in the metrics service.</p>
+
+<h2>example (batch forwarding)</h2>
+
+<p>If we don't want to add a (short) delay to each invocation, metric values can be forwarded asynchronously. An explicit action will be created to forward metric values from invocation logs. This action will be triggered on a periodic schedule using the alarm trigger feed.</p>
+
+<p><em>This example assumes you already have the CLI tool for IBM Cloud Functions installed and configured. If you need to do this, please follow the instructions <a href="https://console.bluemix.net/openwhisk/learn/cli">here</a>.</em></p>
+
+<h3>create sample action</h3>
+
+<p><code>
+$ mkdir hello-world
+$ cd hello-world
+$ npm init -y
+$ npm install openwhisk-metrics
+</code></p>
+
+<p>Create a file called <code>index.js</code> with the following code.</p>
+
+<p>```javascript
+const metrics = require('openwhisk-metrics')</p>
+
+<p>const main = params => {
+  return { message: "Hello World" }
+}</p>
+
+<p>module.exports.main = metrics(main)
+```</p>
+
+<h3>deploy and test sample action</h3>
+
+<p>Package and deploy <code>hello-world</code> action.</p>
+
+<p><code>
+$ zip -r action.zip index.js package.json node_modules
+$ wsk action create hello-world --kind nodejs:8 action.zip
+</code></p>
+
+<p>Metric values are written to the console for each invocation.</p>
+
+<p><code>
+$ wsk action invoke hello-world -b
+ok: invoked /_/hello-world with id 28da39d219df436a9a39d219df036a30
+$ wsk activation logs 28da39d219df436a9a39d219df036a30
+2017-12-18T14:38:50.751615113Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.cpu.user 0 1513607930
+2017-12-18T14:38:50.751672372Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.cpu.system 0 1513607930
+2017-12-18T14:38:50.751685034Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.time.start 1513607930749 1513607930
+...
+</code></p>
+
+<h3>create metric-forwarder action</h3>
+
+<p>Clone the project repository and install NPM dependencies.</p>
+
+<p><code>
+$ git clone https://github.com/jthomas/cloud-functions-metrics-service
+$ cd cloud-functions-metrics-service
+$ npm install
+</code></p>
+
+<p>Update action configuration file (<code>config.json</code>) with the following parameter values.</p>
+
+<p>```
+{
+  "actions": ["hello-world"],
+  "service": {</p>
+
+<pre><code>"host": "metrics.&lt;???&gt;.bluemix.net",
+"scope": "s-&lt;???&gt;",
+"api_key": "&lt;???&gt;"          
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><strong>Replace the <code>&lt;???&gt;</code> fields in the configuration file from values from above.</strong></p>
+
+<p>Package <code>metric-forwarder</code> action.</p>
+
+<p><code>
+$ zip -r action.zip index.js package.json lib node_modules
+</code></p>
+
+<h3>deploy metric-forwarder action</h3>
+
+<p>Create new <code>metric-forwarder</code> action from deployment package and configuration file.</p>
+
+<p><code>
+$ wsk action create metric-forwarder --kind nodejs:8 action.zip --param-file config.json
+</code></p>
+
+<p>Create trigger feed for alarm package to run <code>metric-forwarder</code> on periodic schedule.</p>
+
+<p><code>
+$ wsk trigger create interval \
+  --feed /whisk.system/alarms/interval \
+  --param minutes 1
+</code></p>
+
+<p>Bind trigger to action using rule.</p>
+
+<p><code>
+$ wsk rule create forward-metrics-on-interval interval metric-forwarder
+</code></p>
+
+<h3>invoke sample action</h3>
+
+<p><code>
+$ wsk action invoke hello-world -b
+ok: invoked /_/hello-world with id 28da39d219df436a9a39d219df036a30
+</code></p>
+
+<p>This will generate activation records containing metric values. When the <code>interval</code> trigger is next fired, metric values from these records forwarded to the collection service.</p>
+
+<p>Logs from the <code>metric-forwarder</code> action will show the activation records that have been retrieved.</p>
+
+<p><code>
+$ wsk activation poll metric-forwarder
+</code></p>
+
+<h3>use api to list metrics</h3>
+
+<p>Use <code>curl</code> to manually list the ingested metric labels for IBM Cloud Functions.</p>
+
+<p><strong>Replace the <code>&lt;???&gt;</code> values in the command with configuration values from above.</strong></p>
+
+<p><code>
+$ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.public.cloud-functions.*.*.*.*' --header 'x-auth-scope-id: s-&lt;???&gt;' --header 'x-auth-user-token: apikey &lt;???&gt;'
+[{
+  "leaf": 0,
+  "context": {},
+  "text": "72df4bc809c04fae9f4bc809c01fae77",
+  "expandable": 1,
+  "id": "ibm.public.cloud-functions.*.*.*.28da39d219df436a9a39d219df036a30",
+  "allowChildren": 1
+}]
+</code></p>
+
+<p>Each activation identifier should be listed as a label value in the metrics service.</p>
+
+<h2>next steps</h2>
+
+<p>Metric values from our serverless applications are now being collected by the IBM Cloud Monitoring service. 👏👏👏</p>
+
+<p>Applications metrics are automatically recorded by the runtime library for each invocation. Metric values are exported to the monitoring service in real-time or using a timed action to forward in batches.</p>
+
+<p>Setting up monitoring dashboards from the collected values will allow us to identify and resolve issues with our serverless applications. In the next blog post, we'll look using Grafana to visualise metric values being collected…</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Monitoring Serverless Applications Metrics]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring/"/>
+    <updated>2017-12-15T10:53:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2017/12/15/serverless-applications-metrics-and-monitoring</id>
+    <content type="html"><![CDATA[<p>Serverless applications are not "No Ops", <a href="https://thenewstack.io/serverless-computing-growing-quickly/">despite the meme</a>. 🙄</p>
+
+<p>Monitoring runtime metrics is <a href="https://hackernoon.com/how-we-monitor-serverless-apps-with-hundreds-of-functions-d0f1fa938d1e">still crucial for serverless applications</a>. Identifying, diagnosing and resolving issues in production requires data on execution durations, errors thrown, resource usage statistics amongst other metrics.</p>
+
+<p><a href="https://bluemix.net/">IBM Cloud</a> has a comprehensive <a href="https://console.bluemix.net/catalog/?category=devops">series of tools</a> for monitoring application metrics. In this blog post series, we're going to look at using these tools to monitor metrics from serverless applications. 💯💯💯</p>
+
+<h2>overview</h2>
+
+<p>We'll start with understanding how to capture metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications. Then we'll look at methods for automatically sending metric values into the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a>. Once metric data is being captured, we'll explore <a href="https://grafana.com/">Grafana</a> to create dashboards to monitor data values in real-time. Finally, we'll look at configuring alerting services to notify us when issues occur.</p>
+
+<p><em>Here's a sneak peak of some of the dashboards we'll be creating from serverless application metrics…</em></p>
+
+<p><img src="/images/serverless_metrics/action-metrics.gif"></p>
+
+<h2>blog posts</h2>
+
+<p>Here are the links to the blog posts in the series…</p>
+
+<ul>
+<li>Part 1: <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a></li>
+<li>Part 2: <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a></li>
+<li>Part 3: Configuring Alert Notifications Based on Metric Rules</li>
+</ul>
+
+
+<p>You can start now with the <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">first blog post</a>, other blog posts will follow soon….</p>
+
+<h2>tldr?</h2>
+
+<p><em>pssst. want to set this up without reading all those boring words and stuff?</em></p>
+
+<p>Here are the links to the open-source libraries used to set this up. Follow the instructions in the repositories to enable capturing and forwarding metrics to the monitoring service.</p>
+
+<ul>
+<li><a href="https://github.com/jthomas/openwhisk-metrics">openwhisk-metrics</a></li>
+<li><a href="https://github.com/jthomas/cloud-functions-monitoring-service">cloud-functions-monitoring-service</a></li>
+</ul>
+
+
+<p>Here are the JSON configuration files for the Grafana dashboards.</p>
+
+<p><a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b</a></p>
+
+<p>Import these files to create new dashboards and add the following template variables.</p>
+
+<ul>
+<li><strong>$region</strong> => ibm.public.cloud-functions.*</li>
+<li><strong>$namespace</strong> => ibm.public.cloud-functions.$region.*</li>
+<li><strong>$actions</strong> => ibm.public.cloud-functions.$region.$namespace.*</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Openwhisk Logstash Forwarder]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/11/21/openwhisk-logstash-forwarder/"/>
+    <updated>2017-11-21T17:15:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2017/11/21/openwhisk-logstash-forwarder</id>
+    <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/kibana_copy.png" title="Kibana Dashboard with OpenWhisk Logs" alt="Kibana Dashboard" /></p>
+
+<p>Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing into the machine and attaching a debugger to a process or using strace to dump system calls.</p>
+
+<p>Storing, searching and analysing serverless application logs is crucial to diagnosing and fixing bugs on serverless platforms.</p>
+
+<p>The "<a href="https://www.oreilly.com/ideas/understanding-the-elk-stack">ELK Stack</a>" has become a popular solution for managing applications logs. Combining three open-source projects (<a href="https://github.com/elastic/elasticsearch">ElasticSearch</a>, <a href="https://github.com/elastic/logstash">Logstash</a> and <a href="https://github.com/elastic/kibana">Kibana</a>), this solution provides a scalable platform for importing, storing and searching application logs.</p>
+
+<p><strong><em>How can we use the ELK stack to manage logs for serverless applications running on Apache OpenWhisk?</em></strong></p>
+
+<h3>ELK and OpenWhisk</h3>
+
+<p>In traditional application runtimes, like a VM or a Docker container, a <a href="https://michael.bouvy.net/blog/en/2013/12/06/use-lumberjack-logstash-forwarder-to-forward-logs-logstash/">background agent</a> is used to automatically forward application and system logs to the ingestion service for the ELK stack.</p>
+
+<p>However, serverless applications run in an <a href="https://martinfowler.com/articles/serverless.html">ephemeral environment</a>. Runtimes are instantiated on-demand per request and destroyed after the function returns. These runtimes do not support the use of background agents.</p>
+
+<p>One solution for this is the <a href="https://github.com/jthomas/logstash-input-openwhisk">custom OpenWhisk plugin</a> for Logstash. This plugin polls the platform for new logs and automatically ingests them into ElasticSearch.</p>
+
+<p><strong><em>But what if you are using a hosted ELK service that does not support installing custom plugins?</em></strong></p>
+
+<h3>OpenWhisk Logstash Forwarder</h3>
+
+<p>"<a href="https://github.com/jthomas/openwhisk-logstash-forwarder">OpenWhisk Logstash Forwarder</a>" is designed for this scenario. It can ingest logs into ElasticSearch using standard Logstash input plugins.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-logstash-forwarder">https://github.com/jthomas/openwhisk-logstash-forwarder</a></p>
+
+<p>This project contains an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">OpenWhisk action</a> which acts as a "serverless" version of the logstash-forwarder agent. When the action executes, it retrieves all new logs from a user-provided list of actions to monitor. Log messages are pushed into Logstash using the <a href="https://www.elastic.co/guide/en/logstash/current/plugins-inputs-lumberjack.html">Lumberjack protocol</a>.</p>
+
+<p>The action is connected to an <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a> with a <a href="https://github.com/apache/incubator-openwhisk-package-alarms#firing-a-trigger-event-periodically">customisable schedule</a>. This event source will ensure all logs are forwarded on a regular schedule.</p>
+
+<h3>Demo</h3>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/demo.gif" title="OpenWhisk Logs with ElasticSearch Demo" alt="Demo" /></p>
+
+<p>In this example, the developer has the serverless logstash forwarder agent deployed in their workspace. The agent is configured to monitor logs from the <code>forecast</code> action. The alarm trigger feed is connected to the monitoring action and runs once per minute.</p>
+
+<p>Invoking the <code>forecast</code> action generates log messages to be ingested.</p>
+
+<p>When the alarm trigger feed next fires, the monitoring action is executed. It retrieves log messages generated by new <code>forecast</code> activations and pushes those logs into the configured ELK instance.</p>
+
+<p>Opening Kibana and refreshing the monitoring dashboard, new log messages are shown as individual documents. Selecting the individual documents shows the log message contents with activation record details.</p>
+
+<h3>Source Code</h3>
+
+<p>The source code for this project is now available on Github:</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-logstash-forwarder">https://github.com/jthomas/openwhisk-logstash-forwarder</a></p>
+
+<p>See the <a href="https://github.com/jthomas/openwhisk-logstash-forwarder#installation">installation instructions</a> for how to deploy this project on an OpenWhisk platform.</p>
+
+<p>This project needs an instance of OpenWhisk platform and an ELK-stack service accessible on a public IP address.</p>
+
+<p>This project can be deployed using <a href="https://serverless.com/">The Serverless Framework</a> or the <a href="https://github.com/apache/incubator-openwhisk-cli">OpenWhisk CLI</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[advanced openwhisk alarm schedules]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
+    <updated>2017-10-31T12:00:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
+    <content type="html"><![CDATA[<p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
+
+<p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
+
+<p><strong>Using a <a href="http://crontab.org/">cron-based schedule pattern</a>, running functions once a minute, every two hours or 5pm on Mondays is simple, but what about more complex schedule patterns?</strong> 🤔</p>
+
+<p>What if we need to…</p>
+
+<ul>
+<li>⏰ <em>Fire a <a href="https://stackoverflow.com/questions/45898048/can-i-schedule-a-one-shot-action-in-openwhisk">single one-off event</a> at a specific time in the future?</em></li>
+<li>⏰ <em>Fire events a fixed period of time from an action finishing?</em></li>
+<li>⏰ <em>Fire events on an irregular schedule?</em></li>
+</ul>
+
+
+<p>It is possible to implement all these examples with a few tricks… 🤹‍♂️🤹‍♂️🤹‍♂️.</p>
+
+<p><em>Before we dive into the details, let's review how the alarm feed provider works…</em></p>
+
+<h2>Alarm Trigger Feeds</h2>
+
+<p>OpenWhisk triggers are connected to external event sources <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#creating-and-using-trigger-feeds">using feed providers</a>.</p>
+
+<p>Feed providers listen to event sources, like message queues, <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">firing triggers with event parameters</a> as external events occur.</p>
+
+<p>There are a number of <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#browsing-packages">pre-installed feed providers</a> in the <code>whisk.system</code> namespace. This includes the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarms package</a> which includes a feed provider (<code>/whisk.system/alarms/alarm</code>).</p>
+
+<p><code>
+$ wsk package get /whisk.system/alarms --summary
+package /whisk.system/alarms: Alarms and periodic utility
+   (parameters: *apihost, *cron, *trigger_payload)
+ feed   /whisk.system/alarms/alarm: Fire trigger when alarm occurs
+   (parameters: none defined)
+</code></p>
+
+<h3>feed parameters</h3>
+
+<p>The following parameters are used to configure the feed provider.</p>
+
+<ul>
+<li><code>cron</code> - <em>crontab syntax used to configure timer schedule.</em></li>
+<li><code>trigger_payload</code> - <em>event parameters to fire trigger with.</em></li>
+<li><code>maxTriggers</code> - <em>maximum number of triggers to fire (-1 for no limit).</em></li>
+</ul>
+
+
+<p><code>cron</code> is the parameter which controls when triggers will be fired. It uses the <a href="http://crontab.org/">cron syntax</a> to specify the schedule expression.</p>
+
+<h3>cron schedule format</h3>
+
+<p>Cron schedule values are a string containing sections for the following time fields. Field values can be integers or patterns including wild cards.</p>
+
+<p>```</p>
+
+<h1>┌────────────── second (0 - 59, optional &amp; defaults to 0)</h1>
+
+<h1>│ ┌────────────── minute (0 - 59)</h1>
+
+<h1>│ │ ┌────────────── hour (0 - 23)</h1>
+
+<h1>│ │ │ ┌────────────── day of month (1 - 31)</h1>
+
+<h1>│ │ │ │ ┌────────────── month (0 - 11)</h1>
+
+<h1>│ │ │ │ │ ┌────────────── day of week (0 - 6) (Sunday to Saturday)</h1>
+
+<h1>│ │ │ │ │ │</h1>
+
+<h1>│ │ │ │ │ │</h1>
+
+<h1>* * * * * *</h1>
+
+<p>```</p>
+
+<p><strong><em>NOTE: Month field starts from 0 not 1, 0 is January with December being 11. Day of week also starts from 0. Sunday is first day of the week.</em></strong></p>
+
+<p>The second field is a non-standard cron field and does not need to be used. The Node.js module <a href="https://github.com/kelektiv/node-cron">used to parse the cron schedules</a> supports a value with five or six fields.</p>
+
+<h3>crontab examples</h3>
+
+<p>Here are some example patterns…</p>
+
+<ul>
+<li><code>*/10 * * * * *</code> - run every 10 seconds</li>
+<li><code>* * * * *</code> - run every minute</li>
+<li><code>0 * * * *</code> - run every hour</li>
+<li><code>0 */2 * * *</code> - run every two hours</li>
+<li><code>30 11 * * 1-5</code>  - run Monday to Friday at 11:30AM</li>
+<li><code>0 0 1 * *</code> - run at midnight the first day of the month</li>
+</ul>
+
+
+<p><a href="https://crontab.guru/">https://crontab.guru/</a> is an online editor for generating cron schedule expressions.</p>
+
+<h2>Creating Alarm Triggers</h2>
+
+<p>Using the <code>wsk</code> cli triggers can be created using the <code>alarm</code> feed. Schedule and event parameters are passed in using command-line arguments (<code>-p name value</code>).</p>
+
+<p><code>
+$ wsk trigger create periodic --feed /whisk.system/alarms/alarm -p cron '* * * * * *' -p trigger_payload '{"hello":"world"}'
+ok: invoked /whisk.system/alarms/alarm with id 42ca80fbe7cf47318a80fbe7cff73177
+...
+ok: created trigger feed periodic
+</code></p>
+
+<p>Trigger invocations are recorded in the activation records.</p>
+
+<p>```
+$ wsk activation list periodic
+activations
+d55d15297781474b9d15297781974b92 periodic
+...
+$ wsk activation get d55d15297781474b9d15297781974b92
+ok: got activation d55d15297781474b9d15297781974b92
+{</p>
+
+<pre><code>"namespace": "user@host.com_dev",
+"name": "periodic",
+...
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Deleting the trigger will automatically remove the trigger from the alarm scheduler.</p>
+
+<p><code>
+$ wsk delete periodic
+ok: invoked /whisk.system/alarms/alarm with id 44e8fc5e76c64175a8fc5e76c6c175dd
+...
+ok: deleted trigger periodic
+</code></p>
+
+<h3>Programmatic Creation</h3>
+
+<p>The <a href="https://github.com/apache/incubator-openwhisk-client-js">OpenWhisk JavaScript library</a> can also register and remove triggers with feed providers.</p>
+
+<p><code>javascript
+const params = {cron: '* * * * * *', trigger_payload: {"hello":"world"}}
+const name = '/whisk.system/alarms/alarm'
+const trigger = 'periodic'
+ow.feeds.create({name, trigger, params}).then(package =&gt; {
+  console.log('alarm trigger feed created', package)
+}).catch(err =&gt; {
+  console.error('failed to create alarm trigger', err)
+})
+</code></p>
+
+<p><em>Triggers must already exist before registering with the feed provider using the client library.</em></p>
+
+<p>Using the client library provides a mechanism for actions to dynamically set up scheduled events.</p>
+
+<h2>Advanced Examples</h2>
+
+<p>Having reviewed how the alarm feed works, let's look at some more advanced use-cases for the scheduler…</p>
+
+<h3>Schedule one-off event at a specific time in the future</h3>
+
+<p>Creating one-off events, that fire at a specific date and time, is possible using the <code>cron</code> and <code>maxTriggers</code> parameters together.</p>
+
+<p>Using the minute, hour, day of the month and month fields in the cron parameter, the schedule can be configured to run once a year. The day of the week field will use the wildcard value.</p>
+
+<p>Setting the <code>maxTriggers</code> parameter to 1, the trigger is removed from the scheduler after firing.</p>
+
+<h4>happy new year example</h4>
+
+<p><em>What if we want to fire an event when the New Year starts?</em></p>
+
+<p>Here's the cron schedule for 00:00 on January 1st.</p>
+
+<p>```</p>
+
+<h1>┌───────────── minute (0 - 59)</h1>
+
+<h1>│ ┌───────────── hour (0 - 23)</h1>
+
+<h1>│ │ ┌───────────── day of month (1 - 31)</h1>
+
+<h1>│ │ │ ┌───────────── month (0 - 11)</h1>
+
+<h1>│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)</h1>
+
+<h1>│ │ │ │ │</h1>
+
+<h1>│ │ │ │ │</h1>
+
+<h1>0 0 1 0 *</h1>
+
+<p>```</p>
+
+<p>Here are the cli commands to set up a trigger to run at 01/01/2018 @ 00:00 to celebrate the new year.</p>
+
+<p><code>
+$ wsk trigger create new_year --feed /whisk.system/alarms/alarm -p cron '0 0 1 0 *' -p maxTriggers 1 -p trigger_payload '{"message":"Happy New Year!"}'
+ok: invoked /whisk.system/alarms/alarm with id 754bec0a58b944a68bec0a58b9f4a6c1
+...
+ok: created trigger new_year
+</code></p>
+
+<h3>Firing events a fixed period of time from an action finishing</h3>
+
+<p>Imagine you want to run an action on a loop, with a 60 second delay between invocations. Start times for future invocations are dependent on the finishing time of previous invocations. This means we can't use the alarm feed with a fixed schedule like '<code>* * * * *</code>'.</p>
+
+<p><strong><em>Instead we'll schedule the first invocation as a one-off event and then have the action re-schedule itself using the JavaScript client library!</em></strong></p>
+
+<h4>action code</h4>
+
+<p>Here's the sample JavaScript code for an action which does that….</p>
+
+<p>```js
+const openwhisk = require('openwhisk');</p>
+
+<p>function calculateSchedule() {
+  const now = new Date()
+  const seconds = now.getSeconds()
+  const nextMinute = (now.getMinutes() + 1) % 60
+  return <code>${seconds} ${nextMinute} * * * *</code>
+}</p>
+
+<p>function main(params) {
+  const ow = openwhisk();
+  const params = {cron: calculateSchedule(), maxTriggers: 1}
+  console.log(params)
+  return ow.feeds.delete({name: '/whisk.system/alarms/alarm', trigger: 'delay'}).then(() => {</p>
+
+<pre><code>console.log('delay trigger feed deleted.')
+return ow.feeds.create({name: '/whisk.system/alarms/alarm', trigger: 'delay', params: params})
+}).then(result =&gt; {
+ console.log('delay trigger feed created.')
+})
+.catch(err =&gt; {
+  console.error('failed to create/delete delay trigger', err)
+  console.log("ERROR", err.error.response.result)
+})
+</code></pre>
+
+<p>}
+```</p>
+
+<h4>setting up</h4>
+
+<ul>
+<li>Create an action called <code>reschedule</code> with code from above.</li>
+</ul>
+
+
+<p><code>
+$ wsk action create reschedule reschedule.js
+ok: created action reschedule
+</code></p>
+
+<ul>
+<li>Create a trigger (<code>delay</code>)  using the alarm feed, set to run in the next 60 seconds.</li>
+</ul>
+
+
+<p><code>
+$ wsk trigger create delay --feed /whisk.system/alarms/alarm -p cron '* * * * * *'
+ok: invoked /whisk.system/alarms/alarm with id b3da4de5726b41679a4de5726b0167c8
+...
+ok: created trigger delay
+</code></p>
+
+<ul>
+<li>Connect the action (<code>reschedule</code>) to the trigger (<code>delay</code>) with a rule (<code>reschedule_delay</code>).</li>
+</ul>
+
+
+<p><code>
+$ wsk rule create reschedule_delay delay reschedule
+ok: created rule reschedule_delay
+</code></p>
+
+<p><strong>This action will continue to re-schedule itself indefinitely.</strong></p>
+
+<p>Stop this infinite loop by disabling or removing the rule connecting the action to the trigger.</p>
+
+<p><code>
+$ wsk rule disable reschedule_delay
+ok: disabled rule reschedule_delay
+</code></p>
+
+<h3>Firing events on an irregular schedule</h3>
+
+<p>How can you schedule events to occur from a predictable but irregular pattern, e.g. sending a daily message to users at sunrise?</p>
+
+<p>Sunrise happens at a different time each morning. This schedule cannot be defined using a static cron-based pattern.</p>
+
+<p><em>Using the same approach as above, where actions re-schedule triggers at runtime, events can created to follow an irregular schedule.</em></p>
+
+<h4>sunrise times</h4>
+
+<p>This <a href="https://sunrise-sunset.org/api">external API</a> provides the sunrise times for a location. Retrieving the sunrise times for tomorrow during execution will provide the date time used to re-schedule the action.</p>
+
+<p>```json
+{</p>
+
+<pre><code>"results": {
+    "astronomical_twilight_begin": "5:13:40 AM",
+    "astronomical_twilight_end": "6:48:52 PM",
+    "civil_twilight_begin": "6:14:23 AM",
+    "civil_twilight_end": "5:48:09 PM",
+    "day_length": "10:40:26",
+    "nautical_twilight_begin": "5:43:50 AM",
+    "nautical_twilight_end": "6:18:42 PM",
+    "solar_noon": "12:01:16 PM",
+    "sunrise": "6:41:03 AM",
+    "sunset": "5:21:29 PM"
+},
+"status": "OK"
+</code></pre>
+
+<p>}
+```</p>
+
+<h4>action code</h4>
+
+<p>Here's the sample JavaScript action that will re-schedule itself at sunrise.</p>
+
+<p>```javascript
+const openwhisk = require('openwhisk');
+const request = require('request-promise');</p>
+
+<p>function getNextSunrise(lat, lng, when) {
+  const options = {</p>
+
+<pre><code>uri: 'https://api.sunrise-sunset.org/json',
+qs: { lat: lat, lng: lng, when: when },
+json: true
+</code></pre>
+
+<p>  }</p>
+
+<p>  return request(options)</p>
+
+<pre><code>.then(result =&gt; result.results.sunrise)
+</code></pre>
+
+<p>}</p>
+
+<p>function calculateSchedule(sunrise) {
+  console.log('Next sunrise:', sunrise)
+  const sections = sunrise.split(':')
+  const hour = sections[0], minute = sections[1]
+  return <code>${minute} ${hour} * * *</code>
+}</p>
+
+<p>function scheduleSunriseEvent (sunrise) {
+  const ow = openwhisk();
+  const params = {cron: sunrise, maxTriggers: 1}
+  return ow.feeds.delete({name: '/whisk.system/alarms/alarm', trigger: 'sunrise'}).then(() => {</p>
+
+<pre><code>console.log('trigger feed deleted.')
+return ow.feeds.create({name: '/whisk.system/alarms/alarm', trigger: 'sunrise', params: params})
+</code></pre>
+
+<p>  }).then(result => {</p>
+
+<pre><code>console.log('trigger feed created.')
+</code></pre>
+
+<p>  })
+  .catch(err => {</p>
+
+<pre><code>console.error('failed to create/delete trigger', err)
+console.log("ERROR", err.error.response.result)
+</code></pre>
+
+<p>  })
+}</p>
+
+<p>function main(params) {
+  console.log('GOOD MORNING!')</p>
+
+<p>  return getNextSunrise(params.lat, params.lng, 'tomorrow')</p>
+
+<pre><code>.then(calculateSchedule)
+.then(scheduleSunriseEvent)
+</code></pre>
+
+<p>}
+```</p>
+
+<h4>setting up</h4>
+
+<ul>
+<li>Create an action called <code>wake_up</code> with code from above. <code>lat</code> and <code>lng</code> parameters define location for sunrise.</li>
+</ul>
+
+
+<p><code>
+$ wsk action create wake_up wake_up.js -p lat 51.50 -p lng -0.076
+ok: created action wake_up
+</code></p>
+
+<ul>
+<li>Create a trigger (<code>sunrise</code>)  with the alarm feed, scheduled for the next sunrise.</li>
+</ul>
+
+
+<p><code>
+$ wsk trigger create sunrise --feed /whisk.system/alarms/alarm -p cron '03 41 06 * * *'
+ok: invoked /whisk.system/alarms/alarm with id 606dafe276f24400adafe276f2240082
+...
+ok: created trigger sunrise
+</code></p>
+
+<ul>
+<li>Connect the action (<code>wake_up</code>) to the trigger (<code>sunrise</code>) with a rule (<code>wake_up_at_sunrise</code>).</li>
+</ul>
+
+
+<p><code>
+$ wsk rule create wake_up_at_sunrise sunrise wake_up
+ok: created rule wake_up_at_sunrise
+</code></p>
+
+<p><em>Checking the activation logs the following morning will show the trigger being fired, which invokes the action, which re-schedules the one-off event!</em> 🌅🌅🌅</p>
+
+<h2>Caveats</h2>
+
+<p>Here's a few issues you might encounter using the alarm feed that I ran into….</p>
+
+<ul>
+<li>Month field in cron schedule starts from zero not one. January is 0, December is 11.</li>
+<li>Day of the week field starts from zero. First day of the week is Sunday, not Monday.</li>
+<li>Feeds <a href="https://github.com/apache/incubator-openwhisk/issues/1925">cannot be updated</a> with a new schedule once created. Feeds must be <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">deleted before being re-created</a> to use a different schedule.</li>
+</ul>
+
+
+<h2>Future Plans</h2>
+
+<p>Extending the alarm feed to support even more features and improve the developer experience is in-progress. There are a number of Github issues in the official OpenWhisk repository around this work.</p>
+
+<ul>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/102">Enhancements for startDate, stopDate, fire once, interval (#102)</a></em></li>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/89">Add fire once triggers (#89)</a></em></li>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/pull/101">Support read and updating trigger details (#101)</a></em></li>
+</ul>
+
+
+<p>If you have feature requests, discover bugs with the feed or have other suggestions, please comment on the existing issues or open new ones.</p>
+
+<h2>Conclusion</h2>
+
+<p>Scheduled events are a necessary feature of serverless cloud platforms. Due to the ephemeral nature of runtime environments, scheduling background tasks must be managed by the platform.</p>
+
+<p>In Apache OpenWhisk, the alarm feed allows static events to be generated on a customisable schedule. Using a cron-based schedule pattern, running functions once a minute, every two hours or 5pm on Mondays, is simple but what about more complex schedule patterns?</p>
+
+<p>Using the <code>cron</code> and <code>maxTriggers</code> parameters with the OpenWhisk client library, much more advanced event schedules can be utilised within the platform. In the examples above, we looked at how to schedule one-off events, events using a predictable but irregular schedule and how actions can re-schedule events at runtime. 💯💯💯</p>
+]]></content>
+  </entry>
+  
+</feed>

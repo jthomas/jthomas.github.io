@@ -1,0 +1,489 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Node.js v4 in Cloud Foundry - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Running Node.js applications on cloud foundry with Node.js version 4">
+  <meta name="keywords" content="cloudfoundry bluemix nodejs node.js buildpacks">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jthomas.github.com/jthomas/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jthomas.github.com/jthomas" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Node.js V4 in Cloud Foundry</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-09-18T17:33:00+01:00" pubdate data-updated="true">Sep 18<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Last week, Node.js <a href="https://nodejs.org/en/blog/release/v4.0.0/">released the latest version</a>
+of their project, v4.0.0. This release, representing the convergence of io.js with the original Node.js
+project, came with lots of exciting features like <a href="http://apmblog.dynatrace.com/2015/09/05/all-you-need-to-know-about-node-js-4-0/">improved ES6 support</a>.</p>
+
+<p>Cloud Foundry already <a href="https://docs.cloudfoundry.org/buildpacks/node/node-tips.html">supports multiple versions</a> of the Node.js runtime.
+Developers select the desired runtime version using a parameter in their
+application&#8217;s <a href="http://browsenpm.org/package.json">package descriptor</a>.</p>
+
+<p><em>So, we just update package.json to include &#8220;4.0.0&#8221; and re-deploy our application?</em></p>
+
+<p>Not yet.</p>
+
+<p>There is an <a href="https://github.com/nodejs/node/issues/2783">unresolved technical issue</a>
+delaying the <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">release</a> of &#8220;official&#8221;
+Node.js v4 support for the platform. 😿</p>
+
+<p><em>Can we add support ourselves?</em></p>
+
+<p><strong>Yes!</strong></p>
+
+<p>To do this, we need to explore how Cloud Foundry configures the runtime
+environment for applications.</p>
+
+<h2>Buildpacks</h2>
+
+<p>Rather than hardcoding supported runtimes and frameworks into the platform,
+Cloud Foundry borrowed the <a href="https://docs.cloudfoundry.org/buildpacks/"><em>buildpack model</em></a> from Heroku. Buildpacks are a
+<a href="https://docs.cloudfoundry.org/buildpacks/custom.html#custom-buildpacks">set of scripts</a>, run by the platform during deployment, to configure the runtime
+environment.</p>
+
+<p>Users can set an explicit buildpack for an application, <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#buildpack">using the manifest</a>, or let
+the platform decide. Buildpacks for <a href="https://docs.cloudfoundry.org/buildpacks/">common runtimes</a> are pre-installed with the platform.
+Buildpacks set through the manifest can point to external URLs, allowing users to create
+new buildpacks supporting custom runtimes.</p>
+
+<p>Each buildpack must contain the following files as executable scripts.</p>
+
+<ul>
+<li><strong>bin/detect</strong> - <em>determine whether a buildpack is suitable for an application.</em></li>
+<li><strong>bin/compile</strong> - <em>install and configure the runtime environment on the DEA.</em></li>
+<li><strong>bin/release</strong> - <em>provide metadata with information on executing application.</em></li>
+</ul>
+
+
+<p>Full details on existing buildpacks for the platform are available <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">here</a>.</p>
+
+<p>Node.js is supported as an &#8220;official&#8221; buildpack by the platform. This will be
+the one we will modify to add support for the latest version of the runtime.</p>
+
+<h2>Node.js Buildpack </h2>
+
+<p><a href="https://github.com/cloudfoundry/nodejs-buildpack">This</a> is the Node.js
+buildpack for Cloud Foundry. Applications using this buildpack can select the
+version of Node.js to install using the engine parameter in the package
+descriptor.</p>
+
+<p>Looking at the <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile"><em>bin/compile</em></a>
+script will show us how the Node.js runtime is installed during deployment.</p>
+
+<p>This <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile#L66-L88">snippet</a> handles
+accessing the Node.js version configured, using the node.engine parameter from package.json, before calling
+<em>install_nodejs</em> to install the correct runtime package.</p>
+
+<pre>
+install_bins() {
+  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
+  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
+
+  echo "engines.node (package.json):  ${node_engine:-unspecified}"
+  echo "engines.npm (package.json):   ${npm_engine:-unspecified (use default)}"
+  echo ""
+
+  warn_node_engine "$node_engine"
+  install_nodejs "$node_engine" "$BUILD_DIR/.heroku/node"
+  install_npm "$npm_engine" "$BUILD_DIR/.heroku/node"
+  warn_old_npm
+}
+</pre>
+
+
+<p>Searching through the buildpack for this function, it&#8217;s in the
+<a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/lib/binaries.sh">lib/binaries.sh</a>
+file.  Looking at the <a href="https://github.com/heroku/heroku-buildpack-nodejs/blob/master/lib/binaries.sh#L10-L25">function code</a>, it translates the version number into a
+URL pointing to an archive with the pre-compiled Node.js binary. This archive
+file is downloaded, extracted and installed into the runtime environment.</p>
+
+<p>Translating Node.js version identifiers into archive URLs uses a special file
+in the buildpack, <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/manifest.yml">manifest.yml</a>. This file maps every supported version to a
+pre-built binary location.</p>
+
+<p>Looking at <a href="https://github.com/cloudfoundry/nodejs-buildpack/commit/8536a85cd69c867dc797c9586839a1373da4fd9d">previous commits</a> to the Node.js buildpack, adding support for additional
+versions of Node.js simply requires updating this file with the extra version
+identifier and archive URL.</p>
+
+<p>Until the Cloud Foundry team updates the buildpack to support Node.js v4, they won&#8217;t
+provide an external archive containing the pre-built runtime environment.</p>
+
+<p><em>Where can we find a suitable build of the Node.js binary?</em></p>
+
+<h2>Node.js Runtime Binaries </h2>
+
+<p>Cloud Foundry borrowed the <strong>buildpack</strong> concept from <a href="https://devcenter.heroku.com/articles/buildpacks">Heroku</a> and still
+maintains backwards compatibility with their platform. Heroku buildpacks will
+work with Cloud Foundry applications. The Node.js buildpack for Cloud Foundry
+is actually still a fork of <a href="https://github.com/heroku/heroku-buildpack-nodejs">Heroku&#8217;s</a>.</p>
+
+<p>Looking back through the original buildpack source, this URL template is used to translate
+Node.js versions to archive URLs being built by Heroku.</p>
+
+<p><em>http://s3pository.heroku.com/node/v$version/node-v$version-$os-$cpu.tar.gz</em></p>
+
+<p>Combining the correct version identifier and platform parameters with this
+template gave the following location for a potential build of the Node.js v4
+runtime.</p>
+
+<p><a href="">http://s3pository.heroku.com/node/v4.0.0/node-v4.0.0-linux-x64.tar.gz</a></p>
+
+<p>Running curl against the location successfully downloaded the Node.js v4 binary archive!</p>
+
+<h2>Custom v4 Buildpack</h2>
+
+<p>Forking the Cloud Foundry Node.js buildpack on Github, we can update the
+<a href="https://github.com/jthomas/nodejs-v4-buildpack/blob/master/manifest.yml#L57-L62">manifest.yml</a> with the Node.js v4 identifier pointing to the Heroku runtime
+archive. This <a href="https://github.com/jthomas/nodejs-v4-buildpack">external Git repository</a> will be used as the buildpack identifier
+in the application manfest.</p>
+
+<h2>Deploying with v4</h2>
+
+<p>Having updated our application manifest with the custom buildpack location and
+set the updated node version flag, re-deploying our application will start it
+running on Node.js v4.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>20:02:29 ~<span class="o">]</span><span class="nv">$ </span>cf app sample-demo-app
+</span><span class='line'>Showing health and status <span class="k">for </span>app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>requested state: started
+</span><span class='line'>instances: 1/1
+</span><span class='line'>usage: 256M x 1 instances
+</span><span class='line'>urls: sample-demo-app.mybluemix.net
+</span><span class='line'>last uploaded: Fri Sep 18 18:33:56 UTC 2015
+</span><span class='line'>stack: lucid64
+</span><span class='line'>buildpack: SDK <span class="k">for </span>Node.js<span class="o">(</span>TM<span class="o">)</span> <span class="o">(</span>node.js-4.0.0<span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'>     state     since                    cpu    memory          disk        details
+</span><span class='line'><span class="c">#0   running   2015-09-18 07:35:01 PM   0.0%   65.3M of 256M   59M of 1G</span>
+</span><span class='line'><span class="o">[</span>20:03:13 ~<span class="o">]</span><span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Looking at the logs from the deployment we can see the latest Node.js
+runtime has been downloaded and installed within our runtime environment.</p>
+
+<h2>Conclusion</h2>
+
+<p>Buildpacks are a brilliant feature of Cloud Foundry.</p>
+
+<p>Understanding how buildpacks are structured and used by the platform means we
+can start customising existing buildpacks and even start creating our own.</p>
+
+<p><strong>If you want to run Node.js applications using v4 on Cloud Foundry today, you
+can use the <a href="https://github.com/jthomas/nodejs-v4-buildpack">following buildpack</a>
+created using the instructions above.</strong></p>
+
+<p>Cloud Foundry is currently adding support for the version to
+the official buildpack, follow their progress <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">here</a>.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-09-18T17:33:00+01:00" pubdate data-updated="true">Sep 18<span>th</span>, 2015</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/bluemix/'>bluemix</a>, <a class='category' href='/blog/categories/buildpacks/'>buildpacks</a>, <a class='category' href='/blog/categories/cloud-foundry/'>cloud foundry</a>, <a class='category' href='/blog/categories/nodejs/'>nodejs</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jthomas.github.com/jthomas/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/" data-via="thomasj" data-counturl="http://jthomas.github.com/jthomas/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2015/09/11/location-based-cloud-foundry-applications-with-nginx-and-docker/" title="Previous Post: Location-Based Cloud Foundry Applications using Nginx and Docker">&laquo; Location-Based Cloud Foundry Applications using Nginx and Docker</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2016/01/04/npm-modules-in-node-red/" title="Next Post: NPM Modules in Node-RED">NPM Modules in Node-RED &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">Monitoring Serverless Applications Metrics</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/11/21/openwhisk-logstash-forwarder/">Openwhisk Logstash Forwarder</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/10/31/openwhisk-alarm-trigger-schedules/">advanced openwhisk alarm schedules</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2018 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jthomas.github.com/jthomas/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/';
+        var disqus_url = 'http://jthomas.github.com/jthomas/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
