@@ -4,7 +4,7 @@
   <title><![CDATA[Category: docker | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/docker/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-01-11T16:17:08+00:00</updated>
+  <updated>2018-01-22T15:29:47+00:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,261 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Starting OpenWhisk In Sixty Seconds]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/01/19/starting-openwhisk-in-sixty-seconds/"/>
+    <updated>2018-01-19T11:02:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/01/19/starting-openwhisk-in-sixty-seconds</id>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is an open-source serverless platform. Developers can use <a href="https://console.bluemix.net/openwhisk/">hosted instances</a> from IBM, <a href="https://github.com/apache/incubator-openwhisk/tree/master/ansible">deploy to any</a> infrastructure provider and <a href="https://github.com/apache/incubator-openwhisk#quick-start">even run it locally</a>.</p>
+
+<p>Developers often use a local instance of the platform during development. Deploying to a local instance is faster than the cloud. It also provides access runtime environments to debug issues and allows development without an Internet connection. Production applications are still run on IBM Cloud Functions.</p>
+
+<p>But OpenWhisk provides numerous options for starting the platform, including running the platform services directly, using container management tools like <a href="https://github.com/apache/incubator-openwhisk-deploy-kube">Kubernetes</a> and <a href="https://events.static.linuxfound.org/sites/events/files/slides/OpenwhiskMesoscon2017_16-9.pdf">Mesos</a> or starting a <a href="https://github.com/apache/incubator-openwhisk/blob/master/tools/vagrant/README.md">pre-configured virtual machine</a> with Vagrant.</p>
+
+<p><em>So, what's easiest?</em></p>
+
+<p><strong><a href="https://github.com/apache/incubator-openwhisk-devtools">OpenWhisk Devtools</a>.</strong></p>
+
+<p>Using this project, the platform can be started on any machine with <a href="https://docs.docker.com/compose/">Docker Compose</a> in around sixty seconds. Before we explain how this works, let's show the steps needed to spin up the platform using the project.</p>
+
+<h2>openwhisk in around sixty seconds…</h2>
+
+<p><em>Do you have Docker with Compose support installed? If not, follow the instructions <a href="https://docs.docker.com/compose/install/">here.</a></em></p>
+
+<p>Start the platform with the following commands.</p>
+
+<p><code>
+$ git clone git@github.com:apache/incubator-openwhisk-devtools.git
+$ cd incubator-openwhisk-devtools/docker-compose
+$ make quick-start
+</code></p>
+
+<p>Having cloned the repository, creating the local instance only takes around sixty seconds! 💯</p>
+
+<p>```
+$ time make quick-start &amp;>/dev/null</p>
+
+<p>real    1m10.128s
+user    0m1.709s
+sys     0m1.258s
+```</p>
+
+<p>Platform services will be running as containers on the host after initialisation.</p>
+
+<p><code>
+$ docker ps --format "&amp;#123;&amp;#123;.ID&amp;#125;&amp;#125;: &amp;#123;&amp;#123;.Names&amp;#125;&amp;#125; &amp;#123;&amp;#123;.Image&amp;#125;&amp;#125;"
+17c5d31e2c20: wsk0_60_prewarm_nodejs6       (openwhisk/nodejs6action:latest)
+0eace484289c: wsk0_59_prewarm_nodejs6       (openwhisk/nodejs6action:latest)
+1be725d8767c: openwhisk_apigateway_1          (adobeapiplatform/apigateway:1.1.0)
+641cbabeb790: openwhisk_kafka-topics-ui_1   (landoop/kafka-topics-ui:0.9.3)
+f52c25dbadd9: openwhisk_controller_1            (openwhisk/controller)
+8f0c6aa14ccc: openwhisk_invoker_1           (openwhisk/invoker)
+d5274194f842: openwhisk_kafka-rest_1            (confluentinc/cp-kafka-rest:3.3.1)
+40a1585f64bb: openwhisk_kafka_1                 (wurstmeister/kafka:0.11.0.1)
+b0b0f75c6fdb: openwhisk_db_1                    (couchdb:1.6)
+a7449c2edc4d: openwhisk_zookeeper_1             (zookeeper:3.4)
+178abe09b793: openwhisk_redis_1                 (redis:2.8)
+</code></p>
+
+<p>…and that's it!</p>
+
+<h2>testing it out</h2>
+
+<h3>setting up CLI tool</h3>
+
+<p>OpenWhisk provides a <a href="https://github.com/apache/incubator-openwhisk-cli">CLI tool</a> for interacting with the platform. The <code>quick-start</code> command automatically writes account credentials for the local instance into the CLI configuration file. Using the CLI tool to print current configuration values shows the platform endpoint set as the local machine ip or hostname.</p>
+
+<p><em>If you don't have the CLI tool already installed, the project downloads the binary to the following location: <code>devtools/docker-compose/openwhisk-master/bin/wsk</code></em></p>
+
+<p><code>
+$ wsk property get | grep host
+whisk API host      localhost
+</code></p>
+
+<p>The local instance is configured with a single user account (<code>guest</code>) with <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.guest">these credentials</a>. Administrative credentials are stored in <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.whisk.system">this configuration file</a>.</p>
+
+<h3>creating sample actions</h3>
+
+<p>With the CLI configured correctly, you can create and invoke an action on the local platform instance.</p>
+
+<ul>
+<li>Create a new file called <code>hello.js</code> with the following contents.</li>
+</ul>
+
+
+<p><code>javascript
+function main (params) {
+  var name = params.name || 'World'
+  return { payload: 'Hello, ' + name + '!' }
+}
+</code></p>
+
+<ul>
+<li>Create a new action called <code>hello</code> from the local <code>hello.js</code> file.</li>
+</ul>
+
+
+<p><code>
+$ wsk action create hello hello.js
+ok: created action hello
+</code></p>
+
+<ul>
+<li>List the actions registered on the platform.</li>
+</ul>
+
+
+<p><code>
+$ wsk action list
+actions
+/guest/hello                                                           private nodejs:6
+</code></p>
+
+<ul>
+<li>Invoke the action, blocking until it has finished.</li>
+</ul>
+
+
+<p><code>
+$ wsk action invoke -r hello -p name James
+{
+  "payload": "Hello, James!"
+}
+</code></p>
+
+<ul>
+<li>Retrieve the activation record.</li>
+</ul>
+
+
+<p>```
+$ wsk activation list
+activations
+1d16d13fdbba4fdc96d13fdbba7fdc76 hello
+$ wsk activation get 1d16d13fdbba4fdc96d13fdbba7fdc76
+ok: got activation 1d16d13fdbba4fdc96d13fdbba7fdc76
+{
+  "namespace": "guest",
+  "name": "hello",
+  "version": "0.0.1",
+  "subject": "guest",
+  "activationId": "1d16d13fdbba4fdc96d13fdbba7fdc76",
+  "start": 1516364811767,
+  "end": 1516364811769,
+  "duration": 2,
+  "response": {</p>
+
+<pre><code>"status": "success",
+"statusCode": 0,
+"success": true,
+"result": {
+  "payload": "Hello, James!"
+}
+</code></pre>
+
+<p>  },
+  ...
+}
+```</p>
+
+<h2>how does it work?</h2>
+
+<p>Apache OpenWhisk is an open-source serverless platform, composed of microservices written in Scala. Custom runtime code is bundled and managed as platform services using Docker. The platform also uses numerous external open-source projects, including CouchDB, Kafka, Zookeeper and Redis. Existing public images are used to pull those dependencies into the project.</p>
+
+<p>Apache OpenWhisk automatically <a href="https://hub.docker.com/r/openwhisk/">builds and publishes images</a> for custom runtime services on Docker Hub. This means containers can be started from public images, rather than having to build them manually. Using the existing images dramatically reduces the start-up time for getting the project running locally.</p>
+
+<p>"Devtools" uses Docker Compose to <a href="https://github.com/apache/incubator-openwhisk-devtools/tree/master/docker-compose">start a local instance</a> of the platform. Docker Compose coordinates starting containers in the correct order, injects runtime configuration properties and link services using local networking interfaces.</p>
+
+<h2>tips &amp; tricks</h2>
+
+<p><em>Once you have a local instance of the platform running, there are a few things you can do to make it easier to use during development…</em></p>
+
+<h3>switching CLI between platform instances</h3>
+
+<p>Using a local instance of the platform for testing and development, you will still want to deploy production applications to IBM Cloud Functions. Switching between these platform instances relies on <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/cli.md#setting-up-the-openwhisk-cli">updating the CLI configuration file</a> with the correct authorisation credentials each time.</p>
+
+<p>Rather than manually updating the default configuration file each time, an environment variable (<code>WSK_CONFIG_FILE</code>) can be used to choose a different configuration file. Keep credentials for different instances in separate files. Use the environment parameter to quickly switch platform instances.</p>
+
+<p><code>
+$ WSK_CONFIG_FILE=~/.wskprops-local wsk
+</code></p>
+
+<p>Using a shell alias to expose a new command to do this automatically makes this even easier.</p>
+
+<p><code>
+alias wsk-local='WSK_CONFIG_FILE=~/.wskprops-local wsk -i'
+</code></p>
+
+<p><em>The <code>-i</code> flag is used because the local platform instance uses a self-signed SSL certificate.</em></p>
+
+<h3>view platform details in database</h3>
+
+<p><a href="https://couchdb.apache.org/">CouchDB</a> is the platform data store. This stores all installed actions, save activation records and other runtime properties. Accessing this database can be helpful to diagnose issues directly.</p>
+
+<p>CouchDB comes with a administration web application called "<a href="http://docs.couchdb.org/en/1.6.1/intro/futon.html">Futon</a>". This can read and modify database documents, run view queries and check configuration parameters.</p>
+
+<p>Open this URL to access Futon for the local platform instance: <a href="http://localhost:5984/_utils/">http://localhost:5984/_utils/</a></p>
+
+<p><em>Docker is configured to forward networking traffic from local port 5984 to the same port on the container.</em></p>
+
+<h3>read platform logs</h3>
+
+<p>System logs, generated from platform containers, are stored in the  <code>~/tmp/openwhisk</code> directory.</p>
+
+<p>Logs from the invoker are stored in the <code>invoker/logs/invoker-local_logs.log</code> file. Logs from the controller are stored in the <code>controller/logs/controller-local_logs.log</code> file. All other container logs are stored in the same <code>docker-compose.log</code> file.</p>
+
+<p>Searching these files with the activation id will allow you to find all platform logs for that action invocation.</p>
+
+<h3>find the runtime container for an activation</h3>
+
+<p>Running the platform locally means you can access runtime environments used to execute actions. This can help diagnosing and debugging application errors.</p>
+
+<p>Finding the runtime container used for an invocation relies on having the activation identifier. Using this value, search the controller logs for the following log message.</p>
+
+<p><code>
+[InvokerReactive] &lt;namespace/action_id&gt; &lt;user&gt; &lt;activation_id&gt;
+</code></p>
+
+<p>This is then followed by a log message with the container identifier used for that invocation.</p>
+
+<p><code>
+[DockerContainer] sending initialization to ContainerId(&lt;CONTAINER_ID&gt;)
+</code></p>
+
+<p>Using <code>docker exec</code> you can then access the runtime environment to poke around!</p>
+
+<p><code>
+$ docker exec -it &lt;CONTAINER_ID&gt; /bin/bash
+</code></p>
+
+<h3>install shared packages</h3>
+
+<p>On IBM Cloud Functions, the <code>/whisk.system/</code> namespace contains shared packages for common utilities and external feed providers. These packages are not installed by default on the platform created by devtools.</p>
+
+<p>These packages are available in the following repositories.</p>
+
+<ul>
+<li><a href="https://github.com/apache/incubator-openwhisk-catalog">incubator-openwhisk-catalog</a> - Shared utilities and simple feed providers.</li>
+<li><a href="https://github.com/apache/incubator-openwhisk-package-alarms">incubator-openwhisk-package-alarms</a> - Alarms feed provider.</li>
+<li><a href="https://github.com/apache/incubator-openwhisk-package-cloudant">incubator-openwhisk-package-cloudant</a> - Cloudant feed provider.</li>
+<li><a href="https://github.com/apache/incubator-openwhisk-package-kafka">incubator-openwhsk-package-kafka</a> - Kafka feed provider.</li>
+</ul>
+
+
+<p>Follow the instructions in the repositories to make these available on your local version of the platform.</p>
+
+<p><em>Pull requests have been opened to automate installing <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/82">these</a> <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/83">packages</a> in the devtools project.</em></p>
+
+<h2>conclusion</h2>
+
+<p>Serverless platforms often get criticised as having a poor "developer experience" for people used to traditional application servers. Having no access to the environments running your code can make development and testing challenging. Debugging issues through console logs feels like a step backwards.</p>
+
+<p>Using an open-source serverless platform means you can actually run the entire platform locally. Using a local instance during development improves deployment times, provides access to runtime environments and allows you to work offline.</p>
+
+<p>Apache OpenWhisk has numerous options for deploying the platform, including virtual machines, kubernetes or native containers. Whilst the platform is not the simplest to set-up manually, the devtools project bootstraps a pre-configured version by spinning up a local instance using Docker Compose. This is the easiest approach for most developers to have a local instance of the platform.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk and Rust]]></title>
@@ -22,7 +277,9 @@
 
 <p>Let's look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
 
-<p><blockquote><p>Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.</p></blockquote></p>
+<p>{% blockquote %}
+Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.
+{% endblockquote %}</p>
 
 <p>Rust has been growing in popularity since it launched in 2010. Rust is a popular language for writing microservices due to the focus on the attention to safety and strong concurrency support.</p>
 
@@ -117,7 +374,7 @@ $ tree .
 [package]
 name = "action"
 version = "0.1.0"
-authors = ["Me <a href="&#109;&#x61;&#x69;&#x6c;&#116;&#111;&#x3a;&#x6d;&#101;&#64;&#x65;&#109;&#x61;&#x69;&#x6c;&#46;&#x63;&#x6f;&#109;">&#109;&#101;&#x40;&#x65;&#109;&#97;&#x69;&#x6c;&#46;&#99;&#111;&#109;</a>"]</p>
+authors = ["Me <a href="&#109;&#x61;&#x69;&#108;&#116;&#111;&#x3a;&#x6d;&#101;&#x40;&#101;&#x6d;&#x61;&#105;&#x6c;&#46;&#x63;&#x6f;&#x6d;">&#109;&#101;&#x40;&#101;&#109;&#97;&#105;&#108;&#46;&#99;&#x6f;&#109;</a>"]</p>
 
 <p>[dependencies]
 rustc-serialize = "0.3"
@@ -757,58 +1014,6 @@ published with the <em>rpi</em> tag, means users can now start Node-RED on the R
 <p><code>
 docker run -it -p 1880:1880 nodered/node-red-docker:rpi
 </code></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Debugging Live Containers on IBM Bluemix]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/"/>
-    <updated>2016-01-22T16:57:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix</id>
-    <content type="html"><![CDATA[<p>For the last few months, I've been using the <a href="https://www.elastic.co/webinars/introduction-elk-stack">ELK stack</a> to <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">collect logs</a> from my
-Cloud Foundry applications. This service has been deployed on IBM Bluemix using
-a Docker container, previously detailed in <a href="jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">this blog post</a>, and running happily
-until it ran into issues this week.</p>
-
-<p>Trying to load the Kibana web application, the server was returning <em>connection
-refused</em> errors. Looking at the container in the <a href="http://bluemix.net">IBM Bluemix</a> dashboard showed
-no obvious signs of issues. Reviewing the <a href="https://www.ng.bluemix.net/docs/containers/container_ml_ov.html">container log output</a> uncovered nothing
-indicating what had failed.</p>
-
-<p>Hmmm...</p>
-
-<p><strong>Fixing this issue would require me to start debugging from within the live
-container, but how?</strong></p>
-
-<p>This container image had not included an SSH daemon that would allow remote
-access over SSH.</p>
-
-<p>Looking over the <a href="https://www.ng.bluemix.net/docs/containers/container_index.html">documentation</a> for the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html#container_cli_cfic">IBM Containers plugin</a> for the Cloud
-Foundry CLI, I noticed the <em>exec</em> command.</p>
-
-<p><blockquote><p>Docker exec allows a user to spawn a process inside their Docker container via<br/>the Docker API and CLI.</p></blockquote></p>
-
-<p>Since Docker 1.3, released in October 2014, the <a href="https://docs.docker.com/engine/reference/commandline/exec/"><em>exec</em> command</a> has allowed users to
-run new commands within existing containers.</p>
-
-<p>The IBM Containers implementation now <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">supports this Docker command</a>.</p>
-
-<p>Using the IBM Containers plugin for the Cloud Foundry CLI, I can find the
-container id for the instance I want to debug and then start a bash shell to
-start resolving my issue.</p>
-
-<p><code>sh
-$ cf ic ps
-$ cf ic exec -it &lt;container_id&gt; /bin/bash
-</code></p>
-
-<p>Having a live shell to my container allowed me to resolve the issue within a
-few minutes, without having to affect the running state of the container. This
-command also removes the need to keep an SSH daemon running on containers for
-remote access.</p>
-
-<p>For more information on the subset of Docker commands supported by IBM
-Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
 ]]></content>
   </entry>
   
