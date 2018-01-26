@@ -1,0 +1,834 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Configuring Alert Notifications Using Serverless Metrics - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Configuring alerting rules using serverless application metrics for IBM Cloud Functions (OpenWhisk) using IBM Cloud Monitoring service.">
+  <meta name="keywords" content="openwhisk monitoring metrics serverless grafana ibm cloud">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jthomas.github.com/jthomas/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jthomas.github.com/jthomas" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Configuring Alert Notifications Using Serverless Metrics</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-01-25T11:16:00+00:00" pubdate data-updated="true">Jan 25<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><em>This blog post is the final part of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+
+<p>In previous blog posts, we showed how to <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">capture serverless metrics</a> from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">send those values</a> into the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a> and <a href="http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">build visualisation dashboards</a> using Grafana.</p>
+
+<p><strong>Dashboards are a great way to monitor metrics but rely on someone watching them! We need a way to be alerted to issues without having to manually review dashboards.</strong></p>
+
+<p>Fortunately, IBM Cloud Monitoring service comes with an <a href="https://console.bluemix.net/docs/services/cloud-monitoring/config_alerts_ov.html#config_alerts_ov">automatic alerting mechanism</a>. Users configure rules that define metrics to monitor and expected values. When values fall outside normal ranges, alerts are sent using installed notification methods.</p>
+
+<p><em>Let&#8217;s finish off this series on monitoring serverless applications by setting up a sample alert notification monitoring errors from our serverless applications…</em></p>
+
+<h2>Alerting in IBM Cloud Monitoring</h2>
+
+<p>IBM Cloud Monitoring service supports defining custom monitoring alerts. Users define rules to identify metric values to monitor and expected values. Alerts are triggered when metric values fall outside thresholds. Notification methods including email, webhooks and PagerDuty are supported.</p>
+
+<p><strong>Let&#8217;s set up a sample monitoring alert for IBM Cloud Functions applications.</strong></p>
+
+<p>We want to be notified when actions start to return error codes, rather than successful responses. The <a href="https://github.com/jthomas/openwhisk-metrics">monitoring library</a> already records boolean values for error responses from each invocation.</p>
+
+<p>Creating monitoring alerts needs us to use the IBM Cloud <a href="https://console.bluemix.net/apidocs/940-ibm-cloud-monitoring-alerts-api?&amp;language=node#introduction">Monitoring API</a>.</p>
+
+<p><em>Using the IBM Cloud Monitoring API needs authentication credentials and a space domain identifier. In a <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/#monitoring%20service">previous blog post</a>, we showed how to retrieve these values.</em></p>
+
+<h3>Monitoring Rules API</h3>
+
+<p>Monitoring rules can be registered by sending a HTTP POST request to the <code>/alert/rule</code> <a href="https://console.bluemix.net/apidocs/940-ibm-cloud-monitoring-alerts-api?&amp;language=node#introduction">endpoint.</a></p>
+
+<p>Configuration parameters are included in the JSON body. This includes the metric query, threshold values and monitoring time window. Rules are connected to notification methods using notification identifiers.</p>
+
+<p><em>This is an example rule configuration for monitoring errors from IBM Cloud Function applications.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;ibm_cloud_functions&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Monitor errors from all actions&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;expression&quot;</span><span class="p">:</span> <span class="s2">&quot;sumSeries(ibm.public.cloud-functions.&lt;region&gt;.&lt;namespace&gt;.*.*.error)&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;enabled&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;from&quot;</span><span class="p">:</span> <span class="s2">&quot;-5min&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;until&quot;</span><span class="p">:</span> <span class="s2">&quot;now&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;comparison&quot;</span><span class="p">:</span> <span class="s2">&quot;above&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;comparison_scope&quot;</span><span class="p">:</span> <span class="s2">&quot;last&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;error_level&quot;</span> <span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;warning_level&quot;</span> <span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;1min&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;dashboard_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://metrics.ng.bluemix.net&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;notifications&quot;</span><span class="p">:</span> <span class="p">[</span>
+</span><span class='line'>    <span class="s2">&quot;email_alert&quot;</span>
+</span><span class='line'>  <span class="p">]</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>expression</code> parameter defines the query used to monitor values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">sumSeries(ibm.public.cloud-functions.&lt;region&gt;.&lt;namespace&gt;.*.*.error)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Error metric values use <code>0</code> for normal responses and <code>1</code> for errors. <code>sumSeries</code> adds up all error values recorded within the monitoring window.</em></p>
+
+<p>Using a wildcard for the sixth field means all actions are monitored. Replacing this field value with an action name will restrict monitoring to just that action. Region and namespace templates need substituting with actual values for your application.</p>
+
+<p>Threshold values for triggering alerts are defined using the <code>warning_level</code> and  <code>error_level</code> parameters.  Warning messages are triggered after a single action failure and error messages after ten failures.</p>
+
+<p>Notification identifiers, registered using the API, are provided in the <code>notifications</code> field. Rules may include more than one notification identifiers.</p>
+
+<h3>Notifications API</h3>
+
+<p>Notifications can be registered by sending a HTTP POST request to the <code>/alert/notification</code> <a href="https://console.bluemix.net/apidocs/940-ibm-cloud-monitoring-alerts-api?&amp;language=node#introduction">endpoint</a>. Configuration parameters are included in the JSON body.</p>
+
+<p><em>This is an example configuration for email notifications.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;email_alert&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Email&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;description&quot;</span> <span class="p">:</span> <span class="s2">&quot;Email alerting notifications&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;detail&quot;</span><span class="p">:</span> <span class="s2">&quot;email@address.com&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Notifications are configured using the <code>type</code> parameter in the body. Valid values for this field include <code>Email</code>, <code>Webhook</code> or <code>PagerDuty</code>. The <code>detail</code> field is used to include the email address, webhook endpoint or PagerDuty API key. The <code>name</code> field is used to reference this notification method when setting up rules.</p>
+
+<h2>Setting up alerts for serverless errors</h2>
+
+<h3>Creating an email notification</h3>
+
+<ul>
+<li>Create the <code>notify.json</code> file from the template above.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">cat</span> <span class="err">notify.json</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;email_alert&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Email&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;description&quot;</span> <span class="p">:</span> <span class="s2">&quot;Email alerting notifications&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;detail&quot;</span><span class="p">:</span> <span class="s2">&quot;your_email@address.com&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Send the following HTTP request using <code>curl</code>. Include scope and auth token values in the headers.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">curl</span> <span class="err">--request</span> <span class="err">POST</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--url</span> <span class="err">https://metrics.ng.bluemix.net/v</span><span class="mi">1</span><span class="err">/alert/notification</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-scope-id:</span> <span class="err">s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-user-token:</span> <span class="err">apikey</span> <span class="err">&lt;YOUR_API_KEY&gt;&#39;</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--data</span> <span class="err">@notify.json</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Created notification &#39;email_alert&#39;&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Testing email notification</h3>
+
+<ul>
+<li>Sending the following HTTP request using <code>curl</code> to generate a test email.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">curl</span> <span class="err">--request</span> <span class="err">POST</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--url</span> <span class="err">https://metrics.ng.bluemix.net/v</span><span class="mi">1</span><span class="err">/alert/notification/test/email_alert</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-scope-id:</span> <span class="err">s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-user-token:</span> <span class="err">apikey</span> <span class="err">&lt;YOUR_API_KEY&gt;&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>This returns the test notification message which will be emailed to the address.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Triggered test for notification &#39;email_alert&#39;&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;content&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>      <span class="nt">&quot;rule_name&quot;</span><span class="p">:</span> <span class="s2">&quot;test_rule_name&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;test_rule_description&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;notification_name&quot;</span><span class="p">:</span> <span class="s2">&quot;email_alert&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;scope_id&quot;</span><span class="p">:</span> <span class="s2">&quot;s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;expression&quot;</span><span class="p">:</span> <span class="s2">&quot;test_rule_expression&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;warning_level&quot;</span><span class="p">:</span> <span class="s2">&quot;80&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;error_level&quot;</span><span class="p">:</span> <span class="s2">&quot;90.9&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;dashboard_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://metrics.ng.bluemix.net&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="nt">&quot;alert_messages&quot;</span><span class="p">:</span> <span class="p">[</span>
+</span><span class='line'>        <span class="p">{</span>
+</span><span class='line'>          <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;test_alert_target&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;from_type&quot;</span><span class="p">:</span> <span class="s2">&quot;OK&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;to_type&quot;</span><span class="p">:</span> <span class="s2">&quot;ERROR&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;current_value&quot;</span><span class="p">:</span> <span class="s2">&quot;95.0&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;comparison&quot;</span><span class="p">:</span> <span class="s2">&quot;above&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2018-01-25T12:36:05Z&quot;</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>      <span class="p">]</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Check the email inbox to verify the message has arrived.</li>
+</ul>
+
+
+<p><img src="/images/metrics_alerts/test_email.png"></p>
+
+<h3>Create monitoring rule for errors</h3>
+
+<ul>
+<li><p>Create the <code>rule.json</code> file from the template above, replacing <code>region</code> and <code>namespace</code> values.</p></li>
+<li><p>Send the following HTTP request using <code>curl</code>. Include scope and auth token values in the headers.</p></li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">curl</span> <span class="err">--request</span> <span class="err">POST</span> <span class="err">--url</span> <span class="err">https://metrics.ng.bluemix.net/v</span><span class="mi">1</span><span class="err">/alert/rule</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-scope-id:</span> <span class="err">s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-user-token:</span> <span class="err">apikey</span> <span class="err">&lt;YOUR_API_KEY&gt;&#39;</span> <span class="err">\</span>
+</span><span class='line'>    <span class="err">--data</span> <span class="err">@rule.json</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Created rule &#39;ibm_cloud_functions&#39;&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Testing alerts for serverless errors</h2>
+
+<p>Let&#8217;s generate some errors in a sample action to check the monitoring rule works.</p>
+
+<h3>Create failing action</h3>
+
+<ul>
+<li>Create a new Node.js library called &#8220;fails&#8221;.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">mkdir</span> <span class="err">fails</span> <span class="err">&amp;&amp;</span> <span class="err">cd</span> <span class="err">fails</span> <span class="err">&amp;&amp;</span> <span class="err">npm</span> <span class="err">init</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Install the <code>openwhisk-metrics</code> <a href="https://github.com/jthomas/openwhisk-metrics">library</a>.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">npm</span> <span class="err">install</span> <span class="err">openwhisk-metrics</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Edit the <code>index.js</code> file to have the following source code.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">metrics</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk-metrics&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">main</span> <span class="o">=</span> <span class="nx">params</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">error</span><span class="o">:</span> <span class="s1">&#39;Oh dear, this action failed...&#39;</span> <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">main</span> <span class="o">=</span> <span class="nx">metrics</span><span class="p">(</span><span class="nx">main</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Deploy the code as an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">OpenWhisk action</a>.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">zip</span> <span class="o">-</span><span class="nx">r</span> <span class="nx">action</span><span class="p">.</span><span class="nx">zip</span> <span class="o">*</span>
+</span><span class='line'>  <span class="nx">adding</span><span class="o">:</span> <span class="nx">index</span><span class="p">.</span><span class="nx">js</span> <span class="p">(</span><span class="nx">deflated</span> <span class="mi">22</span><span class="o">%</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">...</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">fails</span> <span class="nx">action</span><span class="p">.</span><span class="nx">zip</span> <span class="o">--</span><span class="nx">kind</span> <span class="nx">nodejs</span><span class="o">:</span><span class="mi">8</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">fails</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Invoke the action. Check the activation response is an error.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">fails</span> <span class="o">-</span><span class="nx">b</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">fails</span> <span class="kd">with</span> <span class="nx">id</span> <span class="nx">cbee42f77c6543c6ae42f77c6583c6a7</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="s2">&quot;activationId&quot;</span><span class="o">:</span> <span class="s2">&quot;cbee42f77c6543c6ae42f77c6583c6a7&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="s2">&quot;response&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;result&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>      <span class="s2">&quot;error&quot;</span><span class="o">:</span> <span class="s2">&quot;Oh dear, this action failed...&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="s2">&quot;status&quot;</span><span class="o">:</span> <span class="s2">&quot;application error&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;success&quot;</span><span class="o">:</span> <span class="kc">false</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="p">...</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em><code>response.result.success</code> should be false.</em></p>
+
+<ul>
+<li>Update <code>actions</code> parameter for the <code>metric-forwarder</code> action to include the <code>fails</code> action name.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">cat</span> <span class="nx">params</span><span class="p">.</span><span class="nx">json</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="s2">&quot;actions&quot;</span><span class="o">:</span> <span class="p">[</span><span class="s2">&quot;fails&quot;</span><span class="p">],</span>
+</span><span class='line'>  <span class="s2">&quot;service&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;api_key&quot;</span><span class="o">:</span> <span class="s2">&quot;&lt;API_KEY&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;host&quot;</span><span class="o">:</span> <span class="s2">&quot;metrics.ng.bluemix.net&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;scope&quot;</span><span class="o">:</span> <span class="s2">&quot;s-&lt;SPACE_ID&gt;&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="s2">&quot;since&quot;</span><span class="o">:</span> <span class="mi">1516894777975</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">update</span> <span class="nx">metric</span><span class="o">-</span><span class="nx">forwarder</span> <span class="o">-</span><span class="nx">P</span> <span class="nx">params</span><span class="p">.</span><span class="nx">json</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Generate serverless errors</h3>
+
+<p>Invoking the <code>fails</code> action should now trigger an email notification. Let&#8217;s test this out and trace metrics values through the platform.</p>
+
+<ul>
+<li>Fire an action invocation using the CLI.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">fails</span> <span class="o">-</span><span class="nx">b</span>
+</span><span class='line'><span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">fails</span> <span class="o">-</span><span class="nx">b</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">fails</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">524</span><span class="nx">b27044fd84b6a8b27044fd84b6ad8</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Review the activation logs to show the error metric was recorded.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">logs</span> <span class="mi">524</span><span class="nx">b27044fd84b6a8b27044fd84b6ad8</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="nx">stdout</span><span class="o">:</span> <span class="nx">METRIC</span> <span class="o">&lt;</span><span class="nx">namespace</span><span class="o">&gt;</span><span class="p">.</span><span class="nx">fails</span><span class="p">.</span><span class="mi">524</span><span class="nx">b27044fd84b6a8b27044fd84b6ad8</span><span class="p">.</span><span class="nx">error</span> <span class="mi">1</span> <span class="mi">1516895270</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Invoke the <code>metric-forwarder</code> action to push metric values into the IBM Cloud Monitoring service.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">metric</span><span class="o">-</span><span class="nx">forwarder</span> <span class="o">-</span><span class="nx">b</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">metric</span><span class="o">-</span><span class="nx">forwarder</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">295</span><span class="nx">c47f05ea042849c47f05ea08284f0</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Review activation logs to verify metric values were retrieved.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">logs</span> <span class="mi">295</span><span class="nx">c47f05ea042849c47f05ea08284f0</span>
+</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.160135346</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">actions</span> <span class="nx">being</span> <span class="nx">monitored</span><span class="o">:</span> <span class="p">[</span> <span class="s1">&#39;fails&#39;</span> <span class="p">]</span>
+</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.160177305</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">retrieving</span> <span class="nx">logs</span> <span class="nx">since</span><span class="o">:</span> <span class="mi">1516894777975</span>
+</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.290529179</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">found</span> <span class="mi">11</span> <span class="nx">metric</span> <span class="nx">values</span> <span class="nx">from</span> <span class="mi">1</span> <span class="nx">activations</span>
+</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.291234046</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">saving</span> <span class="nx">to</span> <span class="nx">metrics</span> <span class="nx">service</span> <span class="o">-&gt;</span> <span class="nx">metrics</span><span class="p">.</span><span class="nx">ng</span><span class="p">.</span><span class="nx">bluemix</span><span class="p">.</span><span class="nx">net</span>
+</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">48.232790321</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">saving</span> <span class="nx">metrics</span> <span class="nx">to</span> <span class="nx">service</span> <span class="nx">took</span><span class="o">:</span> <span class="mf">941.169</span><span class="nx">ms</span>
+</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">48.233334982</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">updating</span> <span class="nx">since</span> <span class="nx">parameter</span><span class="o">:</span> <span class="mi">1516895270458</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Use the IBM Cloud Monitoring dashboard to show the error has been recorded.</li>
+</ul>
+
+
+<p><img src="/images/metrics_alerts/single_error.jpg"></p>
+
+<ul>
+<li>Check your email inbox for the message showing the error notification!</li>
+</ul>
+
+
+<p><img src="/images/metrics_alerts/email.png"></p>
+
+<ul>
+<li>Using the Cloud Monitoring API, we can retrieve the notification history to show this message was sent.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">curl</span> <span class="o">--</span><span class="nx">request</span> <span class="nx">POST</span> <span class="o">--</span><span class="nx">url</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//metrics.ng.bluemix.net/v1/alert/history \</span>
+</span><span class='line'>    <span class="o">--</span><span class="nx">header</span> <span class="s1">&#39;x-auth-scope-id: s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="o">\</span>
+</span><span class='line'>    <span class="o">--</span><span class="nx">header</span> <span class="s1">&#39;x-auth-user-token: apikey &lt;YOUR_API_KEY&gt;&#39;</span>
+</span><span class='line'><span class="p">[</span>
+</span><span class='line'>  <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;from_level&quot;</span><span class="o">:</span> <span class="s2">&quot;OK&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;metric_name&quot;</span><span class="o">:</span> <span class="s2">&quot;sumSeries(ibm.public.cloud-functions.&lt;region&gt;.&lt;namespace&gt;.*.*.error)&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;notification_names&quot;</span><span class="o">:</span> <span class="p">[</span>
+</span><span class='line'>      <span class="s2">&quot;email_alert&quot;</span>
+</span><span class='line'>    <span class="p">],</span>
+</span><span class='line'>    <span class="s2">&quot;rule_name&quot;</span><span class="o">:</span> <span class="s2">&quot;ibm_cloud_functions&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;timestamp&quot;</span><span class="o">:</span> <span class="s2">&quot;2018-01-23T15:29:48Z&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;to_level&quot;</span><span class="o">:</span> <span class="s2">&quot;WARN&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;value&quot;</span><span class="o">:</span> <span class="mi">1</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Invoking the <code>fails</code> action more than ten times will trigger a second alert when the rule moves from <code>warning</code> to <code>error</code> thresholds.</p>
+
+<h2>Conclusion</h2>
+
+<p>IBM Cloud Monitoring service supports sending notification alerts based upon application metric values. Configuring notifications rules, based upon our serverless metrics, ensures we will be alerted immediately when issues occur with our serverless applications. Notifications can be sent over email, webhooks or using PagerDuty.</p>
+
+<p>In this series on <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">&#8220;Monitoring Serverless Application Metrics&#8221;</a>, we have shown you how to monitor serverless applications using IBM Cloud. Starting with <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">capturing runtime metrics</a> from IBM Cloud Functions, we then showed how to <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">forward metrics</a> into the IBM Cloud Monitoring service. Once metric values were being recorded, <a href="http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">visualisation dashboards</a> were built to help diagnose and resolve application issues. Finally, we configured automatic alerting rules to notify us over email as soon as issues developed.</p>
+
+<p>Serverless applications are <a href="https://medium.com/@PaulDJohnston/what-is-serverless-architecture-43b9ea4babca">not “No Ops”, but &#8220;Different Ops&#8221;</a>. Monitoring runtime metrics is still crucial. IBM Cloud provides a comprehensive set of tools for monitoring cloud applications. Utilising these services, you can create a robust monitoring solution for IBM Cloud Functions applications.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-01-25T11:16:00+00:00" pubdate data-updated="true">Jan 25<span>th</span>, 2018</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/alerts/'>alerts</a>, <a class='category' href='/blog/categories/grafana/'>grafana</a>, <a class='category' href='/blog/categories/metrics/'>metrics</a>, <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jthomas.github.com/jthomas/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/" data-via="thomasj" data-counturl="http://jthomas.github.com/jthomas/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2018/01/21/lessons-from-west-berkshire-action-for-refugees/" title="Previous Post: Lessons From West Berkshire Action For Refugees">&laquo; Lessons From West Berkshire Action For Refugees</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/">Configuring Alert Notifications Using Serverless Metrics</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/21/lessons-from-west-berkshire-action-for-refugees/">Lessons From West Berkshire Action For Refugees</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/19/starting-openwhisk-in-sixty-seconds/">Starting OpenWhisk In Sixty Seconds</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2018 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jthomas.github.com/jthomas/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/';
+        var disqus_url = 'http://jthomas.github.com/jthomas/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
