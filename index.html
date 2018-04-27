@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="This blog post is the final part of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the introduction post for details and &hellip;">
+  <meta name="description" content="&#8220;Where do you store files without a server?&#8221; …is the most common question I get asked during Q&amp;A after one of my &#8221;Introduction &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,156 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/">File Storage for Serverless Applications</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-04-27T14:27:00+01:00" pubdate data-updated="true">Apr 27<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><blockquote><p><strong><em>&#8220;Where do you store files without a server?&#8221;</em></strong></p></blockquote>
+
+<p>…is the most common question I get asked during Q&amp;A after one of my &#8221;<a href="http://bit.ly/james_thomas">Introduction to Serverless Platforms</a>&#8221; conference talks. Searching for this question online, <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">this is the answer</a> you will often find.</p>
+
+<blockquote><p> <strong><em>&#8220;Use an object store for file storage and access using the S3-compatible interface. Provide direct access to files by making buckets public and return pre-signed URLs for uploading content. Easy, right?&#8221;</em></strong></p></blockquote>
+
+<p>Responding to people with this information often leads to the following response:</p>
+
+<p>🤔🤔🤔</p>
+
+<p>Developers who are not familiar with cloud platforms, can often understand the benefits and concepts behind serverless, but don&#8217;t know the other cloud services needed to replicate application services from traditional (or server-full) architectures.</p>
+
+<p><strong>In this blog post, I want to explain why we do not use the file system for files in serverless applications and introduce the cloud services used to handle this.</strong></p>
+
+<h2>serverless runtime file systems</h2>
+
+<p>Serverless runtimes do provide access to a filesystem with a (small) amount of ephemeral storage.</p>
+
+<p>Serverless application <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">deployment packages</a> are extracted into this filesystem prior to execution. Uploading files into the environment relies on them being included within the application package. Serverless functions can read, modify and create files within this local file system.</p>
+
+<p>These temporary file systems come with the following restrictions…</p>
+
+<ul>
+<li><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb">Maximum application package size</a> limits additional files that can be uploaded.</li>
+<li>Serverless platforms usually limit total usable space to around 512MB.</li>
+<li>Modifications to the file system are lost once the environment is <a href="https://hackernoon.com/im-afraid-you-re-thinking-about-aws-lambda-cold-starts-all-wrong-7d907f278a4f">not used for further invocations</a>.</li>
+<li>Concurrent executions of the same function use independent runtime environments and do not share filesystem storage.</li>
+<li>There is no access to these temporary file systems outside the runtime environment.</li>
+</ul>
+
+
+<p><em>All these limitations make the file system provided by serverless platforms unsuitable as a scalable storage solution for serverless applications.</em></p>
+
+<p><strong><em>So, what is the alternative?</em></strong></p>
+
+<h2>object stores</h2>
+
+<blockquote><p>Object stores manage data as objects, as opposed to other storage architectures like <a href="https://en.wikipedia.org/wiki/File_systems">file systems</a> which manage data as a file hierarchy. Object-storage systems allow retention of massive amounts of <a href="https://en.wikipedia.org/wiki/Unstructured_data">unstructured data</a>, with simple retrieval and search capabilities.</p>
+
+<p><a href="https://en.wikipedia.org/wiki/Object_storage"><em>https://en.wikipedia.org/wiki/Object_storage</em></a></p></blockquote>
+
+<p>Object stores provide &#8220;storage-as-a-service&#8221; solutions for cloud applications.</p>
+
+<p><strong>These services are used for file storage within serverless applications.</strong></p>
+
+<p>Unlike traditional block storage devices, data objects in object storage services are organised using flat hierarchies of containers, known as &#8221;<em>buckets</em>&#8221;. Objects within buckets are identified by unique identifiers, known as &#8221;<em>keys</em>&#8221;. Metadata can also be stored alongside data objects for additional context.</p>
+
+<p>Object stores provide simple access to files by applications, rather than users.</p>
+
+<h2>advantages of an object store</h2>
+
+<h3>scalable and elastic storage</h3>
+
+<p>Rather than having a disk drive, with a fixed amount of storage, object stores provide scalable and elastic storage for data objects. Users are <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage">charged</a> based upon the amount of data stored, API requests and bandwidth used. Object stores are built to scale as storage needs grow towards the <a href="https://www.ibm.com/cloud/object-storage/faq">petabyte range</a>.</p>
+
+<h3>simple http access</h3>
+
+<p>Object stores provide a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP-based API endpoint</a> to interact with the data objects.</p>
+
+<p>Rather than using a standard library methods to access the file system, which translates into system calls to the operating system, files are available over a standard HTTP endpoint.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">Client libraries</a> provide a simple interface for interacting with the remote endpoints.</p>
+
+<h3>expose direct access to files</h3>
+
+<p>Files stored in object storage can be made <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">publicly accessible</a>. Client applications can access files directly without needing to use an application backend as a proxy.</p>
+
+<p>Special URLs can also be generated to provide <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url">temporary access to files</a> for external clients. Clients can even use these URLs to directly upload and modify files. URLs are set to expire after a fixed amount of time.</p>
+
+<h2>ibm cloud object storage</h2>
+
+<p><a href="https://bluemix.net/">IBM Cloud</a> provides an object storage service called <a href="https://console.bluemix.net/docs/services/cloud-object-storage/about-cos.html">IBM Cloud Object Storage</a>. This service provides the following features concerning resiliency, reliability and cost.</p>
+
+<h3>data resiliency</h3>
+
+<p>Buckets&#8217; contents can be stored with the following automatic <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">data resiliency choices</a>.</p>
+
+<ul>
+<li><strong><em>Cross Region.</em></strong> Store data across three regions within a geographic area.</li>
+<li><strong><em>Regional.</em></strong> Store data in multiple data centres within a single geographic region.</li>
+<li><strong><em>Single Data Centre.</em></strong> Store data across multiple devices in a single data centre.</li>
+</ul>
+
+
+<p>Cross Region is the best choice for &#8221;<em>regional concurrent access and highest availability</em>&#8221;. Regional is used for <em>&#8220;high availability and performance&#8221;</em>. Single Data Centre is appropriate when <em>&#8220;when data locality matters most&#8221;.</em></p>
+
+<h3>storage classes</h3>
+
+<p>Data access patterns can be used to save costs by choosing the appropriate <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/classes.html#use-storage-classes">storage class for data storage</a>.</p>
+
+<p>IBM Cloud Object Storage offers the following storage classes: <strong><em>Standard, Vault, Cold Vault, Flex.</em></strong></p>
+
+<p><em>Standard class</em> is used for workloads with frequent data access. <em>Vault and Cold Vault</em> are used with infrequent data retrieval and data archiving workloads. <em>Flex</em> is a mixed storage class for workloads where access patterns are more difficult to predict.</p>
+
+<h3>costs</h3>
+
+<p>Storage class and data resiliency options are used to <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">calculate the cost of service usage</a>.</p>
+
+<p>Storage is charged based upon the amount of data storage used, operational requests (GET, POST, PUT…) and outgoing public bandwidth.</p>
+
+<p>Storage classes affect the price of data retrieval operations and storage costs. Storage classes used for archiving, e.g. <em>cold vault</em>, charge less for data storage and more for operational requests. Storage classes used for frequency access, e.g. <em>standard</em>, charge more for data storage and less for operational requests.</p>
+
+<p>Higher resiliency data storage is more expensive than lower resiliency storage.</p>
+
+<h3>lite plan</h3>
+
+<p>IBM Cloud Object Storage provides a generous free tier (<em>25GB storage per month, 5GB public bandwidth</em>) for Lite account users. <a href="https://www.ibm.com/cloud/lite-account">IBM Cloud Lite accounts</a> provide perpetual access to a free set of IBM Cloud resources. Lite accounts do not expire after a time period or need a credit card to sign up.</p>
+
+<h2>conclusion</h2>
+
+<p>Serving files from serverless runtimes is often accomplished using object storage services.</p>
+
+<p>Object stores provide a scalable and cost-effective service for managing files without using storage infrastructure directly. Storing files in an object store provides simple access from serverless runtimes and even allows the files to be made directly accessible to end users.</p>
+
+<p>In the next blog posts, I&#8217;m going to show you how to set up IBM Cloud Object Storage and access files from serverless applications on IBM Cloud Functions. I&#8217;ll be demonstrating this approach for both the Node.js and Swift runtimes.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3496,500 +3646,6 @@ to monitor incoming data values live.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2017/07/17/creating-swift-binaries-for-openwhisk/">Creating Swift Binaries for OpenWhisk</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2017-07-17T12:12:00+01:00" pubdate data-updated="true">Jul 17<span>th</span>, 2017</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, we explained how to write Serverless Swift functions using <a href="http://openwhisk.incubator.apache.org/">OpenWhisk actions</a>.</p>
-
-<p>Swift sources files are compiled into a binary by the platform before processing requests.</p>
-
-<p>This compilation process adds a delay on the invocation time for &#8220;cold&#8221; runtimes. If the action has not been invoked for a while, the system is under heavy load or multiple invocations are received in parallel, a new runtime will need to be initialised.</p>
-
-<p>Pre-compiled binaries can be deployed to remove this delay. Binaries must be compiled for the correct platform architecture and support execution through the OpenWhisk runtime.</p>
-
-<p><strong>There is now a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> to make the process of building pre-compiled binaries much easier.</strong></p>
-
-<p><em>Let&#8217;s have a look at how this works…</em></p>
-
-<h2>Swift Packages</h2>
-
-<p>Swift introduced a <a href="https://swift.org/package-manager/">package manager</a> in Swift 3.0. The package manager integrates with the build system to <em>&#8220;automate the process of downloading, compiling, and linking dependencies&#8221;.</em></p>
-
-<p>Swift uses a <a href="https://medium.com/@jp_pancake/the-manifest-file-of-the-swift-package-manager-swiftlang-6eedf0f2f805">manifest file</a> (<code>Packages.swift</code>) to define package properties including dependencies.</p>
-
-<h3>Example Swift Package</h3>
-
-<p>Here&#8217;s an <a href="https://github.com/apple/example-package-deckofplayingcards/blob/master/Package.swift">example manifest file</a> from a <a href="https://github.com/apple/example-package-dealer">sample package</a> with external dependencies.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
-</span><span class='line'>
-</span><span class='line'>let package = Package(
-</span><span class='line'>    name: "DeckOfPlayingCards",
-</span><span class='line'>    targets: [],
-</span><span class='line'>    dependencies: [
-</span><span class='line'>        .Package(url: "https://github.com/apple/example-package-fisheryates.git",
-</span><span class='line'>                 majorVersion: 1),
-</span><span class='line'>        .Package(url: "https://github.com/apple/example-package-playingcard.git",
-</span><span class='line'>                 majorVersion: 1),
-</span><span class='line'>    ]
-</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Packages are referenced through a URL which resolves to a Git repository. <a href="http://semver.org/">Semantic versioning</a> conventions are used to control the package version installed.</p>
-
-<p>External packages are downloaded, compiled and linked in the project during the build process.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ swift build
-</span><span class='line'>Fetching https://github.com/apple/example-package-deckofplayingcards.git
-</span><span class='line'>Fetching https://github.com/apple/example-package-fisheryates.git
-</span><span class='line'>Fetching https://github.com/apple/example-package-playingcard.git
-</span><span class='line'>Cloning https://github.com/apple/example-package-fisheryates.git
-</span><span class='line'>Resolving https://github.com/apple/example-package-fisheryates.git at 2.0.3
-</span><span class='line'>Cloning https://github.com/apple/example-package-playingcard.git
-</span><span class='line'>Resolving https://github.com/apple/example-package-playingcard.git at 3.0.2
-</span><span class='line'>Cloning https://github.com/apple/example-package-deckofplayingcards.git
-</span><span class='line'>Resolving https://github.com/apple/example-package-deckofplayingcards.git at 3.0.3
-</span><span class='line'>Compile Swift Module 'PlayingCard' (3 sources)
-</span><span class='line'>Compile Swift Module 'FisherYates' (2 sources)
-</span><span class='line'>Compile Swift Module 'DeckOfPlayingCards' (1 sources)
-</span><span class='line'>Compile Swift Module 'Dealer' (1 sources)
-</span><span class='line'>Linking ./.build/debug/Dealer
-</span><span class='line'>$</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>OpenWhiskAction Package</h2>
-
-<p><a href="https://github.com/jthomas/OpenWhiskAction">OpenWhiskAction</a> is a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> for registering Swift functions as OpenWhisk actions.</p>
-
-<p>It bundles the Swift source files used to <a href="https://github.com/apache/incubator-openwhisk/tree/master/core/swift3Action/spm-build">implement the runtime handler</a> for OpenWhisk as a library. Using this package means developers do not have to manually import those source files into their projects.</p>
-
-<h3>usage</h3>
-
-<p>This package exposes a public function (<code>OpenWhiskAction</code> ) that should be called with a function reference (<code>([String: Any]) -&gt; [String: Any])</code>) as a named parameter (<code>main</code>). The callback will be executed with the invocation parameters. Returned values will be serialised as the invocation response.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import OpenWhiskAction
-</span><span class='line'>
-</span><span class='line'>func hello(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    if let name = args["name"] as? String {
-</span><span class='line'>      return [ "greeting" : "Hello \(name)!" ]
-</span><span class='line'>    } else {
-</span><span class='line'>      return [ "greeting" : "Hello stranger!" ]
-</span><span class='line'>    }
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'>OpenWhiskAction(main: hello)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>example</h3>
-
-<p>Let&#8217;s show an example of using the package to build a pre-compiled Swift action for OpenWhisk.</p>
-
-<h4>create new package</h4>
-
-<p>Create a new directory and use the <code>swift package init</code> command to generate the boilerplate package.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir Action
-</span><span class='line'>$ cd Action/
-</span><span class='line'>$ swift package init
-</span><span class='line'>Creating library package: Action
-</span><span class='line'>Creating Package.swift
-</span><span class='line'>Creating .gitignore
-</span><span class='line'>Creating Sources/
-</span><span class='line'>Creating Sources/Action.swift
-</span><span class='line'>Creating Tests/
-</span><span class='line'>Creating Tests/LinuxMain.swift
-</span><span class='line'>Creating Tests/ActionTests/
-</span><span class='line'>Creating Tests/ActionTests/ActionTests.swift</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>add package dependency</h4>
-
-<p>Add the OpenWhiskAction package as a dependency to the manifest file (<code>Package.swift</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
-</span><span class='line'>
-</span><span class='line'>let package = Package(
-</span><span class='line'>    name: "Action",
-</span><span class='line'>    dependencies: [
-</span><span class='line'>        .Package(url: "https://github.com/jthomas/OpenWhiskAction.git", majorVersion: 0)
-</span><span class='line'>    ]
-</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>write serverless function</h4>
-
-<p>Create a new <code>main.swift</code> file under the <code>Sources</code> directory containing the following source code.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import OpenWhiskAction
-</span><span class='line'>
-</span><span class='line'>func hello(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    if let name = args["name"] as? String {
-</span><span class='line'>      return [ "greeting" : "Hello \(name)!" ]
-</span><span class='line'>    } else {
-</span><span class='line'>      return [ "greeting" : "Hello stranger!" ]
-</span><span class='line'>    }
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'>OpenWhiskAction(main: hello)</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Swift&#8217;s build process will produce an executable if the package contains a <code>main.swift</code> file. That file will be compiled as the package binary.</em></p>
-
-<h4>compiling with docker</h4>
-
-<p>OpenWhisk Swift actions use a <a href="https://github.com/jthomas/OpenWhiskAction/blob/master">custom Docker image</a> as the runtime environment. Compiling application binaries from this image will ensure it is compatible with the platform runtime.</p>
-
-<p>This command will run the <code>swift build</code> command within a container from this image. The host filesystem is mounted into the container at <code>/swift-package</code>. Binaries and other build artifacts will be available in <code>./.build/release/</code> after the command has executed.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>docker run --rm -it -v $(pwd):/swift-package openwhisk/action-swift-v3.1.1 bash -e -c "cd /swift-package && swift build -v -c release"</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>deploying to openwhisk</h3>
-
-<p>OpenWhisk actions can be created from a zip file containing action artifacts. The zip file will be expanded prior to execution. In the Swift environment, the Swift binary executed by the platform should be at <code>./.build/release/Action</code>.</p>
-
-<p>If an action is deployed from a zip file which contains this file, the runtime will execute this binary rather than compiling a new binary from source code within the zip file.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ zip action.zip .build/release/Action
-</span><span class='line'>  adding: .build/release/Action (deflated 67%)
-</span><span class='line'>$ wsk action create swift-action --kind swift action.zip
-</span><span class='line'>ok: created action swift-action
-</span><span class='line'>$ wsk action invoke --blocking --result -p name "Bernie Sanders" swift-action
-</span><span class='line'>{
-</span><span class='line'>    "greeting": "Hello Bernie Sanders!"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Using With The Serverless Framework</h2>
-
-<p>As shown in the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, <a href="https://serverless.com/">The Serverless Framework</a> supports the Swift runtime. Actions can either be created from <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---swift">Swift source files</a> or <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---pre-compiled-swift-binaries">pre-compiled binaries</a>.</p>
-
-<p>This <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">example project</a> demonstrates how to integrate pre-compiled binaries into a serverless framework application.</p>
-
-<h3>example project</h3>
-
-<p>The project contains two Swift source files under the <code>Sources</code> directory. Using the <code>main.swift</code> file name means these files will be compiled into separate binaries under the <code>.build/release</code> directory.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ tree .
-</span><span class='line'>.
-</span><span class='line'>├── Package.swift
-</span><span class='line'>├── README.md
-</span><span class='line'>├── Sources
-</span><span class='line'>│   ├── hello
-</span><span class='line'>│   │   └── main.swift
-</span><span class='line'>│   └── welcome
-</span><span class='line'>│       └── main.swift
-</span><span class='line'>├── package.json
-</span><span class='line'>└── serverless.yml
-</span><span class='line'>
-</span><span class='line'>3 directories, 6 files</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The package manifest (<code>Package.swift</code>) contains the <code>OpenWhiskAction</code> dependency.</p>
-
-<h3>serverless.yml</h3>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">swift-packages</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">runtime</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">swift</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">hello</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">.build/release/hello</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">welcome</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">.build/release/welcome</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">custom</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">scripts</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">hooks</span><span class="p-Indicator">:</span>
-</span><span class='line'>      <span class="s">&#39;package:initialize&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">npm run-script compile</span>
-</span><span class='line'><span class="l-Scalar-Plain">plugins</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-openwhisk</span>
-</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-plugin-scripts</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This configuration file describes two actions (<code>hello</code> and <code>welcome</code>) using the <code>swift</code> runtime. The handler property for those actions refers to a binary, produced by the build process, rather than source file.</p>
-
-<h3>compile during deployment</h3>
-
-<p>Before using <code>serverless deploy</code> command to create our application, we need to compile binaries for the OpenWhisk runtime.</p>
-
-<p>Manually running the Swift build command before each deployment is cumbersome and error-prone.</p>
-
-<p><em>Let&#8217;s automate this process…</em></p>
-
-<p>Using NPM&#8217;s <a href="https://docs.npmjs.com/cli/run-script">scripts feature</a>, the project exports a new command <code>npm run-script compile</code> which triggers the build process using the OpenWhisk Docker runtime for Swift.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;openwhisk-swift-package-with-precompiled-binaries&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Swift packages and pre-compiled binaries on OpenWhisk.&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;handler.js&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;scripts&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;postinstall&quot;</span><span class="p">:</span> <span class="s2">&quot;npm link serverless-openwhisk&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;compile&quot;</span><span class="p">:</span> <span class="s2">&quot;docker run --rm -it -v $(pwd):/swift-package openwhisk/action-swift-v3.1.1 bash -e -c &#39;cd /swift-package &amp;&amp; swift build -v -c release&#39;&quot;</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="nt">&quot;keywords&quot;</span><span class="p">:</span> <span class="p">[</span>
-</span><span class='line'>    <span class="s2">&quot;serverless&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;openwhisk&quot;</span>
-</span><span class='line'>  <span class="p">],</span>
-</span><span class='line'>  <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;serverless-plugin-scripts&quot;</span><span class="p">:</span> <span class="s2">&quot;^1.0.2&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>serverless-plugin-scripts</code> <a href="https://www.npmjs.com/package/serverless-plugin-scripts">plugin</a> provides a mechanism for running shell commands when framework commands are executed. Using this plugin we can use the <code>package:initialize</code> event to execute the <code>npm run-script compile</code> command.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">custom</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">scripts</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">hooks</span><span class="p-Indicator">:</span>
-</span><span class='line'>      <span class="s">&#39;package:initialize&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">npm run-script compile</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>package:initialize</code> event is fired when the <code>serverless deploy</code> command executes.</p>
-
-<p><strong>Swift binaries will be compiled prior to deployment without any manual steps from the developer.</strong></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">$ serverless deploy</span>
-</span><span class='line'><span class="l-Scalar-Plain">&gt; openwhisk-swift-package-with-precompiled-binaries@1.0.0 compile /Users/james/code/bluemix/serverless-examples/openwhisk-swift-precompiled-binaries</span>
-</span><span class='line'><span class="l-Scalar-Plain">&gt; docker run --rm -it -v $(pwd):/swift-package openwhisk/action-swift-v3.1.1 bash -e -c &#39;cd /swift-package &amp;&amp; swift build -v -c release&#39;</span>
-</span><span class='line'><span class="nn">...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Packaging service...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Functions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling API Gateway definitions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Rules...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Triggers &amp; Feeds...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deploying Functions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deployment successful!</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">Service Information</span>
-</span><span class='line'><span class="l-Scalar-Plain">platform</span><span class="err">:   </span><span class="l-Scalar-Plain">openwhisk.ng.bluemix.net</span>
-</span><span class='line'><span class="l-Scalar-Plain">namespace</span><span class="err">:  </span><span class="l-Scalar-Plain">_</span>
-</span><span class='line'><span class="l-Scalar-Plain">service</span><span class="err">:    </span><span class="l-Scalar-Plain">swift-packages</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">actions</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="l-Scalar-Plain">swift-packages-dev-hello    swift-packages-dev-welcome</span>
-</span><span class='line'><span class="nn">...</span>
-</span><span class='line'><span class="l-Scalar-Plain">$ serverless invoke -f hello</span>
-</span><span class='line'><span class="l-Scalar-Plain">{</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">&quot;greeting&quot;</span><span class="p-Indicator">:</span> <span class="s">&quot;Hello</span><span class="nv"> </span><span class="s">stranger!&quot;</span>
-</span><span class='line'><span class="err">}</span>
-</span><span class='line'><span class="l-Scalar-Plain">$ serverless invoke -f welcome</span>
-</span><span class='line'><span class="p-Indicator">{</span>
-</span><span class='line'>    <span class="s">&quot;greeting&quot;</span><span class="p-Indicator">:</span> <span class="s">&quot;Welcome</span><span class="nv"> </span><span class="s">stranger!&quot;</span>
-</span><span class='line'><span class="p-Indicator">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Conclusion</h2>
-
-<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-swift-actions">creating Swift actions</a> from source files and pre-compiled binaries. Using binaries <a href="https://medium.com/openwhisk/run-swiftly-precompiled-swift-actions-775addae0345">reduces the startup time</a> for &#8220;cold&#8221; environments. This is important for latency sensitive applications like API endpoints.</p>
-
-<p>Swift binaries for OpenWhisk must be compiled for the correct architecture and support execution through the platform runtime. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-swift-executable">Previous instruction</a> for producing these binaries involved numerous manual and error-prone steps.</p>
-
-<p>This process has now been improved through a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">new Swift package</a> which wraps the runtime handler source files. Adding this dependency into the package manifest file means the downloading, compiling and linking of these source files will be handled by the Swift package manager.</p>
-
-<p><a href="https://github.com/serverless/serverless-openwhisk/releases/tag/v0.8.0">Recent updates</a> to the OpenWhisk provider plugin for The Serverless Framework also added support for pre-compiled Swift binaries. Combined with other plugins, the framework can now <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">completely automate the process of building binaries</a> for the Swift runtime.</p>
-
-<p><strong>Building binaries for Swift OpenWhisk actions has never been easier!</strong> 😎</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -4005,6 +3661,10 @@ to monitor incoming data values live.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/">File Storage For Serverless Applications</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/">Configuring Alert Notifications Using Serverless Metrics</a>
       </li>
     
@@ -4018,10 +3678,6 @@ to monitor incoming data values live.</p>
     
       <li class="post">
         <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a>
       </li>
     
   </ul>

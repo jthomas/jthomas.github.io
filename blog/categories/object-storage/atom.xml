@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: object-storage | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/object-storage/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-04-27T15:11:07+01:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[File Storage For Serverless Applications]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/"/>
+    <updated>2018-04-27T14:27:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage</id>
+    <content type="html"><![CDATA[<blockquote><p><strong><em>"Where do you store files without a server?"</em></strong></p></blockquote>
+
+<p>…is the most common question I get asked during Q&amp;A after one of my "<a href="http://bit.ly/james_thomas">Introduction to Serverless Platforms</a>" conference talks. Searching for this question online, <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">this is the answer</a> you will often find.</p>
+
+<blockquote><p> <strong><em>"Use an object store for file storage and access using the S3-compatible interface. Provide direct access to files by making buckets public and return pre-signed URLs for uploading content. Easy, right?"</em></strong></p></blockquote>
+
+<p>Responding to people with this information often leads to the following response:</p>
+
+<p>🤔🤔🤔</p>
+
+<p>Developers who are not familiar with cloud platforms, can often understand the benefits and concepts behind serverless, but don't know the other cloud services needed to replicate application services from traditional (or server-full) architectures.</p>
+
+<p><strong>In this blog post, I want to explain why we do not use the file system for files in serverless applications and introduce the cloud services used to handle this.</strong></p>
+
+<h2>serverless runtime file systems</h2>
+
+<p>Serverless runtimes do provide access to a filesystem with a (small) amount of ephemeral storage.</p>
+
+<p>Serverless application <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">deployment packages</a> are extracted into this filesystem prior to execution. Uploading files into the environment relies on them being included within the application package. Serverless functions can read, modify and create files within this local file system.</p>
+
+<p>These temporary file systems come with the following restrictions…</p>
+
+<ul>
+<li><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb">Maximum application package size</a> limits additional files that can be uploaded.</li>
+<li>Serverless platforms usually limit total usable space to around 512MB.</li>
+<li>Modifications to the file system are lost once the environment is <a href="https://hackernoon.com/im-afraid-you-re-thinking-about-aws-lambda-cold-starts-all-wrong-7d907f278a4f">not used for further invocations</a>.</li>
+<li>Concurrent executions of the same function use independent runtime environments and do not share filesystem storage.</li>
+<li>There is no access to these temporary file systems outside the runtime environment.</li>
+</ul>
+
+
+<p><em>All these limitations make the file system provided by serverless platforms unsuitable as a scalable storage solution for serverless applications.</em></p>
+
+<p><strong><em>So, what is the alternative?</em></strong></p>
+
+<h2>object stores</h2>
+
+<blockquote><p>Object stores manage data as objects, as opposed to other storage architectures like <a href="https://en.wikipedia.org/wiki/File_systems">file systems</a> which manage data as a file hierarchy. Object-storage systems allow retention of massive amounts of <a href="https://en.wikipedia.org/wiki/Unstructured_data">unstructured data</a>, with simple retrieval and search capabilities.</p>
+
+<p><a href="https://en.wikipedia.org/wiki/Object_storage"><em>https://en.wikipedia.org/wiki/Object_storage</em></a></p></blockquote>
+
+<p>Object stores provide "storage-as-a-service" solutions for cloud applications.</p>
+
+<p><strong>These services are used for file storage within serverless applications.</strong></p>
+
+<p>Unlike traditional block storage devices, data objects in object storage services are organised using flat hierarchies of containers, known as "<em>buckets</em>". Objects within buckets are identified by unique identifiers, known as "<em>keys</em>". Metadata can also be stored alongside data objects for additional context.</p>
+
+<p>Object stores provide simple access to files by applications, rather than users.</p>
+
+<h2>advantages of an object store</h2>
+
+<h3>scalable and elastic storage</h3>
+
+<p>Rather than having a disk drive, with a fixed amount of storage, object stores provide scalable and elastic storage for data objects. Users are <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage">charged</a> based upon the amount of data stored, API requests and bandwidth used. Object stores are built to scale as storage needs grow towards the <a href="https://www.ibm.com/cloud/object-storage/faq">petabyte range</a>.</p>
+
+<h3>simple http access</h3>
+
+<p>Object stores provide a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP-based API endpoint</a> to interact with the data objects.</p>
+
+<p>Rather than using a standard library methods to access the file system, which translates into system calls to the operating system, files are available over a standard HTTP endpoint.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">Client libraries</a> provide a simple interface for interacting with the remote endpoints.</p>
+
+<h3>expose direct access to files</h3>
+
+<p>Files stored in object storage can be made <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">publicly accessible</a>. Client applications can access files directly without needing to use an application backend as a proxy.</p>
+
+<p>Special URLs can also be generated to provide <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url">temporary access to files</a> for external clients. Clients can even use these URLs to directly upload and modify files. URLs are set to expire after a fixed amount of time.</p>
+
+<h2>ibm cloud object storage</h2>
+
+<p><a href="https://bluemix.net/">IBM Cloud</a> provides an object storage service called <a href="https://console.bluemix.net/docs/services/cloud-object-storage/about-cos.html">IBM Cloud Object Storage</a>. This service provides the following features concerning resiliency, reliability and cost.</p>
+
+<h3>data resiliency</h3>
+
+<p>Buckets' contents can be stored with the following automatic <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">data resiliency choices</a>.</p>
+
+<ul>
+<li><strong><em>Cross Region.</em></strong> Store data across three regions within a geographic area.</li>
+<li><strong><em>Regional.</em></strong> Store data in multiple data centres within a single geographic region.</li>
+<li><strong><em>Single Data Centre.</em></strong> Store data across multiple devices in a single data centre.</li>
+</ul>
+
+
+<p>Cross Region is the best choice for "<em>regional concurrent access and highest availability</em>". Regional is used for <em>"high availability and performance"</em>. Single Data Centre is appropriate when <em>"when data locality matters most".</em></p>
+
+<h3>storage classes</h3>
+
+<p>Data access patterns can be used to save costs by choosing the appropriate <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/classes.html#use-storage-classes">storage class for data storage</a>.</p>
+
+<p>IBM Cloud Object Storage offers the following storage classes: <strong><em>Standard, Vault, Cold Vault, Flex.</em></strong></p>
+
+<p><em>Standard class</em> is used for workloads with frequent data access. <em>Vault and Cold Vault</em> are used with infrequent data retrieval and data archiving workloads. <em>Flex</em> is a mixed storage class for workloads where access patterns are more difficult to predict.</p>
+
+<h3>costs</h3>
+
+<p>Storage class and data resiliency options are used to <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">calculate the cost of service usage</a>.</p>
+
+<p>Storage is charged based upon the amount of data storage used, operational requests (GET, POST, PUT…) and outgoing public bandwidth.</p>
+
+<p>Storage classes affect the price of data retrieval operations and storage costs. Storage classes used for archiving, e.g. <em>cold vault</em>, charge less for data storage and more for operational requests. Storage classes used for frequency access, e.g. <em>standard</em>, charge more for data storage and less for operational requests.</p>
+
+<p>Higher resiliency data storage is more expensive than lower resiliency storage.</p>
+
+<h3>lite plan</h3>
+
+<p>IBM Cloud Object Storage provides a generous free tier (<em>25GB storage per month, 5GB public bandwidth</em>) for Lite account users. <a href="https://www.ibm.com/cloud/lite-account">IBM Cloud Lite accounts</a> provide perpetual access to a free set of IBM Cloud resources. Lite accounts do not expire after a time period or need a credit card to sign up.</p>
+
+<h2>conclusion</h2>
+
+<p>Serving files from serverless runtimes is often accomplished using object storage services.</p>
+
+<p>Object stores provide a scalable and cost-effective service for managing files without using storage infrastructure directly. Storing files in an object store provides simple access from serverless runtimes and even allows the files to be made directly accessible to end users.</p>
+
+<p>In the next blog posts, I'm going to show you how to set up IBM Cloud Object Storage and access files from serverless applications on IBM Cloud Functions. I'll be demonstrating this approach for both the Node.js and Swift runtimes.</p>
+]]></content>
+  </entry>
+  
+</feed>
