@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-04-27T15:11:07+01:00</updated>
+  <updated>2018-05-31T10:39:30+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,933 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Using Cloud Object Storage from IBM Cloud Functions (Node.js)]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/"/>
+    <updated>2018-05-31T10:00:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js</id>
+    <content type="html"><![CDATA[<p>How do you manage files for a serverless application? 🤔</p>
+
+<p><a href="http://jamesthom.as/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/">Previous blog posts</a> discussed this common problem and introduced the most popular solution, using a <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">cloud-based object storage service</a>. 👏👏👏</p>
+
+<p>Object stores provide elastic storage in the cloud, with a billing model which charges for capacity used. These services are the storage solution for serverless applications, which do not have access to a traditional file system. 👍</p>
+
+<p><strong>I'm now going to demonstrate how to use <a href="https://console.bluemix.net/catalog/services/cloud-object-storage">IBM Cloud Object Storage</a> from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</strong></p>
+
+<p>This blog post will show you...</p>
+
+<ul>
+<li>How to provision IBM Cloud Object Storage and create authentication tokens.</li>
+<li>How use client libraries to access IBM Cloud Object Storage from IBM Cloud Functions.</li>
+<li>Example serverless functions for common use-cases, e.g uploading files.</li>
+</ul>
+
+
+<p><a href="https://github.com/jthomas/serverless-file-storage">Code examples</a> in this blog post will focus on the Node.js runtime.</p>
+
+<p><em>Instructions on service provisioning and authentication credentials are relevant for any runtime.</em></p>
+
+<h2>IBM Cloud Accounts and Storage Services</h2>
+
+<p>IBM Cloud Object Storage is available to all IBM Cloud users.</p>
+
+<p>IBM Cloud has <a href="https://console.bluemix.net/docs/account/index.html#accounts">three different account types</a>: <em>lite, pay-as-you-go</em> or <em>subscription</em>.</p>
+
+<h3>Lite Accounts</h3>
+
+<p><a href="https://www.ibm.com/blogs/bluemix/2017/11/introducing-ibm-cloud-lite-account/">Lite accounts</a> do not require a credit card to register and do not expire after a limited time period.</p>
+
+<p>Numerous platform services, including Cloud Object Storage, provide <a href="https://console.bluemix.net/catalog/?search=label:lite">free resources for lite account users</a>. IBM Cloud Object Storage's free resource tier comes the <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">following monthly limits</a>.</p>
+
+<ul>
+<li><em>Store 25GB of new data.</em></li>
+<li><em>Issue 20,000 GET and 2,000 PUT requests.</em></li>
+<li><em>Use 10GB of public bandwidth.</em></li>
+</ul>
+
+
+<p><em>Lite tier usage supports all resiliency and storage class options but are limited to a single service instance.</em></p>
+
+<p>Users can sign up for a free "Lite" account <a href="https://console.ng.bluemix.net/registration/free">here</a>. Please follow the instructions to <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">install the IBM Cloud CLI.</a></p>
+
+<h3>Pay-as-you-Go &amp; Subscription Accounts</h3>
+
+<p>Lite accounts can be upgraded to <a href="https://console.bluemix.net/docs/account/index.html#paygo">Pay-As-You-Go</a> or <a href="https://console.bluemix.net/docs/account/index.html#subscription-account">Subscription</a> accounts. Upgraded accounts still have access to the free tiers provided in Lite accounts. Users with Pay-As-You-Go or Subscriptions accounts can access services and tiers not included in the Lite account.</p>
+
+<p>Benefits of the additional service tiers for IBM Cloud Object Storage include unlimited instances of the object storage service. Costs are billed according to usage per month. See the pricing page for more details: <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api</a></p>
+
+<h2>Provisioning IBM Cloud Object Storage</h2>
+
+<p>IBM Cloud Object Storage can be provisioned through the <a href="https://console.bluemix.net/catalog/">IBM Cloud service catalog</a>.</p>
+
+<p><img src="/images/cos_storage/catalog.png"></p>
+
+<p>From the <em><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Service Details</a></em> page, follow these instructions to provision a new instance.</p>
+
+<ul>
+<li>Give the service an identifying name.</li>
+<li>Leave the resource group as "<em>default</em>".</li>
+<li>Click the "Create" button.</li>
+</ul>
+
+
+<p>Once the service has been provisioned, it will be shown under the "Services" section of the <a href="https://console.bluemix.net/dashboard/apps">IBM Cloud Dashboard</a>. <strong>IBM Cloud Object Storage services are global services and not bound to individual regions.</strong></p>
+
+<ul>
+<li>Click the service instance from the dashboard to visit the service management page.</li>
+</ul>
+
+
+<p><img src="/images/cos_storage/go-to-service-instance.gif"></p>
+
+<p><em>Once the service has been provisioned, we need to create authentication credentials for external access…</em></p>
+
+<h2>Service Credentials</h2>
+
+<p>Service credentials for IBM Cloud Object Storage use <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/overview.html#getting-started-with-iam">IBM Cloud's IAM service</a>.</p>
+
+<p>I'm just going to cover the basics of using IAM with Cloud Object Storage. Explaining all the <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">concepts and capabilities</a> of the IAM service would need a separate (and lengthy) blog post!</p>
+
+<h3>Auto-Binding Service Credentials</h3>
+
+<p>IBM Cloud Functions can <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">automatically provision and bind service credentials</a> to actions.</p>
+
+<p><em>This feature is supported through the IBM Cloud CLI command: <code>bx wsk service bind</code>.</em></p>
+
+<p>Bound service credentials are stored as default action parameters. Default parameters are automatically included as request parameters for each invocation.</p>
+
+<p><strong>Using this approach means users do not have to manually provision and manage service credentials.</strong> 👍</p>
+
+<p><em>Service credentials provisioned in this manner use the following configuration options:</em></p>
+
+<ul>
+<li><strong>IAM Role</strong>: <em>Manager</em></li>
+<li><strong>Optional Configuration Parameters</strong>: <em>None</em>.</li>
+</ul>
+
+
+<p>If you need to use different configuration options, you will have to manually provision service credentials.</p>
+
+<h3>Manually Creating Credentials</h3>
+
+<ul>
+<li>Select the "<em>Service Credentials</em>" menu item from the service management page.</li>
+<li>Click the "New credential" button.</li>
+</ul>
+
+
+<p><em>Fill in the details for the new credentials.</em></p>
+
+<ul>
+<li>Choose an identifying name for the credentials.</li>
+<li><p>Select an access role. Access roles define which operations applications using these credentials can perform. Permissions for each role are <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/buckets.html#bucket-permissions">listed in the documentation</a>.</p>
+
+<p><em>Note: If you want to make objects publicly accessible <a href="https://stackoverflow.com/questions/50007460/ibm-cloud-object-storage-cannot-modify-object-acl-permissions">make sure you use the manager permission</a>.</em></p></li>
+<li><p>Leave the <code>Service ID</code> unselected.</p></li>
+</ul>
+
+
+<p>If you need HMAC service keys, which are necessary for generating presigned URLs, use the following inline configuration parameters before. Otherwise, leave this field blank.</p>
+
+<p><code>json
+{"HMAC": true}
+</code></p>
+
+<ul>
+<li>Click the "Add" button.</li>
+</ul>
+
+
+<p><img src="/images/cos_storage/provision-credentials.gif"></p>
+
+<p>🔐 <em>Credentials shown in this GIF were deleted after the demo (before you get any ideas...)</em> 🔐</p>
+
+<p>Once created, new service credentials will be shown in the credentials table.</p>
+
+<h2>IBM Cloud Object Storage API</h2>
+
+<p>Cloud Object Storage exposes a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP API</a> for interacting with buckets and files.</p>
+
+<p>This API implements the same interface as <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">AWS S3 API</a>.</p>
+
+<p>Service credentials created above are used to authenticate requests to the API endpoints. Full details on the API operations are available in the <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">documentation</a>.</p>
+
+<h3>HTTP Endpoints</h3>
+
+<p>IBM Cloud Object Storage's HTTP API is available through <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">region-based endpoints</a>.</p>
+
+<p>When creating new buckets to store files, the data resiliency for the bucket (and therefore the files within it) is based upon the endpoint used for the bucket create operation.</p>
+
+<p>Current endpoints are listed in the <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">external documentation</a> and available through an external API: <a href="https://cos-service.bluemix.net/endpoints">https://cos-service.bluemix.net/endpoints</a></p>
+
+<h4>Choosing an endpoint</h4>
+
+<p>IBM Cloud Functions is available in the following regions: <em>US-South, United Kingdom and Germany.</em></p>
+
+<p>Accessing Cloud Object Storage using regional endpoints closest to the Cloud Functions application region will result in better application performance.</p>
+
+<p>IBM Cloud Object Storage lists public and private endpoints for each region (and resiliency) choice. <strong>IBM Cloud Functions only supports access using public endpoints.</strong></p>
+
+<p>In the following examples, IBM Cloud Functions applications will be hosted in the <code>US-South</code> region. Using the <code>US Regional</code> endpoint for Cloud Object Storage will minimise network latency when using the service from IBM Cloud Functions.</p>
+
+<p><em>This endpoint will be used in all our examples:</em> <code>s3-api.us-geo.objectstorage.softlayer.net</code></p>
+
+<h3>Client Libraries</h3>
+
+<p>Rather than manually creating HTTP requests to interact with the Cloud Object Storage API, <a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">client libraries</a> are available.</p>
+
+<p>IBM Cloud Object Storage publishes modified versions of the Node.js, Python and Java AWS S3 SDKs, enhanced with IBM Cloud specific features.</p>
+
+<ul>
+<li><code>ibm-cos-sdk-js</code> - <a href="https://github.com/IBM/ibm-cos-sdk-js">https://github.com/IBM/ibm-cos-sdk-js</a></li>
+<li><code>ibm-cos-sdk-python</code> - <a href="https://github.com/ibm/ibm-cos-sdk-python">https://github.com/ibm/ibm-cos-sdk-python</a></li>
+<li><code>ibm-cos-sdk-java</code> - <a href="https://github.com/ibm/ibm-cos-sdk-java">https://github.com/ibm/ibm-cos-sdk-java</a></li>
+</ul>
+
+
+<p>Both the Node.js and Python COS libraries are pre-installed in the IBM Cloud Functions <a href="https://github.com/ibm-functions">runtime environments</a> for those languages. They can be used without bundling those dependencies in the deployment package.</p>
+
+<p><em>We're going to look at using the JavaScript client library from the Node.js runtime in IBM Cloud Functions.</em></p>
+
+<h4>JavaScript Client Library</h4>
+
+<p>When using the JavaScript client library for IBM Cloud Object Storage, endpoint and authentication credentials need to be passed as configuration parameters.</p>
+
+<p>```javascript
+const COS = require('ibm-cos-sdk');</p>
+
+<p>const config = {</p>
+
+<pre><code>endpoint: '&lt;endpoint&gt;',
+apiKeyId: '&lt;api-key&gt;',    
+serviceInstanceId: '&lt;resource-instance-id&gt;',
+</code></pre>
+
+<p>};</p>
+
+<p>const cos = new COS.S3(config);
+```</p>
+
+<p>Hardcoding configuration values within source code is not recommended. IBM Cloud Functions allows <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> to be bound to actions. Default parameters are automatically passed into action invocations within the event parameters.</p>
+
+<p><em>Default parameters are recommended for managing application secrets for IBM Cloud Functions applications.</em></p>
+
+<p><strong>Having provisioned the storage service instance, learnt about service credentials, chosen an access endpoint and understood how to use the client library, there's one final step before we can start to creating functions…</strong></p>
+
+<h2>Creating Buckets</h2>
+
+<p>IBM Cloud Object Storage organises files into a flat hierarchy of named containers, called buckets. Buckets can be created <a href="https://console.bluemix.net/docs/services/cloud-object-storage/cli/curl.html#add-a-bucket">through the command-line</a>, <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/api-reference-buckets.html#new-bucket">using the API</a> or the web console.</p>
+
+<p>Let's create a new bucket, to store all files for our serverless application, using the web console.</p>
+
+<ul>
+<li>Open the "<em>Buckets</em>" page from the COS management page.</li>
+<li><p>Click the "<em>Create Bucket</em>" link.</p></li>
+<li><p>Create a bucket name.
+<em>Bucket names must be unique across the entire platform, rather than just your account.</em></p></li>
+<li>Select the following configuration options
+
+<ul>
+<li><strong>Resiliency</strong>: <code>Cross Region</code></li>
+<li><strong>Location</strong>: <code>us-geo</code></li>
+<li><strong>Storage class</strong>: <code>Standard</code></li>
+</ul>
+</li>
+<li>Click the "<em>Create</em>" button.</li>
+</ul>
+
+
+<p><img src="/images/cos_storage/creating-buckets.gif"></p>
+
+<p><em>Once the bucket has been created, you will be taken back to the bucket management page.</em></p>
+
+<h4>Test Files</h4>
+
+<p>We need to put some test files in our new bucket. Download the following images files.</p>
+
+<ul>
+<li><a href="https://cdn.pixabay.com/photo/2015/06/08/15/02/pug-801826_640.jpg">Pug Blanket</a></li>
+<li><a href="https://cdn.pixabay.com/photo/2016/07/07/15/35/swimming-1502563_640.jpg">Swimming Pug</a></li>
+<li><a href="https://cdn.pixabay.com/photo/2017/02/28/13/11/dog-2105686_640.jpg">Jumping Pug</a></li>
+</ul>
+
+
+<p><strong>Using the bucket management page, upload these files to the new bucket.</strong></p>
+
+<p><img src="/images/cos_storage/upload-files.png"></p>
+
+<h2>Using Cloud Object Storage from Cloud Functions</h2>
+
+<p>Having created a storage bucket containing test files, we can start to develop our <a href="https://github.com/jthomas/serverless-file-storage">serverless application</a>.</p>
+
+<p>Let's begin with a serverless function that returns a list of files within a bucket. Once this works, we will extend the application to support retrieving, removing and uploading files to a bucket. We can also show how to make objects publicly accessible and generate pre-signed URLs, allowing external clients to upload new content directly.</p>
+
+<p><a href="https://github.com/jthomas/serverless-file-storage">Separate IBM Cloud Functions actions</a> will be created for each storage operation.</p>
+
+<h3>Managing Default Parameters</h3>
+
+<p>Serverless functions will need the bucket name, service endpoint and authentication parameters to access the object storage service. Configuration parameters will be bound to actions as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a>.</p>
+
+<p>Packages can be used to share configuration values across multiple actions. Actions created within a package inherit all <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-package">default parameters stored on that package</a>. This removes the need to manually configure the same default parameters for each action.</p>
+
+<p>Let's create a new package (<code>serverless-files</code>) for our serverless application.</p>
+
+<p><code>sh
+$ bx wsk package create serverless-files
+ok: created package serverless-files
+</code></p>
+
+<p>Update the package with default parameters for the bucket name (<code>bucket</code>) and service endpoint (<code>cos_endpoint</code>).</p>
+
+<p><code>sh
+$ bx wsk package update serverless-files -p bucket &lt;MY_BUCKET_NAME&gt; -p cos_endpoint s3-api.us-geo.objectstorage.softlayer.net
+ok: updated package serverless-files
+</code></p>
+
+<p><strong><em>Did you notice we didn't provide authentication credentials as default parameters?</em></strong></p>
+
+<p>Rather than manually adding these credentials, the CLI can <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">automatically provision and bind them</a>. Let's do this now for the <code>cloud-object-storage</code> service...</p>
+
+<ul>
+<li>Bind service credentials to the <code>serverless-files</code> package using the <code>bx wsk service bind</code> command.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk service bind cloud-object-storage serverless-files
+Credentials 'cloud-fns-key' from 'cloud-object-storage' service instance 'object-storage' bound to 'serverless-files'.
+</code></p>
+
+<ul>
+<li>Retrieve package details to check default parameters contain expected configuration values.</li>
+</ul>
+
+
+<p>```
+$ bx wsk package get serverless-files
+ok: got package serverless-files
+{</p>
+
+<pre><code>...    
+"parameters": [
+    {
+        "key": "bucket",
+        "value": "&lt;MY_BUCKET_NAME&gt;"
+    },
+    {
+        "key": "cos_endpoint",
+        "value": "s3-api.us-geo.objectstorage.softlayer.net"
+    },
+    {
+        "key": "__bx_creds",
+        "value": {
+            "cloud-object-storage": {
+                ...
+            }
+        }
+    }
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>List Objects Within the Bucket</h3>
+
+<ul>
+<li>Create a new file (<code>action.js</code>) with the following contents.</li>
+</ul>
+
+
+<p>```javascript
+const COS = require('ibm-cos-sdk')</p>
+
+<p>function cos_client (params) {
+  const bx_creds = params['<strong>bx_creds']
+  if (!bx_creds) throw new Error('Missing </strong>bx_creds parameter.')</p>
+
+<p>  const cos_creds = bx_creds['cloud-object-storage']
+  if (!cos_creds) throw new Error('Missing cloud-object-storage parameter.')</p>
+
+<p>  const endpoint = params['cos_endpoint']
+  if (!endpoint) throw new Error('Missing cos_endpoint parameter.')</p>
+
+<p>  const config = {</p>
+
+<pre><code>endpoint: endpoint,
+apiKeyId: cos_creds.apikey,
+serviceInstanceId: cos_creds.resource_instance_id
+</code></pre>
+
+<p>  }</p>
+
+<p>  return new COS.S3(config);
+}</p>
+
+<p>function list (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  const client = cos_client(params)</p>
+
+<p>  return client.listObjects({ Bucket: params.bucket }).promise()</p>
+
+<pre><code>.then(results =&gt; ({ files: results.Contents }))
+</code></pre>
+
+<p>}
+```</p>
+
+<p>This action retrieves the bucket name, service endpoint and authentication credentials from invocation parameters. Errors are returned if those parameters are missing.</p>
+
+<ul>
+<li>Create a new package action from this source file with the following command.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/list-files actions.js --main list --kind nodejs:8
+ok: created action list-files
+</code></p>
+
+<p><em>The <code>—main</code> flag set the function name to call for each invocation. This defaults to <code>main</code>. Setting this to an explicit value allows us to use a single source file for multiple actions.</em></p>
+
+<p><em>The <code>—kind</code> sets the action runtime. This optional flag ensures we use the <a href="https://github.com/ibm-functions/runtime-nodejs">Node.js 8 runtime</a> rather than <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">Node.js 6</a>, which is the default for JavaScript actions. The IBM Cloud Object Storage client library is only included in the <a href="https://github.com/ibm-functions/runtime-nodejs">Node.js 8 runtime</a>.</em></p>
+
+<ul>
+<li>Invoke the new action to verify it works.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/list-files -r
+{</p>
+
+<pre><code>"files": [
+    { "Key": "jumping pug.jpg", ... },
+    { "Key": "pug blanket.jpg", ... },
+    { "Key": "swimming pug.jpg", ... }
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>The action response should contain a list of the files uploaded before. 💯💯💯</p>
+
+<h3>Retrieve Object Contents From Bucket</h3>
+
+<p>Let's add another action for retrieving object contents from a bucket.</p>
+
+<ul>
+<li>Add a new function (<code>retrieve</code>) to the existing source file (<code>action.js</code>) with the following source code.</li>
+</ul>
+
+
+<p>```javascript
+function retrieve (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  const client = cos_client(params)</p>
+
+<p>  return client.getObject({ Bucket: params.bucket, Key: params.name }).promise()</p>
+
+<pre><code>.then(result =&gt; ({ body: result.Body.toString('base64') }))
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Retrieving files needs a file name in addition to the bucket name. File contents <a href="https://stackoverflow.com/questions/47653181/return-binary-http-response-from-openwhisk-ibm-cloud-function-action">needs encoding as a Base64 string</a> to support returning in the JSON response returned by IBM Cloud Functions.</p>
+
+<ul>
+<li>Create an additional action from this updated source file with the following command.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/retrieve-file actions.js --main retrieve --kind nodejs:8
+ok: created action serverless-files/retrieve-file
+</code></p>
+
+<ul>
+<li>Invoke this action to test it works, passing the parameter name for the file to retrieve.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/retrieve-file -r -p name "jumping pug.jpg"
+{</p>
+
+<pre><code>"body": "&lt;BASE64 ENCODED STRING&gt;"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>If this is successful, a (very long) response body containing a base64 encoded image should be returned. 👍</p>
+
+<h3>Delete Objects From Bucket</h3>
+
+<p>Let's finish this section by adding a final action that removes objects from our bucket.</p>
+
+<ul>
+<li>Update the source file (<code>actions.js</code>) with this additional function.</li>
+</ul>
+
+
+<p>```javascript
+function remove (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  const client = cos_client(params)</p>
+
+<p>  return client.deleteObject({ Bucket: params.bucket, Key: params.name }).promise()
+}
+```</p>
+
+<ul>
+<li>Create a new action (<code>remove-file</code>) from the updated source file.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/remove-file actions.js --main remove --kind nodejs:8
+ok: created action serverless-files/remove-file
+</code></p>
+
+<ul>
+<li>Test this new action using it to remove a file from the bucket.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action invoke serverless-files/remove-file -r -p name "jumping pug.jpg"
+{}
+</code></p>
+
+<ul>
+<li>Listing bucket files should now return two files, rather than three.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/list-files -r
+{</p>
+
+<pre><code>"files": [
+    { "Key": "pug blanket.jpg", ... },
+    { "Key": "swimming pug.jpg", ... }
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Listing, retrieving and removing files using the client library is relatively simple. Functions just need to call the correct method passing the bucket and object name.</p>
+
+<p><em>Let's move onto a more advanced example, creating new files in the bucket from our action…</em></p>
+
+<h3>Create New Objects Within Bucket</h3>
+
+<p>File content will be passed into our action as Base64 encoded strings. JSON does not support binary data.</p>
+
+<p>When creating new objects, we should <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTCommonRequestHeaders.html">set the MIME type</a>. This is necessary for public access from web browsers, something we'll be doing later on. <a href="https://www.npmjs.com/package/mime-types">Node.js libraries</a> can calculate the correct MIME type value, rather than requiring this as an invocation parameter.</p>
+
+<ul>
+<li>Update the source file (<code>action.js</code>) with the following additional code.</li>
+</ul>
+
+
+<p>```javascript
+const mime = require('mime-types');</p>
+
+<p>function upload (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  if (!params.body) throw new Error("Missing object parameter.")</p>
+
+<p>  const client = cos_client(params)
+  const body = Buffer.from(params.body, 'base64')</p>
+
+<p>  const ContentType = mime.contentType(params.name) || 'application/octet-stream'
+  const object = {</p>
+
+<pre><code>Bucket: params.bucket,
+Key: params.name,
+Body: body,
+ContentType
+</code></pre>
+
+<p>  }</p>
+
+<p>  return client.upload(object).promise()
+}</p>
+
+<p>exports.upload = upload;
+```</p>
+
+<p><strong>As this code uses an external NPM library, we need to create the action from a zip file containing source files and external dependencies.</strong></p>
+
+<ul>
+<li>Create a <code>package.json</code> file with the following contents.</li>
+</ul>
+
+
+<p>```json
+{
+  "name": "upload-files",
+  "main": "actions.js",
+  "dependencies": {</p>
+
+<pre><code>"mime-types": "^2.1.18"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<ul>
+<li>Install external libraries in local environment.</li>
+</ul>
+
+
+<p><code>sh
+$ npm install
+added 2 packages in 0.804s
+</code></p>
+
+<ul>
+<li>Bundle source file and dependencies into zip file.</li>
+</ul>
+
+
+<p><code>bash
+$ zip -r upload.zip package.json actions.js node_modules
+  adding: actions.js (deflated 72%)
+  adding: node_modules/ (stored 0%)
+  ...
+</code></p>
+
+<ul>
+<li>Create a new action from the zip file.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/upload-file upload.zip --main upload --kind nodejs:8
+ok: created action serverless-files/upload-file
+</code></p>
+
+<ul>
+<li>Create the Base64-encoded string used to pass the new file's content.</li>
+</ul>
+
+
+<p><code>
+$ wget http://www.pugnow.com/wp-content/uploads/2016/04/fly-pug-300x300.jpg
+$ base64 fly-pug-300x300.jpg &gt; body.txt
+</code></p>
+
+<ul>
+<li>Invoke the action with the file name and content as parameters.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action invoke serverless-files/upload-file -r -p body $(cat body.txt) -p name "flying pug.jpg"
+</code></p>
+
+<p>Object details should be returned if the file was uploaded correctly.</p>
+
+<p>```json
+{</p>
+
+<pre><code>"Bucket": "my-serverless-files",
+"ETag": "\"b2ae0fb61dc827c03d6920dfae58e2ba\"",
+"Key": "flying pug.jpg",
+"Location": "https://&lt;MY_BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg",
+"key": "flying pug.jpg"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Accessing the <a href="https://console.bluemix.net/objectstorage/">object storage dashboard</a> shows the new object in the bucket, with the correct file name and size.</p>
+
+<p><img src="/images/cos_storage/upload-file-display.png"></p>
+
+<p><em>Having actions to create, delete and access objects within a bucket, what's left to do?</em> 🤔</p>
+
+<h3>Expose Public Objects From Buckets</h3>
+
+<p>Users can also choose to make certain <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">objects within a bucket public</a>. Public objects can be retrieved, using the external HTTP API, without any further authentication.</p>
+
+<p>Public file access allows external clients to access files directly. It removes the need to invoke (and pay for) a serverless function to serve content. This is useful for serving static assets and media files.</p>
+
+<p>Objects have an explicit property (<code>x-amz-acl</code>) which controls access rights. Files default to having this value set as <code>private</code>, meaning all operations require authentication. Setting this value to <code>public-read</code> will enable <code>GET</code> operations without authentication.</p>
+
+<p><strong><em>Files can be created with an explicit ACL property using credentials with the <code>Writer</code> or <code>Manager</code> role. Modifying ACL values for existing files is only supported using credentials with the <code>Manager</code> role.</em></strong></p>
+
+<ul>
+<li>Add the following source code to the existing actions file (<code>action.js</code>).</li>
+</ul>
+
+
+<p>```javascript
+function make_public (params) {
+  return update_acl(params, 'public-read')
+}</p>
+
+<p>function make_private (params) {
+  return update_acl(params, 'private')
+}</p>
+
+<p>function update_acl (params, acl) => {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  const client = cos_client(params)</p>
+
+<p>  const options = {</p>
+
+<pre><code>Bucket: params.bucket,
+Key: params.name,
+ACL: acl
+</code></pre>
+
+<p>  }</p>
+
+<p>  return client.putObjectAcl(options).promise()
+}
+```</p>
+
+<ul>
+<li>Create two new actions with the update source file.</li>
+</ul>
+
+
+<p><code>sh
+$ bx wsk action create serverless-files/make-public actions.js --main make_public --kind nodejs:8
+ok: created action serverless-files/make-public
+$ bx wsk action create serverless-files/make-private actions.js --main make_private --kind nodejs:8
+ok: created action serverless-files/make-private
+</code></p>
+
+<p><em>Bucket objects use the following URL scheme</em>: <em>https://<BUCKET_NAME>.<ENDPOINT_HOST>/<OBJECT_NAME></em></p>
+
+<p>We have been using the following endpoint hostname:  <code>s3-api.us-geo.objectstorage.softlayer.net</code>.</p>
+
+<ul>
+<li>Checking the status code returned when accessing an existing object confirms it defaults to private.</li>
+</ul>
+
+
+<p><code>bash
+$ curl -I https://&lt;BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg
+HTTP/1.1 403 Forbidden
+...
+</code></p>
+
+<ul>
+<li>Invoke the <code>make-public</code> action to allow GET requests without authentication.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action invoke serverless-files/make-public -r -p name "flying pug.jpg"
+</code></p>
+
+<ul>
+<li>Retry file access using the external HTTP API. This time a <code>200</code> response is returned with the content.</li>
+</ul>
+
+
+<p><code>
+$ curl -I https://&lt;BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg
+HTTP/1.1 200 OK
+Content-Type: image/jpeg
+...
+</code></p>
+
+<p>Having set an explicit content type for the file, opening this URL in a web browser will show the image.</p>
+
+<p><img src="http://www.pugnow.com/wp-content/uploads/2016/04/fly-pug-300x300.jpg"></p>
+
+<ul>
+<li>Disable public access using the other new action.</li>
+</ul>
+
+
+<p><code>
+bx wsk action invoke serverless-files/make-private -r -p name "flying pug.jpg"
+</code></p>
+
+<ul>
+<li>Re-issue the <code>curl</code> request to the file location.</li>
+</ul>
+
+
+<p><code>
+$ curl -I https://&lt;BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg
+HTTP/1.1 403 Forbidden
+...
+</code></p>
+
+<p>HTTP requests to this file now return a <code>403</code> status. Authentication is required again. 🔑</p>
+
+<p><em>In addition to allowing public read access we can go even further in allowing clients to interact with buckets…</em></p>
+
+<h3>Provide Direct Upload Access To Buckets</h3>
+
+<p>Cloud Object Storage provides a mechanism (<a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url"><em>presigned URLs</em></a>) to generate temporary links that allow clients to interact with buckets without further authentication. Passing these links to clients means they can access to private objects or upload new files to buckets. Presigned URLs expire after a configurable time period.</p>
+
+<p><strong>Generating presigned URLs is only supported from <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/credentials.html#using-hmac-credentials">HMAC authentication keys</a>.</strong></p>
+
+<p>HMAC service credentials must be manually provisioned, rather than using the <code>bx wsk service bind</code> command. See above for instructions on how to do this.</p>
+
+<ul>
+<li>Save provisioned HMAC keys into a file called <code>credentials.json</code>.</li>
+</ul>
+
+
+<p>Let's create an action that returns presigned URLs, allowing users to upload files directly. Users will call the action with a new file name. Returned URLs will support an unauthenticated PUT request for the next five minutes.</p>
+
+<ul>
+<li>Create a new file called <code>presign.js</code></li>
+</ul>
+
+
+<p>```javascript
+'use strict';</p>
+
+<p>const COS = require('ibm-cos-sdk');
+const mime = require('mime-types');</p>
+
+<p>function cos_client (params) {
+  const creds = params.cos_hmac_keys
+  if (!creds) throw new Error('Missing cos_hmac_keys parameter.')</p>
+
+<p>  const endpoint = params.cos_endpoint
+  if (!endpoint) throw new Error('Missing cos_endpoint parameter.')</p>
+
+<p>  const config = {</p>
+
+<pre><code>endpoint: endpoint,
+accessKeyId: creds.access_key_id, 
+secretAccessKey: creds.secret_access_key
+</code></pre>
+
+<p>  }</p>
+
+<p>  return new COS.S3(config);
+}</p>
+
+<p>function presign (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")</p>
+
+<p>  const client = cos_client(params)</p>
+
+<p>  const options = {</p>
+
+<pre><code>Bucket: params.bucket,
+Key: params.name,
+Expires: 300,
+ContentType: mime.contentType(params.name) || 'application/octet-stream'
+</code></pre>
+
+<p>  }</p>
+
+<p>  return { url: client.getSignedUrl('putObject', options) }
+}</p>
+
+<p>exports.presign = presign;
+```</p>
+
+<ul>
+<li>Update the <code>package.json</code> file with the following contents.</li>
+</ul>
+
+
+<p>```json
+{
+  "name": "presign",
+  "main": "presign.js",
+  "dependencies": {</p>
+
+<pre><code>"mime-types": "^2.1.18"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<ul>
+<li>Bundle source file and dependencies into zip file.</li>
+</ul>
+
+
+<p><code>sh
+$ zip -r presign.zip package.json presign.js node_modules
+  adding: actions.js (deflated 72%)
+  adding: node_modules/ (stored 0%)
+  ...
+</code></p>
+
+<ul>
+<li>Create a new action from the zip file.</li>
+</ul>
+
+
+<p><code>sh
+$ bx wsk action create serverless-files/presign presign.zip --main presign --kind nodejs:8 -P credentials.json
+ok: created action serverless-files/presign
+</code></p>
+
+<ul>
+<li>Invoke the action to return a presigned URL for a new file.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/presign -r -p name pug.jpg
+{</p>
+
+<pre><code>"url": "https://&lt;BUCKET&gt;.s3-api.us-geo.objectstorage.softlayer.net/pug.jpg?AWSAccessKeyId=&lt;SECRET&gt;&amp;Content-Type=image%2Fjpeg&amp;Expires=&lt;TIME&gt;&amp;Signature=&lt;KEY&gt;"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Using this URL we can upload a new image without providing authentication credentials.</p>
+
+<ul>
+<li>This curl command <code>—upload-file</code> will send a HTTP PUT, with image file as request body, to that URL.</li>
+</ul>
+
+
+<p><code>
+$ curl --upload-file "my pug.jpg" &lt;URL&gt; --header "Content-Type: image/jpeg"
+</code></p>
+
+<p><em>The HTTP request must include the correct "Content-Type" header. Use the value provided when creating the presigned URL. If these values do not match, the request will be rejected.</em></p>
+
+<p>Exploring the objects in our bucket confirms we have uploaded a file! 🕺💃</p>
+
+<p><img src="/images/cos_storage/uploaded-my-pug.png"></p>
+
+<p>Presigned URLs are a brilliant feature of Cloud Object Storage. Allowing users to upload files directly overcomes the payload limit for cloud functions. It also reduces the cost for uploading files, removing the cloud functions' invocation cost.</p>
+
+<h2>conclusion</h2>
+
+<p>Object storage services are the solution for managing files with serverless applications.</p>
+
+<p>IBM Cloud provides both a serverless runtime (<a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>) and an object storage service (<a href="https://console.bluemix.net/catalog/services/cloud-object-storage">IBM Cloud Object Store</a>). In this blog post, we looked at how integrate these services to provide a file storage solution for serverless applications.</p>
+
+<p>We showed you how to provision new COS services, create and manage authentication credentials, access files using a client library and even allow external clients to interact directly with buckets. Sample serverless functions using the Node.js runtime were also provided.</p>
+
+<p><em>Do you have any questions, comments or issues about the content above? Please leave a comment below, find me on the <a href="http://openwhisk.incubator.apache.org/slack.html">openwhisk slack</a> or send me a <a href="https://twitter.com/thomasj">tweet</a>.</em></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[File Storage For Serverless Applications]]></title>
@@ -324,7 +1251,7 @@ $ curl --request POST \</p>
 </ul>
 
 
-<p>{% img /images/metrics_alerts/test_email.png %}</p>
+<p><img src="/images/metrics_alerts/test_email.png"></p>
 
 <h3>Create monitoring rule for errors</h3>
 
@@ -505,14 +1432,14 @@ $ bx wsk activation logs 295c47f05ea042849c47f05ea08284f0
 </ul>
 
 
-<p>{% img /images/metrics_alerts/single_error.jpg %}</p>
+<p><img src="/images/metrics_alerts/single_error.jpg"></p>
 
 <ul>
 <li>Check your email inbox for the message showing the error notification!</li>
 </ul>
 
 
-<p>{% img /images/metrics_alerts/email.png %}</p>
+<p><img src="/images/metrics_alerts/email.png"></p>
 
 <ul>
 <li>Using the Cloud Monitoring API, we can retrieve the notification history to show this message was sent.</li>
@@ -816,7 +1743,7 @@ $ docker exec -it &lt;CONTAINER_ID&gt; /bin/bash
     <link href="http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/"/>
     <updated>2018-01-05T15:40:00+00:00</updated>
     <id>http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards</id>
-    <content type="html"><![CDATA[<p>{% img /images/grafana_dashboards/action-dashboard.gif %}</p>
+    <content type="html"><![CDATA[<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
 
 <p><em>This blog post is part three of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
 
@@ -825,11 +1752,7 @@ applications, monitoring incoming metric values will alert us to problems.</p>
 
 <p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
 
-<p>{% blockquote %}
-Grafana is an open source metric analytics &amp; visualization
-suite. It is most commonly used for visualizing time series data for
-infrastructure and application analytics.
-{% endblockquote %}</p>
+<p><blockquote><p>Grafana is an open source metric analytics &amp; visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote></p>
 
 <p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
 
@@ -864,7 +1787,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 
 <p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
 
-<p>{% img /images/grafana_dashboards/templating.png %}</p>
+<p><img src="/images/grafana_dashboards/templating.png"></p>
 
 <p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
 
@@ -878,7 +1801,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/new_dashboard.png %}</p>
+<p><img src="/images/grafana_dashboards/new_dashboard.png"></p>
 
 <h4>How to set the dashboard name?</h4>
 
@@ -889,7 +1812,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/dashboard_name.png %}</p>
+<p><img src="/images/grafana_dashboards/dashboard_name.png"></p>
 
 <h4>How to set dashboard template variables?</h4>
 
@@ -900,7 +1823,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/dashboard_template_menu.png %}</p>
+<p><img src="/images/grafana_dashboards/dashboard_template_menu.png"></p>
 
 <ul>
 <li>Fill in the name field with the template identifier.</li>
@@ -909,7 +1832,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/dashboard_template_details.png %}</p>
+<p><img src="/images/grafana_dashboards/dashboard_template_details.png"></p>
 
 <h4>How to add new row to dashboard?</h4>
 
@@ -918,7 +1841,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/add_row.png %}</p>
+<p><img src="/images/grafana_dashboards/add_row.png"></p>
 
 <h4>How to add new chart to row?</h4>
 
@@ -929,7 +1852,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/add_row_panel.png %}</p>
+<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
 
 <h4>How to set and display row name?</h4>
 
@@ -940,7 +1863,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/add_row_panel.png %}</p>
+<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
 
 <h4>How to edit chart parameters?</h4>
 
@@ -951,7 +1874,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/panel_details_more.png %}</p>
+<p><img src="/images/grafana_dashboards/panel_details_more.png"></p>
 
 <h4>How to choose time range for metric values?</h4>
 
@@ -962,7 +1885,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
 </ul>
 
 
-<p>{% img /images/grafana_dashboards/time_range_menu.png %}</p>
+<p><img src="/images/grafana_dashboards/time_range_menu.png"></p>
 
 <h2>Dashboards</h2>
 
@@ -977,7 +1900,7 @@ for the Grafana dashboards below. Remember to create the necessary template vari
 
 <p>This is an example of the first dashboard we want to create.</p>
 
-<p>{% img /images/grafana_dashboards/overview-dashboard.gif %}</p>
+<p><img src="/images/grafana_dashboards/overview-dashboard.gif"></p>
 
 <p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
 
@@ -999,7 +1922,7 @@ for the Grafana dashboards below. Remember to create the necessary template vari
 
 <h4>invocations graph</h4>
 
-<p>{% img /images/grafana_dashboards/overview-invocations.png %}</p>
+<p><img src="/images/grafana_dashboards/overview-invocations.png"></p>
 
 <p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
 
@@ -1035,7 +1958,7 @@ ibm.public.cloud-functions.$region.$namespace.*.*.error
 
 <h4>invocation types</h4>
 
-<p>{% img /images/grafana_dashboards/overview-invocation-types.png %}</p>
+<p><img src="/images/grafana_dashboards/overview-invocation-types.png"></p>
 
 <p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
 
@@ -1140,7 +2063,7 @@ ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()
 
 <h4>invocation durations</h4>
 
-<p>{% img /images/grafana_dashboards/overview-invocation-durations.png %}</p>
+<p><img src="/images/grafana_dashboards/overview-invocation-durations.png"></p>
 
 <p>This row will contain counts for the total, mean and range of all invocations.</p>
 
@@ -1214,7 +2137,7 @@ ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()
 
 <h4>invocation details table</h4>
 
-<p>{% img /images/grafana_dashboards/overview-tables.png %}</p>
+<p><img src="/images/grafana_dashboards/overview-tables.png"></p>
 
 <p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
 
@@ -1301,7 +2224,7 @@ ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)
 
 <p>This is an example of the second dashboard we want to create.</p>
 
-<p>{% img /images/grafana_dashboards/action-dashboard.gif %}</p>
+<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
 
 <p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
 
@@ -1324,7 +2247,7 @@ ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)
 
 <h4>invocations</h4>
 
-<p>{% img /images/grafana_dashboards/action-invocations.png %}</p>
+<p><img src="/images/grafana_dashboards/action-invocations.png"></p>
 
 <p>Action invocations are shown this first dashboard row. Bar charts display
 successful versus failed invocations and cold versus warm starts.</p>
@@ -1357,7 +2280,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.*.error
 
 <h4>invocation types</h4>
 
-<p>{% img /images/grafana_dashboards/action-invocation-types.png %}</p>
+<p><img src="/images/grafana_dashboards/action-invocation-types.png"></p>
 
 <p>This row replicates the <em>"Invocation Types"</em> row from the <em>"Overview"</em> dashboard.</p>
 
@@ -1367,7 +2290,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.*.error
 
 <h4>invocation durations</h4>
 
-<p>{% img /images/grafana_dashboards/action-invocation-durations.png %}</p>
+<p><img src="/images/grafana_dashboards/action-invocation-durations.png"></p>
 
 <p>This row uses an extended version of the durations row from the <em>"Overview"</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
 
@@ -1452,7 +2375,7 @@ ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
 
 <h4>cpu usage</h4>
 
-<p>{% img /images/grafana_dashboards/action-cpu-usage.png %}</p>
+<p><img src="/images/grafana_dashboards/action-cpu-usage.png"></p>
 
 <p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
 
@@ -1490,7 +2413,7 @@ ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
 
 <h4>memory usage</h4>
 
-<p>{% img /images/grafana_dashboards/action-memory-usage.png %}</p>
+<p><img src="/images/grafana_dashboards/action-memory-usage.png"></p>
 
 <p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
 
@@ -1535,386 +2458,6 @@ are a perfect solution for this problem. Building custom dashboards allows us
 to monitor incoming data values live.</p>
 
 <p>In the next blog post, we're going to finish off <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values...</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Capturing Runtime Metrics For OpenWhisk Applications]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/"/>
-    <updated>2017-12-18T09:21:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications</id>
-    <content type="html"><![CDATA[<p><em>This blog post is part one of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
-
-<p>Serverless platforms pose a unique challenge for collecting application metrics. Runtime environments are <a href="https://martinfowler.com/articles/serverless.html">ephemeral</a>, existing only to process requests.</p>
-
-<p>Using a background process to capture and export metrics to an external service is impossible. With such a restricted runtime environment, we have to look at other options… 🤔</p>
-
-<h2>exporting serverless runtime metrics</h2>
-
-<h3>console logs with alarm trigger</h3>
-
-<p>Apache OpenWhisk captures console logs written to stdout or stderr by actions. Logs are available in <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#activation-record">activation records</a> through the <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/apiv1swagger.json">platform API</a>.</p>
-
-<p>Runtime metrics written to the console will be saved in the activation records.</p>
-
-<p>An additional action, triggered from the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm package</a>, can be scheduled to collect these values from the logs and forward to the metrics service.</p>
-
-<p><em>This approach is simple and does not interfere with request processing. However, it does add a delay to the metric values being available in the collection service. This delay is dependent on the schedule chosen for the alarm trigger feed.</em></p>
-
-<h3>send before returning</h3>
-
-<p>Another option is to instrument the serverless functions to automatically collect and push metrics to the metric service before returning from the function.</p>
-
-<p>The function will have to wait for the external metrics service to respond before returning.</p>
-
-<p><em>This method pushes metric values into the collection service in real-time. There is no waiting for the background collection action to run. The disadvantage of this approach is that it adds a delay to each request. This delay is dependent on the response time from the collection service.</em></p>
-
-<h2>capturing runtime metrics</h2>
-
-<p>Metric values will have to be captured using a runtime library, due to the restrictions on running background processes.</p>
-
-<p>The library should automatically capture registered metrics during each invocation. Values will be forwarded to the collection service using the configured forwarding method.</p>
-
-<h3>openwhisk-metrics</h3>
-
-<p>There is a Node.js library to ease the process of capturing runtime metrics for OpenWhisk actions.</p>
-
-<p><a href="https://github.com/jthomas/openwhisk-metrics">https://github.com/jthomas/openwhisk-metrics</a></p>
-
-<p>Node.js actions are wrapped with a proxy to automate recording metrics during invocations.</p>
-
-<p>Metric values for <code>cpu</code>, <code>memory</code>, <code>time</code>, <code>error</code> and <code>coldstart</code> are collected by default. It supports adding custom metric collectors.</p>
-
-<h4>usage</h4>
-
-<p>Wrap action handlers with the metrics library.</p>
-
-<p>```javascript
-const metrics = require('openwhisk-metrics')</p>
-
-<p>const main = params => {
-  return { message: "Hello World" }
-}</p>
-
-<p>module.exports.main = metrics(main)
-```</p>
-
-<p>Metrics values are logged to stdout for each invocation of the serverless function.</p>
-
-<p><code>
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.rss 53018624 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.heapTotal 34463744 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.heapUsed 16955224 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.external 987361 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.error 0 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.coldstart 0 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.cpu.user 177 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.cpu.system 2 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.start 1511605588388 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.end 1511605588468 1512489781
-METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.duration 80 1512489781
-</code></p>
-
-<p>Once you are collecting metrics, you need a monitoring service to forward them to…</p>
-
-<h2>monitoring service</h2>
-
-<p>We're going to look at collecting and visualising metrics using the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring Service</a>.</p>
-
-<blockquote><p>Use the IBM® Cloud Monitoring service to expand your collection and retention capabilities when working with metrics, and to be able to define rules and alerts that notify you of conditions that require attention.</p></blockquote>
-
-<p><a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a> comes with a metric collection service, Grafana-based visualisation dashboard and an alerting system.</p>
-
-<p>Let's demonstrate how to use the approaches listed above for exporting metrics to the IBM Cloud Monitoring service.</p>
-
-<p>There's an <a href="https://github.com/jthomas/cloud-functions-metrics-service">additional Node.js library</a> to integrate the <a href="https://github.com/jthomas/openwhisk-metrics">OpenWhisk Metrics</a> library with the IBM Cloud Monitoring Service. This can forward metrics in real-time or batches (using a schedule action from a timer).</p>
-
-<h3>provisioning</h3>
-
-<p>An instance of the service must be provisioned before being used.</p>
-
-<p><em>The service is available in <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">multiple regions</a>. Choose the same region as the IBM Cloud Functions instance for best performance.</em></p>
-
-<p>Instances can be provisioned through the <a href="https://console.bluemix.net">IBM Cloud dashboard</a> or the <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">IBM Cloud CLI</a> tool.</p>
-
-<p><code>
- $ bx cf create-service Monitoring lite my_monitoring_svc
-</code></p>
-
-<p>For more details on provisioning instances of this service, please see the documentation: <a href="https://console.bluemix.net/docs/services/cloud-monitoring/how-to/provision.html#provision">https://console.bluemix.net/docs/services/cloud-monitoring/how-to/provision.html#provision</a></p>
-
-<h3>authentication</h3>
-
-<p>IBM Cloud Monitoring supports the following authentication methods: <em>API Key, UAA Token or IAM Token.</em></p>
-
-<p>An API key will be used to provide authentication credentials in the examples below.</p>
-
-<p>Keys can be created through the <a href="https://console.bluemix.net">IBM Cloud dashboard</a> or the <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">IBM Cloud CLI</a> tool.</p>
-
-<p><code>
-$ bx iam api-key-create metrics-key -d "API Key For Serverless Metrics"
-</code></p>
-
-<p><strong>Note:</strong> <em>The API key is only shown at the time of creation. If the API key is lost, you must create a new API key.</em></p>
-
-<p>For more details on creating API keys, please see the documentation here: <a href="https://console.bluemix.net/docs/services/cloud-monitoring/security/auth_api_key.html#auth_api_key">https://console.bluemix.net/docs/services/cloud-monitoring/security/auth_api_key.html#auth_api_key</a></p>
-
-<h3>space domain</h3>
-
-<p>The GUID of the <a href="https://console.bluemix.net/docs/admin/orgs_spaces.html#orgsspacesusers">account space</a> is also required to use the metrics service.</p>
-
-<p>Retrieve this value using the IBM Cloud CLI tool. Replace <code>SpaceName</code> with the name of the space.</p>
-
-<p><code>
-bx iam space SpaceName --guid
-</code></p>
-
-<p>The GUID for the space is returned.</p>
-
-<p><code>
-$ bx iam space dev --guid
-667fadfc-jhtg-1234-9f0e-cf4123451095
-</code></p>
-
-<p><strong>Note:</strong> <em>Space GUIDs must be prefixed with <code>s-</code> when being using with the monitoring service.</em></p>
-
-<p><code>
-"667fadfc-jhtg-1234-9f0e-cf4123451095" =&gt; "s-667fadfc-jhtg-1234-9f0e-cf4123451095"
-</code></p>
-
-<h2>example (real-time forwarding)</h2>
-
-<p>Let's start with an example of using real-time forwarding of metrics values. Metric values will be automatically collected by the runtime library. Before each invocation finishes, the library will send the values to the external collection service.</p>
-
-<p><em>This example assumes you already have the CLI tool for IBM Cloud Functions installed and configured. If you need to do this, please follow the instructions <a href="https://console.bluemix.net/openwhisk/learn/cli">here</a>.</em></p>
-
-<h3>create new directory</h3>
-
-<p><code>
-$ mkdir hello-world
-$ cd hello-world
-</code></p>
-
-<h3>initialise npm package</h3>
-
-<p><code>
-$ npm init -y
-</code></p>
-
-<h3>install libraries</h3>
-
-<p><code>
-$ npm install openwhisk-metrics cloud-functions-metrics-service
-</code></p>
-
-<h3>update action handler source</h3>
-
-<p>Create a file called <code>index.js</code> with following code.</p>
-
-<p>```javascript
-const metrics = require('openwhisk-metrics')
-const service = require('cloud-functions-metrics-service')</p>
-
-<p>metrics.service = service.client({<br/>
-  host: 'metrics.&lt;???>.bluemix.net',
-  scope: 's-&lt;???>',
-  api_key: '&lt;???>'
-})</p>
-
-<p>const main = params => {</p>
-
-<pre><code>return { message: "Hello World" }
-</code></pre>
-
-<p>}</p>
-
-<p>module.exports.main = metrics(main)
-```</p>
-
-<p>Replace the <code>host</code>, <code>scope</code> and <code>api_key</code> parameters custom values. Host names for the regional monitoring service endpoints are listed <a href="https://console.bluemix.net/docs/services/cloud-monitoring/send_retrieve_metrics_ov.html#endpoints">here</a>.</p>
-
-<p><em>Space GUIDs must be prefixed with <code>s-</code> to identify a space in the <code>scope</code> parameter.</em></p>
-
-<h3>create new action</h3>
-
-<p><code>
-$ zip -r action.zip index.js package.json node_modules
-$ wsk action create hello-world --kind nodejs:8 action.zip
-</code></p>
-
-<h3>invoke action</h3>
-
-<p><code>
-$ wsk action invoke hello-world -b
-ok: invoked /_/hello-world with id 74add543b3b94bbbadd543b3b9dbbb17
-</code></p>
-
-<h3>use api to list metrics</h3>
-
-<p>Use <code>curl</code> to manually list the ingested metric labels for IBM Cloud Functions.</p>
-
-<p><strong>Replace the <code>&lt;???&gt;</code> values in the command with configuration values from above.</strong></p>
-
-<p><code>
-$ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.public.cloud-functions.*.*.*.*' --header 'x-auth-scope-id: s-&lt;???&gt;' --header 'X-Auth-User-Token: apikey &lt;???&gt;'
-[{
-  "leaf": 0,
-  "context": {},
-  "text": "72df4bc809c04fae9f4bc809c01fae77",
-  "expandable": 1,
-  "id": "ibm.public.cloud-functions.*.*.*.72df4bc809c04fae9f4bc809c01fae77",
-  "allowChildren": 1
-}]
-</code></p>
-
-<p>Each activation identifier should be listed as a label value in the metrics service.</p>
-
-<h2>example (batch forwarding)</h2>
-
-<p>If we don't want to add a (short) delay to each invocation, metric values can be forwarded asynchronously. An explicit action will be created to forward metric values from invocation logs. This action will be triggered on a periodic schedule using the alarm trigger feed.</p>
-
-<p><em>This example assumes you already have the CLI tool for IBM Cloud Functions installed and configured. If you need to do this, please follow the instructions <a href="https://console.bluemix.net/openwhisk/learn/cli">here</a>.</em></p>
-
-<h3>create sample action</h3>
-
-<p><code>
-$ mkdir hello-world
-$ cd hello-world
-$ npm init -y
-$ npm install openwhisk-metrics
-</code></p>
-
-<p>Create a file called <code>index.js</code> with the following code.</p>
-
-<p>```javascript
-const metrics = require('openwhisk-metrics')</p>
-
-<p>const main = params => {
-  return { message: "Hello World" }
-}</p>
-
-<p>module.exports.main = metrics(main)
-```</p>
-
-<h3>deploy and test sample action</h3>
-
-<p>Package and deploy <code>hello-world</code> action.</p>
-
-<p><code>
-$ zip -r action.zip index.js package.json node_modules
-$ wsk action create hello-world --kind nodejs:8 action.zip
-</code></p>
-
-<p>Metric values are written to the console for each invocation.</p>
-
-<p><code>
-$ wsk action invoke hello-world -b
-ok: invoked /_/hello-world with id 28da39d219df436a9a39d219df036a30
-$ wsk activation logs 28da39d219df436a9a39d219df036a30
-2017-12-18T14:38:50.751615113Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.cpu.user 0 1513607930
-2017-12-18T14:38:50.751672372Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.cpu.system 0 1513607930
-2017-12-18T14:38:50.751685034Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.time.start 1513607930749 1513607930
-...
-</code></p>
-
-<h3>create metric-forwarder action</h3>
-
-<p>Clone the project repository and install NPM dependencies.</p>
-
-<p><code>
-$ git clone https://github.com/jthomas/cloud-functions-metrics-service
-$ cd cloud-functions-metrics-service
-$ npm install
-</code></p>
-
-<p>Update action configuration file (<code>config.json</code>) with the following parameter values.</p>
-
-<p>```
-{
-  "actions": ["hello-world"],
-  "service": {</p>
-
-<pre><code>"host": "metrics.&lt;???&gt;.bluemix.net",
-"scope": "s-&lt;???&gt;",
-"api_key": "&lt;???&gt;"          
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p><strong>Replace the <code>&lt;???&gt;</code> fields in the configuration file from values from above.</strong></p>
-
-<p>Package <code>metric-forwarder</code> action.</p>
-
-<p><code>
-$ zip -r action.zip index.js package.json lib node_modules
-</code></p>
-
-<h3>deploy metric-forwarder action</h3>
-
-<p>Create new <code>metric-forwarder</code> action from deployment package and configuration file.</p>
-
-<p><code>
-$ wsk action create metric-forwarder --kind nodejs:8 action.zip --param-file config.json
-</code></p>
-
-<p>Create trigger feed for alarm package to run <code>metric-forwarder</code> on periodic schedule.</p>
-
-<p><code>
-$ wsk trigger create interval \
-  --feed /whisk.system/alarms/interval \
-  --param minutes 1
-</code></p>
-
-<p>Bind trigger to action using rule.</p>
-
-<p><code>
-$ wsk rule create forward-metrics-on-interval interval metric-forwarder
-</code></p>
-
-<h3>invoke sample action</h3>
-
-<p><code>
-$ wsk action invoke hello-world -b
-ok: invoked /_/hello-world with id 28da39d219df436a9a39d219df036a30
-</code></p>
-
-<p>This will generate activation records containing metric values. When the <code>interval</code> trigger is next fired, metric values from these records forwarded to the collection service.</p>
-
-<p>Logs from the <code>metric-forwarder</code> action will show the activation records that have been retrieved.</p>
-
-<p><code>
-$ wsk activation poll metric-forwarder
-</code></p>
-
-<h3>use api to list metrics</h3>
-
-<p>Use <code>curl</code> to manually list the ingested metric labels for IBM Cloud Functions.</p>
-
-<p><strong>Replace the <code>&lt;???&gt;</code> values in the command with configuration values from above.</strong></p>
-
-<p><code>
-$ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.public.cloud-functions.*.*.*.*' --header 'x-auth-scope-id: s-&lt;???&gt;' --header 'x-auth-user-token: apikey &lt;???&gt;'
-[{
-  "leaf": 0,
-  "context": {},
-  "text": "72df4bc809c04fae9f4bc809c01fae77",
-  "expandable": 1,
-  "id": "ibm.public.cloud-functions.*.*.*.28da39d219df436a9a39d219df036a30",
-  "allowChildren": 1
-}]
-</code></p>
-
-<p>Each activation identifier should be listed as a label value in the metrics service.</p>
-
-<h2>next steps</h2>
-
-<p>Metric values from our serverless applications are now being collected by the IBM Cloud Monitoring service. 👏👏👏</p>
-
-<p>Applications metrics are automatically recorded by the runtime library for each invocation. Metric values are exported to the monitoring service in real-time or using a timed action to forward in batches.</p>
-
-<p>Setting up monitoring dashboards from the collected values will allow us to identify and resolve issues with our serverless applications. In the next blog post, we'll look using Grafana to visualise metric values being collected…</p>
 ]]></content>
   </entry>
   

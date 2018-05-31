@@ -9,9 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Since creating Phonebot last month,
-I&#8217;ve been working on setting up a fully-automated build and deploy for the project.
-Using IBM DevOps &hellip;">
+  <meta name="description" content="Logs are boring. It used to be the only time you&#8217;d be looking at your application logs was when something went wrong. Logs filled up disk &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -79,6 +77,590 @@ Using IBM DevOps &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">Making Logs Awesome - Elasticsearch in the Cloud Using Docker</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-08T10:34:00+01:00" pubdate data-updated="true">Jul 8<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/Logs.png"></p>
+
+<h3><strong>Logs are boring.</strong></h3>
+
+<p>It used to be the only time you&#8217;d be looking at your application logs was when something went wrong.</p>
+
+<p>Logs filled up disk space until they rotated out of existence.</p>
+
+<p>&#8230;but now businesses are increasingly focused on using data to <a href="http://www.slideshare.net/mikebrittain/metrics-driven-engineering-at-etsy">drive decisions</a>.</p>
+
+<p><em>Which advert leads to the highest click-through rates?</em></p>
+
+<p><em>How did that last website change affect user retention?</em></p>
+
+<p><em>What customer devices should our website support?</em></p>
+
+<p>Guess where the answers lie?</p>
+
+<h4><strong>Logs.</strong></h4>
+
+<p>Storing, processing and querying logs effectively is <a href="http://www.slideshare.net/mikebrittain/take-my-logs-please">helping businesses succeed</a>.</p>
+
+<h2>Introducing the ELK (Elasticsearch, Logstash, Kibana) stack&#8230;</h2>
+
+<p><img src="https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png"></p>
+
+<p>Five years ago, <a href="https://www.elastic.co/products/elasticsearch">Elasticsearch</a>, an open-source full-text search engine, was
+released. It&#8217;s now the second most popular enterprise search engine.
+Complementing this project were <a href="https://www.elastic.co/products/logstash">Logstash</a> and <a href="https://www.elastic.co/products/kibana">Kibana</a>.
+Logstash was a log
+processing pipeline that could normalize streaming logs into a centralised
+Elasticsearch cluster. Kibana was an analytics and visualisation platform for
+turning those logs into actionable insights.</p>
+
+<p>These tools were commonly used together, now known as the ELK stack, to deliver&#8230;</p>
+
+<blockquote><p>&#8220;an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source.&#8221;</p></blockquote>
+
+
+<h4><strong>ELK, making logs awesome!</strong></h4>
+
+<p><em><em>Manually installing and configuring Elasticsearch, Logstash and Kibana is not a <a href="https://gist.github.com/ashrithr/c5c03950ef631ac63c43">trivial task</a>.</em></em></p>
+
+<p>Luckily, there is a better way&#8230;</p>
+
+<h2>Docker </h2>
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/7/79/Docker_(container_engine)_logo.png"></p>
+
+<blockquote><p>&#8220;Docker allows you to pack, ship and run any application as a lightweight container&#8221;.</p></blockquote>
+
+
+<p><a href="https://www.docker.com/">Docker</a> <em>images</em> define pre-configured environments that containers
+are started from.  <a href="https://hub.docker.com/">Docker Hub</a> is the public image registry, where anyone can
+publish, search and retrieve new images.</p>
+
+<p><img src="/images/Docker%20Hub.png"></p>
+
+<p>Rather than having to install and configure individual software packages, we
+can pull down one of the many existing Docker images for the <a href="https://registry.hub.docker.com/search?q=elk">ELK stack</a>.</p>
+
+<p><em>With one command, we can spin up an entire ELK instance on any platform with no extra configuration needed.</em></p>
+
+<p>Magic.</p>
+
+<h2>IBM Containers</h2>
+
+<p>IBM recently announced <a href="https://developer.ibm.com/bluemix/2015/06/22/ibm-containers-on-bluemix/">Docker support</a> for their Platform-as-a-Service cloud service, <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>. Developers can now deploy and manage Docker containers on a scalable cloud platform.</p>
+
+<p><a href="https://developer.ibm.com/bluemix/2015/06/22/ibm-containers-on-bluemix/">IBM Containers</a> provides the following services:</p>
+
+<ul>
+<li>Private image registry</li>
+<li>Elastic scaling and auto-recovery</li>
+<li>Persistent storage and advanced networking configuration</li>
+<li>Automated security scans</li>
+<li>Integration with the IBM Bluemix cloud services.</li>
+</ul>
+
+
+<p><em>Using this service, we can build and test a custom ELK container in our local
+development environment and &#8220;web-scale&#8221; it by pushing to the IBM Bluemix cloud platform.</em></p>
+
+<h2>Manging Application Logs</h2>
+
+<p>Once our ELK instance is running, we can then start to push application logs
+from other applications running on IBM Bluemix into the service. We&#8217;ll look at
+automatically setting up a log drain to forward all applications logs into a
+centralised Elasticsearch service. We can then start to drive business
+decisions using data rather than intuition using Kibana, the visualisation
+dashboard.</p>
+
+<p><strong><em>This blog post will explain the technical details of using Docker to create a
+customised ELK service that can be hosted on a scalable cloud platform.</em></strong></p>
+
+<h2>Running ELK instances Using Docker </h2>
+
+<p>Docker Hub has over forty five thousands public images available. There are multiple public images we can pull
+down with a pre-configured ELK stack. Looking at the options, we&#8217;re going to use the <a href="https://registry.hub.docker.com/u/sebp/elk/">sebp/elk</a>
+repository because it&#8217;s popular and easily modifiable with a custom configuration.</p>
+
+<p>We&#8217;re going to start by pulling the image into our local machine and running a container to check it&#8217;s working&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull sebp/elk
+</span><span class='line'><span class="nv">$ </span>docker run -p 5601:5601 -p 9200:9200 -p 5000:5000 -it --name elk sebp/elk
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>That last command will start a new container from the <em>sebp/elk</em> image,
+exposing the ports for Kibana (5601), Elasticsearch (9200) and Logstash (5000)
+for external access. The container has been started with the <em>-i</em> flag,
+interactive mode, allowing us to monitor the container logs in the console.
+When the instance has started, we can view the status output from command line.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker ps
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                                                                              NAMES
+</span><span class='line'>42d40d1fb59c        sebp/elk:latest     <span class="err">&quot;</span>/usr/local/bin/star   27 seconds ago      Up 26 seconds       0.0.0.0:5000-&gt;5000/tcp, 0.0.0.0:5601-&gt;5601/tcp, 0.0.0.0:9200-&gt;9200/tcp, 9300/tcp   elk
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using Mac OS X for local development, we&#8217;re using the <a href="http://boot2docker.io/">Boot2Docker project</a> to host a Linux VM for deploying Docker containers locally.
+With the following command, we can discover the virtual IP address for the ELK container.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>boot2docker ip
+</span><span class='line'>192.168.59.103
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Opening a web browser, we can now visit <em>http://192.168.59.103:5601</em> to show the Kibana application.
+For now, this isn&#8217;t very useful because Elasticsearch has no logs!</p>
+
+<p>Let&#8217;s fix that&#8230;</p>
+
+<h2>Draining Logs from Cloud Foundry</h2>
+
+<p><a href="https://www.cloudfoundry.org">Cloud Foundry</a>, the open-source project powering IBM Bluemix, supports <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">setting up a syslog drain</a>
+to forward all applications logs to a third-party logging service. Full details on configuring this will be <a href="#config">shown later</a>.</p>
+
+<p>Scott Frederick has already written an <a href="http://scottfrederick.cfapps.io/blog/2014/02/20/cloud-foundry-and-logstash">amazing blog post</a> about configuring Logstash
+to support the log format used by the Cloud Foundry. Logstash expects the older RFC3164 syslog formatting by default, whilst Cloud Foundry emits log lines that follow
+the newer RFC5424 standard.</p>
+
+<p>Scott provides the following configuration file that sets up the syslog input channels, running on port 5000, along with a custom filter that converts the incoming RFC5424 logs into
+an acceptable format.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>input <span class="o">{</span>
+</span><span class='line'>  tcp <span class="o">{</span>
+</span><span class='line'>    <span class="nv">port</span> <span class="o">=</span>&gt; 5000
+</span><span class='line'>    <span class="nb">type</span> <span class="o">=</span>&gt; syslog
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>  udp <span class="o">{</span>
+</span><span class='line'>    <span class="nv">port</span> <span class="o">=</span>&gt; 5000
+</span><span class='line'>    <span class="nb">type</span> <span class="o">=</span>&gt; syslog
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>filter <span class="o">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="o">[</span><span class="nb">type</span><span class="o">]</span> <span class="o">==</span> <span class="s2">&quot;syslog&quot;</span> <span class="o">{</span>
+</span><span class='line'>    grok <span class="o">{</span>
+</span><span class='line'>      <span class="nv">match</span> <span class="o">=</span>&gt; <span class="o">{</span> <span class="s2">&quot;message&quot;</span> <span class="o">=</span>&gt; <span class="s2">&quot;%{SYSLOG5424PRI}%{NONNEGINT:syslog5424_ver} +(?:%{TIMESTAMP_ISO8601:syslog5424_ts}|-) +(?:%{HOSTNAME:syslog5424_host}|-) +(?:%{NOTSPACE:syslog5424_app}|-) +(?:%{NOTSPACE:syslog5424_proc}|-) +(?:%{WORD:syslog5424_msgid}|-) +(?:%{SYSLOG5424SD:syslog5424_sd}|-|) +%{GREEDYDATA:syslog5424_msg}&quot;</span> <span class="o">}</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>    syslog_pri <span class="o">{</span> <span class="o">}</span>
+</span><span class='line'>    date <span class="o">{</span>
+</span><span class='line'>      <span class="nv">match</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;syslog_timestamp&quot;</span>, <span class="s2">&quot;MMM  d HH:mm:ss&quot;</span>, <span class="s2">&quot;MMM dd HH:mm:ss&quot;</span> <span class="o">]</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>    <span class="k">if</span> !<span class="o">(</span><span class="s2">&quot;_grokparsefailure&quot;</span> in <span class="o">[</span>tags<span class="o">])</span> <span class="o">{</span>
+</span><span class='line'>      mutate <span class="o">{</span>
+</span><span class='line'>        <span class="nv">replace</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;@source_host&quot;</span>, <span class="s2">&quot;%{syslog_hostname}&quot;</span> <span class="o">]</span>
+</span><span class='line'>        <span class="nv">replace</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;@message&quot;</span>, <span class="s2">&quot;%{syslog_message}&quot;</span> <span class="o">]</span>
+</span><span class='line'>      <span class="o">}</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>    mutate <span class="o">{</span>
+</span><span class='line'>      <span class="nv">remove_field</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;syslog_hostname&quot;</span>, <span class="s2">&quot;syslog_message&quot;</span>, <span class="s2">&quot;syslog_timestamp&quot;</span> <span class="o">]</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>output <span class="o">{</span>
+</span><span class='line'>  elasticsearch <span class="o">{</span> <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using this configuration, Logstash will accept and index our application logs into Elasticsearch.</p>
+
+<p><em>Note: There is also a <a href="https://www.elastic.co/guide/en/logstash/current/plugins-outputs-syslog.html">custom plugin</a> to enable RFC5424 support.</em></p>
+
+<h2>Building Custom Docker Images</h2>
+
+<p>Using the custom Logstash configuration relies on building a new Docker image
+with this configuration baked in. We could download the Git repository
+containing the image <a href="https://github.com/spujadas/elk-docker">source files</a>, modify those and rebuild from scratch.
+However, an easier way uses the existing image as a <em>base</em>, applies our
+modifications on top and then generates a brand new image.</p>
+
+<p><strong>So, how do we build our own Docker images? Using a Dockerfile.</strong></p>
+
+<blockquote><p>A Dockerfile is a text document that contains all the commands you would <br/>normally execute manually in order to build a Docker image.</p></blockquote>
+
+
+<p></p>
+
+<p>Reviewing the <a href="https://registry.hub.docker.com/u/sebp/elk/dockerfile/">Dockerfile</a> for the <em>sebp/elk</em> image, configuration for logstash is
+stored in the <em>/etc/logstash/conf.d/</em> directory. All we need to do is replace these files with our custom configuration.</p>
+
+<p>Creating the custom configuration locally, we define a Dockerfile with instructions for building our image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ls
+</span><span class='line'>01-syslog-input.conf 10-syslog.conf       Dockerfile
+</span><span class='line'><span class="nv">$ </span>cat Dockerfile
+</span><span class='line'>FROM sebp/elk
+</span><span class='line'>RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+</span><span class='line'>ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+</span><span class='line'>ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The Dockerfile starts with the &#8220;sebp/elk&#8221; image as a base layer. Using the RUN command, we execute a command to remove existing input configuration. After this
+the ADD command copies files from our local directory into the image.</p>
+
+<p>We can now run the Docker build system to generate our new image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker build -t jthomas/elk .
+</span><span class='line'>Sending build context to Docker daemon 4.608 kB
+</span><span class='line'>Sending build context to Docker daemon
+</span><span class='line'>Step 0 : FROM sebp/elk
+</span><span class='line'> ---&gt; 2b71e915297f
+</span><span class='line'>Step 1 : RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; f196b6833121
+</span><span class='line'>Step 2 : ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 522ba2c76b00
+</span><span class='line'>Step 3 : ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 79256ffaac3b
+</span><span class='line'>Successfully built 79256ffaac3b
+</span><span class='line'><span class="nv">$ </span>docker images jthomas/elk
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>jthomas/elk         latest              79256ffaac3b        26 hours ago        1.027 GB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>&#8230;and that&#8217;s it! We have a customised Docker image with our configuration changes ready for running.</em></p>
+
+<h2>Testing Our Custom Image</h2>
+
+<p>Before pushing this image to the cloud, we need to check it&#8217;s working correctly.
+Let&#8217;s start by starting a new container from our custom image locally.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker run -p 5601:5601 -p 9200:9200 -p 5000:5000 -it --name elk jthomas/elk
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now, use the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> to access recent logs for a sample application and paste the output into
+a telnet connection to port 5000 on our container.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf logs APP_NAME --recent
+</span><span class='line'>Connected, dumping recent logs <span class="k">for </span>app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>
+</span><span class='line'>2015-07-02T17:14:47.58+0100 <span class="o">[</span>RTR/1<span class="o">]</span>      OUT nodered-app.mybluemix.net - <span class="o">[</span>02/07/2015:16:14:47 +0000<span class="o">]</span> <span class="s2">&quot;GET / HTTP/1.1&quot;</span> 200 0 7720 <span class="s2">&quot;-&quot;</span> <span class="s2">&quot;Java/1.7.0&quot;</span> 75.126.70.42:56147 x_forwarded_for:<span class="s2">&quot;-&quot;</span> vcap_request_id:1280fe18-e53a-4bd4-40a9-2aaf7c53cc54 response_time:0.003247100 app_id:f18c2dea-7649-4567-9532-473797b0818d
+</span><span class='line'>2015-07-02T17:15:44.56+0100 <span class="o">[</span>RTR/2<span class="o">]</span>      OUT nodered-app.mybluemix.net - <span class="o">[</span>02/07/2015:16:15:44 +0000<span class="o">]</span> <span class="s2">&quot;GET / HTTP/1.1&quot;</span> 200 0 7720 <span class="s2">&quot;-&quot;</span> <span class="s2">&quot;Java/1.7.0&quot;</span> 75.126.70.43:38807 x_forwarded_for:<span class="s2">&quot;-&quot;</span> vcap_request_id:4dd96d84-c61d-45ec-772a-289ab2f37c67 response_time:0.003848360 app_id:f18c2dea-7649-4567-9532-473797b0818d
+</span><span class='line'>2015-07-02T17:16:29.61+0100 <span class="o">[</span>RTR/2<span class="o">]</span>      OUT nodered-app.mybluemix.net - <span class="o">[</span>02/07/2015:16:14:29 +0000<span class="o">]</span> <span class="s2">&quot;GET /red/comms HTTP/1.1&quot;</span> 101 0 0 <span class="s2">&quot;-&quot;</span> <span class="s2">&quot;Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.130 Safari/537.36&quot;</span> 75.126.70.42:54826 x_forwarded_for:<span class="s2">&quot;75.126.70.42&quot;</span> vcap_request_id:15c2d4f8-e6ba-4a20-77b7-345aafd32e95 response_time:MissingFinishedAt app_id:f18c2dea-7649-4567-9532-473797b0818d
+</span><span class='line'><span class="nv">$ </span>telnet 192.168.59.103 5000
+</span><span class='line'>Trying 192.168.59.103...
+</span><span class='line'>Connected to 192.168.59.103.
+</span><span class='line'>Escape character is <span class="s1">&#39;^]&#39;</span>.
+</span><span class='line'>// PASTE LOG LINES....
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Starting a web browser and opening the Kibana page, port 5601, the log lines are now available in the dashboard. Success!</p>
+
+<h2>Pushing Docker Images To The Cloud </h2>
+
+<p>Having successfully built and tested our custom Docker image locally, we want
+to push this image to our cloud platform to allow us to start new containers
+based on this image.</p>
+
+<p>Docker supports pushing local images to the <a href="http://hub.docker.com">public registry</a> using the <em>docker push</em> command.
+We can choose to use a <a href="https://blog.docker.com/2013/07/how-to-use-your-own-registry/">private registry</a>
+by creating a new image tag which prefixes the repository location in the name.</p>
+
+<p><em>IBM Containers&#8217; private registry is available at the following address, <strong>registry.ng.bluemix.net</strong>.</em></p>
+
+<p>Let&#8217;s push our custom image to the IBM Containers private registry&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker tag jthomas/elk registry.ng.bluemix.net/jthomas/elk
+</span><span class='line'><span class="nv">$ </span>docker images
+</span><span class='line'>REPOSITORY                                     TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>jthomas/elk                                   latest              79256ffaac3b        43 hours ago        1.027 GB
+</span><span class='line'>registry.ng.bluemix.net/jthomas/elk           latest              79256ffaac3b        43 hours ago        1.027 GB
+</span><span class='line'><span class="nv">$ </span>docker push registry.ng.bluemix.net/jthomas/elk
+</span><span class='line'>The push refers to a repository <span class="o">[</span>registry.ng.bluemix.net/jthomas/elk<span class="o">]</span> <span class="o">(</span>len: 1<span class="o">)</span>
+</span><span class='line'>Sending image list
+</span><span class='line'>Pushing repository registry.ng.bluemix.net/jthomas/elk <span class="o">(</span>1 tags<span class="o">)</span>
+</span><span class='line'>511136ea3c5a Image successfully pushed
+</span><span class='line'>...
+</span><span class='line'>79256ffaac3b: Image successfully pushed
+</span><span class='line'>Pushing tag <span class="k">for </span>rev <span class="o">[</span>79256ffaac3b<span class="o">]</span> on <span class="o">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/elk/tags/latest<span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Pushing custom images from a local environment can be a slow process. For the <em>elk</em> image, this means transferring over one gigabyte of data
+to the external registry.</p>
+
+<p><em>We can speed this up by using IBM Containers to create our image from the Dockerfile, rather than uploading the built image.</em></p>
+
+<p>Doing this from the command line requires the use of the IBM Containers command-line application.</p>
+
+<h2>Managing IBM Containers</h2>
+
+<p>IBM Containers enables you to manage your containers from the command-line with <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html">two options</a>&#8230;</p>
+
+<ul>
+<li><em><a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#installcontainercfplugin">IBM Containers Plug-in</a> for the Cloud Foundry CLI.</em></li>
+<li><em><a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov_ice.html">IBM Containers Extension</a>, standalone command-line application.</em></li>
+</ul>
+
+
+<p>Both approaches handle the interactions between the local and remote Docker hosts, while providing
+extra functionality not supported natively by Docker.</p>
+
+<p><em>Full details on the differences and installation procedures
+for the two applications are available <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html">here</a>.</em></p>
+
+<h2>Building Images Using IBM Containers</h2>
+
+<p>Building our image using the IBM Containers service uses the same syntax as <a href="https://docs.docker.com/reference/commandline/build/">Docker build</a>. Local files
+from the current directory will be sent with the Dockerfile to the remote service. Once the image has
+been built, we can verify it&#8217;s available in the remote repository.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ice build -t registry.ng.bluemix.net/jthomas/elk .
+</span><span class='line'>zipped tar size: 706
+</span><span class='line'>Posting 706 bytes... It may take a <span class="k">while</span>...
+</span><span class='line'>Step 0 : FROM sebp/elk
+</span><span class='line'> ---&gt; 2b71e915297f
+</span><span class='line'>Step 1 : RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; ed13d91e0197
+</span><span class='line'>Step 2 : ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 808a4c7410c7
+</span><span class='line'>Step 3 : ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 117e4454b015
+</span><span class='line'>Successfully built 117e4454b015
+</span><span class='line'>The push refers to a repository <span class="o">[</span>registry.ng.bluemix.net/jthomas/elk<span class="o">]</span> <span class="o">(</span>len: 1<span class="o">)</span>
+</span><span class='line'>Sending image list
+</span><span class='line'>Pushing repository registry.ng.bluemix.net/jthomas/elk <span class="o">(</span>1 tags<span class="o">)</span>
+</span><span class='line'>Image 117e4454b015 already pushed, skipping
+</span><span class='line'>Pushing tag <span class="k">for </span>rev <span class="o">[</span>117e4454b015<span class="o">]</span> on <span class="o">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/elk/tags/latest<span class="o">}</span>
+</span><span class='line'><span class="nv">$ </span>ice images
+</span><span class='line'>REPOSITORY                                TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>registry.ng.bluemix.net/jthomas/elk       latest              5454d3ec-0f3        44 hours ago        0 B
+</span><span class='line'>registry.ng.bluemix.net/ibmliberty        latest              3724d2e0-06d        9 days ago          0 B
+</span><span class='line'>registry.ng.bluemix.net/ibmnode           latest              9435349e-8b4        9 days ago          0 B
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>All private repositories on IBM Bluemix have two official images for supported versions of <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#container_images_node">NodeJS</a> and <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#container_images_liberty">Websphere Liberty</a>.</p>
+
+<p><em>We can now see the third image is the custom ELK stack that was built.</em></p>
+
+<h2>Starting ELK Containers</h2>
+
+<p>Starting containers from images in the IBM Containers registry can be done using the command-line applications or through the <a href="http://bluemix.net">IBM Bluemix UI</a>.
+In this example, we&#8217;ll be using the IBM Bluemix UI to start and configure a new ELK container from our pre-configured image.</p>
+
+<p>Logging into the IBM Bluemix, the <em>Catalogue</em> page shows the list of available images used to create new containers. We have both the official
+images from IBM Containers and our custom ELK service.</p>
+
+<p><img src="/images/Container%20Images.png"></p>
+
+<p>Selecting the <em>ELK</em> image, we can configure and run a new container from this
+image. Setting up a new container with a public IP address,
+memory limit to 1GB and expose the same ports as running locally (5000, 5601
+and 9200).</p>
+
+<p><img src="/images/Create%20Container.png"></p>
+
+<p>Clicking the <em>Create</em> button, IBM Bluemix will provision and start our
+new container.</p>
+
+<p>Once the container has started, we can view the <em>Dashboard</em> page for this instance. Here we can view
+details about the container instance, modify the running state and access monitoring and logs tools.</p>
+
+<p><img src="/images/Container%20Overview.png">
+<img src="/images/Container%20Monitoring.png"></p>
+
+<p><em>&#8230;and that&#8217;s it! We now have our ELK service running using IBM Containers
+ready to start processing logs from our applications.</em></p>
+
+<p>Visiting the external IP address assigned to the container on the Kibana
+application port (5601) shows the Kibana web interface demonstrating our
+container has started correctly.</p>
+
+<h2><a name="config"></a>Draining Cloud Foundry Logs</h2>
+
+<p>Cloud Foundry supports draining applications logs to a <a href="http://docs.cloudfoundry.org/devguide/services/log-management.html">third-party syslog service</a>.
+The ELK container has a syslog drain configured on port 5000 of the public IP address bound to the instance.</p>
+
+<p>Binding this custom syslog drain to Cloud Foundry applications uses a <a href="https://docs.cloudfoundry.org/devguide/services/user-provided.html">custom user-provided service</a>.
+Creating user-provided services using the CF CLI, there is a special flag, <em>-l</em>, that notifies the platform this service is a syslog drain. Binding this special syslog
+drain service to an application will automatically set up log forwarding. Once the application has been restarted, logs will start to flow into the external service.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf cups logstash-drain -l syslog://<span class="o">[</span>CONTAINER_IP<span class="o">]</span>:5000
+</span><span class='line'><span class="nv">$ </span>cf <span class="nb">bind</span>-service <span class="o">[</span>app-name<span class="o">]</span> logstash-drain
+</span><span class='line'><span class="nv">$ </span>cf restart <span class="o">[</span>app-name<span class="o">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Cloud Foundry supports multiple syslog drains for the same application.</em></p>
+
+<p>Testing this out is as simple as visiting our application to generate sample logs and then looking at the Kibana page to see they are showing up.
+Here is a screenshot of the expected output when our ELK container is successfully processing logs from a Cloud Foundry application.</p>
+
+<p><img src="/images/Kibana.png"></p>
+
+<h2>Conclusion</h2>
+
+<p>Elastic Search, Kibana and Logstash is the modern log processing framework.
+Using Docker, we&#8217;ve been able to create a custom ELK service without manually
+installing and configuring a multitude of different software packages. Pushing
+this image to the IBM Containers platform means we can spin up new ELK
+containers on-demand within minutes!</p>
+
+<blockquote><p>Elasticsearch, Docker and IBM Containers&#8230; Making Logs Awesome.</p></blockquote>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2872,49 +3454,6 @@ pages should provide a good indication of the current level of support.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2012/10/22/london-js/">London JS - Watson</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2012-10-22T16:43:00+01:00" pubdate data-updated="true">Oct 22<span>nd</span>, 2012</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Last month, I was invited to speak at LondonJS on the machine learning and artificial intelligence behind IBM Watson.</p>
-
-<p>I jokingly said the talk would win the prize for the &#8220;least amount of JavaScript-related content in a LondonJS talk&#8221;.</p>
-
-<p>The idea was to introduce the audience to topics (machine learning) that might be relevant in the future and IBM Watson was a
-great example that people love hearing about.</p>
-
-<p>Slides for the event are now posted online, check them out <a href="https://speakerdeck.com/u/jthomas/p/a-computer-called-watson">here</a>.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/6/">&larr; Older</a>
@@ -2932,6 +3471,10 @@ great example that people love hearing about.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">Using Cloud Object Storage from IBM Cloud Functions (Node.js)</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/">File Storage For Serverless Applications</a>
       </li>
     
@@ -2945,10 +3488,6 @@ great example that people love hearing about.</p>
     
       <li class="post">
         <a href="/blog/2018/01/19/starting-openwhisk-in-sixty-seconds/">Starting OpenWhisk In Sixty Seconds</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a>
       </li>
     
   </ul>
