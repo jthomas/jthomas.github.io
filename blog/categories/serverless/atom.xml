@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-05-31T10:39:30+01:00</updated>
+  <updated>2018-06-06T11:15:12+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,219 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Binding IAM Services To IBM Cloud Functions]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/"/>
+    <updated>2018-06-05T09:47:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
+
+<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
+
+<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
+
+<p><blockquote><p></p></p><p><p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p></p><p><p></p></blockquote></p>
+
+<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
+
+<p><em>Let's look at how this works...</em></p>
+
+<h2>Binding IAM Credentials</h2>
+
+<h3>Requirements</h3>
+
+<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
+
+<ul>
+<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
+<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
+</ul>
+
+
+<p>You will need the following information to bind a service credentials.</p>
+
+<ul>
+<li>Service name.</li>
+<li><em>(Optional)</em> Instance name.</li>
+<li><em>(Optional)</em> Credentials identifier.</li>
+</ul>
+
+
+<h3>Using the CLI</h3>
+
+<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
+
+<p><code>
+bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;
+</code></p>
+
+<p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
+
+<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
+
+<h3>Accessing from actions</h3>
+
+<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
+
+<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
+
+<p>```json
+{
+   "__bx_creds":{</p>
+
+<pre><code>  "service-name":{
+     "apikey":"&lt;API_KEY&gt;",
+     ...
+  }
+</code></pre>
+
+<p>   }
+}
+```</p>
+
+<p>Default parameters are automatically merged into the request parameters during invocations.</p>
+
+<h2>Common Questions</h2>
+
+<h4>How can I tell whether a service instance uses IAM-based authentication?</h4>
+
+<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
+
+<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
+
+<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
+
+<h4>How can I find the service name for an IAM-based service instance?</h4>
+
+<p>Run the <code>ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
+
+<p>Service names are shown as the <code>Service Name:</code> field value.</p>
+
+<h4>How can I list available service credentials for an IAM-based service instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt; </code> command.</p>
+
+<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
+
+<h4>How can I manually retrieve IAM-based credentials for an instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
+
+<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
+
+<h4>How can I create new service credentials?</h4>
+
+<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
+
+<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
+
+<h2>Example - Cloud Object Storage</h2>
+
+<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let's look at an example....</em></p>
+
+<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
+
+<p><strong>Let's look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
+
+<p>Using the CLI, we can check an instance of this service is available...</p>
+
+<p><code>sh
+$ ibmcloud resource service-instances
+Retrieving service instances in resource group default..
+OK
+Name                     Location   State    Type               Tags
+my-cos-storage           global     active   service_instance
+</code></p>
+
+<p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
+
+<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
+
+<p>```sh
+$ ibmcloud resource service-instance my-cos-storage
+Retrieving service instance my-cos-storage in resource group default..
+OK</p>
+
+<p>Name:                  my-cos-storage
+ID:                    crn:v1:bluemix:public:cloud-object-storage:global:<GUID>:
+GUID:                  <GUID>
+Location:              global
+Service Name:          cloud-object-storage
+Service Plan Name:     lite
+Resource Group Name:   default
+State:                 active
+Type:                  service_instance
+Tags:
+```</p>
+
+<p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
+
+<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
+
+<p><code>
+$ ibmcloud resource service-keys --instance-name my-cos-storage
+Retrieving service keys in resource group default...
+OK
+Name                     State    Created At
+serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
+</code></p>
+
+<p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
+
+<p>Retrieving the service key details shows us the API secret for this credential.</p>
+
+<p>```
+$ ibmcloud resource service-key serverless-credentials
+Retrieving service key serverless-credentials in resource group default...
+OK</p>
+
+<p>Name:          serverless-credentials
+ID:            <ID>
+Created At:    Tue Jun  5 09:11:06 UTC 2018
+State:         active
+Credentials:</p>
+
+<pre><code>           ...
+           apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
+</code></pre>
+
+<p>```</p>
+
+<p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
+
+<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
+
+<p><code>
+$ bx wsk service bind cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
+Credentials 'serverless-credentials' from 'cloud-object-storage' service instance 'my-cos-storage' bound to 'params'.
+</code></p>
+
+<p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
+
+<p>```
+$ bx wsk action get params
+ok: got action params
+{
+  ...
+  "parameters": [{</p>
+
+<pre><code>"key": "__bx_creds",
+"value": {
+  "cloud-object-storage": {
+    "apikey": "&lt;API_KEY_SECRET&gt;",
+    ...
+  }
+}
+</code></pre>
+
+<p>  }]
+}
+```</p>
+
+<p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Using Cloud Object Storage from IBM Cloud Functions (Node.js)]]></title>
@@ -1735,729 +1948,6 @@ $ docker exec -it &lt;CONTAINER_ID&gt; /bin/bash
 <p>Using an open-source serverless platform means you can actually run the entire platform locally. Using a local instance during development improves deployment times, provides access to runtime environments and allows you to work offline.</p>
 
 <p>Apache OpenWhisk has numerous options for deploying the platform, including virtual machines, kubernetes or native containers. Whilst the platform is not the simplest to set-up manually, the devtools project bootstraps a pre-configured version by spinning up a local instance using Docker Compose. This is the easiest approach for most developers to have a local instance of the platform.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Visualising Serverless Metrics With Grafana Dashboards]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/"/>
-    <updated>2018-01-05T15:40:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2018/01/05/visualising-metrics-with-grafana-dashboards</id>
-    <content type="html"><![CDATA[<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
-
-<p><em>This blog post is part three of a series on "Monitoring Serverless Applications Metrics". See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
-
-<p>Having <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
-applications, monitoring incoming metric values will alert us to problems.</p>
-
-<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
-
-<p><blockquote><p>Grafana is an open source metric analytics &amp; visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote></p>
-
-<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
-
-<p>Let's review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
-before we start setting up the serverless monitoring dashboards…</p>
-
-<h2>Grafana Basics</h2>
-
-<h3>Metric Data Values</h3>
-
-<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
-</code></p>
-
-<p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
-
-<ul>
-<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
-<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
-<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
-<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration</code></em></li>
-</ul>
-
-
-<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
-
-<h3>Templates</h3>
-
-<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
-
-<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
-
-<p><img src="/images/grafana_dashboards/templating.png"></p>
-
-<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
-
-<h3>Common Tasks</h3>
-
-<h4>How to create a new dashboard?</h4>
-
-<ul>
-<li>Open the dashboard menu by clicking the drop-down menu.</li>
-<li>Click the "Create New" button.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/new_dashboard.png"></p>
-
-<h4>How to set the dashboard name?</h4>
-
-<ul>
-<li>Select the "Manage Dashboard" menu option.</li>
-<li>Click "Settings" to open the dashboard options panel.</li>
-<li>Change the "General -> Details -> Name" configuration value.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/dashboard_name.png"></p>
-
-<h4>How to set dashboard template variables?</h4>
-
-<ul>
-<li>Select the "Manage Dashboard" menu option.</li>
-<li>Click "Templating" to open the templating variables configuration panel.</li>
-<li>Click "New" button to define template variables.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/dashboard_template_menu.png"></p>
-
-<ul>
-<li>Fill in the name field with the template identifier.</li>
-<li>Select "IBM Cloud Monitoring" as the data source.</li>
-<li>Fill in the query field with chosen metric query.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/dashboard_template_details.png"></p>
-
-<h4>How to add new row to dashboard?</h4>
-
-<ul>
-<li>Click the "Add Row" button beneath the last row.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/add_row.png"></p>
-
-<h4>How to add new chart to row?</h4>
-
-<ul>
-<li>Hover over the options menu on the right-hand side of the row.</li>
-<li>Select the "Add Panel" menu item.</li>
-<li>Choose a chart type from the panel menu.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
-
-<h4>How to set and display row name?</h4>
-
-<ul>
-<li>Hover over the options menu on the right-hand side of the row.</li>
-<li>Select the "Row Options" menu item.</li>
-<li>Fill in the "Title" field. Click the "Show" checkbox.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
-
-<h4>How to edit chart parameters?</h4>
-
-<ul>
-<li>Click the panel title to open the panel options dialog.</li>
-<li>Select the "Edit" button.</li>
-<li>Graph options dialog opens below the chart panel.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/panel_details_more.png"></p>
-
-<h4>How to choose time range for metric values?</h4>
-
-<ul>
-<li>Click the clock icon on the right-hand side of the menu bar.</li>
-<li>Define time ranges manually or by selecting options from the "Quick Ranges" examples.</li>
-<li>Auto-update can be enabled using the "Refresh" drop-down menu.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/time_range_menu.png"></p>
-
-<h2>Dashboards</h2>
-
-<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
-
-<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
-
-<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
-for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
-
-<h3>Overview Dashboard</h3>
-
-<p>This is an example of the first dashboard we want to create.</p>
-
-<p><img src="/images/grafana_dashboards/overview-dashboard.gif"></p>
-
-<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
-
-<h4>setup</h4>
-
-<ol>
-<li>Create a new dashboard named "Overview".</li>
-<li>Set the following template variables.
-
-<ul>
-<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
-<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
-</ul>
-</li>
-</ol>
-
-
-<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
-
-<h4>invocations graph</h4>
-
-<p><img src="/images/grafana_dashboards/overview-invocations.png"></p>
-
-<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
-
-<p><em>How can we calculate total invocations from the metric values?</em></p>
-
-<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
-
-<p><em>Let's implement this now…</em></p>
-
-<ul>
-<li>Set and display default row name as <em>"Invocations"</em>.</li>
-<li>Add new <em>"Graph"</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.error
-.scale(0).offset(1).groupByNode(5, sum)
-</code></p>
-
-<ul>
-<li>Set the following options to true.
-
-<ul>
-<li><em>Legend->Options->Show</em></li>
-<li><em>Display->Draw Modes->Bars</em></li>
-<li><em>Display->Stacking &amp; Null value->Stack</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation types</h4>
-
-<p><img src="/images/grafana_dashboards/overview-invocation-types.png"></p>
-
-<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
-
-<p>Calculating the sum for all invocations recorded will use the same "scale &amp; offset" trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
-
-<p><strong><u>all count</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display default row name as <em>"Invocation Types"</em>.</li>
-<li>Add a new <em>"Single Stat"</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = All</em></li>
-<li><em>Options -> Value -> Stat = total</em></li>
-<li><em>Options -> Coloring -> Background = true</em></li>
-<li><em>Options -> Coloring -> Thresholds = 0,100000</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>success count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"All"</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Success</em></li>
-<li><em>Options -> Coloring -> Colors = Make green the last threshold colour.</em></li>
-<li><em>Options -> Coloring -> Thresholds = 0,0</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>errors count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Success"</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Errors</em></li>
-<li><em>Options-> Coloring -> Colors = Make red the last threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>cold start count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Errors"</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Cold Start</em></li>
-<li><em>Options-> Coloring -> Colors = Make blue the last threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation durations</h4>
-
-<p><img src="/images/grafana_dashboards/overview-invocation-durations.png"></p>
-
-<p>This row will contain counts for the total, mean and range of all invocations.</p>
-
-<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
-
-<p><strong><u>total duration</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display default row name as <em>"Invocation Durations"</em>.</li>
-<li>Add a new <em>"Single Stat"</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Total</em></li>
-<li><em>Options -> Value -> Stat = total</em></li>
-<li><em>Options -> Value -> Unit = milliseconds</em></li>
-<li><em>Options -> Coloring -> Background = true</em></li>
-<li><em>Options -> Coloring -> Thresholds = 100000000,100000000</em></li>
-<li><em>Options -> Coloring -> Colors = Make grey the first threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>average duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Total"</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Average</em></li>
-<li><em>Options -> Value -> Stat = avg</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>range duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Average"</em> chart in the row.</li>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Range</em></li>
-<li><em>Options -> Value -> Stat = range</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation details table</h4>
-
-<p><img src="/images/grafana_dashboards/overview-tables.png"></p>
-
-<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
-
-<p><strong><u>all invocations table</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>"Invocations Per Action"</em>.</li>
-<li>Add a <em>"Table"</em> panel to the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.error
-.scale(0).offset(1).groupByNode(5, sum)
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (All)</em></li>
-<li><em>Options -> Data -> Table Transform = Time series aggregations</em></li>
-<li><em>Options -> Data -> Columns = Total</em></li>
-<li><em>Options -> Column Styles -> Decimals = 0</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>error invocations table</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Invocations (All)"</em> chart in the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (Errors)</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>duration statistics table</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Invocations (Errors)"</em> chart in the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (Duration)</em></li>
-<li><em>Options -> Data -> Columns = Avg, Min, Max</em></li>
-<li><em>Options -> Column Styles -> Decimals = Milliseconds</em></li>
-<li><em>Options -> Column Styles -> Decimals = 2</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
-
-<p><em>Let's move onto the second dashboard, which will give us more in-depth statistics for individual actions...</em></p>
-
-<h3>Action Dashboard</h3>
-
-<p>This is an example of the second dashboard we want to create.</p>
-
-<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
-
-<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
-
-<h4>setup</h4>
-
-<ul>
-<li>Create a new dashboard named <em>"Action Details"</em>.</li>
-<li>Set the following template variables.
-
-<ul>
-<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
-<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
-<li><strong>$actions</strong> => <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
-</ul>
-</li>
-</ul>
-
-
-<p><em>Replace &lt;action> with the name of an action you are monitoring.</em></p>
-
-<h4>invocations</h4>
-
-<p><img src="/images/grafana_dashboards/action-invocations.png"></p>
-
-<p>Action invocations are shown this first dashboard row. Bar charts display
-successful versus failed invocations and cold versus warm starts.</p>
-
-<p>Failed invocations and cold starts are recorded as metric values. Using the
-<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
-and warm starts from these properties.</p>
-
-<ul>
-<li>Set and display default row name as <em>"Invocations"</em>.</li>
-<li>Add new <em>"Graph"</em> chart to row.</li>
-<li><p>Configure two metric queries for the chart:
-<code>
-ibm.public.cloud-functions.$region.$namespace.$action.*.error
-.scale(0).offset(1).groupByNode(5, sum).alias(success)
-</code>
-<code>
-ibm.public.cloud-functions.$region.$namespace.$action.*.error
-.groupByNode(5, sum).alias(failure)
-</code></p></li>
-<li><p>Set the following options to true.</p>
-
-<ul>
-<li><em>Legend->Options->Show</em></li>
-<li><em>Display->Draw Modes->Bars</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation types</h4>
-
-<p><img src="/images/grafana_dashboards/action-invocation-types.png"></p>
-
-<p>This row replicates the <em>"Invocation Types"</em> row from the <em>"Overview"</em> dashboard.</p>
-
-<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
-
-<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
-
-<h4>invocation durations</h4>
-
-<p><img src="/images/grafana_dashboards/action-invocation-durations.png"></p>
-
-<p>This row uses an extended version of the durations row from the <em>"Overview"</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
-
-<p><strong>Repeat the instructions from above to add the <em>"Total"</em> and <em>"Average"</em> panels.</strong></p>
-
-<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
-
-<p><strong><u>minimum duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Total"</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Min</em></li>
-<li><em>Options -> Value -> Stat = min</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>maximum duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>"Minimum"</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Min</em></li>
-<li><em>Options -> Value -> Stat = max</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>percentiles graph</u></strong></p>
-
-<ul>
-<li>Add a <em>"Table"</em> panel to the row.</li>
-<li>Configure this metric query for the chart:</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
-.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)
-</code></p>
-
-<ul>
-<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Durations (Percentiles)</em></li>
-<li><em>Axes -> Left Y -> Unit = Milliseconds</em></li>
-<li><em>Legend -> Options -> Show = True</em></li>
-<li><em>Legend -> Values -> Avg = True</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>cpu usage</h4>
-
-<p><img src="/images/grafana_dashboards/action-cpu-usage.png"></p>
-
-<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>"CPU Usage"</em>.</li>
-<li>Add new <em>"Graph"</em> panel to row.</li>
-<li>Configure two metric queries for the chart.</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
-.groupByNode(5, avg).alias(user-time)
-</code></p>
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
-.groupByNode(5, avg).alias(system-time)
-</code></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>Axes -> Left Y -> Unit = Microseconds</em></li>
-<li><em>Legend -> Values -> Avg = true</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>memory usage</h4>
-
-<p><img src="/images/grafana_dashboards/action-memory-usage.png"></p>
-
-<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>"Memory Usage"</em>.</li>
-<li>Add new <em>"Graph"</em> panel to row.</li>
-<li>Configure four metric queries for the chart using this template.</li>
-</ul>
-
-
-<p><code>
-ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
-.groupByNode(5, avg).alias(&lt;label&gt;)
-</code></p>
-
-<p><strong>Replace &lt;label> with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>Axes -> Left Y -> Unit = bytes</em></li>
-<li><em>Legend -> Values -> Avg = true</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong>Having finished all the charts for the action details example, you should now
-have dashboards which look like the examples above!</strong> 📈📊📉</p>
-
-<h2>conclusion</h2>
-
-<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
-
-<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
-are a perfect solution for this problem. Building custom dashboards allows us
-to monitor incoming data values live.</p>
-
-<p>In the next blog post, we're going to finish off <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values...</p>
 ]]></content>
   </entry>
   

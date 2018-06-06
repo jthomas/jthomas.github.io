@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: ibm cloud functions | James Thomas]]></title>
+  <link href="http://jthomas.github.com/jthomas/blog/categories/ibm-cloud-functions/atom.xml" rel="self"/>
+  <link href="http://jthomas.github.com/jthomas/"/>
+  <updated>2018-06-06T11:15:12+01:00</updated>
+  <id>http://jthomas.github.com/jthomas/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Binding IAM Services To IBM Cloud Functions]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/"/>
+    <updated>2018-06-05T09:47:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
+
+<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
+
+<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
+
+<p><blockquote><p></p></p><p><p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p></p><p><p></p></blockquote></p>
+
+<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
+
+<p><em>Let's look at how this works...</em></p>
+
+<h2>Binding IAM Credentials</h2>
+
+<h3>Requirements</h3>
+
+<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
+
+<ul>
+<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
+<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
+</ul>
+
+
+<p>You will need the following information to bind a service credentials.</p>
+
+<ul>
+<li>Service name.</li>
+<li><em>(Optional)</em> Instance name.</li>
+<li><em>(Optional)</em> Credentials identifier.</li>
+</ul>
+
+
+<h3>Using the CLI</h3>
+
+<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
+
+<p><code>
+bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;
+</code></p>
+
+<p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
+
+<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
+
+<h3>Accessing from actions</h3>
+
+<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
+
+<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
+
+<p>```json
+{
+   "__bx_creds":{</p>
+
+<pre><code>  "service-name":{
+     "apikey":"&lt;API_KEY&gt;",
+     ...
+  }
+</code></pre>
+
+<p>   }
+}
+```</p>
+
+<p>Default parameters are automatically merged into the request parameters during invocations.</p>
+
+<h2>Common Questions</h2>
+
+<h4>How can I tell whether a service instance uses IAM-based authentication?</h4>
+
+<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
+
+<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
+
+<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
+
+<h4>How can I find the service name for an IAM-based service instance?</h4>
+
+<p>Run the <code>ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
+
+<p>Service names are shown as the <code>Service Name:</code> field value.</p>
+
+<h4>How can I list available service credentials for an IAM-based service instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt; </code> command.</p>
+
+<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
+
+<h4>How can I manually retrieve IAM-based credentials for an instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
+
+<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
+
+<h4>How can I create new service credentials?</h4>
+
+<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
+
+<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
+
+<h2>Example - Cloud Object Storage</h2>
+
+<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let's look at an example....</em></p>
+
+<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
+
+<p><strong>Let's look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
+
+<p>Using the CLI, we can check an instance of this service is available...</p>
+
+<p><code>sh
+$ ibmcloud resource service-instances
+Retrieving service instances in resource group default..
+OK
+Name                     Location   State    Type               Tags
+my-cos-storage           global     active   service_instance
+</code></p>
+
+<p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
+
+<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
+
+<p>```sh
+$ ibmcloud resource service-instance my-cos-storage
+Retrieving service instance my-cos-storage in resource group default..
+OK</p>
+
+<p>Name:                  my-cos-storage
+ID:                    crn:v1:bluemix:public:cloud-object-storage:global:<GUID>:
+GUID:                  <GUID>
+Location:              global
+Service Name:          cloud-object-storage
+Service Plan Name:     lite
+Resource Group Name:   default
+State:                 active
+Type:                  service_instance
+Tags:
+```</p>
+
+<p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
+
+<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
+
+<p><code>
+$ ibmcloud resource service-keys --instance-name my-cos-storage
+Retrieving service keys in resource group default...
+OK
+Name                     State    Created At
+serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
+</code></p>
+
+<p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
+
+<p>Retrieving the service key details shows us the API secret for this credential.</p>
+
+<p>```
+$ ibmcloud resource service-key serverless-credentials
+Retrieving service key serverless-credentials in resource group default...
+OK</p>
+
+<p>Name:          serverless-credentials
+ID:            <ID>
+Created At:    Tue Jun  5 09:11:06 UTC 2018
+State:         active
+Credentials:</p>
+
+<pre><code>           ...
+           apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
+</code></pre>
+
+<p>```</p>
+
+<p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
+
+<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
+
+<p><code>
+$ bx wsk service bind cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
+Credentials 'serverless-credentials' from 'cloud-object-storage' service instance 'my-cos-storage' bound to 'params'.
+</code></p>
+
+<p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
+
+<p>```
+$ bx wsk action get params
+ok: got action params
+{
+  ...
+  "parameters": [{</p>
+
+<pre><code>"key": "__bx_creds",
+"value": {
+  "cloud-object-storage": {
+    "apikey": "&lt;API_KEY_SECRET&gt;",
+    ...
+  }
+}
+</code></pre>
+
+<p>  }]
+}
+```</p>
+
+<p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
+]]></content>
+  </entry>
+  
+</feed>

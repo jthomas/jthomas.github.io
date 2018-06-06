@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-05-31T10:39:30+01:00</updated>
+  <updated>2018-06-06T11:15:12+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,270 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Binding IAM Services To IBM Cloud Functions]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/"/>
+    <updated>2018-06-05T09:47:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
+
+<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
+
+<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
+
+<blockquote><p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p></blockquote>
+
+
+<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
+
+<p><em>Let&#8217;s look at how this works&#8230;</em></p>
+
+<h2>Binding IAM Credentials</h2>
+
+<h3>Requirements</h3>
+
+<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
+
+<ul>
+<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
+<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
+</ul>
+
+
+<p>You will need the following information to bind a service credentials.</p>
+
+<ul>
+<li>Service name.</li>
+<li><em>(Optional)</em> Instance name.</li>
+<li><em>(Optional)</em> Credentials identifier.</li>
+</ul>
+
+
+<h3>Using the CLI</h3>
+
+<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
+
+<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
+
+<h3>Accessing from actions</h3>
+
+<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
+
+<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>   <span class="nt">&quot;__bx_creds&quot;</span><span class="p">:{</span>
+</span><span class='line'>      <span class="nt">&quot;service-name&quot;</span><span class="p">:{</span>
+</span><span class='line'>         <span class="nt">&quot;apikey&quot;</span><span class="p">:</span><span class="s2">&quot;&lt;API_KEY&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>         <span class="err">...</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Default parameters are automatically merged into the request parameters during invocations.</p>
+
+<h2>Common Questions</h2>
+
+<h4>How can I tell whether a service instance uses IAM-based authentication?</h4>
+
+<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
+
+<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
+
+<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
+
+<h4>How can I find the service name for an IAM-based service instance?</h4>
+
+<p>Run the <code>ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
+
+<p>Service names are shown as the <code>Service Name:</code> field value.</p>
+
+<h4>How can I list available service credentials for an IAM-based service instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt; </code> command.</p>
+
+<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
+
+<h4>How can I manually retrieve IAM-based credentials for an instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
+
+<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
+
+<h4>How can I create new service credentials?</h4>
+
+<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
+
+<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
+
+<h2>Example - Cloud Object Storage</h2>
+
+<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let&#8217;s look at an example&#8230;.</em></p>
+
+<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
+
+<p><strong>Let&#8217;s look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
+
+<p>Using the CLI, we can check an instance of this service is available&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-instances
+</span><span class='line'>Retrieving service instances in resource group default..
+</span><span class='line'>OK
+</span><span class='line'>Name                     Location   State    Type               Tags
+</span><span class='line'>my-cos-storage           global     active   service_instance
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
+
+<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-instance my-cos-storage
+</span><span class='line'>Retrieving service instance my-cos-storage in resource group default..
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>Name:                  my-cos-storage
+</span><span class='line'>ID:                    crn:v1:bluemix:public:cloud-object-storage:global:&lt;GUID&gt;:
+</span><span class='line'>GUID:                  &lt;GUID&gt;
+</span><span class='line'>Location:              global
+</span><span class='line'>Service Name:          cloud-object-storage
+</span><span class='line'>Service Plan Name:     lite
+</span><span class='line'>Resource Group Name:   default
+</span><span class='line'>State:                 active
+</span><span class='line'>Type:                  service_instance
+</span><span class='line'>Tags:
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
+
+<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-keys --instance-name my-cos-storage
+</span><span class='line'>Retrieving service keys in resource group default...
+</span><span class='line'>OK
+</span><span class='line'>Name                     State    Created At
+</span><span class='line'>serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
+
+<p>Retrieving the service key details shows us the API secret for this credential.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-key serverless-credentials
+</span><span class='line'>Retrieving service key serverless-credentials in resource group default...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>Name:          serverless-credentials
+</span><span class='line'>ID:            &lt;ID&gt;
+</span><span class='line'>Created At:    Tue Jun  5 09:11:06 UTC 2018
+</span><span class='line'>State:         active
+</span><span class='line'>Credentials:
+</span><span class='line'>               ...
+</span><span class='line'>               apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
+
+<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>bx wsk service <span class="nb">bind </span>cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
+</span><span class='line'>Credentials <span class="s1">&#39;serverless-credentials&#39;</span> from <span class="s1">&#39;cloud-object-storage&#39;</span> service instance <span class="s1">&#39;my-cos-storage&#39;</span> bound to <span class="s1">&#39;params&#39;</span>.
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>bx wsk action get params
+</span><span class='line'>ok: got action params
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>  ...
+</span><span class='line'>  <span class="s2">&quot;parameters&quot;</span>: <span class="o">[{</span>
+</span><span class='line'>    <span class="s2">&quot;key&quot;</span>: <span class="s2">&quot;__bx_creds&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
+</span><span class='line'>      <span class="s2">&quot;cloud-object-storage&quot;</span>: <span class="o">{</span>
+</span><span class='line'>        <span class="s2">&quot;apikey&quot;</span>: <span class="s2">&quot;&lt;API_KEY_SECRET&gt;&quot;</span>,
+</span><span class='line'>        ...
+</span><span class='line'>      <span class="o">}</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>  <span class="o">}]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Using Cloud Object Storage from IBM Cloud Functions (Node.js)]]></title>
@@ -7150,332 +7414,6 @@ to monitor incoming data values live.</p>
 <p>Hopefully this blog post has shown you how to get started with this feature.</p>
 
 <p>Over the next few weeks, we&#8217;re going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates&#8230;</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[NPM Modules in OpenWhisk]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2016/11/28/npm-modules-in-openwhisk/"/>
-    <updated>2016-11-28T14:03:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2016/11/28/npm-modules-in-openwhisk</id>
-    <content type="html"><![CDATA[<p>OpenWhisk now <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">supports creating Node.js Actions from a zip file</a>. The archive file will be extracted into the runtime environment by the platform. This allows us to split microservice logic across multiple files, use third-party <a href="https://www.npmjs.com/">NPM modules</a> or include non-JavaScript assets (configuration files, images, HTML files).</p>
-
-<h2>&#8220;Hello World&#8221; Example</h2>
-
-<p>Let&#8217;s look at a &#8220;Hello World&#8221; example of registering a serverless function from a zip file. Our archive will contain two files, the <a href="https://docs.npmjs.com/files/package.json">package descriptor</a> and a JavaScript file.</p>
-
-<p>Here is the minimal <code>package.json</code> file required for loading a module from a directory.</p>
-
-<figure class='code'><figcaption><span>package.json</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;my_file.js&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In <code>my_file.js</code>, a function is returned through the <code>main</code> property on the <code>exports</code> object. This function <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#creating-and-invoking-javascript-actions">implements the Action interface.</a></p>
-
-<figure class='code'><figcaption><span>my_file.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">main</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span><span class="nx">result</span><span class="o">:</span> <span class="s2">&quot;Hello World&quot;</span><span class="p">};</span>
-</span><span class='line'><span class="p">};</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Creating a zip file from the current directory, we can deploy this Action through the command-line utility.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip -r action.zip *
-</span><span class='line'><span class="nv">$ </span>wsk action create hello_world --kind nodejs:default action.zip
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When this Action is invoked, the archive will be unzipped into a temporary directory. OpenWhisk loads the directory as a Node.js module and invokes the function property on the module for each invocation.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke hello_world --result
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;result&quot;</span>: <span class="s2">&quot;Hello world&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Using NPM Dependencies</h2>
-
-<p>Let&#8217;s look a more complicated example which uses an external <a href="https://www.npmjs.com/">NPM module</a> in our Action.</p>
-
-<figure class='code'><figcaption><span>index.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">leftPad</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;left-pad&quot;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">myAction</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="kr">const</span> <span class="nx">lines</span> <span class="o">=</span> <span class="nx">args</span><span class="p">.</span><span class="nx">lines</span> <span class="o">||</span> <span class="p">[];</span>
-</span><span class='line'>    <span class="k">return</span> <span class="p">{</span> <span class="nx">padded</span><span class="o">:</span> <span class="nx">lines</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">l</span> <span class="o">=&gt;</span> <span class="nx">leftPad</span><span class="p">(</span><span class="nx">l</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="s2">&quot;.&quot;</span><span class="p">))</span> <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">main</span> <span class="o">=</span> <span class="nx">myAction</span><span class="p">;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This module uses the <a href="http://qz.com/646467/how-one-programmer-broke-the-internet-by-deleting-a-tiny-piece-of-code/">extremely popular</a> <a href="https://www.npmjs.com/package/left-pad">left-pad</a> module to process an array of strings, passed through a request parameter. The resulting output is returned in the response.</p>
-
-<p>Before using this module, we need to install the dependencies listed in <code>package.json</code>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;my-action&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;index.js&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;dependencies&quot;</span> <span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;left-pad&quot;</span> <span class="p">:</span> <span class="s2">&quot;1.1.3&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>OpenWhisk does not automatically install dependencies listed in <code>package.json</code> in the runtime environment.</strong></p>
-
-<p>The developer has to run <code>npm install</code> locally and include the <code>node_modules</code> directory in the zip file.</p>
-
-<ul>
-<li>Install NPM dependencies locally.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>npm install
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a <code>.zip</code> archive containing all files.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip -r action.zip *
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create the action using command-line utility.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action create packageAction --kind nodejs:default action.zip
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Now we can test out our action to check it works….</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke --blocking --result packageAction --param lines <span class="s2">&quot;[\&quot;and now\&quot;, \&quot;for something completely\&quot;, \&quot;different\&quot; ]&quot;</span>
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;padded&quot;</span>: <span class="o">[</span>
-</span><span class='line'>        <span class="s2">&quot;.......................and now&quot;</span>,
-</span><span class='line'>        <span class="s2">&quot;......for something completely&quot;</span>,
-</span><span class='line'>        <span class="s2">&quot;.....................different&quot;</span>
-</span><span class='line'>    <span class="o">]</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Native Module Dependencies</h2>
-
-<p>Node.js provides a mechanism for JavaScript modules to <a href="https://nodejs.org/api/addons.html">include native platform code</a> as if they were ordinary modules. This is often used to improve performance by deferring operations to native C/C++ libraries. NPM handles compiling native code during the dependency install process.</p>
-
-<p><strong>Using modules with native dependencies in Actions requires the native code to be compiled for the platform runtime.</strong></p>
-
-<h3>Compiling dependencies with Docker</h3>
-
-<p>One solution to this problem uses Docker to simulate the same runtime environment.</p>
-
-<p>OpenWhisk uses Docker to manage the runtime environments for Actions. The <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile"><em>buildpack-deps:trusty-curl</em></a> image is used as the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejsActionBase/Dockerfile">base image for all Node.js Actions</a>.</p>
-
-<p>Running a local container from this image will give access to the same runtime environment. Running <code>npm install</code> within this container will produce the <code>node_modules</code> directory with native code compiled for the correct architecture.</p>
-
-<h3>Action With Native Modules</h3>
-
-<p>Let&#8217;s look at an example…</p>
-
-<figure class='code'><figcaption><span>index.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">SHA3</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;sha3&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">SHA</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">d</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">SHA3</span><span class="p">.</span><span class="nx">SHA3Hash</span><span class="p">();</span>
-</span><span class='line'>  <span class="nx">d</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">payload</span><span class="p">);</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">sha</span><span class="o">:</span> <span class="nx">d</span><span class="p">.</span><span class="nx">digest</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span> <span class="p">};</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">main</span> <span class="o">=</span> <span class="nx">SHA</span><span class="p">;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This module returns a function that calculates a SHA3 cryptographic hash for the invocation payload. The hex string for the hash is returned as the function response.</p>
-
-<p>The NPM module (<a href="https://www.npmjs.com/package/sha3">sha3</a>) used to calculate the digest uses a C++ extension for the hashing algorithm.</p>
-
-<figure class='code'><figcaption><span>package.json</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;hashing-service&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;index.js&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;sha3&quot;</span><span class="p">:</span> <span class="s2">&quot;^1.2.0&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Action Runtime Environments</h3>
-
-<p>OpenWhisk uses a <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile">public Docker image</a> as the base image for the Action environments. It then <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejs6Action/Dockerfile">builds a custom image</a> by installing Node.js and NPM for the particular runtime version.</p>
-
-<p>Rather than building this image ourselves, we can use existing images published on <a href="https://hub.docker.com/">Docker Hub</a>.</p>
-
-<p><a href="https://nodesource.com/">NodeSource</a> provides <a href="https://hub.docker.com/u/nodesource/">public Docker images pre-installed with different Node.js versions</a>. Provided the base image (Ubuntu Trusty) and Node.js version (6.7) matches, the runtime environment will be the same.</p>
-
-<p>Starting a local container from this image, we can use Docker&#8217;s <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">host volume support</a> to mount the local directory into the host container.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker run -it -v <span class="s2">&quot;/action:/usr/src/app&quot;</span> nodesource/trusty:6.7 /bin/sh
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Running <code>npm install</code> in the container, the <code>sha3</code> dependency is compiled and installed.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c"># npm install</span>
-</span><span class='line'>
-</span><span class='line'>&gt; sha3@1.2.0 install /usr/src/app/node_modules/sha3
-</span><span class='line'>&gt; node-gyp rebuild
-</span><span class='line'>
-</span><span class='line'>make: Entering directory <span class="sb">`</span>/usr/src/app/node_modules/sha3/build<span class="s1">&#39;                                                       </span>
-</span><span class='line'><span class="s1">make: Warning: File `sha3.target.mk&#39;</span> has modification <span class="nb">time </span>0.19 s in the future
-</span><span class='line'>  CXX<span class="o">(</span>target<span class="o">)</span> Release/obj.target/sha3/src/addon.o
-</span><span class='line'>  CXX<span class="o">(</span>target<span class="o">)</span> Release/obj.target/sha3/src/displayIntermediateValues.o
-</span><span class='line'>  CXX<span class="o">(</span>target<span class="o">)</span> Release/obj.target/sha3/src/KeccakF-1600-reference.o
-</span><span class='line'>  CXX<span class="o">(</span>target<span class="o">)</span> Release/obj.target/sha3/src/KeccakNISTInterface.o
-</span><span class='line'>  CXX<span class="o">(</span>target<span class="o">)</span> Release/obj.target/sha3/src/KeccakSponge.o
-</span><span class='line'>  SOLINK_MODULE<span class="o">(</span>target<span class="o">)</span> Release/obj.target/sha3.node
-</span><span class='line'>  COPY Release/sha3.node
-</span><span class='line'>make: warning:  Clock skew detected.  Your build may be incomplete.
-</span><span class='line'>make: Leaving directory <span class="sb">`</span>/usr/src/app/node_modules/sha3/build<span class="err">&#39;</span>
-</span><span class='line'>my-action@1.0.0 /usr/src/app
-</span><span class='line'><span class="sb">`</span>-- sha3@1.2.0
-</span><span class='line'>  <span class="sb">`</span>-- nan@2.4.0
-</span><span class='line'>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>node_modules</code> directory will be available on the host system after exiting the container. Repeat the steps above to archive the source files and deploy our serverless function.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip -r action.zip *
-</span><span class='line'><span class="nv">$ </span>wsk action create packageAction --kind nodejs:6 action.zip
-</span><span class='line'>ok: created action packageAction
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Invoking the Action will now use the native code to produce hash values for the invocation parameters.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke packageAction -b -p payload <span class="s2">&quot;Hello&quot;</span> --result
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;sha&quot;</span>: <span class="s2">&quot;c33fede18a1ae53ddb8663710f8054866beb714044fce759790459996196f101d94dfc7bd8268577f7ee3d2f8ff0cef4004a963222</span>
-</span><span class='line'><span class="s2">7db84df62d2b40682d69e2&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Action Package Details</h2>
-
-<p>Upon invocation, OpenWhisk extracts the action&#8217;s zip file to a temporary directory in the runtime environment. It then <a href="https://nodejs.org/api/modules.html#modules_all_together">loads the directory as a standard Node.js module</a>, using <code>require</code>.</p>
-
-<p>Node.js expects the directory to have a valid <code>package.json</code> file. The <code>main</code> property is used to define which JavaScript file is evaluated when the module is loaded. This file can assign values to the global <code>exports</code> object. These references are then returned when <code>require</code> is called for this module.</p>
-
-<p><strong>OpenWhisk expects the returned module object to have a property called <code>main</code> which references a function. This function will be executed for each invocation request.</strong></p>
-
-<p>Request parameters are passed as object properties on the first function argument. The function must return an object for the invocation response.</p>
-
-<p>Other files included in the archive will be available in the current working directory. These can also be loaded as modules or read directly from the file-system.</p>
-
-<h2>Conclusions</h2>
-
-<p>OpenWhisk support for Action packages is a huge step forward for the platform. Node.js has an enormous ecosystem of third-party modules. Developers can now easily use any of these modules within their Actions.</p>
-
-<p>This feature can also be used to include non-JS files within the runtime environment. It would be possible to use configuration files in JSON or static assets like HTML or CSS files.</p>
-
-<p><strong><em>The team are now working on providing support for other runtimes, watch this space…</em></strong></p>
 ]]></content>
   </entry>
   
