@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-06-06T11:15:12+01:00</updated>
+  <updated>2018-07-10T10:05:18+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,292 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Debugging Node.js OpenWhisk Actions]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/"/>
+    <updated>2018-07-10T09:00:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions</id>
+    <content type="html"><![CDATA[<p>Debugging serverless applications is one of the <a href="https://www.stackery.io/blog/the-serverless-learning-curve/">most challenging issues</a> developers face when using serverless platforms. How can you use debugging tools without any access to the runtime environment?</p>
+
+<p>Last week, I worked out <a href="https://twitter.com/thomasj/status/1013006648439443458">how to expose the Node.js debugger</a> in the Docker environment used for the application runtime in Apache OpenWhisk.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Want to use Node.js debugger for <a href="https://twitter.com/openwhisk?ref_src=twsrc%5Etfw">@openwhisk</a> actions? Start runtime container locally with this command to expose v8 inspector.<br>$ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js<br>Then connect Chrome Dev Tools or <a href="https://twitter.com/code?ref_src=twsrc%5Etfw">@code</a>. 💯 <a href="https://t.co/X4i01QEOmg">pic.twitter.com/X4i01QEOmg</a></p>&mdash; James Thomas (@thomasj) <a href="https://twitter.com/thomasj/status/1013006648439443458?ref_src=twsrc%5Etfw">June 30, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>Using the remote debugging service, we can set breakpoints and step through action handlers live, rather than just being reliant on logs and metrics to diagnose bugs.</p>
+
+<p><strong>So, how does this work?</strong></p>
+
+<p><em>Let's find out more about how Apache OpenWhisk executes serverless functions...</em></p>
+
+<h2>Background</h2>
+
+<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is the open-source serverless platform which powers <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. OpenWhisk <a href="https://medium.com/openwhisk/uncovering-the-magic-how-serverless-platforms-really-work-3cb127b05f71">uses Docker containers</a> to create isolated runtime environments for executing serverless functions.</p>
+
+<p>Containers are started on-demand as invocation requests arrive. Serverless function source files are dynamically injected into the runtime and executed for each invocation. Between invocations, containers are paused and kept in a cache for re-use with further invocations.</p>
+
+<p>The benefit of using an open-source serverless platform is that the <a href="https://github.com/search?q=incubator-openwhisk-runtime">build files</a> used to create runtime images are also open-source. OpenWhisk also automatically builds and publishes all <a href="https://hub.docker.com/r/openwhisk/">runtime images externally</a> on Docker Hub. Running containers using these images allows us to simulate the remote serverless runtime environment.</p>
+
+<h3>Runtime Images</h3>
+
+<p>All OpenWhisk runtime images are <a href="https://hub.docker.com/r/openwhisk/">published externally</a> on Docker Hub.</p>
+
+<p>Runtime images <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">start a HTTP server</a> which listens on port 8080. This HTTP server must implement two API endpoints (<code>/init</code> &amp; <code>/run</code>) accepting HTTP POST requests. The platform uses these endpoints to initialise the runtime with action code and then invoke the action with event parameters.</p>
+
+<p>More details on the API endpoints can be found in this <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">blog post</a> on creating Docker-based actions.</p>
+
+<h3>Node.js Runtime Image</h3>
+
+<p>This repository contains the source code used to create <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">Node.js runtime environment image</a>.</p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">https://github.com/apache/incubator-openwhisk-runtime-nodejs</a></p>
+
+<p>Both <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs8Action">Node.js 8</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">6 runtimes</a>  are built from a <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejsActionBase">common base image</a>. This base image contains an <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/app.js">Express.js server</a> which handles the platform API requests. The <code>app.js</code> file containing the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">is executed</a> when the containers starts.</p>
+
+<p>JavaScript code is injected into the runtime using the <code>/init</code> API. Actions created from source code are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">dynamically evaluated</a> to instantiate the code in the runtime. Actions created from zip files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">extracted into a temporary directory</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">imported as a Node.js module</a>.</p>
+
+<p>Once instantiated, actions are executed using the <code>/run</code> API. Event parameters are come from the request body. Each time a new request is received, the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">calls the action handler with event parameters</a>. Returned values are serialised as the JSON body in the API response.</p>
+
+<h3>Starting Node.js Runtime Containers</h3>
+
+<p><a href="https://docs.docker.com/engine/reference/commandline/run/">Use this command</a> to start the Node.js runtime container locally.</p>
+
+<p><code>
+$ docker run -it -p 8080:8080 openwhisk/action-nodejs-v8
+</code></p>
+
+<p>Once the container has started, port 8080 on localhost will be mapped to the HTTP service exposed by the runtime environment. This can be used to inject serverless applications into the runtime environment and invoke the serverless function handler with event parameters.</p>
+
+<h2>Node.js Remote Debugging</h2>
+
+<p>Modern versions of the Node.js runtime have a command-line flag (<code>--inspect</code>) to expose a <a href="https://nodejs.org/api/debugger.html#debugger_advanced_usage">remote debugging service</a>. This service runs a WebSocket server on localhost which implements the <a href="https://chromedevtools.github.io/devtools-protocol/">Chrome DevTools Protocol</a>.</p>
+
+<p><code>
+$ node --inspect index.js
+Debugger listening on 127.0.0.1:9229.
+</code></p>
+
+<p>External tools can connect to this port to provide debugging capabilities for Node.js code.</p>
+
+<p>Docker images for the OpenWhisk Node.js runtimes use the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">following command</a> to start the internal Node.js process. <strong>Remote debugging is not enabled by default.</strong></p>
+
+<p><code>
+node --expose-gc app.js
+</code></p>
+
+<p>Docker allows containers to override the default image start command using a <a href="https://docs.docker.com/engine/reference/run/">command line argument</a>.</p>
+
+<p><strong>This command will start the OpenWhisk Node.js runtime container with the remote debugging service enabled.</strong> Binding the HTTP API and WebSocket ports to the host machine allows us to access those services remotely.</p>
+
+<p><code>
+docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js
+</code></p>
+
+<p><em>Once a container from the runtime image has started, we can connect our favourite debugging tools...</em></p>
+
+<h3>Chrome Dev Tools</h3>
+
+<p>To connect <a href="https://developers.google.com/web/tools/chrome-devtools/">Chrome Dev Tools</a> to the remote Node.js debugging service, follow these steps.</p>
+
+<ul>
+<li>Open the following page in Chrome: <a href="chrome://inspect/#devices">chrome://inspect/#devices</a></li>
+</ul>
+
+
+<p><img src="/images/debugging/devtools.png" title="Chrome Dev Tools" ></p>
+
+<p>Chrome Dev Tools is configured to open a connection on port 9229 on localhost. If the web socket connection succeeds, the debugging target should be listed in the "Remote Target" section.</p>
+
+<ul>
+<li>Click the "<em>Open dedicated DevTools for Node</em>" link.</li>
+</ul>
+
+
+<p>In the "Sources" panel the JavaScript files loaded by the Node.js process are available.</p>
+
+<p><img src="/images/debugging/devtools-debugging.png" title="Chrome Dev Tools Debugging" ></p>
+
+<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
+
+<h3>VSCode</h3>
+
+<p><a href="https://code.visualstudio.com/">Visual Studio Code</a> supports remote debugging of Node.js code using the Chrome Dev Tools protocol. Follow these steps to connect the editor to the remote debugging service.</p>
+
+<ul>
+<li>Click the menu item "<em>Debug -> Add Configuration</em>"</li>
+<li>Select the "<em>Node.js: Attach to Remote Program</em>" from the Intellisense menu.</li>
+<li>Edit the default configuration to have the following values.</li>
+</ul>
+
+
+<p><code>json
+{
+  "type": "node",
+  "request": "attach",
+  "name": "Attach to Remote",
+  "address": "127.0.0.1",
+  "port": 9229,
+  "localRoot": "${workspaceFolder}"
+}
+</code></p>
+
+<p><img src="/images/debugging/vscode.png" title="Visual Studio Code" ></p>
+
+<ul>
+<li>Choose the new "<em>attach to remote</em>" debugging profile and click the Run button.</li>
+</ul>
+
+
+<p>The "<em>Loaded Scripts</em>" window will show all the JavaScript files loaded by the Node.js process.</p>
+
+<p><img src="/images/debugging/vscode-debugging.png" title="Visual Studio Code Debugging" ></p>
+
+<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
+
+<h3>Breakpoint Locations</h3>
+
+<p>Here are some useful locations to set breakpoints to catch errors in your serverless functions for the OpenWhisk Node.js runtime environments.</p>
+
+<h4>Initialisation Errors - Source Actions</h4>
+
+<p>If you are creating OpenWhisk actions from JavaScript source files, the code is dynamically evaluated during  the <code>/init</code> request at <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">this location</a>. Putting a breakpoint here will allow you to catch errors thrown during that <code>eval()</code> call.</p>
+
+<h4>Initialisation Errors - Binary Actions</h4>
+
+<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">this location</a> is where the archive is extracted in the runtime filesystem. Putting a breakpoint here will catch errors from the extraction call and runtime checks for a valid JavaScript module.</p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">This code</a> is where the JavaScript module is imported once it has been extracted. Putting a breakpoint here will catch errors thrown importing the module into the Node.js environment.</p>
+
+<h4>Action Handler Errors</h4>
+
+<p>For both source file and zipped module actions, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">this location</a> is where the action handler is invoked on each <code>/run</code> request. Putting a breakpoint here will catch errors thrown from within action handlers.</p>
+
+<h2>Invoking OpenWhisk Actions</h2>
+
+<p>Once you have attached the debugger to the remote Node.js process, you need to send the API requests to simulate the platform invocations. Runtime containers use separate HTTP endpoints to import the action source code into the runtime environment (<code>/init</code>)  and then fire the invocation requests (<code>/run</code>).</p>
+
+<h4>Generating Init Request Body - Source Files</h4>
+
+<p>If you are creating OpenWhisk actions from JavaScript source files, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
+
+<p>```json
+{
+  "value": {</p>
+
+<pre><code>"main": "&lt;FUNCTION NAME IN SOURCE FILE&gt;",
+"code": "&lt;INSERT SOURCE HERE&gt;"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><code>code</code> is the JavaScript source to be evaluated which contains the action handler. <code>main</code> is the function name in the source file used for the action handler.</p>
+
+<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the source code in <code>file.js</code>.</p>
+
+<p><code>sh
+$ cat file.js | jq -sR  '{value: {main: "main", code: .}}'
+</code></p>
+
+<h4>Generating Init Request Body - Zipped Modules</h4>
+
+<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
+
+<p>```json
+{
+  "value": {</p>
+
+<pre><code>"main": "&lt;FUNCTION NAME ON JS MODULE&gt;",
+"code": "&lt;INSERT BASE64 ENCODED STRING FROM ZIP FILE HERE&gt;",
+"binary": true
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><code>code</code> must be a Base64 encoded string for the zip file. <code>main</code> is the function name returned in the imported JavaScript module to call as the action handler.</p>
+
+<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the zip file in <code>action.zip</code>.</p>
+
+<p><code>sh
+$ base64 action.zip | tr -d '\n' | jq -sR '{value: {main: "main", binary: true, code: .}}'
+</code></p>
+
+<h4>Sending Init Request</h4>
+
+<p>The <a href="https://httpie.org/">HTTPie</a> tool makes it simple to send HTTP requests from the command-line.</p>
+
+<p>Using this tool, the following command will initialise the runtime container with an OpenWhisk action.</p>
+
+<p>```sh
+$ http post localhost:8080/init &lt; init.json
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"OK": true
+</code></pre>
+
+<p>}
+```</p>
+
+<p>If this HTTP request returns without an error, the action is ready to be invoked.</p>
+
+<p><em>No further initialisation requests are needed unless you want to modify the action deployed.</em></p>
+
+<h4>Generating Run Request Body</h4>
+
+<p>Invocations of the action handler functions are triggered from a HTTP POST to the <code>/run</code> API endpoint.</p>
+
+<p>Invocations parameters are sent in the JSON request body, using a JSON object with a <code>value</code> field.</p>
+
+<p>```json
+{
+  "value": {</p>
+
+<pre><code>"some-param-name": "some-param-value",
+"another-param-name": "another-param-value",
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h4>Sending Run Request</h4>
+
+<p>Using the <a href="https://httpie.org/">HTTPie</a> tool, the following command will invoke the OpenWhisk action.</p>
+
+<p>```sh
+$ http post localhost:8080/run &lt; run.json
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"msg": "Hello world"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Returned values from the action handler are serialised as the JSON body in the HTTP response. Issuing further HTTP POST requests to the <code>/run</code> endpoint allows us to re-invoke the action.</p>
+
+<h2>Conclusion</h2>
+
+<p>Lack of debugging tools is one of the biggest complaints from developers migrating to serverless platforms.</p>
+
+<p>Using an open-source serverless platform helps with this problem, by making it simple to run the same containers locally that are used for the platform's runtime environments. Debugging tools can then be started from inside these local environments to simulate remote access.</p>
+
+<p>In this example, this approach was used to enable the remote debugging service from the OpenWhisk Node.js runtime environment. The same approach could be used for any language and debugging tool needing local access to the runtime environment.</p>
+
+<p>Having access to the Node.js debugger is huge improvement when debugging challenging issues, rather than just being reliant on logs and metrics collected by the platform.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Binding IAM Services To IBM Cloud Functions]]></title>
@@ -1693,261 +1979,6 @@ $ curl --request POST --url https://metrics.ng.bluemix.net/v1/alert/history \</p
 <p>In this series on <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">"Monitoring Serverless Application Metrics"</a>, we have shown you how to monitor serverless applications using IBM Cloud. Starting with <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">capturing runtime metrics</a> from IBM Cloud Functions, we then showed how to <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">forward metrics</a> into the IBM Cloud Monitoring service. Once metric values were being recorded, <a href="http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">visualisation dashboards</a> were built to help diagnose and resolve application issues. Finally, we configured automatic alerting rules to notify us over email as soon as issues developed.</p>
 
 <p>Serverless applications are <a href="https://medium.com/@PaulDJohnston/what-is-serverless-architecture-43b9ea4babca">not “No Ops”, but "Different Ops"</a>. Monitoring runtime metrics is still crucial. IBM Cloud provides a comprehensive set of tools for monitoring cloud applications. Utilising these services, you can create a robust monitoring solution for IBM Cloud Functions applications.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Starting OpenWhisk In Sixty Seconds]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2018/01/19/starting-openwhisk-in-sixty-seconds/"/>
-    <updated>2018-01-19T11:02:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2018/01/19/starting-openwhisk-in-sixty-seconds</id>
-    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is an open-source serverless platform. Developers can use <a href="https://console.bluemix.net/openwhisk/">hosted instances</a> from IBM, <a href="https://github.com/apache/incubator-openwhisk/tree/master/ansible">deploy to any</a> infrastructure provider and <a href="https://github.com/apache/incubator-openwhisk#quick-start">even run it locally</a>.</p>
-
-<p>Developers often use a local instance of the platform during development. Deploying to a local instance is faster than the cloud. It also provides access runtime environments to debug issues and allows development without an Internet connection. Production applications are still run on IBM Cloud Functions.</p>
-
-<p>But OpenWhisk provides numerous options for starting the platform, including running the platform services directly, using container management tools like <a href="https://github.com/apache/incubator-openwhisk-deploy-kube">Kubernetes</a> and <a href="https://events.static.linuxfound.org/sites/events/files/slides/OpenwhiskMesoscon2017_16-9.pdf">Mesos</a> or starting a <a href="https://github.com/apache/incubator-openwhisk/blob/master/tools/vagrant/README.md">pre-configured virtual machine</a> with Vagrant.</p>
-
-<p><em>So, what's easiest?</em></p>
-
-<p><strong><a href="https://github.com/apache/incubator-openwhisk-devtools">OpenWhisk Devtools</a>.</strong></p>
-
-<p>Using this project, the platform can be started on any machine with <a href="https://docs.docker.com/compose/">Docker Compose</a> in around sixty seconds. Before we explain how this works, let's show the steps needed to spin up the platform using the project.</p>
-
-<h2>openwhisk in around sixty seconds…</h2>
-
-<p><em>Do you have Docker with Compose support installed? If not, follow the instructions <a href="https://docs.docker.com/compose/install/">here.</a></em></p>
-
-<p>Start the platform with the following commands.</p>
-
-<p><code>
-$ git clone git@github.com:apache/incubator-openwhisk-devtools.git
-$ cd incubator-openwhisk-devtools/docker-compose
-$ make quick-start
-</code></p>
-
-<p>Having cloned the repository, creating the local instance only takes around sixty seconds! 💯</p>
-
-<p>```
-$ time make quick-start &amp;>/dev/null</p>
-
-<p>real    1m10.128s
-user    0m1.709s
-sys     0m1.258s
-```</p>
-
-<p>Platform services will be running as containers on the host after initialisation.</p>
-
-<p><code>
-$ docker ps --format "&amp;#123;&amp;#123;.ID&amp;#125;&amp;#125;: &amp;#123;&amp;#123;.Names&amp;#125;&amp;#125; &amp;#123;&amp;#123;.Image&amp;#125;&amp;#125;"
-17c5d31e2c20: wsk0_60_prewarm_nodejs6       (openwhisk/nodejs6action:latest)
-0eace484289c: wsk0_59_prewarm_nodejs6       (openwhisk/nodejs6action:latest)
-1be725d8767c: openwhisk_apigateway_1          (adobeapiplatform/apigateway:1.1.0)
-641cbabeb790: openwhisk_kafka-topics-ui_1   (landoop/kafka-topics-ui:0.9.3)
-f52c25dbadd9: openwhisk_controller_1            (openwhisk/controller)
-8f0c6aa14ccc: openwhisk_invoker_1           (openwhisk/invoker)
-d5274194f842: openwhisk_kafka-rest_1            (confluentinc/cp-kafka-rest:3.3.1)
-40a1585f64bb: openwhisk_kafka_1                 (wurstmeister/kafka:0.11.0.1)
-b0b0f75c6fdb: openwhisk_db_1                    (couchdb:1.6)
-a7449c2edc4d: openwhisk_zookeeper_1             (zookeeper:3.4)
-178abe09b793: openwhisk_redis_1                 (redis:2.8)
-</code></p>
-
-<p>…and that's it!</p>
-
-<h2>testing it out</h2>
-
-<h3>setting up CLI tool</h3>
-
-<p>OpenWhisk provides a <a href="https://github.com/apache/incubator-openwhisk-cli">CLI tool</a> for interacting with the platform. The <code>quick-start</code> command automatically writes account credentials for the local instance into the CLI configuration file. Using the CLI tool to print current configuration values shows the platform endpoint set as the local machine ip or hostname.</p>
-
-<p><em>If you don't have the CLI tool already installed, the project downloads the binary to the following location: <code>devtools/docker-compose/openwhisk-master/bin/wsk</code></em></p>
-
-<p><code>
-$ wsk property get | grep host
-whisk API host      localhost
-</code></p>
-
-<p>The local instance is configured with a single user account (<code>guest</code>) with <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.guest">these credentials</a>. Administrative credentials are stored in <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.whisk.system">this configuration file</a>.</p>
-
-<h3>creating sample actions</h3>
-
-<p>With the CLI configured correctly, you can create and invoke an action on the local platform instance.</p>
-
-<ul>
-<li>Create a new file called <code>hello.js</code> with the following contents.</li>
-</ul>
-
-
-<p><code>javascript
-function main (params) {
-  var name = params.name || 'World'
-  return { payload: 'Hello, ' + name + '!' }
-}
-</code></p>
-
-<ul>
-<li>Create a new action called <code>hello</code> from the local <code>hello.js</code> file.</li>
-</ul>
-
-
-<p><code>
-$ wsk action create hello hello.js
-ok: created action hello
-</code></p>
-
-<ul>
-<li>List the actions registered on the platform.</li>
-</ul>
-
-
-<p><code>
-$ wsk action list
-actions
-/guest/hello                                                           private nodejs:6
-</code></p>
-
-<ul>
-<li>Invoke the action, blocking until it has finished.</li>
-</ul>
-
-
-<p><code>
-$ wsk action invoke -r hello -p name James
-{
-  "payload": "Hello, James!"
-}
-</code></p>
-
-<ul>
-<li>Retrieve the activation record.</li>
-</ul>
-
-
-<p>```
-$ wsk activation list
-activations
-1d16d13fdbba4fdc96d13fdbba7fdc76 hello
-$ wsk activation get 1d16d13fdbba4fdc96d13fdbba7fdc76
-ok: got activation 1d16d13fdbba4fdc96d13fdbba7fdc76
-{
-  "namespace": "guest",
-  "name": "hello",
-  "version": "0.0.1",
-  "subject": "guest",
-  "activationId": "1d16d13fdbba4fdc96d13fdbba7fdc76",
-  "start": 1516364811767,
-  "end": 1516364811769,
-  "duration": 2,
-  "response": {</p>
-
-<pre><code>"status": "success",
-"statusCode": 0,
-"success": true,
-"result": {
-  "payload": "Hello, James!"
-}
-</code></pre>
-
-<p>  },
-  ...
-}
-```</p>
-
-<h2>how does it work?</h2>
-
-<p>Apache OpenWhisk is an open-source serverless platform, composed of microservices written in Scala. Custom runtime code is bundled and managed as platform services using Docker. The platform also uses numerous external open-source projects, including CouchDB, Kafka, Zookeeper and Redis. Existing public images are used to pull those dependencies into the project.</p>
-
-<p>Apache OpenWhisk automatically <a href="https://hub.docker.com/r/openwhisk/">builds and publishes images</a> for custom runtime services on Docker Hub. This means containers can be started from public images, rather than having to build them manually. Using the existing images dramatically reduces the start-up time for getting the project running locally.</p>
-
-<p>"Devtools" uses Docker Compose to <a href="https://github.com/apache/incubator-openwhisk-devtools/tree/master/docker-compose">start a local instance</a> of the platform. Docker Compose coordinates starting containers in the correct order, injects runtime configuration properties and link services using local networking interfaces.</p>
-
-<h2>tips &amp; tricks</h2>
-
-<p><em>Once you have a local instance of the platform running, there are a few things you can do to make it easier to use during development…</em></p>
-
-<h3>switching CLI between platform instances</h3>
-
-<p>Using a local instance of the platform for testing and development, you will still want to deploy production applications to IBM Cloud Functions. Switching between these platform instances relies on <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/cli.md#setting-up-the-openwhisk-cli">updating the CLI configuration file</a> with the correct authorisation credentials each time.</p>
-
-<p>Rather than manually updating the default configuration file each time, an environment variable (<code>WSK_CONFIG_FILE</code>) can be used to choose a different configuration file. Keep credentials for different instances in separate files. Use the environment parameter to quickly switch platform instances.</p>
-
-<p><code>
-$ WSK_CONFIG_FILE=~/.wskprops-local wsk
-</code></p>
-
-<p>Using a shell alias to expose a new command to do this automatically makes this even easier.</p>
-
-<p><code>
-alias wsk-local='WSK_CONFIG_FILE=~/.wskprops-local wsk -i'
-</code></p>
-
-<p><em>The <code>-i</code> flag is used because the local platform instance uses a self-signed SSL certificate.</em></p>
-
-<h3>view platform details in database</h3>
-
-<p><a href="https://couchdb.apache.org/">CouchDB</a> is the platform data store. This stores all installed actions, save activation records and other runtime properties. Accessing this database can be helpful to diagnose issues directly.</p>
-
-<p>CouchDB comes with a administration web application called "<a href="http://docs.couchdb.org/en/1.6.1/intro/futon.html">Futon</a>". This can read and modify database documents, run view queries and check configuration parameters.</p>
-
-<p>Open this URL to access Futon for the local platform instance: <a href="http://localhost:5984/_utils/">http://localhost:5984/_utils/</a></p>
-
-<p><em>Docker is configured to forward networking traffic from local port 5984 to the same port on the container.</em></p>
-
-<h3>read platform logs</h3>
-
-<p>System logs, generated from platform containers, are stored in the  <code>~/tmp/openwhisk</code> directory.</p>
-
-<p>Logs from the invoker are stored in the <code>invoker/logs/invoker-local_logs.log</code> file. Logs from the controller are stored in the <code>controller/logs/controller-local_logs.log</code> file. All other container logs are stored in the same <code>docker-compose.log</code> file.</p>
-
-<p>Searching these files with the activation id will allow you to find all platform logs for that action invocation.</p>
-
-<h3>find the runtime container for an activation</h3>
-
-<p>Running the platform locally means you can access runtime environments used to execute actions. This can help diagnosing and debugging application errors.</p>
-
-<p>Finding the runtime container used for an invocation relies on having the activation identifier. Using this value, search the controller logs for the following log message.</p>
-
-<p><code>
-[InvokerReactive] &lt;namespace/action_id&gt; &lt;user&gt; &lt;activation_id&gt;
-</code></p>
-
-<p>This is then followed by a log message with the container identifier used for that invocation.</p>
-
-<p><code>
-[DockerContainer] sending initialization to ContainerId(&lt;CONTAINER_ID&gt;)
-</code></p>
-
-<p>Using <code>docker exec</code> you can then access the runtime environment to poke around!</p>
-
-<p><code>
-$ docker exec -it &lt;CONTAINER_ID&gt; /bin/bash
-</code></p>
-
-<h3>install shared packages</h3>
-
-<p>On IBM Cloud Functions, the <code>/whisk.system/</code> namespace contains shared packages for common utilities and external feed providers. These packages are not installed by default on the platform created by devtools.</p>
-
-<p>These packages are available in the following repositories.</p>
-
-<ul>
-<li><a href="https://github.com/apache/incubator-openwhisk-catalog">incubator-openwhisk-catalog</a> - Shared utilities and simple feed providers.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-alarms">incubator-openwhisk-package-alarms</a> - Alarms feed provider.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-cloudant">incubator-openwhisk-package-cloudant</a> - Cloudant feed provider.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-kafka">incubator-openwhsk-package-kafka</a> - Kafka feed provider.</li>
-</ul>
-
-
-<p>Follow the instructions in the repositories to make these available on your local version of the platform.</p>
-
-<p><em>Pull requests have been opened to automate installing <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/82">these</a> <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/83">packages</a> in the devtools project.</em></p>
-
-<h2>conclusion</h2>
-
-<p>Serverless platforms often get criticised as having a poor "developer experience" for people used to traditional application servers. Having no access to the environments running your code can make development and testing challenging. Debugging issues through console logs feels like a step backwards.</p>
-
-<p>Using an open-source serverless platform means you can actually run the entire platform locally. Using a local instance during development improves deployment times, provides access to runtime environments and allows you to work offline.</p>
-
-<p>Apache OpenWhisk has numerous options for deploying the platform, including virtual machines, kubernetes or native containers. Whilst the platform is not the simplest to set-up manually, the devtools project bootstraps a pre-configured version by spinning up a local instance using Docker Compose. This is the easiest approach for most developers to have a local instance of the platform.</p>
 ]]></content>
   </entry>
   

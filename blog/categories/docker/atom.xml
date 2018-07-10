@@ -4,7 +4,7 @@
   <title><![CDATA[Category: docker | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/docker/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-06-06T11:15:12+01:00</updated>
+  <updated>2018-07-10T10:05:18+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,292 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Debugging Node.js OpenWhisk Actions]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/"/>
+    <updated>2018-07-10T09:00:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions</id>
+    <content type="html"><![CDATA[<p>Debugging serverless applications is one of the <a href="https://www.stackery.io/blog/the-serverless-learning-curve/">most challenging issues</a> developers face when using serverless platforms. How can you use debugging tools without any access to the runtime environment?</p>
+
+<p>Last week, I worked out <a href="https://twitter.com/thomasj/status/1013006648439443458">how to expose the Node.js debugger</a> in the Docker environment used for the application runtime in Apache OpenWhisk.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Want to use Node.js debugger for <a href="https://twitter.com/openwhisk?ref_src=twsrc%5Etfw">@openwhisk</a> actions? Start runtime container locally with this command to expose v8 inspector.<br>$ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js<br>Then connect Chrome Dev Tools or <a href="https://twitter.com/code?ref_src=twsrc%5Etfw">@code</a>. 💯 <a href="https://t.co/X4i01QEOmg">pic.twitter.com/X4i01QEOmg</a></p>&mdash; James Thomas (@thomasj) <a href="https://twitter.com/thomasj/status/1013006648439443458?ref_src=twsrc%5Etfw">June 30, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>Using the remote debugging service, we can set breakpoints and step through action handlers live, rather than just being reliant on logs and metrics to diagnose bugs.</p>
+
+<p><strong>So, how does this work?</strong></p>
+
+<p><em>Let's find out more about how Apache OpenWhisk executes serverless functions...</em></p>
+
+<h2>Background</h2>
+
+<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is the open-source serverless platform which powers <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. OpenWhisk <a href="https://medium.com/openwhisk/uncovering-the-magic-how-serverless-platforms-really-work-3cb127b05f71">uses Docker containers</a> to create isolated runtime environments for executing serverless functions.</p>
+
+<p>Containers are started on-demand as invocation requests arrive. Serverless function source files are dynamically injected into the runtime and executed for each invocation. Between invocations, containers are paused and kept in a cache for re-use with further invocations.</p>
+
+<p>The benefit of using an open-source serverless platform is that the <a href="https://github.com/search?q=incubator-openwhisk-runtime">build files</a> used to create runtime images are also open-source. OpenWhisk also automatically builds and publishes all <a href="https://hub.docker.com/r/openwhisk/">runtime images externally</a> on Docker Hub. Running containers using these images allows us to simulate the remote serverless runtime environment.</p>
+
+<h3>Runtime Images</h3>
+
+<p>All OpenWhisk runtime images are <a href="https://hub.docker.com/r/openwhisk/">published externally</a> on Docker Hub.</p>
+
+<p>Runtime images <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">start a HTTP server</a> which listens on port 8080. This HTTP server must implement two API endpoints (<code>/init</code> &amp; <code>/run</code>) accepting HTTP POST requests. The platform uses these endpoints to initialise the runtime with action code and then invoke the action with event parameters.</p>
+
+<p>More details on the API endpoints can be found in this <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">blog post</a> on creating Docker-based actions.</p>
+
+<h3>Node.js Runtime Image</h3>
+
+<p>This repository contains the source code used to create <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">Node.js runtime environment image</a>.</p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">https://github.com/apache/incubator-openwhisk-runtime-nodejs</a></p>
+
+<p>Both <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs8Action">Node.js 8</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">6 runtimes</a>  are built from a <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejsActionBase">common base image</a>. This base image contains an <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/app.js">Express.js server</a> which handles the platform API requests. The <code>app.js</code> file containing the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">is executed</a> when the containers starts.</p>
+
+<p>JavaScript code is injected into the runtime using the <code>/init</code> API. Actions created from source code are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">dynamically evaluated</a> to instantiate the code in the runtime. Actions created from zip files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">extracted into a temporary directory</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">imported as a Node.js module</a>.</p>
+
+<p>Once instantiated, actions are executed using the <code>/run</code> API. Event parameters are come from the request body. Each time a new request is received, the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">calls the action handler with event parameters</a>. Returned values are serialised as the JSON body in the API response.</p>
+
+<h3>Starting Node.js Runtime Containers</h3>
+
+<p><a href="https://docs.docker.com/engine/reference/commandline/run/">Use this command</a> to start the Node.js runtime container locally.</p>
+
+<p><code>
+$ docker run -it -p 8080:8080 openwhisk/action-nodejs-v8
+</code></p>
+
+<p>Once the container has started, port 8080 on localhost will be mapped to the HTTP service exposed by the runtime environment. This can be used to inject serverless applications into the runtime environment and invoke the serverless function handler with event parameters.</p>
+
+<h2>Node.js Remote Debugging</h2>
+
+<p>Modern versions of the Node.js runtime have a command-line flag (<code>--inspect</code>) to expose a <a href="https://nodejs.org/api/debugger.html#debugger_advanced_usage">remote debugging service</a>. This service runs a WebSocket server on localhost which implements the <a href="https://chromedevtools.github.io/devtools-protocol/">Chrome DevTools Protocol</a>.</p>
+
+<p><code>
+$ node --inspect index.js
+Debugger listening on 127.0.0.1:9229.
+</code></p>
+
+<p>External tools can connect to this port to provide debugging capabilities for Node.js code.</p>
+
+<p>Docker images for the OpenWhisk Node.js runtimes use the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">following command</a> to start the internal Node.js process. <strong>Remote debugging is not enabled by default.</strong></p>
+
+<p><code>
+node --expose-gc app.js
+</code></p>
+
+<p>Docker allows containers to override the default image start command using a <a href="https://docs.docker.com/engine/reference/run/">command line argument</a>.</p>
+
+<p><strong>This command will start the OpenWhisk Node.js runtime container with the remote debugging service enabled.</strong> Binding the HTTP API and WebSocket ports to the host machine allows us to access those services remotely.</p>
+
+<p><code>
+docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js
+</code></p>
+
+<p><em>Once a container from the runtime image has started, we can connect our favourite debugging tools...</em></p>
+
+<h3>Chrome Dev Tools</h3>
+
+<p>To connect <a href="https://developers.google.com/web/tools/chrome-devtools/">Chrome Dev Tools</a> to the remote Node.js debugging service, follow these steps.</p>
+
+<ul>
+<li>Open the following page in Chrome: <a href="chrome://inspect/#devices">chrome://inspect/#devices</a></li>
+</ul>
+
+
+<p><img src="/images/debugging/devtools.png" title="Chrome Dev Tools" ></p>
+
+<p>Chrome Dev Tools is configured to open a connection on port 9229 on localhost. If the web socket connection succeeds, the debugging target should be listed in the "Remote Target" section.</p>
+
+<ul>
+<li>Click the "<em>Open dedicated DevTools for Node</em>" link.</li>
+</ul>
+
+
+<p>In the "Sources" panel the JavaScript files loaded by the Node.js process are available.</p>
+
+<p><img src="/images/debugging/devtools-debugging.png" title="Chrome Dev Tools Debugging" ></p>
+
+<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
+
+<h3>VSCode</h3>
+
+<p><a href="https://code.visualstudio.com/">Visual Studio Code</a> supports remote debugging of Node.js code using the Chrome Dev Tools protocol. Follow these steps to connect the editor to the remote debugging service.</p>
+
+<ul>
+<li>Click the menu item "<em>Debug -> Add Configuration</em>"</li>
+<li>Select the "<em>Node.js: Attach to Remote Program</em>" from the Intellisense menu.</li>
+<li>Edit the default configuration to have the following values.</li>
+</ul>
+
+
+<p><code>json
+{
+  "type": "node",
+  "request": "attach",
+  "name": "Attach to Remote",
+  "address": "127.0.0.1",
+  "port": 9229,
+  "localRoot": "${workspaceFolder}"
+}
+</code></p>
+
+<p><img src="/images/debugging/vscode.png" title="Visual Studio Code" ></p>
+
+<ul>
+<li>Choose the new "<em>attach to remote</em>" debugging profile and click the Run button.</li>
+</ul>
+
+
+<p>The "<em>Loaded Scripts</em>" window will show all the JavaScript files loaded by the Node.js process.</p>
+
+<p><img src="/images/debugging/vscode-debugging.png" title="Visual Studio Code Debugging" ></p>
+
+<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
+
+<h3>Breakpoint Locations</h3>
+
+<p>Here are some useful locations to set breakpoints to catch errors in your serverless functions for the OpenWhisk Node.js runtime environments.</p>
+
+<h4>Initialisation Errors - Source Actions</h4>
+
+<p>If you are creating OpenWhisk actions from JavaScript source files, the code is dynamically evaluated during  the <code>/init</code> request at <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">this location</a>. Putting a breakpoint here will allow you to catch errors thrown during that <code>eval()</code> call.</p>
+
+<h4>Initialisation Errors - Binary Actions</h4>
+
+<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">this location</a> is where the archive is extracted in the runtime filesystem. Putting a breakpoint here will catch errors from the extraction call and runtime checks for a valid JavaScript module.</p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">This code</a> is where the JavaScript module is imported once it has been extracted. Putting a breakpoint here will catch errors thrown importing the module into the Node.js environment.</p>
+
+<h4>Action Handler Errors</h4>
+
+<p>For both source file and zipped module actions, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">this location</a> is where the action handler is invoked on each <code>/run</code> request. Putting a breakpoint here will catch errors thrown from within action handlers.</p>
+
+<h2>Invoking OpenWhisk Actions</h2>
+
+<p>Once you have attached the debugger to the remote Node.js process, you need to send the API requests to simulate the platform invocations. Runtime containers use separate HTTP endpoints to import the action source code into the runtime environment (<code>/init</code>)  and then fire the invocation requests (<code>/run</code>).</p>
+
+<h4>Generating Init Request Body - Source Files</h4>
+
+<p>If you are creating OpenWhisk actions from JavaScript source files, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
+
+<p>```json
+{
+  "value": {</p>
+
+<pre><code>"main": "&lt;FUNCTION NAME IN SOURCE FILE&gt;",
+"code": "&lt;INSERT SOURCE HERE&gt;"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><code>code</code> is the JavaScript source to be evaluated which contains the action handler. <code>main</code> is the function name in the source file used for the action handler.</p>
+
+<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the source code in <code>file.js</code>.</p>
+
+<p><code>sh
+$ cat file.js | jq -sR  '{value: {main: "main", code: .}}'
+</code></p>
+
+<h4>Generating Init Request Body - Zipped Modules</h4>
+
+<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
+
+<p>```json
+{
+  "value": {</p>
+
+<pre><code>"main": "&lt;FUNCTION NAME ON JS MODULE&gt;",
+"code": "&lt;INSERT BASE64 ENCODED STRING FROM ZIP FILE HERE&gt;",
+"binary": true
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><code>code</code> must be a Base64 encoded string for the zip file. <code>main</code> is the function name returned in the imported JavaScript module to call as the action handler.</p>
+
+<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the zip file in <code>action.zip</code>.</p>
+
+<p><code>sh
+$ base64 action.zip | tr -d '\n' | jq -sR '{value: {main: "main", binary: true, code: .}}'
+</code></p>
+
+<h4>Sending Init Request</h4>
+
+<p>The <a href="https://httpie.org/">HTTPie</a> tool makes it simple to send HTTP requests from the command-line.</p>
+
+<p>Using this tool, the following command will initialise the runtime container with an OpenWhisk action.</p>
+
+<p>```sh
+$ http post localhost:8080/init &lt; init.json
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"OK": true
+</code></pre>
+
+<p>}
+```</p>
+
+<p>If this HTTP request returns without an error, the action is ready to be invoked.</p>
+
+<p><em>No further initialisation requests are needed unless you want to modify the action deployed.</em></p>
+
+<h4>Generating Run Request Body</h4>
+
+<p>Invocations of the action handler functions are triggered from a HTTP POST to the <code>/run</code> API endpoint.</p>
+
+<p>Invocations parameters are sent in the JSON request body, using a JSON object with a <code>value</code> field.</p>
+
+<p>```json
+{
+  "value": {</p>
+
+<pre><code>"some-param-name": "some-param-value",
+"another-param-name": "another-param-value",
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h4>Sending Run Request</h4>
+
+<p>Using the <a href="https://httpie.org/">HTTPie</a> tool, the following command will invoke the OpenWhisk action.</p>
+
+<p>```sh
+$ http post localhost:8080/run &lt; run.json
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"msg": "Hello world"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Returned values from the action handler are serialised as the JSON body in the HTTP response. Issuing further HTTP POST requests to the <code>/run</code> endpoint allows us to re-invoke the action.</p>
+
+<h2>Conclusion</h2>
+
+<p>Lack of debugging tools is one of the biggest complaints from developers migrating to serverless platforms.</p>
+
+<p>Using an open-source serverless platform helps with this problem, by making it simple to run the same containers locally that are used for the platform's runtime environments. Debugging tools can then be started from inside these local environments to simulate remote access.</p>
+
+<p>In this example, this approach was used to enable the remote debugging service from the OpenWhisk Node.js runtime environment. The same approach could be used for any language and debugging tool needing local access to the runtime environment.</p>
+
+<p>Having access to the Node.js debugger is huge improvement when debugging challenging issues, rather than just being reliant on logs and metrics collected by the platform.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Starting OpenWhisk In Sixty Seconds]]></title>
@@ -372,7 +658,7 @@ $ tree .
 [package]
 name = "action"
 version = "0.1.0"
-authors = ["Me <a href="&#x6d;&#x61;&#105;&#108;&#x74;&#111;&#x3a;&#x6d;&#101;&#x40;&#101;&#109;&#x61;&#x69;&#108;&#x2e;&#99;&#111;&#109;">&#x6d;&#x65;&#64;&#x65;&#x6d;&#x61;&#x69;&#108;&#46;&#99;&#111;&#109;</a>"]</p>
+authors = ["Me <a href="&#x6d;&#97;&#x69;&#x6c;&#x74;&#x6f;&#58;&#x6d;&#101;&#64;&#101;&#x6d;&#97;&#x69;&#108;&#x2e;&#x63;&#x6f;&#x6d;">&#x6d;&#101;&#64;&#101;&#x6d;&#97;&#x69;&#x6c;&#x2e;&#x63;&#111;&#x6d;</a>"]</p>
 
 <p>[dependencies]
 rustc-serialize = "0.3"
@@ -832,192 +1118,6 @@ Date: Mon, 16 Jan 2017 14:17:15 GMT</p>
 <p>Hopefully this blog post has shown you how to get started with this feature.</p>
 
 <p>Over the next few weeks, we're going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates...</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Node-RED Docker Images]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2016/07/27/node-red-docker-images/"/>
-    <updated>2016-07-27T15:24:00+01:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2016/07/27/node-red-docker-images</id>
-    <content type="html"><![CDATA[<p>This week, I've been helping create and publish official <a href="https://www.docker.com/">Docker</a> images for the
-<a href="http://nodered.org/">Node-RED</a> project. Users can start Node-RED instances from these images using the following command.</p>
-
-<p><code>
-docker run -it -p 1880:1880 nodered/node-red-docker
-</code></p>
-
-<p>Node-RED is now publishing the <a href="https://hub.docker.com/r/nodered/node-red-docker/">following images to Docker Hub</a> for each new release.</p>
-
-<ul>
-<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/latest">latest</a></strong> - uses <a href="https://hub.docker.com/_/node/">official Node.JS v4 base image</a>.</li>
-<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/slim">slim</a></strong> - uses <a href="https://hub.docker.com/r/mhart/alpine-node/">Alpine Linux base image</a>.</li>
-<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/rpi">rpi</a></strong> - uses <a href="https://hub.docker.com/r/hypriot/rpi-node/">RPi-compatible base image</a>.</li>
-</ul>
-
-
-<p>When a new version is <a href="https://www.npmjs.com/package/node-red">released on NPM</a>, an <a href="https://travis-ci.org/node-red/node-red-docker">automated CI service</a> will build, test and
-publish new images with the <a href="https://hub.docker.com/r/nodered/node-red-docker/tags/">updated version tags</a>.</p>
-
-<p>The source repository for the Docker images is available at <a href="https://github.com/node-red/node-red-docker">https://github.com/node-red/node-red-docker</a>.</p>
-
-<h2>Background</h2>
-
-<p>There was a <a href="https://github.com/node-red/node-red/issues/603">long-standing issue</a> open with the project
-to provide official Docker images for the tool. Many users had <a href="https://hub.docker.com/r/cpswan/node-red/">already</a> <a href="https://github.com/jamesbrink/docker-node-red">been</a>
-<a href="http://ivyco.blogspot.co.uk/2015/03/docker-awesomeness.html">experimenting</a> with Node-RED and Docker.</p>
-
-<p><em>Reviewing the community's efforts, we wanted to create official images that
-made it simple for users to start Node-RED as Docker containers with minimal
-configuration whilst allowing for easy customisation, i.e. adding new nodes.</em></p>
-
-<p>Docker images are created using a configuration file (<a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a>) that lists the
-commands to build that image and can start by <a href="https://docs.docker.com/engine/reference/builder/#/from">using another image as the 'base'</a>.</p>
-
-<p>Node-RED is a Node.js application, published as an <a href="https://www.npmjs.com/package/node-red">NPM module</a>.
-The Node.js project publishes <a href="https://hub.docker.com/_/node/">official Docker images</a> which we used as our base image.
-These images provide an environment with the correct versions of Node.js and
-NPM installed.</p>
-
-<p>Rather than manually copying the Node-RED source code into the container image,
-we used NPM to install the source code by defining a custom <a href="https://docs.npmjs.com/files/package.json">package.json</a>
-which includes Node-RED as dependency.</p>
-
-<p>``` json package.json
-{</p>
-
-<pre><code>"name": "node-red-docker",
-"version": "0.14.5",
-"description": "Docker images for Node-RED",
-"main": "node_modules/node-red/red/red.js",
-"scripts": {
-    "start": "node-red"
-},
-...
-"dependencies": {
-    "node-red": "0.14.5"
-},
-"engines": {
-    "node": "4.*.*"
-}
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Adding this file into the container image and then running <a href="https://docs.npmjs.com/cli/install">NPM install</a>, using
-the <a href="https://docs.docker.com/engine/reference/builder/#/add">ADD</a> and <a href="https://docs.docker.com/engine/reference/builder/#/run">RUN</a> commands, will retrieve the correct Node-RED version and build
-that into the container image.</p>
-
-<p>Docker images define a <a href="https://docs.docker.com/engine/reference/builder/#/cmd">default start command</a> to run when the container is
-created. Using <em>npm start</em> for this image will parse the start script
-listed in the package.json file, which has been set to
-<em>node-red</em>.</p>
-
-<h2>Adding New Nodes</h2>
-
-<p>Node-RED has a <a href="http://flows.nodered.org/">huge community</a> which produces custom nodes for everything from
-accessing data from a <a href="http://flows.nodered.org/node/node-red-contrib-gpio">Raspberry Pi's sensors</a> to a <a href="http://flows.nodered.org/node/node-red-contrib-teslams">Tesla car</a>.</p>
-
-<p>Additional nodes <a href="http://nodered.org/docs/getting-started/adding-nodes">can be installed</a> by putting the files into your user
-directory, which defaults to <em>$HOME/.node-red</em>.</p>
-
-<p>Allowing users to install additional nodes without building new images is
-possible using <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">Docker's volume support</a>. Docker data volumes can be used to
-share files between the container and the host system, by <a href="https://docs.docker.com/engine/tutorials/dockervolumes/#/mount-a-host-directory-as-a-data-volume">mounting a directory on the host as a data volume within the container</a>.</p>
-
-<p>Exposing the Node-RED user directory within the container as a data volume
-means users can mount this on the host system. Nodes installed into this
-directory, using NPM on the host system, will automatically be registered when
-Node-RED starts.</p>
-
-<p>Within the Dockerfile for the Node-RED image, the /data directory is configured
-as the user directory and <a href="https://github.com/node-red/node-red-docker/blob/master/latest/Dockerfile#L23">exported as a data volume</a>.</p>
-
-<p>Users can mount their local user directory into the container with the
-following command.</p>
-
-<p><code>sh
-docker run -it -p 1880:1880 -v ~/.node-red:/data nodered/node-red-docker
-</code></p>
-
-<h2>Environment Parameters</h2>
-
-<p>Docker <a href="http://stackoverflow.com/questions/30494050/how-to-pass-environment-variables-to-docker-containers">supports injecting environment parameter</a> values into running containers,
-using command-line options on the host system. This is often used to configure
-runtime options without users having to build new container images. Node-RED's
-Docker images support the following environment parameters.</p>
-
-<h3>Flows Configuration</h3>
-
-<p>User flow configurations are <a href="http://nodered.org/docs/getting-started/running">stored in a JSON file under the user directory</a>. This defaults to
-<em>flows.json</em> but can be configured using an environment parameter
-(<strong>FLOWS</strong>) passed to the container, as shown below.</p>
-
-<p><code>
-docker run -it -p 1880:1880 -e FLOWS=my_flows.json nodered/node-red-docker
-</code></p>
-
-<h3>Node Options</h3>
-
-<p>Node.js runtime arguments can be passed to the container using an environment
-parameter (<strong>NODE_OPTIONS</strong>). For example, to <a href="https://github.com/nodejs/node/issues/2738">fix the heap size</a> used by the Node.js
-garbage collector you would use the following command.</p>
-
-<p><code>
-docker run -it -p 1880:1880 -e NODE_OPTIONS="--max_old_space_size=128" nodered/node-red-docker
-</code></p>
-
-<h2>Alpine Linux Image</h2>
-
-<p>The official Node.js Docker image uses the <a href="https://hub.docker.com/_/debian/">Debian Jessie base image</a>. This image
-provides a full Linux install, which means dependent Docker images can be
-hundreds of megabytes in size. Node-RED's Docker image, using this base image,
-is nearly 300 MB.</p>
-
-<p>Reducing Docker image sizes can <a href="http://jasonwilder.com/blog/2014/08/19/squashing-docker-images/">dramatically reduce build and deployment times</a>.</p>
-
-<p><a href="https://www.alpinelinux.org/">Alpine Linux</a> is a lightweight Linux distribution, focused on security and
-performance. A <a href="https://hub.docker.com/_/alpine/">minimal Docker image</a> based on Alpine Linux is only 5 MB in
-size!</p>
-
-<p>Using the <a href="https://hub.docker.com/r/mhart/alpine-node/">alpine-node</a> base
-image, which provides an Alpine Linux environment with Node.js &amp; NPM, in our
-Dockerfiles reduces the resulting image file to under 50 MB.</p>
-
-<p>Alpine Linux does make it <a href="http://stackoverflow.com/questions/36202095/node-serialport-failing-on-alpine-linux">more difficult to install NPM modules with native dependencies</a>, due to missing common libraries and tools needed to build them.</p>
-
-<p>Therefore, we're publishing the Alpine Linux image as a seperate tag (<em>slim</em>), rather
-than using this base image throughout our Dockerfiles.</p>
-
-<p>This version should provide an extremely lightweight Node-RED image that works
-for most users.</p>
-
-<p><code>
-docker run -it -p 1880:1880 nodered/node-red-docker:slim
-</code></p>
-
-<h2>Raspberry Pi Image</h2>
-
-<p>Node-RED is an incredibly popular tool for hacking on the <a href="https://www.raspberrypi.org/">Raspberry Pi</a>. Using a
-<a href="http://blog.hypriot.com/getting-started-with-docker-on-your-arm-device/">custom Raspberry Pi image</a>, developers can also have a full Docker system
-running in the Linux environment on their device.</p>
-
-<p><strong>So, can we use Docker to start Node-RED on the Raspberry Pi?</strong></p>
-
-<p>Due to the platform architecture, ARM rather than x86/x64 by Intel or AMD,
-Docker images must be packaged specifically for that platform. The existing
-Docker images created for Node-RED will not work.</p>
-
-<p>Fortunately, there's an <a href="https://hub.docker.com/r/hypriot/rpi-node/">existing RPi-compatible Docker image</a>
-with Node.js and NPM.</p>
-
-<p>Using this base image to build a new Raspberry Pi-specific Node-RED image,
-published with the <em>rpi</em> tag, means users can now start Node-RED on the Raspberry Pi using Docker.</p>
-
-<p><code>
-docker run -it -p 1880:1880 nodered/node-red-docker:rpi
-</code></p>
 ]]></content>
   </entry>
   
