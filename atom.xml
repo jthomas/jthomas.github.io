@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-07-10T10:05:18+01:00</updated>
+  <updated>2018-07-19T11:15:58+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,252 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Monitoring Dashboards With Kibana For IBM Cloud Functions]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/"/>
+    <updated>2018-07-18T16:08:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p>Following all the events from the World Cup can be hard. So many matches, so many goals. Rather than manually refreshing BBC Football to check the scores, I decided to created a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> that would automatically tweet out each goal.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/wcgoalbot.png" title="World Cup Goal Bot" ></p>
+
+<p><a href="https://github.com/jthomas/goalbot">The Twitter bot</a> runs on <a href="https://console.bluemix.net/openwhisk">IBM Cloud Functions</a>. It is called once a minute to check for new goals, using the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a>. If new goals have been scored, it calls another action to send the tweet messages.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>Once it was running, I need to ensure it was working correctly for the duration of the tournament. Using the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service, I built a custom monitoring dashboard to help to me recognise and diagnose issues.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+
+<p>The dashboard showed counts for successful and failed activations, when they occurred and a list of failed activations. If issues have occurred, I can retrieve the failed activation identifiers and investigate further.</p>
+
+<p><em>Let&#8217;s walk through the steps used to create this dashboard to help you create custom visualisations for serverless applications running on IBM Cloud Functions&#8230;</em></p>
+
+<h2>IBM Cloud Logging</h2>
+
+<p><a href="https://console.bluemix.net/docs/services/CloudLogAnalysis/index.html">IBM Cloud Logging</a> can be accessed <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_logs.html#openwhisk_logs">using the link</a> on the IBM Cloud Functions dashboard. This will open the logging service for the current organisation and space.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/open-logging.gif" title="Opening Logging Service" ></p>
+
+<p>All activation records and application logs are automatically forwarded to the logging service by IBM Cloud Functions.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/discover.png" title="Kibana Discover Screen" ></p>
+
+<h3>Log Message Fields</h3>
+
+<p>Activation records and application log messages have a number of common record fields.</p>
+
+<ul>
+<li><code>activationId_str</code> - <em>activation identifier for log message.</em></li>
+<li><code>timestamp</code> - <em>log draining time.</em></li>
+<li><code>@timestamp</code> - <em>message ingestion time.</em></li>
+<li><code>action_str</code> - <em>fully qualified action name</em></li>
+</ul>
+
+
+<p>Log records for different message types are identified using the <code>type</code> field. This is either <code>activation_record</code> or <code>user_logs</code> for IBM Cloud Functions records.</p>
+
+<p>Activation records have the following custom fields.</p>
+
+<ul>
+<li><code>duration_int</code> - <em>activation duration in milliseconds</em></li>
+<li><code>status_str</code> - <em>activation status response (non-zero for errors)</em></li>
+<li><code>message</code> - <em>activation response returned from action</em></li>
+<li><code>time_date</code> - <em>activation record start time</em></li>
+<li><code>end_date</code> - <em>activation record end time</em></li>
+</ul>
+
+
+<p>Applications log lines, written to stdout or stderr, are forwarded as individual records. One application log line per record. Log message records have the following custom fields.</p>
+
+<ul>
+<li><code>message</code> - <em>single application log line output</em></li>
+<li><code>stream_str</code> - <em>log message source, either <code>stdout</code> or <code>stderr</code></em></li>
+<li><code>time_date</code> - <em>timestamp parsed from application log line</em></li>
+</ul>
+
+
+<h3>Finding Log Messages For One Activation</h3>
+
+<p>Use this query string in the &#8221;<a href="https://www.elastic.co/guide/en/kibana/current/discover.html"><em>Discover</em>&#8221;</a> tab to retrieve all logs messages from a particular activation.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>activationId_str: &lt;ACTIVATION_ID&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Search queries are executed against log records within a <a href="https://www.elastic.co/guide/en/kibana/current/set-time-filter.html">configurable time window</a>.</p>
+
+<h2>Monitoring Dashboard</h2>
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+
+<p>This is the monitoring dashboard I created. It contains visualisations showing counts for successful and failed activations, histograms of when they occurred and a list of the recent failed activation identifiers.</p>
+
+<p>It allows me to quickly review the previous 24 hours activations for issues. If there are notable issues, I can retrieve the failed activation identifiers and investigate further.</p>
+
+<p>Before being able to create the dashboard, I needed to define two resources: <strong><em>saved searches</em></strong> and <strong><em>visualisations</em></strong>.</p>
+
+<h3>Saved Searches</h3>
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/saved-searches.png" title="Saving Search Queries" ></p>
+
+<p>Kibana supports saving and referring to search queries from visualisations using explicit names.</p>
+
+<p>Using <a href="https://www.elastic.co/guide/en/kibana/current/managing-saved-objects.html">saved searches</a> with visualisations, rather than explicit queries, removes the need to manually update visualisations&#8217; configuration when queries change.</p>
+
+<p>This dashboard uses two custom queries in visualisations. Queries are needed to find activation records from both successful and failed invocations.</p>
+
+<ul>
+<li>Create a new <em>&#8220;Saved Search&#8221;</em> named <em>&#8220;activation records (success)&#8221;</em> using the following search query.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>type: activation_record AND status_str: 0</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create a new <em>&#8220;Saved Search&#8221;</em> named <em>&#8220;activation records (failed)&#8221;</em> using the following search query.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>type: activation_record AND NOT status_str: 0</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>The <code>status_str</code> field is set to a non-zero value for failures. Using the <code>type</code> field ensures log messages from other sources are excluded from the results.</em></p>
+
+<h3>Indexed Fields</h3>
+
+<p>Before referencing log record fields in visualisations, those fields <a href="https://www.elastic.co/guide/en/kibana/current/index-patterns.html#reload-fields">need to be indexed</a> correctly. Use these instructions to verify activation records fields are available.</p>
+
+<ul>
+<li>Check IBM Cloud Functions logs are available in IBM Cloud Logging using the &#8221;<em>Discover</em>&#8221; tab.</li>
+<li>Click the &#8220;⚙️ <em>(Management)</em>&#8221; menu item on the left-hand drop-down menu in IBM Cloud Logging.</li>
+<li>Click the &#8221;<em>Index Patterns</em>&#8221; link.</li>
+<li>Click the 🔄 button to refresh the field list.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/refresh-fields.gif" title="Refresh field index" ></p>
+
+<h3>Visualisations</h3>
+
+<p>Three types of <a href="https://www.elastic.co/guide/en/kibana/current/visualize.html">visualisation</a> are used on the monitoring dashboard. Metric displays are used for the activation counts, vertical bar charts for the activation times and a data table to list failed activations.</p>
+
+<p><em>Visualisations <a href="https://www.elastic.co/guide/en/kibana/current/createvis.html">can be created</a> by opening the &#8220;Visualize&#8221; menu item and select a new visualisation type under the &#8220;Create New Visualization&#8221; menu.</em></p>
+
+<p>Create five different visualisations, using the instructions below, before moving on to create the dashboard.</p>
+
+<h4>Activation Counts</h4>
+
+<p>Counts for successful and failed activations are displayed as singular <a href="https://www.elastic.co/guide/en/kibana/current/metric-chart.html">metric values</a>.</p>
+
+<ul>
+<li>Select the &#8220;Metric&#8221; visualisation from the visualisation type list.</li>
+<li>Use the &#8220;activation records (success)&#8221; saved search as the data source.</li>
+<li>Ensure the Metric Aggregation is set to &#8220;Count&#8221;</li>
+<li>Set the &#8220;Font Size&#8221; under the Options menu to 120pt.</li>
+<li>Save the visualisation as &#8220;Activation Counts (Success)&#8221;</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/metrics-success.png" title="Activation success metric" ></p>
+
+<ul>
+<li>Repeat this process to create the failed activation count visualisation.</li>
+<li>Use the &#8220;activation records (failed)&#8221; saved search as the data source.</li>
+<li>Save the visualisation as &#8220;Activation Counts (Failed)&#8221;.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/metrics-fail.png" title="Activation failed metric" ></p>
+
+<h4>Activation Times</h4>
+
+<p>Activation counts over time, for successful and failed invocations, are displayed in <a href="https://www.elastic.co/guide/en/kibana/current/xy-chart.html">vertical bar charts</a>.</p>
+
+<ul>
+<li>Select the &#8220;Vertical bar chart&#8221; visualisation from the visualisation type list.</li>
+<li>Use the &#8220;activation records (success)&#8221; saved search as the data source.</li>
+<li>Set the &#8220;Custom Label&#8221; to Invocations</li>
+<li>Add an &#8220;X-Axis&#8221; bucket type under the Buckets section.</li>
+<li>Choose &#8220;Date Histogram&#8221; for the aggregation, &#8220;@timestamp&#8221; for the field and &#8220;Minute&#8221; for the interval.</li>
+<li>Save the visualisation as &#8220;Activation Times (Success)&#8221;</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/activation-times.png" title="Activation times chart" ></p>
+
+<ul>
+<li>Repeat this process to create the failed activation times visualisation.</li>
+<li>Use the &#8220;activation records (failed)&#8221; saved search as the data source.</li>
+<li>Save the visualisation as &#8220;Activation Times (Failed)&#8221;</li>
+</ul>
+
+
+<h4>Failed Activations List</h4>
+
+<p>Activation identifiers for failed invocations are shown using a <a href="https://www.elastic.co/guide/en/kibana/current/data-table.html">data table</a>.</p>
+
+<ul>
+<li>Select the &#8220;Data table&#8221; visualisation from the visualisation type list.</li>
+<li>Use the &#8220;activation records (failed)&#8221; saved search as the data source.</li>
+<li>Add a &#8220;Split Rows&#8221; bucket type under the Buckets section.</li>
+<li>Choose &#8220;Date Histogram&#8221; for the aggregation, &#8220;@timestamp&#8221; for the field and &#8220;Second&#8221; for the interval.</li>
+<li>Add a &#8220;sub-bucket&#8221; with the &#8220;Split Rows&#8221; type.</li>
+<li>Set sub aggregation to &#8220;Terms&#8221;, field to &#8220;activationId_str&#8221; and order by &#8220;Term&#8221;.</li>
+<li>Save the visualisation as &#8220;Errors Table&#8221;</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/activations-table.png" title="Failed activation table" ></p>
+
+<h3>Creating the dashboard</h3>
+
+<p>Having created the individual visualisations components, the <a href="https://www.elastic.co/guide/en/kibana/current/dashboard.html">monitoring dashboard</a> can be constructed.</p>
+
+<ul>
+<li>Click the &#8220;Dashboard&#8221; menu item from the left-and menu panel.</li>
+<li>Click the &#8220;Add&#8221; button to import visualisations into the current dashboard.</li>
+<li>Add each of the five visualisations created above.</li>
+</ul>
+
+
+<p><em>Hovering the mouse cursor over visualisations will reveal icons for moving and re-sizing.</em></p>
+
+<ul>
+<li>Re-order the visualisations into the following rows:
+
+<ul>
+<li>Activations Metrics</li>
+<li>Activation Times</li>
+<li>Failed Activations List</li>
+</ul>
+</li>
+<li>Select the &#8220;Last 24 hours&#8221; time window, available from the relative time ranges menu.</li>
+<li>Save the dashboard as &#8221;<em>Cloud Functions Monitoring</em>&#8221;. Tick the &#8221;<em>store time with dashboard</em>&#8221; option.</li>
+</ul>
+
+
+<p><img src="http://jthomas.github.com/jthomas/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+
+<p>Having saved the dashboard with time window, re-opening the dashboard will show our visualisations with data for the previous 24 hours. This dashboard can be used to quickly review recent application issues.</p>
+
+<h2>Conclusion</h2>
+
+<p>Monitoring serverless applications is crucial to diagnosing issues on serverless platforms.</p>
+
+<p><a href="https://console.bluemix.net/openwhisk/dashboard">IBM Cloud Functions</a> provides automatic integration with the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service. All activation records and application logs from serverless applications are automatically forwarded as log records. This makes it simple to build custom monitoring dashboards using these records for serverless applications running on IBM Cloud Functions.</p>
+
+<p>Using this service with World Cup Twitter bot allowed me to easily monitor the application for issues. This was much easier than manually retrieving and reviewing activation records using the CLI!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Debugging Node.js OpenWhisk Actions]]></title>
@@ -7314,174 +7560,6 @@ to monitor incoming data values live.</p>
 </span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, Stranger!&quot;</span>
 </span><span class='line'><span class="o">}</span>
 </span><span class='line'><span class="nv">$ </span>wsk action invoke rust_test --result --param name James
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, James!&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Success 😎.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Openwhisk and Go]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2017/01/17/openwhisk-and-go/"/>
-    <updated>2017-01-17T09:00:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2017/01/17/openwhisk-and-go</id>
-    <content type="html"><![CDATA[<p><a href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/">In an earlier blog post</a>, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for each serverless function and hosting them on Docker Hub.</p>
-
-<p><a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">Recent updates</a>  to Docker-based Actions have made this process much simpler. Developers don&#8217;t need to build and expose public images anymore.</p>
-
-<p>Let&#8217;s re-visit the example from the previous post and see how to get it running using this new approach…</p>
-
-<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
-
-<h2>Go Language Actions</h2>
-
-<p>Go&#8217;s <a href="https://golang.org/pkg/go/build/">build system</a> combines application source code and dependencies into a single execution binary. Bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
-
-<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
-
-<h3>Action Source Code</h3>
-
-<p>Here&#8217;s a simple Go function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn&#8217;t present, it defaults to <code>Stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;encoding/json&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;fmt&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;os&quot;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// native actions receive one argument, the JSON object as a string</span>
-</span><span class='line'>  <span class="nx">arg</span> <span class="o">:=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">Args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="c1">// unmarshal the string to a JSON object</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">obj</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}</span>
-</span><span class='line'>  <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">arg</span><span class="p">),</span> <span class="o">&amp;</span><span class="nx">obj</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">name</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nx">obj</span><span class="p">[</span><span class="s">&quot;name&quot;</span><span class="p">].(</span><span class="kt">string</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">if</span> <span class="p">!</span><span class="nx">ok</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nx">name</span> <span class="p">=</span> <span class="s">&quot;Stranger&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="nx">msg</span> <span class="o">:=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span><span class="s">&quot;msg&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s">&quot;Hello, &quot;</span> <span class="o">+</span> <span class="nx">name</span> <span class="o">+</span> <span class="s">&quot;!&quot;</span><span class="p">)}</span>
-</span><span class='line'>  <span class="nx">res</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">msg</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nb">string</span><span class="p">(</span><span class="nx">res</span><span class="p">))</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Building this locally allows us to test it works.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">run</span> <span class="nx">test</span><span class="p">.</span><span class="k">go</span> <span class="err">&#39;</span><span class="p">{</span><span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;James&quot;</span><span class="p">}</span><span class="err">&#39;</span>
-</span><span class='line'><span class="p">{</span><span class="s">&quot;msg&quot;</span><span class="p">:</span><span class="s">&quot;Hello, James!&quot;</span><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
-
-<h3>Cross-Compiling Locally</h3>
-
-<p>Go 1.5 <a href="https://dave.cheney.net/2015/08/22/cross-compilation-with-go-1-5">introduced much improved</a> support for cross-compilation.</p>
-
-<p>If you have the development environment installed locally, you can compile the binary for another platform by setting environment variables. The full list of supported architectures is available <a href="https://golang.org/doc/install/source#environment">here</a>.</p>
-
-<p><em>OpenWhisk uses an <a href="https://hub.docker.com/_/alpine/">Alpine Linux-based</a> environment to execute Actions.</em></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>env <span class="nv">GOOS</span><span class="o">=</span>linux <span class="nv">GOARCH</span><span class="o">=</span>amd64 go build exec.go
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>file <span class="nb">exec</span>
-</span><span class='line'><span class="nb">exec</span>: ELF 64-bit LSB executable, x86-64, version 1 <span class="o">(</span>SYSV<span class="o">)</span>, statically linked, not stripped
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Cross-Compiling Using Docker</h3>
-
-<p>If you don&#8217;t want to install the Go development toolchain, Docker can be used to start a container with the environment set up.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull golang
-</span><span class='line'><span class="nv">$ </span>docker run -it -v <span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:/go/src golang
-</span><span class='line'>root@0a2f1655eece:/go# <span class="nb">cd </span>src/
-</span><span class='line'>root@0a2f1655eece:/go/src# go build exec.go
-</span><span class='line'>root@0a2f1655eece:/go/src# ls
-</span><span class='line'><span class="nb">exec  </span>exec.go
-</span><span class='line'><span class="nv">$ </span>file <span class="nb">exec</span>
-</span><span class='line'><span class="nb">exec</span>: ELF 64-bit LSB executable, x86-64, version 1 <span class="o">(</span>SYSV<span class="o">)</span>, statically linked, not stripped
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Create &amp; Deploy Archive</h3>
-
-<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
-
-<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip action.zip <span class="nb">exec</span>
-</span><span class='line'><span class="nb">  </span>adding: <span class="nb">exec</span> <span class="o">(</span>deflated 66%<span class="o">)</span>
-</span><span class='line'><span class="nv">$ </span>wsk action create go_test action.zip --docker
-</span><span class='line'>ok: created action go_test
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Invoking Action</h3>
-
-<p>Test the action from the command-line to verify it works.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke go_test --blocking --result
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, Stranger!&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span><span class='line'><span class="nv">$ </span>wsk action invoke go_test --blocking --result --param name James
 </span><span class='line'><span class="o">{</span>
 </span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, James!&quot;</span>
 </span><span class='line'><span class="o">}</span>

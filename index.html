@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Debugging serverless applications is one of the most challenging issues developers face when using serverless platforms. How can you use debugging &hellip;">
+  <meta name="description" content="Following all the events from the World Cup can be hard. So many matches, so many goals. Rather than manually refreshing BBC Football to check the &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,279 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/">Monitoring Dashboards With Kibana for IBM Cloud Functions</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-07-18T16:08:00+01:00" pubdate data-updated="true">Jul 18<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Following all the events from the World Cup can be hard. So many matches, so many goals. Rather than manually refreshing BBC Football to check the scores, I decided to created a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> that would automatically tweet out each goal.</p>
+
+<p><img src="/images/monitoring-goalbot/wcgoalbot.png" title="World Cup Goal Bot" ></p>
+
+<p><a href="https://github.com/jthomas/goalbot">The Twitter bot</a> runs on <a href="https://console.bluemix.net/openwhisk">IBM Cloud Functions</a>. It is called once a minute to check for new goals, using the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a>. If new goals have been scored, it calls another action to send the tweet messages.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>Once it was running, I need to ensure it was working correctly for the duration of the tournament. Using the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service, I built a custom monitoring dashboard to help to me recognise and diagnose issues.</p>
+
+<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+
+<p>The dashboard showed counts for successful and failed activations, when they occurred and a list of failed activations. If issues have occurred, I can retrieve the failed activation identifiers and investigate further.</p>
+
+<p><em>Let&#8217;s walk through the steps used to create this dashboard to help you create custom visualisations for serverless applications running on IBM Cloud Functions&#8230;</em></p>
+
+<h2>IBM Cloud Logging</h2>
+
+<p><a href="https://console.bluemix.net/docs/services/CloudLogAnalysis/index.html">IBM Cloud Logging</a> can be accessed <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_logs.html#openwhisk_logs">using the link</a> on the IBM Cloud Functions dashboard. This will open the logging service for the current organisation and space.</p>
+
+<p><img src="/images/monitoring-goalbot/open-logging.gif" title="Opening Logging Service" ></p>
+
+<p>All activation records and application logs are automatically forwarded to the logging service by IBM Cloud Functions.</p>
+
+<p><img src="/images/monitoring-goalbot/discover.png" title="Kibana Discover Screen" ></p>
+
+<h3>Log Message Fields</h3>
+
+<p>Activation records and application log messages have a number of common record fields.</p>
+
+<ul>
+<li><code>activationId_str</code> - <em>activation identifier for log message.</em></li>
+<li><code>timestamp</code> - <em>log draining time.</em></li>
+<li><code>@timestamp</code> - <em>message ingestion time.</em></li>
+<li><code>action_str</code> - <em>fully qualified action name</em></li>
+</ul>
+
+
+<p>Log records for different message types are identified using the <code>type</code> field. This is either <code>activation_record</code> or <code>user_logs</code> for IBM Cloud Functions records.</p>
+
+<p>Activation records have the following custom fields.</p>
+
+<ul>
+<li><code>duration_int</code> - <em>activation duration in milliseconds</em></li>
+<li><code>status_str</code> - <em>activation status response (non-zero for errors)</em></li>
+<li><code>message</code> - <em>activation response returned from action</em></li>
+<li><code>time_date</code> - <em>activation record start time</em></li>
+<li><code>end_date</code> - <em>activation record end time</em></li>
+</ul>
+
+
+<p>Applications log lines, written to stdout or stderr, are forwarded as individual records. One application log line per record. Log message records have the following custom fields.</p>
+
+<ul>
+<li><code>message</code> - <em>single application log line output</em></li>
+<li><code>stream_str</code> - <em>log message source, either <code>stdout</code> or <code>stderr</code></em></li>
+<li><code>time_date</code> - <em>timestamp parsed from application log line</em></li>
+</ul>
+
+
+<h3>Finding Log Messages For One Activation</h3>
+
+<p>Use this query string in the &#8221;<a href="https://www.elastic.co/guide/en/kibana/current/discover.html"><em>Discover</em>&#8221;</a> tab to retrieve all logs messages from a particular activation.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>activationId_str: &lt;ACTIVATION_ID&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Search queries are executed against log records within a <a href="https://www.elastic.co/guide/en/kibana/current/set-time-filter.html">configurable time window</a>.</p>
+
+<h2>Monitoring Dashboard</h2>
+
+<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+
+<p>This is the monitoring dashboard I created. It contains visualisations showing counts for successful and failed activations, histograms of when they occurred and a list of the recent failed activation identifiers.</p>
+
+<p>It allows me to quickly review the previous 24 hours activations for issues. If there are notable issues, I can retrieve the failed activation identifiers and investigate further.</p>
+
+<p>Before being able to create the dashboard, I needed to define two resources: <strong><em>saved searches</em></strong> and <strong><em>visualisations</em></strong>.</p>
+
+<h3>Saved Searches</h3>
+
+<p><img src="/images/monitoring-goalbot/saved-searches.png" title="Saving Search Queries" ></p>
+
+<p>Kibana supports saving and referring to search queries from visualisations using explicit names.</p>
+
+<p>Using <a href="https://www.elastic.co/guide/en/kibana/current/managing-saved-objects.html">saved searches</a> with visualisations, rather than explicit queries, removes the need to manually update visualisations&#8217; configuration when queries change.</p>
+
+<p>This dashboard uses two custom queries in visualisations. Queries are needed to find activation records from both successful and failed invocations.</p>
+
+<ul>
+<li>Create a new <em>&#8220;Saved Search&#8221;</em> named <em>&#8220;activation records (success)&#8221;</em> using the following search query.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>type: activation_record AND status_str: 0</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create a new <em>&#8220;Saved Search&#8221;</em> named <em>&#8220;activation records (failed)&#8221;</em> using the following search query.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>type: activation_record AND NOT status_str: 0</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>The <code>status_str</code> field is set to a non-zero value for failures. Using the <code>type</code> field ensures log messages from other sources are excluded from the results.</em></p>
+
+<h3>Indexed Fields</h3>
+
+<p>Before referencing log record fields in visualisations, those fields <a href="https://www.elastic.co/guide/en/kibana/current/index-patterns.html#reload-fields">need to be indexed</a> correctly. Use these instructions to verify activation records fields are available.</p>
+
+<ul>
+<li>Check IBM Cloud Functions logs are available in IBM Cloud Logging using the &#8221;<em>Discover</em>&#8221; tab.</li>
+<li>Click the &#8220;⚙️ <em>(Management)</em>&#8221; menu item on the left-hand drop-down menu in IBM Cloud Logging.</li>
+<li>Click the &#8221;<em>Index Patterns</em>&#8221; link.</li>
+<li>Click the 🔄 button to refresh the field list.</li>
+</ul>
+
+
+<p><img src="/images/monitoring-goalbot/refresh-fields.gif" title="Refresh field index" ></p>
+
+<h3>Visualisations</h3>
+
+<p>Three types of <a href="https://www.elastic.co/guide/en/kibana/current/visualize.html">visualisation</a> are used on the monitoring dashboard. Metric displays are used for the activation counts, vertical bar charts for the activation times and a data table to list failed activations.</p>
+
+<p><em>Visualisations <a href="https://www.elastic.co/guide/en/kibana/current/createvis.html">can be created</a> by opening the &#8220;Visualize&#8221; menu item and select a new visualisation type under the &#8220;Create New Visualization&#8221; menu.</em></p>
+
+<p>Create five different visualisations, using the instructions below, before moving on to create the dashboard.</p>
+
+<h4>Activation Counts</h4>
+
+<p>Counts for successful and failed activations are displayed as singular <a href="https://www.elastic.co/guide/en/kibana/current/metric-chart.html">metric values</a>.</p>
+
+<ul>
+<li>Select the &#8220;Metric&#8221; visualisation from the visualisation type list.</li>
+<li>Use the &#8220;activation records (success)&#8221; saved search as the data source.</li>
+<li>Ensure the Metric Aggregation is set to &#8220;Count&#8221;</li>
+<li>Set the &#8220;Font Size&#8221; under the Options menu to 120pt.</li>
+<li>Save the visualisation as &#8220;Activation Counts (Success)&#8221;</li>
+</ul>
+
+
+<p><img src="/images/monitoring-goalbot/metrics-success.png" title="Activation success metric" ></p>
+
+<ul>
+<li>Repeat this process to create the failed activation count visualisation.</li>
+<li>Use the &#8220;activation records (failed)&#8221; saved search as the data source.</li>
+<li>Save the visualisation as &#8220;Activation Counts (Failed)&#8221;.</li>
+</ul>
+
+
+<p><img src="/images/monitoring-goalbot/metrics-fail.png" title="Activation failed metric" ></p>
+
+<h4>Activation Times</h4>
+
+<p>Activation counts over time, for successful and failed invocations, are displayed in <a href="https://www.elastic.co/guide/en/kibana/current/xy-chart.html">vertical bar charts</a>.</p>
+
+<ul>
+<li>Select the &#8220;Vertical bar chart&#8221; visualisation from the visualisation type list.</li>
+<li>Use the &#8220;activation records (success)&#8221; saved search as the data source.</li>
+<li>Set the &#8220;Custom Label&#8221; to Invocations</li>
+<li>Add an &#8220;X-Axis&#8221; bucket type under the Buckets section.</li>
+<li>Choose &#8220;Date Histogram&#8221; for the aggregation, &#8220;@timestamp&#8221; for the field and &#8220;Minute&#8221; for the interval.</li>
+<li>Save the visualisation as &#8220;Activation Times (Success)&#8221;</li>
+</ul>
+
+
+<p><img src="/images/monitoring-goalbot/activation-times.png" title="Activation times chart" ></p>
+
+<ul>
+<li>Repeat this process to create the failed activation times visualisation.</li>
+<li>Use the &#8220;activation records (failed)&#8221; saved search as the data source.</li>
+<li>Save the visualisation as &#8220;Activation Times (Failed)&#8221;</li>
+</ul>
+
+
+<h4>Failed Activations List</h4>
+
+<p>Activation identifiers for failed invocations are shown using a <a href="https://www.elastic.co/guide/en/kibana/current/data-table.html">data table</a>.</p>
+
+<ul>
+<li>Select the &#8220;Data table&#8221; visualisation from the visualisation type list.</li>
+<li>Use the &#8220;activation records (failed)&#8221; saved search as the data source.</li>
+<li>Add a &#8220;Split Rows&#8221; bucket type under the Buckets section.</li>
+<li>Choose &#8220;Date Histogram&#8221; for the aggregation, &#8220;@timestamp&#8221; for the field and &#8220;Second&#8221; for the interval.</li>
+<li>Add a &#8220;sub-bucket&#8221; with the &#8220;Split Rows&#8221; type.</li>
+<li>Set sub aggregation to &#8220;Terms&#8221;, field to &#8220;activationId_str&#8221; and order by &#8220;Term&#8221;.</li>
+<li>Save the visualisation as &#8220;Errors Table&#8221;</li>
+</ul>
+
+
+<p><img src="/images/monitoring-goalbot/activations-table.png" title="Failed activation table" ></p>
+
+<h3>Creating the dashboard</h3>
+
+<p>Having created the individual visualisations components, the <a href="https://www.elastic.co/guide/en/kibana/current/dashboard.html">monitoring dashboard</a> can be constructed.</p>
+
+<ul>
+<li>Click the &#8220;Dashboard&#8221; menu item from the left-and menu panel.</li>
+<li>Click the &#8220;Add&#8221; button to import visualisations into the current dashboard.</li>
+<li>Add each of the five visualisations created above.</li>
+</ul>
+
+
+<p><em>Hovering the mouse cursor over visualisations will reveal icons for moving and re-sizing.</em></p>
+
+<ul>
+<li>Re-order the visualisations into the following rows:
+
+<ul>
+<li>Activations Metrics</li>
+<li>Activation Times</li>
+<li>Failed Activations List</li>
+</ul>
+</li>
+<li>Select the &#8220;Last 24 hours&#8221; time window, available from the relative time ranges menu.</li>
+<li>Save the dashboard as &#8221;<em>Cloud Functions Monitoring</em>&#8221;. Tick the &#8221;<em>store time with dashboard</em>&#8221; option.</li>
+</ul>
+
+
+<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+
+<p>Having saved the dashboard with time window, re-opening the dashboard will show our visualisations with data for the previous 24 hours. This dashboard can be used to quickly review recent application issues.</p>
+
+<h2>Conclusion</h2>
+
+<p>Monitoring serverless applications is crucial to diagnosing issues on serverless platforms.</p>
+
+<p><a href="https://console.bluemix.net/openwhisk/dashboard">IBM Cloud Functions</a> provides automatic integration with the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service. All activation records and application logs from serverless applications are automatically forwarded as log records. This makes it simple to build custom monitoring dashboards using these records for serverless applications running on IBM Cloud Functions.</p>
+
+<p>Using this service with World Cup Twitter bot allowed me to easily monitor the application for issues. This was much easier than manually retrieving and reviewing activation records using the CLI!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -4410,92 +4683,6 @@ to monitor incoming data values live.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">Monitoring Serverless Applications Metrics</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2017-12-15T10:53:00+00:00" pubdate data-updated="true">Dec 15<span>th</span>, 2017</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Serverless applications are not &#8220;No Ops&#8221;, <a href="https://thenewstack.io/serverless-computing-growing-quickly/">despite the meme</a>. 🙄</p>
-
-<p>Monitoring runtime metrics is <a href="https://hackernoon.com/how-we-monitor-serverless-apps-with-hundreds-of-functions-d0f1fa938d1e">still crucial for serverless applications</a>. Identifying, diagnosing and resolving issues in production requires data on execution durations, errors thrown, resource usage statistics amongst other metrics.</p>
-
-<p><a href="https://bluemix.net/">IBM Cloud</a> has a comprehensive <a href="https://console.bluemix.net/catalog/?category=devops">series of tools</a> for monitoring application metrics. In this blog post series, we&#8217;re going to look at using these tools to monitor metrics from serverless applications. 💯💯💯</p>
-
-<h2>overview</h2>
-
-<p>We&#8217;ll start with understanding how to capture metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications. Then we&#8217;ll look at methods for automatically sending metric values into the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a>. Once metric data is being captured, we&#8217;ll explore <a href="https://grafana.com/">Grafana</a> to create dashboards to monitor data values in real-time. Finally, we&#8217;ll look at configuring alerting services to notify us when issues occur.</p>
-
-<p><em>Here&#8217;s a sneak peak of some of the dashboards we&#8217;ll be creating from serverless application metrics…</em></p>
-
-<p><img src="/images/serverless_metrics/action-metrics.gif"></p>
-
-<h2>blog posts</h2>
-
-<p>Here are the links to the blog posts in the series…</p>
-
-<ul>
-<li>Part 1: <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a></li>
-<li>Part 2: <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a></li>
-<li>Part 3: <a href="/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/">Configuring Alert Notifications Based on Metric Rules</a></li>
-</ul>
-
-
-<p>You can start now with the <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">first blog post</a>, other blog posts will follow soon….</p>
-
-<h2>tldr?</h2>
-
-<p><em>pssst. want to set this up without reading all those boring words and stuff?</em></p>
-
-<p>Here are the links to the open-source libraries used to set this up. Follow the instructions in the repositories to enable capturing and forwarding metrics to the monitoring service.</p>
-
-<ul>
-<li><a href="https://github.com/jthomas/openwhisk-metrics">openwhisk-metrics</a></li>
-<li><a href="https://github.com/jthomas/cloud-functions-monitoring-service">cloud-functions-monitoring-service</a></li>
-</ul>
-
-
-<p>Here are the JSON configuration files for the Grafana dashboards.</p>
-
-<p><a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b</a></p>
-
-<p>Import these files to create new dashboards and add the following template variables.</p>
-
-<ul>
-<li><strong>$region</strong> => ibm.public.cloud-functions.*</li>
-<li><strong>$namespace</strong> => ibm.public.cloud-functions.$region.*</li>
-<li><strong>$actions</strong> => ibm.public.cloud-functions.$region.$namespace.*</li>
-</ul>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -4511,6 +4698,10 @@ to monitor incoming data values live.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/">Monitoring Dashboards With Kibana For IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/">Debugging Node.js OpenWhisk Actions</a>
       </li>
     
@@ -4524,10 +4715,6 @@ to monitor incoming data values live.</p>
     
       <li class="post">
         <a href="/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/">File Storage For Serverless Applications</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/">Configuring Alert Notifications Using Serverless Metrics</a>
       </li>
     
   </ul>
