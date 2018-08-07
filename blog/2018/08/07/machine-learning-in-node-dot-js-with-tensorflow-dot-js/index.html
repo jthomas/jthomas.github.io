@@ -1,0 +1,679 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Machine Learning In Node.js With TensorFlow.js - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Using TensorFlow.js for Machine Learning on Node.js. Use MobileNet models for image classification and visual recognition on local image files.">
+  <meta name="keywords" content="node.js machine learning tensorflow javascript">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jthomas.github.com/jthomas" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Machine Learning in Node.js With TensorFlow.js</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-08-07T09:52:00+01:00" pubdate data-updated="true">Aug 7<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><a href="https://js.tensorflow.org/">TensorFlow.js</a> is a new version of the popular open-source library which brings deep learning to JavaScript. Developers can now define, train, and run machine learning models using the <a href="https://js.tensorflow.org/api/0.12.0/">high-level library API</a>.</p>
+
+<p><a href="https://github.com/tensorflow/tfjs-models/">Pre-trained models</a> mean developers can now easily perform complex tasks like <a href="https://emojiscavengerhunt.withgoogle.com/">visual recognition</a>, <a href="https://magenta.tensorflow.org/demos/performance_rnn/index.html#2|2,0,1,0,1,1,0,1,0,1,0,1|1,1,1,1,1,1,1,1,1,1,1,1|1,1,1,1,1,1,1,1,1,1,1,1|false">generating music</a> or <a href="https://storage.googleapis.com/tfjs-models/demos/posenet/camera.html">detecting human poses</a> with just a few lines of JavaScript.</p>
+
+<p>Having started as a front-end library for web browsers, recent updates added <a href="https://github.com/tensorflow/tfjs-node">experimental support</a> for Node.js. This allows TensorFlow.js to be used in backend JavaScript applications without having to use Python.</p>
+
+<p><em>Reading about the library, I wanted to test it out with a simple task&#8230;</em> 🧐</p>
+
+<blockquote><p> <strong>Use TensorFlow.js to perform visual recognition on images using JavaScript from Node.js</strong></p></blockquote>
+
+<p>Unfortunately, most of the <a href="https://js.tensorflow.org/#getting-started">documentation</a> and <a href="https://js.tensorflow.org/tutorials/webcam-transfer-learning.html">example code</a> provided uses the library in a browser. <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">Project utilities</a> provided to simplify loading and using pre-trained models have not yet been extended with Node.js support. Getting this working did end up with me spending a lot of time reading the Typescript source files for the library. 👎</p>
+
+<p>However, after a few days&#8217; hacking, I managed to get <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d">this completed</a>! Hurrah! 🤩</p>
+
+<p><em>Before we dive into the code, let&#8217;s start with an overview of the different TensorFlow libraries.</em></p>
+
+<h2>TensorFlow</h2>
+
+<p><a href="https://www.tensorflow.org/">TensorFlow</a> is an open-source software library for machine learning applications. TensorFlow can be used to implement neural networks and other deep learning algorithms.</p>
+
+<p>Released by Google in November 2015, TensorFlow was originally a <a href="https://www.tensorflow.org/api_docs/python/">Python library</a>. It used either CPU or GPU-based computation for training and evaluating machine learning models. The library was initially designed to run on high-performance servers with expensive GPUs.</p>
+
+<p>Recent updates have extended the software to run in resource-constrained environments like mobile devices and web browsers.</p>
+
+<h3>TensorFlow Lite</h3>
+
+<p><a href="https://www.tensorflow.org/mobile/tflite/">Tensorflow Lite</a>, a lightweight version of the library for mobile and embedded devices, was released in May 2017. This was accompanied by a new series of pre-trained deep learning models for vision recognition tasks, called <a href="https://ai.googleblog.com/2017/06/mobilenets-open-source-models-for.html">MobileNet</a>. MobileNet models were designed to work efficiently in resource-constrained environments like mobile devices.</p>
+
+<h3>TensorFlow.js</h3>
+
+<p>Following Tensorflow Lite, <a href="https://medium.com/tensorflow/introducing-tensorflow-js-machine-learning-in-javascript-bf3eab376db">TensorFlow.js</a> was announced in March 2018. This version of the library was designed to run in the browser, building on an earlier project called <a href="https://twitter.com/deeplearnjs">deeplearn.js</a>. WebGL provides GPU access to the library. Developers use a JavaScript API to train, load and run models.</p>
+
+<p>TensorFlow.js was recently extended to run on Node.js, using an <a href="https://github.com/tensorflow/tfjs-node">extension library</a> called <code>tfjs-node</code>.</p>
+
+<p><em>The Node.js extension is an alpha release and still under active development.</em></p>
+
+<h4>Importing Existing Models Into TensorFlow.js</h4>
+
+<p>Existing TensorFlow and Keras models can be executed using the TensorFlow.js library. Models need converting to a new format <a href="https://github.com/tensorflow/tfjs-converter">using this tool</a> before execution. Pre-trained and converted models for image classification, pose detection and k-nearest neighbours are <a href="https://github.com/tensorflow/tfjs-models">available on Github</a>.</p>
+
+<h2>Using TensorFlow.js in Node.js</h2>
+
+<h3>Installing TensorFlow Libraries</h3>
+
+<p>TensorFlow.js can be installed from the <a href="https://www.npmjs.com/">NPM registry</a>.</p>
+
+<ul>
+<li><code>@tensorflow/tfjs</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs">Core TensorFlow.js library</a></li>
+<li><code>@tensorflow/tfjs-node</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs-node">TensorFlow.js Node.js extension</a></li>
+<li><code>@tensorflow/tfjs-node-gpu</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs-node-gpu">TensorFlow.js Node.js extension with GPU support</a></li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>npm install @tensorflow/tfjs @tensorflow/tfjs-node
+</span><span class='line'>// or...
+</span><span class='line'>npm install @tensorflow/tfjs @tensorflow/tfjs-node-gpu</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Both Node.js extensions use native dependencies which will be compiled on demand.</p>
+
+<h3>Loading TensorFlow Libraries</h3>
+
+<p>TensorFlow&#8217;s <a href="https://js.tensorflow.org/api/0.12.0/">JavaScript API</a> is exposed from the core library. Extension modules to enable Node.js support do not expose additional APIs.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">tf</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;@tensorflow/tfjs&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="c1">// Load the binding (CPU computation)</span>
+</span><span class='line'><span class="nx">require</span><span class="p">(</span><span class="s1">&#39;@tensorflow/tfjs-node&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="c1">// Or load the binding (GPU computation)</span>
+</span><span class='line'><span class="nx">require</span><span class="p">(</span><span class="s1">&#39;@tensorflow/tfjs-node-gpu&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Loading TensorFlow Models</h3>
+
+<p>TensorFlow.js provides an <a href="https://github.com/tensorflow/tfjs-models">NPM library</a> (<code>tfjs-models</code>) to ease loading pre-trained &amp; converted models for <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">image classification</a>, <a href="https://github.com/tensorflow/tfjs-models/tree/master/posenet">pose detection</a> and <a href="https://github.com/tensorflow/tfjs-models/tree/master/knn-classifier">k-nearest neighbours</a>.</p>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model</a> used for image classification is a deep neural network trained to <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">identify 1000 different classes</a>.</p>
+
+<p>In the project&#8217;s README, the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet#via-npm">following example code</a> is used to load the model.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">import</span> <span class="o">*</span> <span class="nx">as</span> <span class="nx">mobilenet</span> <span class="nx">from</span> <span class="s1">&#39;@tensorflow-models/mobilenet&#39;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Load the model.</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">mobilenet</span><span class="p">.</span><span class="nx">load</span><span class="p">();</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>One of the first challenges I encountered was that this does not work on Node.js.</strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nb">Error</span><span class="o">:</span> <span class="nx">browserHTTPRequest</span> <span class="nx">is</span> <span class="nx">not</span> <span class="nx">supported</span> <span class="nx">outside</span> <span class="nx">the</span> <span class="nx">web</span> <span class="nx">browser</span><span class="p">.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Looking at the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L27">source code</a>, the <code>mobilenet</code> library is a wrapper around the underlying <code>tf.Model</code> class. When the <code>load()</code> method is called, it automatically downloads the correct model files from an external HTTP address and instantiates the TensorFlow model.</p>
+
+<p>The Node.js extension does not yet support HTTP requests to dynamically retrieve models. Instead, models must be manually loaded from the filesystem.</p>
+
+<p><em>After reading the source code for the library, I managed to create a work-around&#8230;</em></p>
+
+<h4>Loading Models From a Filesystem</h4>
+
+<p>Rather than calling the module&#8217;s <code>load</code> method, if the <code>MobileNet</code> class is created manually, the auto-generated <code>path</code> variable which contains the HTTP address of the model can be overwritten with a local filesystem path. Having done this, calling the <code>load</code> method on the class instance will trigger the <a href="https://js.tensorflow.org/tutorials/model-save-load.html">filesystem loader class</a>, rather than trying to use the browser-based HTTP loader.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">path</span> <span class="o">=</span> <span class="s2">&quot;mobilenet/model.json&quot;</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">mn</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">mobilenet</span><span class="p">.</span><span class="nx">MobileNet</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="nx">mn</span><span class="p">.</span><span class="nx">path</span> <span class="o">=</span> <span class="err">`</span><span class="nx">file</span><span class="o">:</span><span class="c1">//${path}`</span>
+</span><span class='line'><span class="nx">await</span> <span class="nx">mn</span><span class="p">.</span><span class="nx">load</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Awesome, it works!</strong></p>
+
+<p><em>But how where do the models files come from?</em></p>
+
+<h3>MobileNet Models</h3>
+
+<p>Models for TensorFlow.js consist of two file types, a model configuration file stored in JSON and model weights in a binary format. Model weights are often sharded into multiple files for better caching by browsers.</p>
+
+<p>Looking at the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L68-L76">automatic loading code</a> for MobileNet models, models configuration and weight shards are retrieved from a public storage bucket at this address.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">https</span><span class="o">:</span><span class="c1">//storage.googleapis.com/tfjs-models/tfjs/mobilenet_v${version}_${alpha}_${size}/</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The template parameters in the URL refer to the model versions listed <a href="https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md#pre-trained-models">here</a>. Classification accuracy results for each version are also shown on that page.</p>
+
+<p><em>According to the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L36">source code</a>, only MobileNet v1 models can be loaded using the <code>tensorflow-models/mobilenet</code> library.</em></p>
+
+<p>The HTTP retrieval code loads the <code>model.json</code> file from this location and then recursively fetches all referenced model weights shards. These files are in the format <code>groupX-shard1of1</code>.</p>
+
+<h4>Downloading Models Manually</h4>
+
+<p>Saving all model files to a filesystem can be achieved by retrieving the model configuration file, parsing out the referenced weight files and downloading each weight file manually.</p>
+
+<p><strong>I want to use the MobileNet V1 Module with 1.0 alpha value and image size of 224 pixels.</strong> This gives me the <a href="https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json">following URL</a> for the model configuration file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">https</span><span class="o">:</span><span class="c1">//storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once this file has been downloaded locally, I can use the <a href="https://stedolan.github.io/jq/"><code>jq</code> tool</a> to parse all the weight file names.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">cat</span> <span class="nx">model</span><span class="p">.</span><span class="nx">json</span> <span class="o">|</span> <span class="nx">jq</span> <span class="o">-</span><span class="nx">r</span> <span class="s2">&quot;.weightsManifest[].paths[0]&quot;</span>
+</span><span class='line'><span class="nx">group1</span><span class="o">-</span><span class="nx">shard1of1</span>
+</span><span class='line'><span class="nx">group2</span><span class="o">-</span><span class="nx">shard1of1</span>
+</span><span class='line'><span class="nx">group3</span><span class="o">-</span><span class="nx">shard1of1</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using the <code>sed</code> tool, I can prefix these names with the HTTP URL to generate URLs for each weight file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">cat</span> <span class="nx">model</span><span class="p">.</span><span class="nx">json</span> <span class="o">|</span> <span class="nx">jq</span> <span class="o">-</span><span class="nx">r</span> <span class="s2">&quot;.weightsManifest[].paths[0]&quot;</span> <span class="o">|</span> <span class="nx">sed</span> <span class="s1">&#39;s/^/https:\/\/storage.googleapis.com\/tfjs-models\/tfjs\/mobilenet_v1_1.0_224\//&#39;</span>
+</span><span class='line'><span class="nx">https</span><span class="o">:</span><span class="c1">//storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group1-shard1of1</span>
+</span><span class='line'><span class="nx">https</span><span class="o">:</span><span class="c1">//storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group2-shard1of1</span>
+</span><span class='line'><span class="nx">https</span><span class="o">:</span><span class="c1">//storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group3-shard1of1</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using the <code>parallel</code> and <code>curl</code> commands, I can then download all of these files to my local directory.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">cat</span> <span class="nx">model</span><span class="p">.</span><span class="nx">json</span> <span class="o">|</span> <span class="nx">jq</span> <span class="o">-</span><span class="nx">r</span> <span class="s2">&quot;.weightsManifest[].paths[0]&quot;</span> <span class="o">|</span> <span class="nx">sed</span> <span class="s1">&#39;s/^/https:\/\/storage.googleapis.com\/tfjs-models\/tfjs\/mobilenet_v1_1.0_224\//&#39;</span> <span class="o">|</span>  <span class="nx">parallel</span> <span class="nx">curl</span> <span class="o">-</span><span class="nx">O</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Classifying Images</h3>
+
+<p><a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet#via-npm">This example code</a> is provided by TensorFlow.js to demonstrate returning classifications for an image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">img</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;img&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Classify the image.</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">predictions</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">model</span><span class="p">.</span><span class="nx">classify</span><span class="p">(</span><span class="nx">img</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>This does not work on Node.js due to the lack of a DOM.</strong></p>
+
+<p>The <code>classify</code> <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L143-L155">method</a> accepts numerous DOM elements (<code>canvas</code>, <code>video</code>, <code>image</code>) and will automatically retrieve and convert image bytes from these elements into a <a href="https://js.tensorflow.org/api/latest/index.html#tensor3d"><code>tf.Tensor3D</code> class</a> which is used as the input to the model. Alternatively, the <code>tf.Tensor3D</code> input can be passed directly.</p>
+
+<p><strong>Rather than trying to use an external package to simulate a DOM element in Node.js, I found it easier to construct the <code>tf.Tensor3D</code> manually.</strong></p>
+
+<h4>Generating Tensor3D from an Image</h4>
+
+<p>Reading the <a href="https://github.com/tensorflow/tfjs-core/blob/master/src/kernels/backend_cpu.ts#L126-L140">source code</a> for the method used to turn DOM elements into Tensor3D classes, the following input parameters are used to generate the Tensor3D class.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">values</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Int32Array</span><span class="p">(</span><span class="nx">image</span><span class="p">.</span><span class="nx">height</span> <span class="o">*</span> <span class="nx">image</span><span class="p">.</span><span class="nx">width</span> <span class="o">*</span> <span class="nx">numChannels</span><span class="p">);</span>
+</span><span class='line'><span class="c1">// fill pixels with pixel channel bytes from image</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">outShape</span> <span class="o">=</span> <span class="p">[</span><span class="nx">image</span><span class="p">.</span><span class="nx">height</span><span class="p">,</span> <span class="nx">image</span><span class="p">.</span><span class="nx">width</span><span class="p">,</span> <span class="nx">numChannels</span><span class="p">];</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">input</span> <span class="o">=</span> <span class="nx">tf</span><span class="p">.</span><span class="nx">tensor3d</span><span class="p">(</span><span class="nx">values</span><span class="p">,</span> <span class="nx">outShape</span><span class="p">,</span> <span class="s1">&#39;int32&#39;</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>pixels</code> is a 2D array of type (Int32Array) which contains a sequential list of channel values for each pixel. <code>numChannels</code> is the number of channel values per pixel.</p>
+
+<h4>Creating Input Values For JPEGs</h4>
+
+<p>The <a href="https://www.npmjs.com/package/jpeg-js"><code>jpeg-js</code> library</a> is a pure javascript JPEG encoder and decoder for Node.js. Using this library the RGB values for each pixel can be extracted.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">pixels</span> <span class="o">=</span> <span class="nx">jpeg</span><span class="p">.</span><span class="nx">decode</span><span class="p">(</span><span class="nx">buffer</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will return a <code>Uint8Array</code> with four channel values (<code>RGBA</code>) for each pixel (<code>width * height</code>). The MobileNet model only uses the three colour channels (<code>RGB</code>) for classification, ignoring the alpha channel. This code converts the four channel array into the correct three channel version.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">numChannels</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">numPixels</span> <span class="o">=</span> <span class="nx">image</span><span class="p">.</span><span class="nx">width</span> <span class="o">*</span> <span class="nx">image</span><span class="p">.</span><span class="nx">height</span><span class="p">;</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">values</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Int32Array</span><span class="p">(</span><span class="nx">numPixels</span> <span class="o">*</span> <span class="nx">numChannels</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">numPixels</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">channel</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">channel</span> <span class="o">&lt;</span> <span class="nx">numChannels</span><span class="p">;</span> <span class="o">++</span><span class="nx">channel</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">values</span><span class="p">[</span><span class="nx">i</span> <span class="o">*</span> <span class="nx">numChannels</span> <span class="o">+</span> <span class="nx">channel</span><span class="p">]</span> <span class="o">=</span> <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span> <span class="o">*</span> <span class="mi">4</span> <span class="o">+</span> <span class="nx">channel</span><span class="p">];</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>MobileNet Models Input Requirements</h4>
+
+<p>The <a href="https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md#mobilenet_v1">MobileNet model</a> being used classifies images of width and height 224 pixels. Input tensors must contain float values, between -1 and 1, for each of the three channels pixel values.</p>
+
+<p>Input values for images of different dimensions needs to be re-sized before classification. Additionally, pixels values from the JPEG decoder are in the range <em>0 - 255</em>, rather than <em>-1 to 1</em>. These values also need converting prior to classification.</p>
+
+<p><strong>TensorFlow.js has library methods to make this process easier but, fortunately for us, the <code>tfjs-models/mobilenet</code> library <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L103-L114">automatically handles</a> this issue!</strong> 👍</p>
+
+<p>Developers can pass in Tensor3D inputs of type <code>int32</code>  and different dimensions to the  <code>classify</code> method and it converts the input to the correct format prior to classification. Which means there&#8217;s nothing to do&#8230; Super 🕺🕺🕺.</p>
+
+<h4>Obtaining Predictions</h4>
+
+<p>MobileNet models in Tensorflow are trained to recognise entities from the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">top 1000 classes</a> in the <a href="http://image-net.org/">ImageNet</a> dataset. The models output the probabilities that each of those entities is in the image being classified.</p>
+
+<p><em>The full list of trained classes for the model being used can be found in <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">this file</a>.</em></p>
+
+<p>The <code>tfjs-models/mobilenet</code> library exposes a <code>classify</code> method on the <code>MobileNet</code> class to return the top X classes with highest probabilities from an image input.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">predictions</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">mn_model</span><span class="p">.</span><span class="nx">classify</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="mi">10</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>predictions</code> is an array of X classes and probabilities in the following format.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nx">className</span><span class="o">:</span> <span class="s1">&#39;panda&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">probability</span><span class="o">:</span> <span class="mf">0.9993536472320557</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Example</h2>
+
+<p>Having worked how to use the TensorFlow.js library and MobileNet models on Node.js, <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d">this script</a> will classify an image given as a command-line argument.</p>
+
+<h3>source code</h3>
+
+<ul>
+<li>Save this script file and package descriptor to local files.</li>
+</ul>
+
+
+<script src="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d.js"></script>
+
+
+<h3>testing it out</h3>
+
+<ul>
+<li><p>Download the model files to a <code>mobilenet</code> directory using the instructions above.</p></li>
+<li><p>Install the project dependencies using NPM</p></li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">npm</span> <span class="nx">install</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Download a sample JPEG file to classify</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wget</span> <span class="nx">http</span><span class="o">:</span><span class="c1">//bit.ly/2JYSal9 -O panda.jpg</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+
+<ul>
+<li>Run the script with the model file and input image as arguments.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">node</span> <span class="nx">script</span><span class="p">.</span><span class="nx">js</span> <span class="nx">mobilenet</span><span class="o">/</span><span class="nx">model</span><span class="p">.</span><span class="nx">json</span> <span class="nx">panda</span><span class="p">.</span><span class="nx">jpg</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>If everything worked, the following output should be printed to the console.</strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">classification</span> <span class="nx">results</span><span class="o">:</span> <span class="p">[</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">className</span><span class="o">:</span> <span class="s1">&#39;giant panda, panda, panda bear, coon bear&#39;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">probability</span><span class="o">:</span> <span class="mf">0.9993536472320557</span>
+</span><span class='line'><span class="p">}</span> <span class="p">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The image is correctly classified as containing a Panda with 99.93% probability! 🐼🐼🐼</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Having been released as a browser-based library, TensorFlow.js has now been extended to work on Node.js, although not all of the tools and utilities support the new runtime. With a few days&#8217; hacking, I was able to use the library with the MobileNet models for visual recognition on images from a local file.</p>
+
+<p>Getting this working in the Node.js runtime means I now move on to my next idea&#8230; making this run inside a serverless function! Come back soon to read about my next adventure with TensorFlow.js. 👋</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-08-07T09:52:00+01:00" pubdate data-updated="true">Aug 7<span>th</span>, 2018</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/javascript/'>javascript</a>, <a class='category' href='/blog/categories/machine-learning/'>machine learning</a>, <a class='category' href='/blog/categories/node-js/'>node.js</a>, <a class='category' href='/blog/categories/tensorflow/'>tensorflow</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/" data-via="thomasj" data-counturl="http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/" title="Previous Post: Monitoring Dashboards With Kibana For IBM Cloud Functions">&laquo; Monitoring Dashboards With Kibana For IBM Cloud Functions</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">Machine Learning In Node.js With TensorFlow.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/">Monitoring Dashboards With Kibana For IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/">Debugging Node.js OpenWhisk Actions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/">Binding IAM Services To IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">Using Cloud Object Storage from IBM Cloud Functions (Node.js)</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2018 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/';
+        var disqus_url = 'http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

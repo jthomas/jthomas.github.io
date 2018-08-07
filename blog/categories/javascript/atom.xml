@@ -4,7 +4,7 @@
   <title><![CDATA[Category: javascript | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/javascript/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-07-20T15:45:43+01:00</updated>
+  <updated>2018-08-07T09:56:54+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,322 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Machine Learning In Node.js With TensorFlow.js]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/"/>
+    <updated>2018-08-07T09:52:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js</id>
+    <content type="html"><![CDATA[<p><a href="https://js.tensorflow.org/">TensorFlow.js</a> is a new version of the popular open-source library which brings deep learning to JavaScript. Developers can now define, train, and run machine learning models using the <a href="https://js.tensorflow.org/api/0.12.0/">high-level library API</a>.</p>
+
+<p><a href="https://github.com/tensorflow/tfjs-models/">Pre-trained models</a> mean developers can now easily perform complex tasks like <a href="https://emojiscavengerhunt.withgoogle.com/">visual recognition</a>, <a href="https://magenta.tensorflow.org/demos/performance_rnn/index.html#2|2,0,1,0,1,1,0,1,0,1,0,1|1,1,1,1,1,1,1,1,1,1,1,1|1,1,1,1,1,1,1,1,1,1,1,1|false">generating music</a> or <a href="https://storage.googleapis.com/tfjs-models/demos/posenet/camera.html">detecting human poses</a> with just a few lines of JavaScript.</p>
+
+<p>Having started as a front-end library for web browsers, recent updates added <a href="https://github.com/tensorflow/tfjs-node">experimental support</a> for Node.js. This allows TensorFlow.js to be used in backend JavaScript applications without having to use Python.</p>
+
+<p><em>Reading about the library, I wanted to test it out with a simple task...</em> 🧐</p>
+
+<blockquote><p> <strong>Use TensorFlow.js to perform visual recognition on images using JavaScript from Node.js</strong></p></blockquote>
+
+<p>Unfortunately, most of the <a href="https://js.tensorflow.org/#getting-started">documentation</a> and <a href="https://js.tensorflow.org/tutorials/webcam-transfer-learning.html">example code</a> provided uses the library in a browser. <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">Project utilities</a> provided to simplify loading and using pre-trained models have not yet been extended with Node.js support. Getting this working did end up with me spending a lot of time reading the Typescript source files for the library. 👎</p>
+
+<p>However, after a few days' hacking, I managed to get <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d">this completed</a>! Hurrah! 🤩</p>
+
+<p><em>Before we dive into the code, let's start with an overview of the different TensorFlow libraries.</em></p>
+
+<h2>TensorFlow</h2>
+
+<p><a href="https://www.tensorflow.org/">TensorFlow</a> is an open-source software library for machine learning applications. TensorFlow can be used to implement neural networks and other deep learning algorithms.</p>
+
+<p>Released by Google in November 2015, TensorFlow was originally a <a href="https://www.tensorflow.org/api_docs/python/">Python library</a>. It used either CPU or GPU-based computation for training and evaluating machine learning models. The library was initially designed to run on high-performance servers with expensive GPUs.</p>
+
+<p>Recent updates have extended the software to run in resource-constrained environments like mobile devices and web browsers.</p>
+
+<h3>TensorFlow Lite</h3>
+
+<p><a href="https://www.tensorflow.org/mobile/tflite/">Tensorflow Lite</a>, a lightweight version of the library for mobile and embedded devices, was released in May 2017. This was accompanied by a new series of pre-trained deep learning models for vision recognition tasks, called <a href="https://ai.googleblog.com/2017/06/mobilenets-open-source-models-for.html">MobileNet</a>. MobileNet models were designed to work efficiently in resource-constrained environments like mobile devices.</p>
+
+<h3>TensorFlow.js</h3>
+
+<p>Following Tensorflow Lite, <a href="https://medium.com/tensorflow/introducing-tensorflow-js-machine-learning-in-javascript-bf3eab376db">TensorFlow.js</a> was announced in March 2018. This version of the library was designed to run in the browser, building on an earlier project called <a href="https://twitter.com/deeplearnjs">deeplearn.js</a>. WebGL provides GPU access to the library. Developers use a JavaScript API to train, load and run models.</p>
+
+<p>TensorFlow.js was recently extended to run on Node.js, using an <a href="https://github.com/tensorflow/tfjs-node">extension library</a> called <code>tfjs-node</code>.</p>
+
+<p><em>The Node.js extension is an alpha release and still under active development.</em></p>
+
+<h4>Importing Existing Models Into TensorFlow.js</h4>
+
+<p>Existing TensorFlow and Keras models can be executed using the TensorFlow.js library. Models need converting to a new format <a href="https://github.com/tensorflow/tfjs-converter">using this tool</a> before execution. Pre-trained and converted models for image classification, pose detection and k-nearest neighbours are <a href="https://github.com/tensorflow/tfjs-models">available on Github</a>.</p>
+
+<h2>Using TensorFlow.js in Node.js</h2>
+
+<h3>Installing TensorFlow Libraries</h3>
+
+<p>TensorFlow.js can be installed from the <a href="https://www.npmjs.com/">NPM registry</a>.</p>
+
+<ul>
+<li><code>@tensorflow/tfjs</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs">Core TensorFlow.js library</a></li>
+<li><code>@tensorflow/tfjs-node</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs-node">TensorFlow.js Node.js extension</a></li>
+<li><code>@tensorflow/tfjs-node-gpu</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs-node-gpu">TensorFlow.js Node.js extension with GPU support</a></li>
+</ul>
+
+
+<p><code>
+npm install @tensorflow/tfjs @tensorflow/tfjs-node
+// or...
+npm install @tensorflow/tfjs @tensorflow/tfjs-node-gpu
+</code></p>
+
+<p>Both Node.js extensions use native dependencies which will be compiled on demand.</p>
+
+<h3>Loading TensorFlow Libraries</h3>
+
+<p>TensorFlow's <a href="https://js.tensorflow.org/api/0.12.0/">JavaScript API</a> is exposed from the core library. Extension modules to enable Node.js support do not expose additional APIs.</p>
+
+<p><code>javascript
+const tf = require('@tensorflow/tfjs')
+// Load the binding (CPU computation)
+require('@tensorflow/tfjs-node')
+// Or load the binding (GPU computation)
+require('@tensorflow/tfjs-node-gpu')
+</code></p>
+
+<h3>Loading TensorFlow Models</h3>
+
+<p>TensorFlow.js provides an <a href="https://github.com/tensorflow/tfjs-models">NPM library</a> (<code>tfjs-models</code>) to ease loading pre-trained &amp; converted models for <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">image classification</a>, <a href="https://github.com/tensorflow/tfjs-models/tree/master/posenet">pose detection</a> and <a href="https://github.com/tensorflow/tfjs-models/tree/master/knn-classifier">k-nearest neighbours</a>.</p>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model</a> used for image classification is a deep neural network trained to <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">identify 1000 different classes</a>.</p>
+
+<p>In the project's README, the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet#via-npm">following example code</a> is used to load the model.</p>
+
+<p>```javascript
+import * as mobilenet from '@tensorflow-models/mobilenet';</p>
+
+<p>// Load the model.
+const model = await mobilenet.load();
+```</p>
+
+<p><strong>One of the first challenges I encountered was that this does not work on Node.js.</strong></p>
+
+<p><code>
+Error: browserHTTPRequest is not supported outside the web browser.
+</code></p>
+
+<p>Looking at the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L27">source code</a>, the <code>mobilenet</code> library is a wrapper around the underlying <code>tf.Model</code> class. When the <code>load()</code> method is called, it automatically downloads the correct model files from an external HTTP address and instantiates the TensorFlow model.</p>
+
+<p>The Node.js extension does not yet support HTTP requests to dynamically retrieve models. Instead, models must be manually loaded from the filesystem.</p>
+
+<p><em>After reading the source code for the library, I managed to create a work-around...</em></p>
+
+<h4>Loading Models From a Filesystem</h4>
+
+<p>Rather than calling the module's <code>load</code> method, if the <code>MobileNet</code> class is created manually, the auto-generated <code>path</code> variable which contains the HTTP address of the model can be overwritten with a local filesystem path. Having done this, calling the <code>load</code> method on the class instance will trigger the <a href="https://js.tensorflow.org/tutorials/model-save-load.html">filesystem loader class</a>, rather than trying to use the browser-based HTTP loader.</p>
+
+<p><code>javascript
+const path = "mobilenet/model.json"
+const mn = new mobilenet.MobileNet(1, 1);
+mn.path = `file://${path}`
+await mn.load()
+</code></p>
+
+<p><strong>Awesome, it works!</strong></p>
+
+<p><em>But how where do the models files come from?</em></p>
+
+<h3>MobileNet Models</h3>
+
+<p>Models for TensorFlow.js consist of two file types, a model configuration file stored in JSON and model weights in a binary format. Model weights are often sharded into multiple files for better caching by browsers.</p>
+
+<p>Looking at the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L68-L76">automatic loading code</a> for MobileNet models, models configuration and weight shards are retrieved from a public storage bucket at this address.</p>
+
+<p><code>
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v${version}_${alpha}_${size}/
+</code></p>
+
+<p>The template parameters in the URL refer to the model versions listed <a href="https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md#pre-trained-models">here</a>. Classification accuracy results for each version are also shown on that page.</p>
+
+<p><em>According to the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L36">source code</a>, only MobileNet v1 models can be loaded using the <code>tensorflow-models/mobilenet</code> library.</em></p>
+
+<p>The HTTP retrieval code loads the <code>model.json</code> file from this location and then recursively fetches all referenced model weights shards. These files are in the format <code>groupX-shard1of1</code>.</p>
+
+<h4>Downloading Models Manually</h4>
+
+<p>Saving all model files to a filesystem can be achieved by retrieving the model configuration file, parsing out the referenced weight files and downloading each weight file manually.</p>
+
+<p><strong>I want to use the MobileNet V1 Module with 1.0 alpha value and image size of 224 pixels.</strong> This gives me the <a href="https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json">following URL</a> for the model configuration file.</p>
+
+<p><code>
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json
+</code></p>
+
+<p>Once this file has been downloaded locally, I can use the <a href="https://stedolan.github.io/jq/"><code>jq</code> tool</a> to parse all the weight file names.</p>
+
+<p><code>
+$ cat model.json | jq -r ".weightsManifest[].paths[0]"
+group1-shard1of1
+group2-shard1of1
+group3-shard1of1
+...
+</code></p>
+
+<p>Using the <code>sed</code> tool, I can prefix these names with the HTTP URL to generate URLs for each weight file.</p>
+
+<p><code>
+$ cat model.json | jq -r ".weightsManifest[].paths[0]" | sed 's/^/https:\/\/storage.googleapis.com\/tfjs-models\/tfjs\/mobilenet_v1_1.0_224\//'
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group1-shard1of1
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group2-shard1of1
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group3-shard1of1
+...
+</code></p>
+
+<p>Using the <code>parallel</code> and <code>curl</code> commands, I can then download all of these files to my local directory.</p>
+
+<p><code>
+cat model.json | jq -r ".weightsManifest[].paths[0]" | sed 's/^/https:\/\/storage.googleapis.com\/tfjs-models\/tfjs\/mobilenet_v1_1.0_224\//' |  parallel curl -O
+</code></p>
+
+<h3>Classifying Images</h3>
+
+<p><a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet#via-npm">This example code</a> is provided by TensorFlow.js to demonstrate returning classifications for an image.</p>
+
+<p>```javascript
+const img = document.getElementById('img');</p>
+
+<p>// Classify the image.
+const predictions = await model.classify(img);
+```</p>
+
+<p><strong>This does not work on Node.js due to the lack of a DOM.</strong></p>
+
+<p>The <code>classify</code> <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L143-L155">method</a> accepts numerous DOM elements (<code>canvas</code>, <code>video</code>, <code>image</code>) and will automatically retrieve and convert image bytes from these elements into a <a href="https://js.tensorflow.org/api/latest/index.html#tensor3d"><code>tf.Tensor3D</code> class</a> which is used as the input to the model. Alternatively, the <code>tf.Tensor3D</code> input can be passed directly.</p>
+
+<p><strong>Rather than trying to use an external package to simulate a DOM element in Node.js, I found it easier to construct the <code>tf.Tensor3D</code> manually.</strong></p>
+
+<h4>Generating Tensor3D from an Image</h4>
+
+<p>Reading the <a href="https://github.com/tensorflow/tfjs-core/blob/master/src/kernels/backend_cpu.ts#L126-L140">source code</a> for the method used to turn DOM elements into Tensor3D classes, the following input parameters are used to generate the Tensor3D class.</p>
+
+<p><code>javascript
+const values = new Int32Array(image.height * image.width * numChannels);
+// fill pixels with pixel channel bytes from image
+const outShape = [image.height, image.width, numChannels];
+const input = tf.tensor3d(values, outShape, 'int32');
+</code></p>
+
+<p><code>pixels</code> is a 2D array of type (Int32Array) which contains a sequential list of channel values for each pixel. <code>numChannels</code> is the number of channel values per pixel.</p>
+
+<h4>Creating Input Values For JPEGs</h4>
+
+<p>The <a href="https://www.npmjs.com/package/jpeg-js"><code>jpeg-js</code> library</a> is a pure javascript JPEG encoder and decoder for Node.js. Using this library the RGB values for each pixel can be extracted.</p>
+
+<p><code>javascript
+const pixels = jpeg.decode(buffer, true);
+</code></p>
+
+<p>This will return a <code>Uint8Array</code> with four channel values (<code>RGBA</code>) for each pixel (<code>width * height</code>). The MobileNet model only uses the three colour channels (<code>RGB</code>) for classification, ignoring the alpha channel. This code converts the four channel array into the correct three channel version.</p>
+
+<p>```javascript
+const numChannels = 3;
+const numPixels = image.width * image.height;
+const values = new Int32Array(numPixels * numChannels);</p>
+
+<p>for (let i = 0; i &lt; numPixels; i++) {
+  for (let channel = 0; channel &lt; numChannels; ++channel) {</p>
+
+<pre><code>values[i * numChannels + channel] = pixels[i * 4 + channel];
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h4>MobileNet Models Input Requirements</h4>
+
+<p>The <a href="https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md#mobilenet_v1">MobileNet model</a> being used classifies images of width and height 224 pixels. Input tensors must contain float values, between -1 and 1, for each of the three channels pixel values.</p>
+
+<p>Input values for images of different dimensions needs to be re-sized before classification. Additionally, pixels values from the JPEG decoder are in the range <em>0 - 255</em>, rather than <em>-1 to 1</em>. These values also need converting prior to classification.</p>
+
+<p><strong>TensorFlow.js has library methods to make this process easier but, fortunately for us, the <code>tfjs-models/mobilenet</code> library <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L103-L114">automatically handles</a> this issue!</strong> 👍</p>
+
+<p>Developers can pass in Tensor3D inputs of type <code>int32</code>  and different dimensions to the  <code>classify</code> method and it converts the input to the correct format prior to classification. Which means there's nothing to do... Super 🕺🕺🕺.</p>
+
+<h4>Obtaining Predictions</h4>
+
+<p>MobileNet models in Tensorflow are trained to recognise entities from the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">top 1000 classes</a> in the <a href="http://image-net.org/">ImageNet</a> dataset. The models output the probabilities that each of those entities is in the image being classified.</p>
+
+<p><em>The full list of trained classes for the model being used can be found in <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">this file</a>.</em></p>
+
+<p>The <code>tfjs-models/mobilenet</code> library exposes a <code>classify</code> method on the <code>MobileNet</code> class to return the top X classes with highest probabilities from an image input.</p>
+
+<p><code>javascript
+const predictions = await mn_model.classify(input, 10);
+</code></p>
+
+<p><code>predictions</code> is an array of X classes and probabilities in the following format.</p>
+
+<p><code>javascript
+{
+  className: 'panda',
+  probability: 0.9993536472320557
+}
+</code></p>
+
+<h2>Example</h2>
+
+<p>Having worked how to use the TensorFlow.js library and MobileNet models on Node.js, <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d">this script</a> will classify an image given as a command-line argument.</p>
+
+<h3>source code</h3>
+
+<ul>
+<li>Save this script file and package descriptor to local files.</li>
+</ul>
+
+
+<script src="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d.js"></script>
+
+
+<h3>testing it out</h3>
+
+<ul>
+<li><p>Download the model files to a <code>mobilenet</code> directory using the instructions above.</p></li>
+<li><p>Install the project dependencies using NPM
+<code>
+npm install
+</code></p></li>
+<li><p>Download a sample JPEG file to classify
+<code>
+wget http://bit.ly/2JYSal9 -O panda.jpg
+</code>
+<img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p></li>
+<li><p>Run the script with the model file and input image as arguments.
+<code>
+node script.js mobilenet/model.json panda.jpg
+</code></p></li>
+</ul>
+
+
+<p><strong>If everything worked, the following output should be printed to the console.</strong></p>
+
+<p>```javascript
+classification results: [ {</p>
+
+<pre><code>className: 'giant panda, panda, panda bear, coon bear',
+probability: 0.9993536472320557 
+</code></pre>
+
+<p>} ]
+```</p>
+
+<p>The image is correctly classified as containing a Panda with 99.93% probability! 🐼🐼🐼</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Having been released as a browser-based library, TensorFlow.js has now been extended to work on Node.js, although not all of the tools and utilities support the new runtime. With a few days' hacking, I was able to use the library with the MobileNet models for visual recognition on images from a local file.</p>
+
+<p>Getting this working in the Node.js runtime means I now move on to my next idea... making this run inside a serverless function! Come back soon to read about my next adventure with TensorFlow.js. 👋</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Playing With OpenWhisk]]></title>
@@ -778,293 +1094,6 @@ pages should provide a good indication of the current level of support.</p>
 great example that people love hearing about.</p>
 
 <p>Slides for the event are now posted online, check them out <a href="https://speakerdeck.com/u/jthomas/p/a-computer-called-watson">here</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Olympic Bubbles]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2012/08/08/olympic-bubbles/"/>
-    <updated>2012-08-08T08:44:00+01:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2012/08/08/olympic-bubbles</id>
-    <content type="html"><![CDATA[<p>Introducing <strong>Olympic Bubbles</strong>, an experiment visualising mentions of the
-London 2012 Olympics sports on Twitter in real-time.</p>
-
-<p><img src="/images/olympic_bubbles.png"></p>
-
-<p>With the London 2012 Olympics having multiple events running concurrently, Twitter's become invaluable
-for catching up on the day's action, deciding what to watch and getting real-time insight into current events.</p>
-
-<p>Having recently started to play with a JavaScript visualisation library (<a href="http://d3js.org/">D3</a>), this seemed like a great opportunity
-to connect the two activities and automate the analysis of Twitter to visualise the most talked about Olympic sports.</p>
-
-<p>Before we can visualise the data, we needed a way to filter the Twitter firehose for tweets mentioning the Olympic games...</p>
-
-<h2>Analysing tweets for Olympic sports</h2>
-
-<p>Twitter provides a <a href="https://dev.twitter.com/docs/streaming-apis/streams/public">public API</a> for filtering their
-stream, based on keyword matching, but there are two issues with this service:</p>
-
-<ul>
-<li><strong>No access to the firehose.</strong> Results don't represent the full set of matches from the Twitter "firehose", only a sample are returned.</li>
-<li><strong>Polling, not real-time.</strong> No support for receiving results in real-time, the client has to manually poll for new results over HTTP.</li>
-</ul>
-
-
-<p>These problems made Twitter's API unsuitable and an alternative was needed...</p>
-
-<p>Enter <a href="http://datasift.com">DataSift.</a></p>
-
-<p><blockquote><p>DataSift is a real-time media curation platform, allowing you to mine the<br/>Twitter Firehose for tweets matching the specific criteria of your choice.<br/>DataSift's custom Curation Stream Definition Language allows you to filter<br/>based on any meta data within a tweet</p><footer><strong>Twitter</strong> <cite><a href='https://dev.twitter.com/docs/twitter-data-providers'>Partner Providers of Twitter Data</a></cite></footer></blockquote></p>
-
-<p>DataSift are one of only two companies with unrestricted access to the Twitter "firehose". They provide a free
-trial account, with enough credit to mine 10,000 tweets.</p>
-
-<h3>Write a custom stream filter</h3>
-
-<p>DataSift provides a custom query language, <a href="http://dev.datasift.com/csdl">CSDL (Curated Stream Definition Language)</a>,
-for defining stream filters that can match messages based upon text, location, users and much more.</p>
-
-<p>Defining a new filter, we're interested in all messages that contain references to the London 2012 Olympics along with a sport.
-Matching all tweets containing key words can be performed using the <em>contains</em> <a href="http://dev.datasift.com/docs/operators">operator</a>
-on the <em>content</em> <a href="http://dev.datasift.com/docs/targets/common-interaction">property</a> of the <em>interaction</em> <a href="http://dev.datasift.com/docs/targets/common-interaction">instance</a>.
-Each <em>interaction</em> represents a single tweet from the Twitter Firehose.</p>
-
-<p>The example below shows how to match any tweets which mention the word
-<strong>olympic</strong> but ignore those without a valid sport, using the
-<em>conjunction</em> and <em>contains_any</em> operator to make sure those matched messages
-also contain one of the pre-defined keywords for the sports.</p>
-
-<p>``` javascript Olympic Sports Filter
-interaction.content contains "olympic"
-AND
-interaction.content contains_any "</p>
-
-<pre><code>Archery,
-Athletics,
-Badminton,
-...
-Volleyball,
-Water Polo,
-Weightlifting,
-Wrestling"
-</code></pre>
-
-<p>```</p>
-
-<p>Looking over the CSDL documentation, there was a feature that allowed user generated
-<a href="http://dev.datasift.com/docs/advanced/tag-keyword">tags</a> to be appended to filtered messages.
-Rather than having the client-side code manually
-parse each message to determine which sports were referenced, we can append a tag during
-the filtering process, as shown below.</p>
-
-<p>``` javascript Tagging Sports
-tag "archery" {
-  interaction.content contains "archery"
-}</p>
-
-<p>tag "athletics" {
-  interaction.content contains "athletics"
-}</p>
-
-<p>tag "badminton" {
-  interaction.content contains "badminton"
-}
-```</p>
-
-<p>Once the stream has been defined, making it public allows any user to access the
-stream results. You can see the full stream definition and view a preview of the results
-<a href="http://datasift.com/stream/27473/olympics-2012#app1-preview">here</a>.</p>
-
-<h3>Real-time results</h3>
-
-<p>Now we have a stream defined, we need to access the results in the browser in real-time.
-Along with a traditional REST API, DataSift also provides a streaming API using <a href="https://developer.mozilla.org/en-US/docs/WebSockets">WebSockets</a>.
-WebSockets provide a <strong>bi-directional channel for messages between a client and server, without having to poll for replies</strong>. Using their streaming endpoint,
-we receive messages from our filtered firehose in real-time.</p>
-
-<p>Setting up the connection and monitoring for new messages was extremely simple, as shown below. Each time a new message arrives,
-we increment the frequency count for each of the pre-defined sports based on the interaction tag.</p>
-
-<p>``` javascript DataSift Streaming API http://dev.datasift.com/docs/streaming-api/websockets-streaming Documentation
-var ws = new WebSocket('ws://websocket.datasift.com/<hash>?username=<username>&amp;api_key=<api_key>');</p>
-
-<p>ws.onmessage = function(evt) {</p>
-
-<pre><code>var msg = JSON.parse(evt.data),
-    tags = stats.interaction.tags;
-
-tags.forEach(function (tag) {
-    // now publish notification of new tagged messages...
-});
-</code></pre>
-
-<p>}
-```</p>
-
-<h2>Visualising The Tweets</h2>
-
-<p><em>Now we have the data, how should we visualise the results?</em></p>
-
-<p>There are hundreds of <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/charting.html">different</a>
-<a href="http://www.highcharts.com/">charting</a> <a href="http://code.google.com/p/flot/">libraries</a>
-for JavaScript but
-rather than drawing a static histogram of the sport frequencies, we want to incorporate
-the real-time aspect into the visualisation. As new messages are received, the visualisation
-should grow and morph, tied to the transitional nature of the data.</p>
-
-<p><a href="http://d3js.org">D3</a> is a JavaScript visualisation library which provides just that capability.</p>
-
-<p><blockquote><p>D3.js is a JavaScript library for manipulating documents based on data, allowing<br/>you to bind arbitrary data to a Document Object Model (DOM), and then apply data-driven transformations to the document.</p></blockquote></p>
-
-<p>Developed by <a href="http://bost.ocks.org/mike/">Mike Bostock</a> of the Stanford Visualisation Group, the library has fantastic
-<a href="https://github.com/mbostock/d3/wiki">documentation</a> along with an extensive <a href="https://github.com/mbostock/d3/wiki/Gallery">examples gallery</a>,
-which provides a great starting point for developers.</p>
-
-<h3>Creating Bubbles</h3>
-
-<p>Reviewing the gallery, the <a href="http://mbostock.github.com/d3/ex/bubble.html"><strong>Bubble</strong></a> example seemed like a good starting point.
-Each bubble would represent a single sport and the size would be proportional to the frequency of tweets for that sport.</p>
-
-<p><em>Given a list of sports and frequencies, how do we know where to render the nodes and what size they should be?</em></p>
-
-<p>D3 provides a series of algorithms for converting data series into visual layouts, the Bubble example uses
-<a href="https://github.com/mbostock/d3/wiki/Pack-Layout">Pack</a>. This layout turns a hierarchical data structure into
-<em>"enclosure diagrams using containment (nesting) to represent the hierarchy"</em>.</p>
-
-<p>Running our data through this function, shown below, produces a series of
-position values (coordinate location pairs with radius) to construct
-our bubbles from.</p>
-
-<p>``` javascript Generating Bubble Positions
-var sports = {</p>
-
-<pre><code>archery: 1,
-athletics: 2,
-badminton: 3
-... 
-</code></pre>
-
-<p>};</p>
-
-<p>var layout = d3.layout.pack().sort(null).size([this.width, this.height]);</p>
-
-<pre><code>positions = layout.nodes({children: d3.entries(sports)}
-</code></pre>
-
-<p>```</p>
-
-<p>Using the position information, we need to bind these values to appropriate
-DOM elements. Following the example code, we're going to render an SVG <a href="https://developer.mozilla.org/en-US/docs/SVG/Element/g">Group</a> node
-to contain the <a href="https://developer.mozilla.org/en-US/docs/SVG/Element/circle">Circle</a> element with a
-<a href="https://developer.mozilla.org/en-US/docs/SVG/Element/text">Text</a> node (displaying the sport's label). The example
-below shows the code needed for this.</p>
-
-<p>``` javascript Rendering Bubble Nodes
-var vis = d3.select(this.node).append("svg")</p>
-
-<pre><code>        .attr("width", width)
-        .attr("height", height);
-</code></pre>
-
-<p>var chart = vis.selectAll("g.node")</p>
-
-<pre><code>           .data(this.layout.nodes(data))
-           .enter().append("g")
-           .attr("transform", function (d) { return "translate(" + d.x + "," + d.y + ")"; });
-</code></pre>
-
-<p>// Append circle with radius from layout and fill with arbitary colour
-chart.append("circle")</p>
-
-<pre><code> .attr("r", function (d) { return d.r; })
- .style("fill", function (d) { return fill(d.key) });
-</code></pre>
-
-<p>// Add text label to bubble.
-chart.append("text")</p>
-
-<pre><code> .attr("text-anchor", "middle")
- .attr("dy", ".3em");
-</code></pre>
-
-<p>```</p>
-
-<p>Choosing an arbitrary colour for the bubble uses the <a href="https://github.com/mbostock/d3/wiki/Ordinal-Scales#wiki-category20c">d3.scale.category20c</a> method,
-referenced here by <em>fill()</em>, to produce a mapping between our category labels and a series of twenty colours.</p>
-
-<p>The example above is a slightly condensed version of the actual code, ignoring the handling of multi-lined labels and that font-sizes are relative
-to the bubble size, due to brevity.</p>
-
-<h3>Animating Bubbles</h3>
-
-<p><em>What happens when our data changes?</em></p>
-
-<p>As we receive more messages, the relative frequencies of the sports will change and the bubble layout will need updating.
-Using D3, we want to visually transition the bubbles to their new positions, watching them grow and shrink in real-time.</p>
-
-<p>Re-calculating the layout simply needs us to re-run the pack algorithm with the updated values, binding the new data
-to the existing chart.</p>
-
-<p><code>javascript Binding Updated Layout
-chart.data(layout.nodes({children: d3.entries(sports)}));
-</code></p>
-
-<p>Now, we just need to use the <a href="https://github.com/mbostock/d3/wiki/Transitions"><em>transition</em></a>
-method to translate the old properties
-to the new values, over a three second period. As we move the parent group node for
-each bubble, we need also update the bubble radius and label font size to make them
-proportional to the parent.</p>
-
-<p>``` javascript Transitioning Bubbles
-// Move bubble node to new position
-var trans = this.chart</p>
-
-<pre><code>.transition()
-.duration(3000)
-.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
-.attr("r", function(d) { return d.r; });
-</code></pre>
-
-<p>// ... update circle radius
-trans.select("circle")</p>
-
-<pre><code> .transition()
- .attr("r", function(d) { return d.r; });
-</code></pre>
-
-<p>// ... update text size
-trans.select("text")</p>
-
-<pre><code> .transition()
- .attr("font-size", function (d) { return ((d.r / 50)) + "em"; });
-</code></pre>
-
-<p>```</p>
-
-<p><strong>...and that's it!</strong></p>
-
-<p>Each time new messages flow in from the backend, the data values
-change, which triggers a new transition. With a real-time stream of new messages
-constantly arriving, the visualisation is constantly morphing and changing.</p>
-
-<h2>Live Demo</h2>
-
-<p>If you want to see this demo in action, there's a hosted version at
-<a href="http://datasift.jamesthom.as">http://datasift.jamesthom.as</a>. You'll need to sign up
-for a free DataSift account <a href="https://datasift.com/auth/register/">here</a>
-and use your authentication credentials to allow us to access the Twitter firehose.</p>
-
-<p>Source code for the demo is available on Github <a href="http://github.com/jthomas/olympic_bubbles">here</a>.</p>
-
-<h2>Finally...</h2>
-
-<p><em>Why Olympic Bubbles?</em></p>
-
-<p>It's a terrible name but as the quote goes...</p>
-
-<p><blockquote><p>“There are only two hard things in Computer Science: cache invalidation and naming things”.</p></blockquote></p>
-
-<p>...and writing this demo was easier than coming up with a sensible name!</p>
 ]]></content>
   </entry>
   
