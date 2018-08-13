@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-08-07T09:56:54+01:00</updated>
+  <updated>2018-08-13T17:21:19+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,278 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Machine Learning With TensorFlow.js]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/"/>
+    <updated>2018-08-13T12:16:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js</id>
+    <content type="html"><![CDATA[<p>In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to use <a href="https://js.tensorflow.org/">TensorFlow.js</a> on Node.js to run <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d#file-script-js">visual recognition on images from the local filesystem</a>. TensorFlow.js is a JavaScript version of the open-source machine learning library from Google.</p>
+
+<p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
+
+<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
+
+<p>Sounds easy, right? It's just a JavaScript library? So, zip it up and away we go... <strong><em>ahem</em></strong> 👊</p>
+
+<p><em>Converting the image classification script to run in a serverless environment had the following challenges...</em></p>
+
+<ul>
+<li><strong>TensorFlow.js libraries need to be available in the runtime.</strong></li>
+<li><strong>Native bindings for the library must be compiled against the platform architecture.</strong></li>
+<li><strong>Models files need to be loaded from the filesystem.</strong></li>
+</ul>
+
+
+<p>Some of these issues were more challenging than others to fix! Let's start by looking at the details of each issue, before explaining how <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">Docker support</a> in Apache OpenWhisk can be used to resolve them all.</p>
+
+<h2>Challenges</h2>
+
+<h3>TensorFlow.js Libraries</h3>
+
+<p>TensorFlow.js libraries are not included in the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js runtimes</a> provided by the Apache OpenWhisk.</p>
+
+<p>External libraries <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">can be imported</a> into the runtime by deploying applications from a zip file. Custom <code>node_modules</code> folders included in the zip file will be extracted in the runtime. Zip files are limited to a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">maximum size of 48MB</a>.</p>
+
+<h4>Library Size</h4>
+
+<p>Running <code>npm install</code> for the TensorFlow.js libraries used revealed the first problem... the resulting <code>node_modules</code> directory was 175MB. 😱</p>
+
+<p>Looking at the contents of this folder, the <code>tfjs-node</code> module compiles a <a href="https://github.com/tensorflow/tfjs-node/tree/master/src">native shared library</a> (<code>libtensorflow.so</code>) that is 135M. This means no amount of JavaScript minification is going to get those external dependencies under the magic 48 MB limit. 👎</p>
+
+<h4>Native Dependencies</h4>
+
+<p>The <code>libtensorflow.so</code> native shared library must be compiled using the platform runtime. Running <code>npm install</code>  locally automatically compiles native dependencies against the host platform. Local environments may use different CPU architectures (Mac vs Linux) or link against shared libraries not available in the serverless runtime.</p>
+
+<h3>MobileNet Model Files</h3>
+
+<p>TensorFlow models files <a href="https://js.tensorflow.org/tutorials/model-save-load.html">need loading from the filesystem</a> in Node.js. Serverless runtimes do provide a temporary filesystem inside the runtime environment. Files from deployment zip files are automatically extracted into this environment before invocations. There is no external access to this filesystem outside the lifecycle of the serverless function.</p>
+
+<p>Models files for the MobileNet model were 16MB. If these files are included in the deployment package, it leaves 32MB for the rest of the application source code. Although the model files are small enough to include in the zip file, what about the TensorFlow.js libraries? Is this the end of the blog post? Not so fast....</p>
+
+<p><strong>Apache OpenWhisk's support for custom runtimes provides a simple solution to all these issues!</strong></p>
+
+<h2>Custom Runtimes</h2>
+
+<p>Apache OpenWhisk uses Docker containers as the runtime environments for serverless functions (actions). All platform runtime images are <a href="https://hub.docker.com/r/openwhisk/">published on Docker Hub</a>, allowing developers to start these environments locally.</p>
+
+<p>Developers can also <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">specify custom runtime images</a> when creating actions. These images must be publicly available on Docker Hub. Custom runtimes have to expose the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">same HTTP API</a> used by the platform for invoking actions.</p>
+
+<p>Using platform runtime images as <a href="https://docs.docker.com/glossary/?term=parent%20image">parent images</a> makes it simple to build custom runtimes. Users can run commands during the Docker build to install additional libraries and other dependencies. The parent image already contains source files with the HTTP API service handling platform requests.</p>
+
+<h3>TensorFlow.js Runtime</h3>
+
+<p>Here is the Docker build file for the Node.js action runtime with additional TensorFlow.js dependencies.</p>
+
+<p>```
+FROM openwhisk/action-nodejs-v8:latest</p>
+
+<p>RUN npm install @tensorflow/tfjs @tensorflow-models/mobilenet @tensorflow/tfjs-node jpeg-js</p>
+
+<p>COPY mobilenet mobilenet
+```</p>
+
+<p><code>openwhisk/action-nodejs-v8:latest</code> is the Node.js action runtime image <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">published by OpenWhisk</a>.</p>
+
+<p>TensorFlow libraries and other dependencies are installed using <code>npm install</code> in the build process. Native dependencies for the <code>@tensorflow/tfjs-node</code> library are automatically compiled for the correct platform by installing during the build process.</p>
+
+<p>Since I'm building a new runtime, I've also added the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model files</a> to the image. Whilst not strictly necessary, removing them from the action zip file reduces deployment times.</p>
+
+<p><strong><em>Want to skip the next step? Use this image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/"><code>jamesthomas/action-nodejs-v8:tfjs</code></a> rather than building your own.</em></strong></p>
+
+<h3>Building The Runtime</h3>
+
+<p><em>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to download model files from the public storage bucket.</em></p>
+
+<ul>
+<li>Download a version of the MobileNet model and place all files in the <code>mobilenet</code> directory.</li>
+<li>Copy the Docker build file from above to a local file named <code>Dockerfile</code>.</li>
+<li>Run the Docker <a href="https://docs.docker.com/engine/reference/commandline/build/">build command</a> to generate a local image.</li>
+</ul>
+
+
+<p><code>sh
+docker build -t tfjs .
+</code></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag the local image</a> with a remote username and repository.</li>
+</ul>
+
+
+<p><code>sh
+docker tag tfjs &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</code></p>
+
+<p><em>Replace <code>&lt;USERNAME&gt;</code> with your Docker Hub username.</em></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push the local image</a> to Docker Hub</li>
+</ul>
+
+
+<p><code>sh
+ docker push &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</code></p>
+
+<p>Once the image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/">is available</a> on Docker Hub, actions can be created using that runtime image. 😎</p>
+
+<h2>Example Code</h2>
+
+<p>This source code implements image classification as an OpenWhisk action. Image files are provided as a Base64 encoded string using the <code>image</code> property on the event parameters. Classification results are returned as the <code>results</code> property in the response.</p>
+
+<script src="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5.js"></script>
+
+
+<h3>Caching Loaded Models</h3>
+
+<p>Serverless platforms initialise runtime environments on-demand to handle invocations. Once a runtime environment has been created, it will be <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">re-used for further invocations</a> with some limits. This improves performance by removing the initialisation delay ("cold start") from request processing.</p>
+
+<p>Applications can exploit this behaviour by using global variables to maintain state across requests. This is often use to <a href="https://blog.rowanudell.com/database-connections-in-lambda/">cache opened database connections</a> or store initialisation data loaded from external systems.</p>
+
+<p>I have used this pattern to <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L80-L82">cache the MobileNet model</a> used for classification. During cold invocations, the model is loaded from the filesystem and stored in a global variable. Warm invocations then use the existence of that global variable to skip the model loading process with further requests.</p>
+
+<p>Caching the model reduces the time (and therefore cost) for classifications on warm invocations.</p>
+
+<h3>Memory Leak</h3>
+
+<p>Running the Node.js script from blog post on IBM Cloud Functions was possible with minimal modifications. Unfortunately, performance testing revealed a memory leak in the handler function. 😢</p>
+
+<p><em>Reading more about <a href="https://js.tensorflow.org/tutorials/core-concepts.html">how TensorFlow.js works</a> on Node.js uncovered the issue...</em></p>
+
+<p>TensorFlow.js's Node.js extensions use a native C++ library to execute the Tensors on a CPU or GPU engine. Memory allocated for Tensor objects in the native library is retained until the application explicitly releases it or the process exits. TensorFlow.js provides a <code>dispose</code> method on the individual objects to free allocated memory. There is also a <code>tf.tidy</code> method to automatically clean up all allocated objects within a frame.</p>
+
+<p>Reviewing the code, tensors were being created as <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L51-L59">model input from images</a> on each request. These objects were not disposed before returning from the request handler. This meant native memory grew unbounded. Adding an explicit <code>dispose</code> call to free these objects before returning <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L91">fixed the issue</a>.</p>
+
+<h3>Profiling &amp; Performance</h3>
+
+<p>Action code records memory usage and elapsed time at different stages in classification process.</p>
+
+<p>Recording <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L12-L20">memory usage</a> allows me to modify the maximum memory allocated to the function for optimal performance and cost. Node.js provides a <a href="https://nodejs.org/docs/v0.4.11/api/all.html#process.memoryUsage">standard library API</a> to retrieve memory usage for the current process. Logging these values allows me to inspect memory usage at different stages.</p>
+
+<p>Timing <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L71">different tasks</a> in the classification process, i.e. model loading, image classification, gives me an insight into how efficient classification is compared to other methods. Node.js has a <a href="https://nodejs.org/api/console.html#console_console_time_label">standard library API</a> for timers to record and print elapsed time to the console.</p>
+
+<h2>Demo</h2>
+
+<h3>Deploy Action</h3>
+
+<ul>
+<li>Run the following command with the <a href="https://console.bluemix.net/openwhisk/learn/cli">IBM Cloud CLI</a> to create the action.</li>
+</ul>
+
+
+<p><code>sh
+ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
+</code></p>
+
+<p><em>Replace <code>&lt;IMAGE_NAME&gt;</code> with the public Docker Hub image identifier for the custom runtime. Use <code>jamesthomas/action-nodejs-v8:tfjs</code> if you haven't built this manually.</em></p>
+
+<h3>Testing It Out</h3>
+
+<ul>
+<li>Download <a href="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG">this image</a> of a Panda from Wikipedia.</li>
+</ul>
+
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+
+<p><code>sh
+wget http://bit.ly/2JYSal9 -O panda.jpg
+</code></p>
+
+<ul>
+<li>Invoke the action with the Base64 encoded image as an input parameter.</li>
+</ul>
+
+
+<p><code>sh
+ ibmcloud fn action invoke classify -r -p image $(base64 panda.jpg)
+</code></p>
+
+<ul>
+<li>Returned JSON message contains classification probabilities. 🐼🐼🐼</li>
+</ul>
+
+
+<p>```json
+{
+  "results":  [{</p>
+
+<pre><code>className: 'giant panda, panda, panda bear, coon bear',
+probability: 0.9993536472320557
+</code></pre>
+
+<p>  }]
+}
+```</p>
+
+<h3>Activation Details</h3>
+
+<ul>
+<li>Retrieve logging output for the last activation to show performance data.</li>
+</ul>
+
+
+<p><code>sh
+ibmcloud fn activation logs --last
+</code></p>
+
+<p><strong><em>Profiling and memory usage details are logged to stdout</em></strong></p>
+
+<p><code>sh
+prediction function called.
+memory used: rss=150.46 MB, heapTotal=32.83 MB, heapUsed=20.29 MB, external=67.6 MB
+loading image and model...
+decodeImage: 74.233ms
+memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.05 MB, external=40.63 MB
+imageByteArray: 5.676ms
+memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.05 MB, external=45.51 MB
+imageToInput: 5.952ms
+memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.06 MB, external=45.51 MB
+mn_model.classify: 274.805ms
+memory used: rss=149.83 MB, heapTotal=24.33 MB, heapUsed=20.57 MB, external=45.51 MB
+classification results: [...]
+main: 356.639ms
+memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.51 MB
+</code></p>
+
+<p><code>main</code> is the total elapsed time for the action handler. <code>mn_model.classify</code> is the elapsed time for the image classification. Cold start requests print an extra log message with model loading time, <code>loadModel: 394.547ms</code>.</p>
+
+<h2>Performance Results</h2>
+
+<p>Invoking the <code>classify</code> action 1000 times for both cold and warm activations (using 256MB memory) generated the following performance results.</p>
+
+<h3>warm invocations</h3>
+
+<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
+
+<h3>cold invocations</h3>
+
+<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
+
+<p><em>One disadvantage of using custom runtime images in Apache OpenWhisk is the lack of <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">pre-warmed containers</a>. Pre-warming is used to reduce cold start times by starting runtime containers before they are needed. This is not supported for non-standard runtime images.</em></p>
+
+<h3>classification cost</h3>
+
+<p>IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">provides a free tier</a> of 400,000 GB/s per month. Each further second of execution is charged at $0.000017 per GB of memory allocated. Execution time is rounded up to the nearest 100ms.</p>
+
+<p>If all activations were warm, a user could execute <strong>more than 4,000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 600,000 further invocations would cost just over $1.</p>
+
+<p>If all activations were cold, a user could execute <strong>more than 1,2000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 180,000 further invocations would cost just over $1.</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
+
+<p>Fortunately, Apache OpenWhisk's custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Monitoring Dashboards With Kibana For IBM Cloud Functions]]></title>
@@ -1682,129 +1954,6 @@ $ curl --upload-file "my pug.jpg" &lt;URL&gt; --header "Content-Type: image/jpeg
 <p>We showed you how to provision new COS services, create and manage authentication credentials, access files using a client library and even allow external clients to interact directly with buckets. Sample serverless functions using the Node.js runtime were also provided.</p>
 
 <p><em>Do you have any questions, comments or issues about the content above? Please leave a comment below, find me on the <a href="http://openwhisk.incubator.apache.org/slack.html">openwhisk slack</a> or send me a <a href="https://twitter.com/thomasj">tweet</a>.</em></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[File Storage For Serverless Applications]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/"/>
-    <updated>2018-04-27T14:27:00+01:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage</id>
-    <content type="html"><![CDATA[<blockquote><p><strong><em>"Where do you store files without a server?"</em></strong></p></blockquote>
-
-<p>…is the most common question I get asked during Q&amp;A after one of my "<a href="http://bit.ly/james_thomas">Introduction to Serverless Platforms</a>" conference talks. Searching for this question online, <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">this is the answer</a> you will often find.</p>
-
-<blockquote><p> <strong><em>"Use an object store for file storage and access using the S3-compatible interface. Provide direct access to files by making buckets public and return pre-signed URLs for uploading content. Easy, right?"</em></strong></p></blockquote>
-
-<p>Responding to people with this information often leads to the following response:</p>
-
-<p>🤔🤔🤔</p>
-
-<p>Developers who are not familiar with cloud platforms, can often understand the benefits and concepts behind serverless, but don't know the other cloud services needed to replicate application services from traditional (or server-full) architectures.</p>
-
-<p><strong>In this blog post, I want to explain why we do not use the file system for files in serverless applications and introduce the cloud services used to handle this.</strong></p>
-
-<h2>serverless runtime file systems</h2>
-
-<p>Serverless runtimes do provide access to a filesystem with a (small) amount of ephemeral storage.</p>
-
-<p>Serverless application <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">deployment packages</a> are extracted into this filesystem prior to execution. Uploading files into the environment relies on them being included within the application package. Serverless functions can read, modify and create files within this local file system.</p>
-
-<p>These temporary file systems come with the following restrictions…</p>
-
-<ul>
-<li><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb">Maximum application package size</a> limits additional files that can be uploaded.</li>
-<li>Serverless platforms usually limit total usable space to around 512MB.</li>
-<li>Modifications to the file system are lost once the environment is <a href="https://hackernoon.com/im-afraid-you-re-thinking-about-aws-lambda-cold-starts-all-wrong-7d907f278a4f">not used for further invocations</a>.</li>
-<li>Concurrent executions of the same function use independent runtime environments and do not share filesystem storage.</li>
-<li>There is no access to these temporary file systems outside the runtime environment.</li>
-</ul>
-
-
-<p><em>All these limitations make the file system provided by serverless platforms unsuitable as a scalable storage solution for serverless applications.</em></p>
-
-<p><strong><em>So, what is the alternative?</em></strong></p>
-
-<h2>object stores</h2>
-
-<blockquote><p>Object stores manage data as objects, as opposed to other storage architectures like <a href="https://en.wikipedia.org/wiki/File_systems">file systems</a> which manage data as a file hierarchy. Object-storage systems allow retention of massive amounts of <a href="https://en.wikipedia.org/wiki/Unstructured_data">unstructured data</a>, with simple retrieval and search capabilities.</p>
-
-<p><a href="https://en.wikipedia.org/wiki/Object_storage"><em>https://en.wikipedia.org/wiki/Object_storage</em></a></p></blockquote>
-
-<p>Object stores provide "storage-as-a-service" solutions for cloud applications.</p>
-
-<p><strong>These services are used for file storage within serverless applications.</strong></p>
-
-<p>Unlike traditional block storage devices, data objects in object storage services are organised using flat hierarchies of containers, known as "<em>buckets</em>". Objects within buckets are identified by unique identifiers, known as "<em>keys</em>". Metadata can also be stored alongside data objects for additional context.</p>
-
-<p>Object stores provide simple access to files by applications, rather than users.</p>
-
-<h2>advantages of an object store</h2>
-
-<h3>scalable and elastic storage</h3>
-
-<p>Rather than having a disk drive, with a fixed amount of storage, object stores provide scalable and elastic storage for data objects. Users are <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage">charged</a> based upon the amount of data stored, API requests and bandwidth used. Object stores are built to scale as storage needs grow towards the <a href="https://www.ibm.com/cloud/object-storage/faq">petabyte range</a>.</p>
-
-<h3>simple http access</h3>
-
-<p>Object stores provide a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP-based API endpoint</a> to interact with the data objects.</p>
-
-<p>Rather than using a standard library methods to access the file system, which translates into system calls to the operating system, files are available over a standard HTTP endpoint.</p>
-
-<p><a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">Client libraries</a> provide a simple interface for interacting with the remote endpoints.</p>
-
-<h3>expose direct access to files</h3>
-
-<p>Files stored in object storage can be made <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">publicly accessible</a>. Client applications can access files directly without needing to use an application backend as a proxy.</p>
-
-<p>Special URLs can also be generated to provide <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url">temporary access to files</a> for external clients. Clients can even use these URLs to directly upload and modify files. URLs are set to expire after a fixed amount of time.</p>
-
-<h2>ibm cloud object storage</h2>
-
-<p><a href="https://bluemix.net/">IBM Cloud</a> provides an object storage service called <a href="https://console.bluemix.net/docs/services/cloud-object-storage/about-cos.html">IBM Cloud Object Storage</a>. This service provides the following features concerning resiliency, reliability and cost.</p>
-
-<h3>data resiliency</h3>
-
-<p>Buckets' contents can be stored with the following automatic <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">data resiliency choices</a>.</p>
-
-<ul>
-<li><strong><em>Cross Region.</em></strong> Store data across three regions within a geographic area.</li>
-<li><strong><em>Regional.</em></strong> Store data in multiple data centres within a single geographic region.</li>
-<li><strong><em>Single Data Centre.</em></strong> Store data across multiple devices in a single data centre.</li>
-</ul>
-
-
-<p>Cross Region is the best choice for "<em>regional concurrent access and highest availability</em>". Regional is used for <em>"high availability and performance"</em>. Single Data Centre is appropriate when <em>"when data locality matters most".</em></p>
-
-<h3>storage classes</h3>
-
-<p>Data access patterns can be used to save costs by choosing the appropriate <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/classes.html#use-storage-classes">storage class for data storage</a>.</p>
-
-<p>IBM Cloud Object Storage offers the following storage classes: <strong><em>Standard, Vault, Cold Vault, Flex.</em></strong></p>
-
-<p><em>Standard class</em> is used for workloads with frequent data access. <em>Vault and Cold Vault</em> are used with infrequent data retrieval and data archiving workloads. <em>Flex</em> is a mixed storage class for workloads where access patterns are more difficult to predict.</p>
-
-<h3>costs</h3>
-
-<p>Storage class and data resiliency options are used to <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">calculate the cost of service usage</a>.</p>
-
-<p>Storage is charged based upon the amount of data storage used, operational requests (GET, POST, PUT…) and outgoing public bandwidth.</p>
-
-<p>Storage classes affect the price of data retrieval operations and storage costs. Storage classes used for archiving, e.g. <em>cold vault</em>, charge less for data storage and more for operational requests. Storage classes used for frequency access, e.g. <em>standard</em>, charge more for data storage and less for operational requests.</p>
-
-<p>Higher resiliency data storage is more expensive than lower resiliency storage.</p>
-
-<h3>lite plan</h3>
-
-<p>IBM Cloud Object Storage provides a generous free tier (<em>25GB storage per month, 5GB public bandwidth</em>) for Lite account users. <a href="https://www.ibm.com/cloud/lite-account">IBM Cloud Lite accounts</a> provide perpetual access to a free set of IBM Cloud resources. Lite accounts do not expire after a time period or need a credit card to sign up.</p>
-
-<h2>conclusion</h2>
-
-<p>Serving files from serverless runtimes is often accomplished using object storage services.</p>
-
-<p>Object stores provide a scalable and cost-effective service for managing files without using storage infrastructure directly. Storing files in an object store provides simple access from serverless runtimes and even allows the files to be made directly accessible to end users.</p>
-
-<p>In the next blog posts, I'm going to show you how to set up IBM Cloud Object Storage and access files from serverless applications on IBM Cloud Functions. I'll be demonstrating this approach for both the Node.js and Swift runtimes.</p>
 ]]></content>
   </entry>
   

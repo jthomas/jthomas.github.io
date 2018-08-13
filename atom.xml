@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-08-07T09:56:54+01:00</updated>
+  <updated>2018-08-13T17:21:19+01:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,306 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Machine Learning With TensorFlow.js]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/"/>
+    <updated>2018-08-13T12:16:00+01:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js</id>
+    <content type="html"><![CDATA[<p>In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to use <a href="https://js.tensorflow.org/">TensorFlow.js</a> on Node.js to run <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d#file-script-js">visual recognition on images from the local filesystem</a>. TensorFlow.js is a JavaScript version of the open-source machine learning library from Google.</p>
+
+<p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
+
+<p>Sounds easy, right? It&#8217;s just a JavaScript library? So, zip it up and away we go&#8230; <strong><em>ahem</em></strong> 👊</p>
+
+<p><em>Converting the image classification script to run in a serverless environment had the following challenges&#8230;</em></p>
+
+<ul>
+<li><strong>TensorFlow.js libraries need to be available in the runtime.</strong></li>
+<li><strong>Native bindings for the library must be compiled against the platform architecture.</strong></li>
+<li><strong>Models files need to be loaded from the filesystem.</strong></li>
+</ul>
+
+
+<p>Some of these issues were more challenging than others to fix! Let&#8217;s start by looking at the details of each issue, before explaining how <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">Docker support</a> in Apache OpenWhisk can be used to resolve them all.</p>
+
+<h2>Challenges</h2>
+
+<h3>TensorFlow.js Libraries</h3>
+
+<p>TensorFlow.js libraries are not included in the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js runtimes</a> provided by the Apache OpenWhisk.</p>
+
+<p>External libraries <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">can be imported</a> into the runtime by deploying applications from a zip file. Custom <code>node_modules</code> folders included in the zip file will be extracted in the runtime. Zip files are limited to a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">maximum size of 48MB</a>.</p>
+
+<h4>Library Size</h4>
+
+<p>Running <code>npm install</code> for the TensorFlow.js libraries used revealed the first problem&#8230; the resulting <code>node_modules</code> directory was 175MB. 😱</p>
+
+<p>Looking at the contents of this folder, the <code>tfjs-node</code> module compiles a <a href="https://github.com/tensorflow/tfjs-node/tree/master/src">native shared library</a> (<code>libtensorflow.so</code>) that is 135M. This means no amount of JavaScript minification is going to get those external dependencies under the magic 48 MB limit. 👎</p>
+
+<h4>Native Dependencies</h4>
+
+<p>The <code>libtensorflow.so</code> native shared library must be compiled using the platform runtime. Running <code>npm install</code>  locally automatically compiles native dependencies against the host platform. Local environments may use different CPU architectures (Mac vs Linux) or link against shared libraries not available in the serverless runtime.</p>
+
+<h3>MobileNet Model Files</h3>
+
+<p>TensorFlow models files <a href="https://js.tensorflow.org/tutorials/model-save-load.html">need loading from the filesystem</a> in Node.js. Serverless runtimes do provide a temporary filesystem inside the runtime environment. Files from deployment zip files are automatically extracted into this environment before invocations. There is no external access to this filesystem outside the lifecycle of the serverless function.</p>
+
+<p>Models files for the MobileNet model were 16MB. If these files are included in the deployment package, it leaves 32MB for the rest of the application source code. Although the model files are small enough to include in the zip file, what about the TensorFlow.js libraries? Is this the end of the blog post? Not so fast&#8230;.</p>
+
+<p><strong>Apache OpenWhisk&#8217;s support for custom runtimes provides a simple solution to all these issues!</strong></p>
+
+<h2>Custom Runtimes</h2>
+
+<p>Apache OpenWhisk uses Docker containers as the runtime environments for serverless functions (actions). All platform runtime images are <a href="https://hub.docker.com/r/openwhisk/">published on Docker Hub</a>, allowing developers to start these environments locally.</p>
+
+<p>Developers can also <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">specify custom runtime images</a> when creating actions. These images must be publicly available on Docker Hub. Custom runtimes have to expose the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">same HTTP API</a> used by the platform for invoking actions.</p>
+
+<p>Using platform runtime images as <a href="https://docs.docker.com/glossary/?term=parent%20image">parent images</a> makes it simple to build custom runtimes. Users can run commands during the Docker build to install additional libraries and other dependencies. The parent image already contains source files with the HTTP API service handling platform requests.</p>
+
+<h3>TensorFlow.js Runtime</h3>
+
+<p>Here is the Docker build file for the Node.js action runtime with additional TensorFlow.js dependencies.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>FROM openwhisk/action-nodejs-v8:latest
+</span><span class='line'>
+</span><span class='line'>RUN npm install @tensorflow/tfjs @tensorflow-models/mobilenet @tensorflow/tfjs-node jpeg-js
+</span><span class='line'>
+</span><span class='line'>COPY mobilenet mobilenet</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>openwhisk/action-nodejs-v8:latest</code> is the Node.js action runtime image <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">published by OpenWhisk</a>.</p>
+
+<p>TensorFlow libraries and other dependencies are installed using <code>npm install</code> in the build process. Native dependencies for the <code>@tensorflow/tfjs-node</code> library are automatically compiled for the correct platform by installing during the build process.</p>
+
+<p>Since I&#8217;m building a new runtime, I&#8217;ve also added the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model files</a> to the image. Whilst not strictly necessary, removing them from the action zip file reduces deployment times.</p>
+
+<p><strong><em>Want to skip the next step? Use this image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/"><code>jamesthomas/action-nodejs-v8:tfjs</code></a> rather than building your own.</em></strong></p>
+
+<h3>Building The Runtime</h3>
+
+<p><em>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to download model files from the public storage bucket.</em></p>
+
+<ul>
+<li>Download a version of the MobileNet model and place all files in the <code>mobilenet</code> directory.</li>
+<li>Copy the Docker build file from above to a local file named <code>Dockerfile</code>.</li>
+<li>Run the Docker <a href="https://docs.docker.com/engine/reference/commandline/build/">build command</a> to generate a local image.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker build -t tfjs .
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag the local image</a> with a remote username and repository.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker tag tfjs &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Replace <code>&lt;USERNAME&gt;</code> with your Docker Hub username.</em></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push the local image</a> to Docker Hub</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'> docker push &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once the image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/">is available</a> on Docker Hub, actions can be created using that runtime image. 😎</p>
+
+<h2>Example Code</h2>
+
+<p>This source code implements image classification as an OpenWhisk action. Image files are provided as a Base64 encoded string using the <code>image</code> property on the event parameters. Classification results are returned as the <code>results</code> property in the response.</p>
+
+<script src="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5.js"></script>
+
+
+<h3>Caching Loaded Models</h3>
+
+<p>Serverless platforms initialise runtime environments on-demand to handle invocations. Once a runtime environment has been created, it will be <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">re-used for further invocations</a> with some limits. This improves performance by removing the initialisation delay (&#8220;cold start&#8221;) from request processing.</p>
+
+<p>Applications can exploit this behaviour by using global variables to maintain state across requests. This is often use to <a href="https://blog.rowanudell.com/database-connections-in-lambda/">cache opened database connections</a> or store initialisation data loaded from external systems.</p>
+
+<p>I have used this pattern to <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L80-L82">cache the MobileNet model</a> used for classification. During cold invocations, the model is loaded from the filesystem and stored in a global variable. Warm invocations then use the existence of that global variable to skip the model loading process with further requests.</p>
+
+<p>Caching the model reduces the time (and therefore cost) for classifications on warm invocations.</p>
+
+<h3>Memory Leak</h3>
+
+<p>Running the Node.js script from blog post on IBM Cloud Functions was possible with minimal modifications. Unfortunately, performance testing revealed a memory leak in the handler function. 😢</p>
+
+<p><em>Reading more about <a href="https://js.tensorflow.org/tutorials/core-concepts.html">how TensorFlow.js works</a> on Node.js uncovered the issue&#8230;</em></p>
+
+<p>TensorFlow.js&#8217;s Node.js extensions use a native C++ library to execute the Tensors on a CPU or GPU engine. Memory allocated for Tensor objects in the native library is retained until the application explicitly releases it or the process exits. TensorFlow.js provides a <code>dispose</code> method on the individual objects to free allocated memory. There is also a <code>tf.tidy</code> method to automatically clean up all allocated objects within a frame.</p>
+
+<p>Reviewing the code, tensors were being created as <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L51-L59">model input from images</a> on each request. These objects were not disposed before returning from the request handler. This meant native memory grew unbounded. Adding an explicit <code>dispose</code> call to free these objects before returning <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L91">fixed the issue</a>.</p>
+
+<h3>Profiling &amp; Performance</h3>
+
+<p>Action code records memory usage and elapsed time at different stages in classification process.</p>
+
+<p>Recording <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L12-L20">memory usage</a> allows me to modify the maximum memory allocated to the function for optimal performance and cost. Node.js provides a <a href="https://nodejs.org/docs/v0.4.11/api/all.html#process.memoryUsage">standard library API</a> to retrieve memory usage for the current process. Logging these values allows me to inspect memory usage at different stages.</p>
+
+<p>Timing <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L71">different tasks</a> in the classification process, i.e. model loading, image classification, gives me an insight into how efficient classification is compared to other methods. Node.js has a <a href="https://nodejs.org/api/console.html#console_console_time_label">standard library API</a> for timers to record and print elapsed time to the console.</p>
+
+<h2>Demo</h2>
+
+<h3>Deploy Action</h3>
+
+<ul>
+<li>Run the following command with the <a href="https://console.bluemix.net/openwhisk/learn/cli">IBM Cloud CLI</a> to create the action.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Replace <code>&lt;IMAGE_NAME&gt;</code> with the public Docker Hub image identifier for the custom runtime. Use <code>jamesthomas/action-nodejs-v8:tfjs</code> if you haven&#8217;t built this manually.</em></p>
+
+<h3>Testing It Out</h3>
+
+<ul>
+<li>Download <a href="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG">this image</a> of a Panda from Wikipedia.</li>
+</ul>
+
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>wget http://bit.ly/2JYSal9 -O panda.jpg
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Invoke the action with the Base64 encoded image as an input parameter.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'> ibmcloud fn action invoke classify -r -p image <span class="k">$(</span>base64 panda.jpg<span class="k">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Returned JSON message contains classification probabilities. 🐼🐼🐼</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;results&quot;</span><span class="p">:</span>  <span class="p">[{</span>
+</span><span class='line'>    <span class="err">className:</span> <span class="err">&#39;giant</span> <span class="err">panda,</span> <span class="err">panda,</span> <span class="err">panda</span> <span class="err">bear,</span> <span class="err">coon</span> <span class="err">bear&#39;,</span>
+</span><span class='line'>    <span class="err">probability:</span> <span class="err">0.9993536472320557</span>
+</span><span class='line'>  <span class="p">}]</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Activation Details</h3>
+
+<ul>
+<li>Retrieve logging output for the last activation to show performance data.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>ibmcloud fn activation logs --last
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong><em>Profiling and memory usage details are logged to stdout</em></strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>prediction <span class="k">function </span>called.
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>150.46 MB, <span class="nv">heapTotal</span><span class="o">=</span>32.83 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.29 MB, <span class="nv">external</span><span class="o">=</span>67.6 MB
+</span><span class='line'>loading image and model...
+</span><span class='line'>decodeImage: 74.233ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.05 MB, <span class="nv">external</span><span class="o">=</span>40.63 MB
+</span><span class='line'>imageByteArray: 5.676ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.05 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span><span class='line'>imageToInput: 5.952ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.06 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span><span class='line'>mn_model.classify: 274.805ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>149.83 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.57 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span><span class='line'>classification results: <span class="o">[</span>...<span class="o">]</span>
+</span><span class='line'>main: 356.639ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>144.37 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.58 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>main</code> is the total elapsed time for the action handler. <code>mn_model.classify</code> is the elapsed time for the image classification. Cold start requests print an extra log message with model loading time, <code>loadModel: 394.547ms</code>.</p>
+
+<h2>Performance Results</h2>
+
+<p>Invoking the <code>classify</code> action 1000 times for both cold and warm activations (using 256MB memory) generated the following performance results.</p>
+
+<h3>warm invocations</h3>
+
+<p><img src="http://jthomas.github.com/jthomas/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
+
+<h3>cold invocations</h3>
+
+<p><img src="http://jthomas.github.com/jthomas/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
+
+<p><em>One disadvantage of using custom runtime images in Apache OpenWhisk is the lack of <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">pre-warmed containers</a>. Pre-warming is used to reduce cold start times by starting runtime containers before they are needed. This is not supported for non-standard runtime images.</em></p>
+
+<h3>classification cost</h3>
+
+<p>IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">provides a free tier</a> of 400,000 GB/s per month. Each further second of execution is charged at $0.000017 per GB of memory allocated. Execution time is rounded up to the nearest 100ms.</p>
+
+<p>If all activations were warm, a user could execute <strong>more than 4,000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 600,000 further invocations would cost just over $1.</p>
+
+<p>If all activations were cold, a user could execute <strong>more than 1,2000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 180,000 further invocations would cost just over $1.</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
+
+<p>Fortunately, Apache OpenWhisk&#8217;s custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Machine Learning In Node.js With TensorFlow.js]]></title>
@@ -7598,54 +7898,6 @@ to monitor incoming data values live.</p>
 <p>Both Slack and Twilio provide webhook integration for developers to use their platforms. Using OpenWhisk Web Actions, we can write serverless functions that act as a bridge between these services. With less than a hundred lines of code, we&#8217;ve created a new slack bot that can connect users to channels using SMS messages.</p>
 
 <p>Pretty cool, huh?! 👏👏👏</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Openwhisk and The Serverless Framework]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2017/02/09/openwhisk-and-the-serverless-framework/"/>
-    <updated>2017-02-09T15:04:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2017/02/09/openwhisk-and-the-serverless-framework</id>
-    <content type="html"><![CDATA[<p><a href="https://serverless.com">The Serverless Framework</a> is the most popular open-source framework for building serverless applications.</p>
-
-<p><a href="https://serverless.com/blog/serverless-v1.6.0/">Recent releases</a> included support for using the framework with non-AWS providers. This feature makes it easier for developers to try different serverless platforms and move applications between providers.</p>
-
-<p>Since last summer, I&#8217;ve been <a href="https://github.com/serverless/serverless-openwhisk">leading the technical effort</a> to provide an <a href="http://openwhisk.org/">OpenWhisk</a> provider plugin for the framework.</p>
-
-<p>OpenWhisk is the first non-AWS serverless provider to complete integration into the framework.</p>
-
-<p><img src="https://cloud.githubusercontent.com/assets/20538501/22434123/748ae372-e6e0-11e6-86d0-38db9941552d.png"></p>
-
-<h2>Getting Started</h2>
-
-<p>Documentation for the provider plugin is available on <a href="https://serverless.com/framework/docs/">The Serverless Framework&#8217;s website</a>.</p>
-
-<p>Example projects using the framework to build applications for OpenWhisk are now available in <a href="https://github.com/serverless/examples">this repository</a>.</p>
-
-<p>More details on the provider plugin can be found on the <a href="https://github.com/serverless/serverless-openwhisk">project repository</a>.</p>
-
-<p>Found an issue? Feature request? Need help? Please <a href="https://github.com/serverless/serverless-openwhisk/issues">open issues on Github</a>.</p>
-
-<h2>Video Demonstration</h2>
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/GJY10W98Itc" frameborder="0" allowfullscreen></iframe>
-
-
-<h2>Serverless Meetup Presentation</h2>
-
-<p>Last week, I was invited to speak at the <a href="https://www.meetup.com/Serverless-London/events/236664340/">London&#8217;s Serverless Meetup</a> about building multi-provider serverless applications using this feature.</p>
-
-<p>Slides from the presentation are here:</p>
-
-<script async class="speakerdeck-embed" data-id="592fbd47aceb4fbc9021ae3bf2f6b06c" data-ratio="1.77777777777778" src="http://jthomas.github.com/jthomas//speakerdeck.com/assets/embed.js"></script>
-
-
-<p>There is a (low-fi) video recording from the event here:</p>
-
-<iframe src="https://player.twitch.tv/?video=v119142073&autoplay=false" frameborder="0" allowfullscreen="true" scrolling="no" height="378" width="620"></iframe>
-
-
-<p><a href="https://www.twitch.tv/serverlessldn?tt_medium=live_embed&tt_content=text_link" style="padding:2px 0px 4px; display:block; width:345px; font-weight:normal; font-size:10px; text-decoration:underline;">Watch live video from serverlessldn on www.twitch.tv</a></p>
 ]]></content>
   </entry>
   

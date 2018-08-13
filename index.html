@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="TensorFlow.js is a new version of the popular open-source library which brings deep learning to JavaScript. Developers can now define, train, and run &hellip;">
+  <meta name="description" content="In a previous blog post, I showed how to use TensorFlow.js on Node.js to run visual recognition on images from the local filesystem. TensorFlow.js is &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,333 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">Serverless Machine Learning With TensorFlow.js</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-08-13T12:16:00+01:00" pubdate data-updated="true">Aug 13<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to use <a href="https://js.tensorflow.org/">TensorFlow.js</a> on Node.js to run <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d#file-script-js">visual recognition on images from the local filesystem</a>. TensorFlow.js is a JavaScript version of the open-source machine learning library from Google.</p>
+
+<p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
+
+<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
+
+<p>Sounds easy, right? It&#8217;s just a JavaScript library? So, zip it up and away we go&#8230; <strong><em>ahem</em></strong> 👊</p>
+
+<p><em>Converting the image classification script to run in a serverless environment had the following challenges&#8230;</em></p>
+
+<ul>
+<li><strong>TensorFlow.js libraries need to be available in the runtime.</strong></li>
+<li><strong>Native bindings for the library must be compiled against the platform architecture.</strong></li>
+<li><strong>Models files need to be loaded from the filesystem.</strong></li>
+</ul>
+
+
+<p>Some of these issues were more challenging than others to fix! Let&#8217;s start by looking at the details of each issue, before explaining how <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">Docker support</a> in Apache OpenWhisk can be used to resolve them all.</p>
+
+<h2>Challenges</h2>
+
+<h3>TensorFlow.js Libraries</h3>
+
+<p>TensorFlow.js libraries are not included in the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js runtimes</a> provided by the Apache OpenWhisk.</p>
+
+<p>External libraries <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">can be imported</a> into the runtime by deploying applications from a zip file. Custom <code>node_modules</code> folders included in the zip file will be extracted in the runtime. Zip files are limited to a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">maximum size of 48MB</a>.</p>
+
+<h4>Library Size</h4>
+
+<p>Running <code>npm install</code> for the TensorFlow.js libraries used revealed the first problem&#8230; the resulting <code>node_modules</code> directory was 175MB. 😱</p>
+
+<p>Looking at the contents of this folder, the <code>tfjs-node</code> module compiles a <a href="https://github.com/tensorflow/tfjs-node/tree/master/src">native shared library</a> (<code>libtensorflow.so</code>) that is 135M. This means no amount of JavaScript minification is going to get those external dependencies under the magic 48 MB limit. 👎</p>
+
+<h4>Native Dependencies</h4>
+
+<p>The <code>libtensorflow.so</code> native shared library must be compiled using the platform runtime. Running <code>npm install</code>  locally automatically compiles native dependencies against the host platform. Local environments may use different CPU architectures (Mac vs Linux) or link against shared libraries not available in the serverless runtime.</p>
+
+<h3>MobileNet Model Files</h3>
+
+<p>TensorFlow models files <a href="https://js.tensorflow.org/tutorials/model-save-load.html">need loading from the filesystem</a> in Node.js. Serverless runtimes do provide a temporary filesystem inside the runtime environment. Files from deployment zip files are automatically extracted into this environment before invocations. There is no external access to this filesystem outside the lifecycle of the serverless function.</p>
+
+<p>Models files for the MobileNet model were 16MB. If these files are included in the deployment package, it leaves 32MB for the rest of the application source code. Although the model files are small enough to include in the zip file, what about the TensorFlow.js libraries? Is this the end of the blog post? Not so fast&#8230;.</p>
+
+<p><strong>Apache OpenWhisk&#8217;s support for custom runtimes provides a simple solution to all these issues!</strong></p>
+
+<h2>Custom Runtimes</h2>
+
+<p>Apache OpenWhisk uses Docker containers as the runtime environments for serverless functions (actions). All platform runtime images are <a href="https://hub.docker.com/r/openwhisk/">published on Docker Hub</a>, allowing developers to start these environments locally.</p>
+
+<p>Developers can also <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">specify custom runtime images</a> when creating actions. These images must be publicly available on Docker Hub. Custom runtimes have to expose the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">same HTTP API</a> used by the platform for invoking actions.</p>
+
+<p>Using platform runtime images as <a href="https://docs.docker.com/glossary/?term=parent%20image">parent images</a> makes it simple to build custom runtimes. Users can run commands during the Docker build to install additional libraries and other dependencies. The parent image already contains source files with the HTTP API service handling platform requests.</p>
+
+<h3>TensorFlow.js Runtime</h3>
+
+<p>Here is the Docker build file for the Node.js action runtime with additional TensorFlow.js dependencies.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>FROM openwhisk/action-nodejs-v8:latest
+</span><span class='line'>
+</span><span class='line'>RUN npm install @tensorflow/tfjs @tensorflow-models/mobilenet @tensorflow/tfjs-node jpeg-js
+</span><span class='line'>
+</span><span class='line'>COPY mobilenet mobilenet</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>openwhisk/action-nodejs-v8:latest</code> is the Node.js action runtime image <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">published by OpenWhisk</a>.</p>
+
+<p>TensorFlow libraries and other dependencies are installed using <code>npm install</code> in the build process. Native dependencies for the <code>@tensorflow/tfjs-node</code> library are automatically compiled for the correct platform by installing during the build process.</p>
+
+<p>Since I&#8217;m building a new runtime, I&#8217;ve also added the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model files</a> to the image. Whilst not strictly necessary, removing them from the action zip file reduces deployment times.</p>
+
+<p><strong><em>Want to skip the next step? Use this image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/"><code>jamesthomas/action-nodejs-v8:tfjs</code></a> rather than building your own.</em></strong></p>
+
+<h3>Building The Runtime</h3>
+
+<p><em>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to download model files from the public storage bucket.</em></p>
+
+<ul>
+<li>Download a version of the MobileNet model and place all files in the <code>mobilenet</code> directory.</li>
+<li>Copy the Docker build file from above to a local file named <code>Dockerfile</code>.</li>
+<li>Run the Docker <a href="https://docs.docker.com/engine/reference/commandline/build/">build command</a> to generate a local image.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker build -t tfjs .
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag the local image</a> with a remote username and repository.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker tag tfjs &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Replace <code>&lt;USERNAME&gt;</code> with your Docker Hub username.</em></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push the local image</a> to Docker Hub</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'> docker push &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once the image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/">is available</a> on Docker Hub, actions can be created using that runtime image. 😎</p>
+
+<h2>Example Code</h2>
+
+<p>This source code implements image classification as an OpenWhisk action. Image files are provided as a Base64 encoded string using the <code>image</code> property on the event parameters. Classification results are returned as the <code>results</code> property in the response.</p>
+
+<script src="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5.js"></script>
+
+
+<h3>Caching Loaded Models</h3>
+
+<p>Serverless platforms initialise runtime environments on-demand to handle invocations. Once a runtime environment has been created, it will be <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">re-used for further invocations</a> with some limits. This improves performance by removing the initialisation delay (&#8220;cold start&#8221;) from request processing.</p>
+
+<p>Applications can exploit this behaviour by using global variables to maintain state across requests. This is often use to <a href="https://blog.rowanudell.com/database-connections-in-lambda/">cache opened database connections</a> or store initialisation data loaded from external systems.</p>
+
+<p>I have used this pattern to <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L80-L82">cache the MobileNet model</a> used for classification. During cold invocations, the model is loaded from the filesystem and stored in a global variable. Warm invocations then use the existence of that global variable to skip the model loading process with further requests.</p>
+
+<p>Caching the model reduces the time (and therefore cost) for classifications on warm invocations.</p>
+
+<h3>Memory Leak</h3>
+
+<p>Running the Node.js script from blog post on IBM Cloud Functions was possible with minimal modifications. Unfortunately, performance testing revealed a memory leak in the handler function. 😢</p>
+
+<p><em>Reading more about <a href="https://js.tensorflow.org/tutorials/core-concepts.html">how TensorFlow.js works</a> on Node.js uncovered the issue&#8230;</em></p>
+
+<p>TensorFlow.js&#8217;s Node.js extensions use a native C++ library to execute the Tensors on a CPU or GPU engine. Memory allocated for Tensor objects in the native library is retained until the application explicitly releases it or the process exits. TensorFlow.js provides a <code>dispose</code> method on the individual objects to free allocated memory. There is also a <code>tf.tidy</code> method to automatically clean up all allocated objects within a frame.</p>
+
+<p>Reviewing the code, tensors were being created as <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L51-L59">model input from images</a> on each request. These objects were not disposed before returning from the request handler. This meant native memory grew unbounded. Adding an explicit <code>dispose</code> call to free these objects before returning <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L91">fixed the issue</a>.</p>
+
+<h3>Profiling &amp; Performance</h3>
+
+<p>Action code records memory usage and elapsed time at different stages in classification process.</p>
+
+<p>Recording <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L12-L20">memory usage</a> allows me to modify the maximum memory allocated to the function for optimal performance and cost. Node.js provides a <a href="https://nodejs.org/docs/v0.4.11/api/all.html#process.memoryUsage">standard library API</a> to retrieve memory usage for the current process. Logging these values allows me to inspect memory usage at different stages.</p>
+
+<p>Timing <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L71">different tasks</a> in the classification process, i.e. model loading, image classification, gives me an insight into how efficient classification is compared to other methods. Node.js has a <a href="https://nodejs.org/api/console.html#console_console_time_label">standard library API</a> for timers to record and print elapsed time to the console.</p>
+
+<h2>Demo</h2>
+
+<h3>Deploy Action</h3>
+
+<ul>
+<li>Run the following command with the <a href="https://console.bluemix.net/openwhisk/learn/cli">IBM Cloud CLI</a> to create the action.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Replace <code>&lt;IMAGE_NAME&gt;</code> with the public Docker Hub image identifier for the custom runtime. Use <code>jamesthomas/action-nodejs-v8:tfjs</code> if you haven&#8217;t built this manually.</em></p>
+
+<h3>Testing It Out</h3>
+
+<ul>
+<li>Download <a href="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG">this image</a> of a Panda from Wikipedia.</li>
+</ul>
+
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>wget http://bit.ly/2JYSal9 -O panda.jpg
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Invoke the action with the Base64 encoded image as an input parameter.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'> ibmcloud fn action invoke classify -r -p image <span class="k">$(</span>base64 panda.jpg<span class="k">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Returned JSON message contains classification probabilities. 🐼🐼🐼</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;results&quot;</span><span class="p">:</span>  <span class="p">[{</span>
+</span><span class='line'>    <span class="err">className:</span> <span class="err">&#39;giant</span> <span class="err">panda,</span> <span class="err">panda,</span> <span class="err">panda</span> <span class="err">bear,</span> <span class="err">coon</span> <span class="err">bear&#39;,</span>
+</span><span class='line'>    <span class="err">probability:</span> <span class="err">0.9993536472320557</span>
+</span><span class='line'>  <span class="p">}]</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Activation Details</h3>
+
+<ul>
+<li>Retrieve logging output for the last activation to show performance data.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>ibmcloud fn activation logs --last
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong><em>Profiling and memory usage details are logged to stdout</em></strong></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>prediction <span class="k">function </span>called.
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>150.46 MB, <span class="nv">heapTotal</span><span class="o">=</span>32.83 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.29 MB, <span class="nv">external</span><span class="o">=</span>67.6 MB
+</span><span class='line'>loading image and model...
+</span><span class='line'>decodeImage: 74.233ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.05 MB, <span class="nv">external</span><span class="o">=</span>40.63 MB
+</span><span class='line'>imageByteArray: 5.676ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.05 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span><span class='line'>imageToInput: 5.952ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.06 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span><span class='line'>mn_model.classify: 274.805ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>149.83 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.57 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span><span class='line'>classification results: <span class="o">[</span>...<span class="o">]</span>
+</span><span class='line'>main: 356.639ms
+</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>144.37 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.58 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>main</code> is the total elapsed time for the action handler. <code>mn_model.classify</code> is the elapsed time for the image classification. Cold start requests print an extra log message with model loading time, <code>loadModel: 394.547ms</code>.</p>
+
+<h2>Performance Results</h2>
+
+<p>Invoking the <code>classify</code> action 1000 times for both cold and warm activations (using 256MB memory) generated the following performance results.</p>
+
+<h3>warm invocations</h3>
+
+<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
+
+<h3>cold invocations</h3>
+
+<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
+
+<p><em>One disadvantage of using custom runtime images in Apache OpenWhisk is the lack of <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">pre-warmed containers</a>. Pre-warming is used to reduce cold start times by starting runtime containers before they are needed. This is not supported for non-standard runtime images.</em></p>
+
+<h3>classification cost</h3>
+
+<p>IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">provides a free tier</a> of 400,000 GB/s per month. Each further second of execution is charged at $0.000017 per GB of memory allocated. Execution time is rounded up to the nearest 100ms.</p>
+
+<p>If all activations were warm, a user could execute <strong>more than 4,000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 600,000 further invocations would cost just over $1.</p>
+
+<p>If all activations were cold, a user could execute <strong>more than 1,2000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 180,000 further invocations would cost just over $1.</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
+
+<p>Fortunately, Apache OpenWhisk&#8217;s custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3819,773 +4146,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2018-01-05T15:40:00+00:00" pubdate data-updated="true">Jan 5<span>th</span>, 2018</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
-
-<p><em>This blog post is part three of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
-
-<p>Having <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
-applications, monitoring incoming metric values will alert us to problems.</p>
-
-<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
-
-<blockquote><p>Grafana is an open source metric analytics & visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote>
-
-
-<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
-
-<p>Let&#8217;s review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
-before we start setting up the serverless monitoring dashboards…</p>
-
-<h2>Grafana Basics</h2>
-
-<h3>Metric Data Values</h3>
-
-<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
-
-<ul>
-<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
-<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
-<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
-<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration</code></em></li>
-</ul>
-
-
-<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
-
-<h3>Templates</h3>
-
-<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
-
-<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
-
-<p><img src="/images/grafana_dashboards/templating.png"></p>
-
-<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
-
-<h3>Common Tasks</h3>
-
-<h4>How to create a new dashboard?</h4>
-
-<ul>
-<li>Open the dashboard menu by clicking the drop-down menu.</li>
-<li>Click the &#8220;Create New&#8221; button.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/new_dashboard.png"></p>
-
-<h4>How to set the dashboard name?</h4>
-
-<ul>
-<li>Select the &#8220;Manage Dashboard&#8221; menu option.</li>
-<li>Click &#8220;Settings&#8221; to open the dashboard options panel.</li>
-<li>Change the &#8220;General -> Details -> Name&#8221; configuration value.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/dashboard_name.png"></p>
-
-<h4>How to set dashboard template variables?</h4>
-
-<ul>
-<li>Select the &#8220;Manage Dashboard&#8221; menu option.</li>
-<li>Click &#8220;Templating&#8221; to open the templating variables configuration panel.</li>
-<li>Click &#8220;New&#8221; button to define template variables.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/dashboard_template_menu.png"></p>
-
-<ul>
-<li>Fill in the name field with the template identifier.</li>
-<li>Select &#8220;IBM Cloud Monitoring&#8221; as the data source.</li>
-<li>Fill in the query field with chosen metric query.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/dashboard_template_details.png"></p>
-
-<h4>How to add new row to dashboard?</h4>
-
-<ul>
-<li>Click the &#8220;Add Row&#8221; button beneath the last row.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/add_row.png"></p>
-
-<h4>How to add new chart to row?</h4>
-
-<ul>
-<li>Hover over the options menu on the right-hand side of the row.</li>
-<li>Select the &#8220;Add Panel&#8221; menu item.</li>
-<li>Choose a chart type from the panel menu.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
-
-<h4>How to set and display row name?</h4>
-
-<ul>
-<li>Hover over the options menu on the right-hand side of the row.</li>
-<li>Select the &#8220;Row Options&#8221; menu item.</li>
-<li>Fill in the &#8220;Title&#8221; field. Click the &#8220;Show&#8221; checkbox.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/add_row_panel.png"></p>
-
-<h4>How to edit chart parameters?</h4>
-
-<ul>
-<li>Click the panel title to open the panel options dialog.</li>
-<li>Select the &#8220;Edit&#8221; button.</li>
-<li>Graph options dialog opens below the chart panel.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/panel_details_more.png"></p>
-
-<h4>How to choose time range for metric values?</h4>
-
-<ul>
-<li>Click the clock icon on the right-hand side of the menu bar.</li>
-<li>Define time ranges manually or by selecting options from the &#8220;Quick Ranges&#8221; examples.</li>
-<li>Auto-update can be enabled using the &#8220;Refresh&#8221; drop-down menu.</li>
-</ul>
-
-
-<p><img src="/images/grafana_dashboards/time_range_menu.png"></p>
-
-<h2>Dashboards</h2>
-
-<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
-
-<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
-
-<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
-for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
-
-<h3>Overview Dashboard</h3>
-
-<p>This is an example of the first dashboard we want to create.</p>
-
-<p><img src="/images/grafana_dashboards/overview-dashboard.gif"></p>
-
-<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
-
-<h4>setup</h4>
-
-<ol>
-<li>Create a new dashboard named &#8220;Overview&#8221;.</li>
-<li>Set the following template variables.
-
-<ul>
-<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
-<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
-</ul>
-</li>
-</ol>
-
-
-<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
-
-<h4>invocations graph</h4>
-
-<p><img src="/images/grafana_dashboards/overview-invocations.png"></p>
-
-<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
-
-<p><em>How can we calculate total invocations from the metric values?</em></p>
-
-<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
-
-<p><em>Let&#8217;s implement this now…</em></p>
-
-<ul>
-<li>Set and display default row name as <em>&#8220;Invocations&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error
-</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options to true.
-
-<ul>
-<li><em>Legend->Options->Show</em></li>
-<li><em>Display->Draw Modes->Bars</em></li>
-<li><em>Display->Stacking &amp; Null value->Stack</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation types</h4>
-
-<p><img src="/images/grafana_dashboards/overview-invocation-types.png"></p>
-
-<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
-
-<p>Calculating the sum for all invocations recorded will use the same &#8220;scale &amp; offset&#8221; trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
-
-<p><strong><u>all count</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display default row name as <em>&#8220;Invocation Types&#8221;</em>.</li>
-<li>Add a new <em>&#8220;Single Stat&#8221;</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = All</em></li>
-<li><em>Options -> Value -> Stat = total</em></li>
-<li><em>Options -> Coloring -> Background = true</em></li>
-<li><em>Options -> Coloring -> Thresholds = 0,100000</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>success count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;All&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Success</em></li>
-<li><em>Options -> Coloring -> Colors = Make green the last threshold colour.</em></li>
-<li><em>Options -> Coloring -> Thresholds = 0,0</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>errors count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Success&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Errors</em></li>
-<li><em>Options-> Coloring -> Colors = Make red the last threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>cold start count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Errors&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Cold Start</em></li>
-<li><em>Options-> Coloring -> Colors = Make blue the last threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation durations</h4>
-
-<p><img src="/images/grafana_dashboards/overview-invocation-durations.png"></p>
-
-<p>This row will contain counts for the total, mean and range of all invocations.</p>
-
-<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
-
-<p><strong><u>total duration</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display default row name as <em>&#8220;Invocation Durations&#8221;</em>.</li>
-<li>Add a new <em>&#8220;Single Stat&#8221;</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Total</em></li>
-<li><em>Options -> Value -> Stat = total</em></li>
-<li><em>Options -> Value -> Unit = milliseconds</em></li>
-<li><em>Options -> Coloring -> Background = true</em></li>
-<li><em>Options -> Coloring -> Thresholds = 100000000,100000000</em></li>
-<li><em>Options -> Coloring -> Colors = Make grey the first threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>average duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Total&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Average</em></li>
-<li><em>Options -> Value -> Stat = avg</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>range duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Average&#8221;</em> chart in the row.</li>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Range</em></li>
-<li><em>Options -> Value -> Stat = range</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation details table</h4>
-
-<p><img src="/images/grafana_dashboards/overview-tables.png"></p>
-
-<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
-
-<p><strong><u>all invocations table</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>&#8220;Invocations Per Action&#8221;</em>.</li>
-<li>Add a <em>&#8220;Table&#8221;</em> panel to the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error
-</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (All)</em></li>
-<li><em>Options -> Data -> Table Transform = Time series aggregations</em></li>
-<li><em>Options -> Data -> Columns = Total</em></li>
-<li><em>Options -> Column Styles -> Decimals = 0</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>error invocations table</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Invocations (All)&#8221;</em> chart in the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (Errors)</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>duration statistics table</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Invocations (Errors)&#8221;</em> chart in the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (Duration)</em></li>
-<li><em>Options -> Data -> Columns = Avg, Min, Max</em></li>
-<li><em>Options -> Column Styles -> Decimals = Milliseconds</em></li>
-<li><em>Options -> Column Styles -> Decimals = 2</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
-
-<p><em>Let&#8217;s move onto the second dashboard, which will give us more in-depth statistics for individual actions&#8230;</em></p>
-
-<h3>Action Dashboard</h3>
-
-<p>This is an example of the second dashboard we want to create.</p>
-
-<p><img src="/images/grafana_dashboards/action-dashboard.gif"></p>
-
-<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
-
-<h4>setup</h4>
-
-<ul>
-<li>Create a new dashboard named <em>&#8220;Action Details&#8221;</em>.</li>
-<li>Set the following template variables.
-
-<ul>
-<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
-<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
-<li><strong>$actions</strong> => <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
-</ul>
-</li>
-</ul>
-
-
-<p><em>Replace &lt;action> with the name of an action you are monitoring.</em></p>
-
-<h4>invocations</h4>
-
-<p><img src="/images/grafana_dashboards/action-invocations.png"></p>
-
-<p>Action invocations are shown this first dashboard row. Bar charts display
-successful versus failed invocations and cold versus warm starts.</p>
-
-<p>Failed invocations and cold starts are recorded as metric values. Using the
-<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
-and warm starts from these properties.</p>
-
-<ul>
-<li>Set and display default row name as <em>&#8220;Invocations&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> chart to row.</li>
-<li>Configure two metric queries for the chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.error
-</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum).alias(success)</span></code></pre></td></tr></table></div></figure>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.error
-</span><span class='line'>.groupByNode(5, sum).alias(failure)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options to true.
-
-<ul>
-<li><em>Legend->Options->Show</em></li>
-<li><em>Display->Draw Modes->Bars</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation types</h4>
-
-<p><img src="/images/grafana_dashboards/action-invocation-types.png"></p>
-
-<p>This row replicates the <em>&#8220;Invocation Types&#8221;</em> row from the <em>&#8220;Overview&#8221;</em> dashboard.</p>
-
-<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
-
-<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
-
-<h4>invocation durations</h4>
-
-<p><img src="/images/grafana_dashboards/action-invocation-durations.png"></p>
-
-<p>This row uses an extended version of the durations row from the <em>&#8220;Overview&#8221;</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
-
-<p><strong>Repeat the instructions from above to add the <em>&#8220;Total&#8221;</em> and <em>&#8220;Average&#8221;</em> panels.</strong></p>
-
-<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
-
-<p><strong><u>minimum duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Total&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Min</em></li>
-<li><em>Options -> Value -> Stat = min</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>maximum duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Minimum&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Min</em></li>
-<li><em>Options -> Value -> Stat = max</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>percentiles graph</u></strong></p>
-
-<ul>
-<li>Add a <em>&#8220;Table&#8221;</em> panel to the row.</li>
-<li>Configure this metric query for the chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
-</span><span class='line'>.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Durations (Percentiles)</em></li>
-<li><em>Axes -> Left Y -> Unit = Milliseconds</em></li>
-<li><em>Legend -> Options -> Show = True</em></li>
-<li><em>Legend -> Values -> Avg = True</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>cpu usage</h4>
-
-<p><img src="/images/grafana_dashboards/action-cpu-usage.png"></p>
-
-<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>&#8220;CPU Usage&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> panel to row.</li>
-<li>Configure two metric queries for the chart.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
-</span><span class='line'>.groupByNode(5, avg).alias(user-time)</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
-</span><span class='line'>.groupByNode(5, avg).alias(system-time)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>Axes -> Left Y -> Unit = Microseconds</em></li>
-<li><em>Legend -> Values -> Avg = true</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>memory usage</h4>
-
-<p><img src="/images/grafana_dashboards/action-memory-usage.png"></p>
-
-<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>&#8220;Memory Usage&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> panel to row.</li>
-<li>Configure four metric queries for the chart using this template.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
-</span><span class='line'>.groupByNode(5, avg).alias(&lt;label&gt;)</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Replace &lt;label> with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>Axes -> Left Y -> Unit = bytes</em></li>
-<li><em>Legend -> Values -> Avg = true</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong>Having finished all the charts for the action details example, you should now
-have dashboards which look like the examples above!</strong> 📈📊📉</p>
-
-<h2>conclusion</h2>
-
-<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
-
-<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
-are a perfect solution for this problem. Building custom dashboards allows us
-to monitor incoming data values live.</p>
-
-<p>In the next blog post, we&#8217;re going to finish off <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values&#8230;</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -4601,6 +4161,10 @@ to monitor incoming data values live.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">Serverless Machine Learning With TensorFlow.js</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">Machine Learning In Node.js With TensorFlow.js</a>
       </li>
     
@@ -4614,10 +4178,6 @@ to monitor incoming data values live.</p>
     
       <li class="post">
         <a href="/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/">Binding IAM Services To IBM Cloud Functions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">Using Cloud Object Storage from IBM Cloud Functions (Node.js)</a>
       </li>
     
   </ul>
