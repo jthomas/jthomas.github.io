@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jthomas.github.com/jthomas/atom.xml" rel="self"/>
   <link href="http://jthomas.github.com/jthomas/"/>
-  <updated>2018-08-13T17:21:19+01:00</updated>
+  <updated>2018-10-30T10:57:21+00:00</updated>
   <id>http://jthomas.github.com/jthomas/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,602 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Finding photos on Twitter using face recognition with TensorFlow.js]]></title>
+    <link href="http://jthomas.github.com/jthomas/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/"/>
+    <updated>2018-10-30T09:34:00+00:00</updated>
+    <id>http://jthomas.github.com/jthomas/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition</id>
+    <content type="html"><![CDATA[<p>As a developer advocate, I spend a lot of time at developer conferences (talking about serverless 😎). Upon returning from each trip, I need to compile a &#8220;trip report&#8221; on the event for my bosses. This helps demonstrate the value in attending events and that I&#8217;m not just accruing air miles and hotel points for fun&#8230; 🛫🏨</p>
+
+<p>I always include any social media content people post about my talks in the trip report. This is usually tweets with photos of me on stage. If people are tweeting about your session, I assume they enjoyed it and wanted to share with their followers.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">&quot;Servers kill your productivity&quot; <a href="https://twitter.com/thomasj?ref_src=twsrc%5Etfw">@thomasj</a> at <a href="https://twitter.com/hashtag/CodeMobileUK?src=hash&amp;ref_src=twsrc%5Etfw">#CodeMobileUK</a> <a href="https://t.co/Y4NsiBBSxT">pic.twitter.com/Y4NsiBBSxT</a></p>&mdash; Mihai Cîrlănaru (@MCirlanaru) <a href="https://twitter.com/MCirlanaru/status/981170555834441729?ref_src=twsrc%5Etfw">April 3, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p><strong>Finding tweets with photos about your talk from attendees is surprisingly challenging.</strong></p>
+
+<p>Attendees often forget to include your twitter username in their tweets. This means the only way to find those photos is to manually scroll through all the results from the conference hashtag. This is problematic at conferences with thousands of attendees all tweeting during the event. <em>#devrelproblems</em>.</p>
+
+<p>Having become bored of manually trawling through all the tweets for each conference, I had a thought&#8230;</p>
+
+<blockquote><p><em>&#8220;Can&#8217;t I write some code to do this for me?&#8221;</em></p></blockquote>
+
+<p>This didn&#8217;t seem like too ridiculous an idea. Twitter has <a href="https://developer.twitter.com/en/docs/tweets/search/overview">an API</a>, which would allow me to retrieve all tweets for a conference hashtag. Once I had all the tweet photos, couldn&#8217;t I run some magic AI algorithm over the images to tell me if I was in them? 🤔</p>
+
+<p>After a couple of weeks of hacking around (and overcoming numerous challenges) I had (to my own amazement) managed to <a href="https://github.com/jthomas/findme">build a serverless application</a> which can find unlabelled photos of a person on twitter using machine learning with <a href="https://github.com/tensorflow/tfjs">TensorFlow.js</a>.</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/face-recog/find-me-demo.gif" alt="FindMe Example" /></p>
+
+<p><em>If you just want to try this application yourself, follow the instructions in the Github repo: <a href="https://github.com/jthomas/findme">https://github.com/jthomas/findme</a></em></p>
+
+<h2>architecture</h2>
+
+<p><img src="http://jthomas.github.com/jthomas/images/face-recog/architecture.png" alt="FindMe Architecture Diagram" /></p>
+
+<p>This application has four <a href="https://github.com/jthomas/findme/blob/master/serverless.yml">serverless functions</a> (two API handlers and two backend services) and a client-side application from a static web page. Users log into the <a href="https://github.com/jthomas/findme/tree/master/public">client-side application</a> using Auth0 with their Twitter account. This provides the backend application with the user&#8217;s profile image and Twitter API credentials.</p>
+
+<p>When the user invokes a search query, the client-side application invokes the API endpoint for the <code>register_search</code> <a href="https://github.com/jthomas/findme/blob/master/schedule_search.js">function</a> with the query terms and twitter credentials. This function registers a new search job in Redis and fires a new <code>search_request</code> trigger event with the query and job id. This job identifier is returned to the client to poll for real-time status updates.</p>
+
+<p>The <code>twitter_search</code> <a href="https://github.com/jthomas/findme/blob/master/twitter_search.js">function</a> is connected to the <code>search_request</code> trigger and invoked for each event. It uses the Twitter Search API to retrieve all tweets for the search terms. If tweets retrieved from the API contain photos, those tweet ids (with photo urls) are fired as new <code>tweet_image</code> trigger events.</p>
+
+<p>The <code>compare_images</code> <a href="https://github.com/jthomas/findme/blob/master/compare_images.js">function</a> is connected to the <code>tweet_image</code> trigger. When invoked, it downloads the user&#8217;s twitter profile image along with the tweet image and runs face detection against both images, using the <code>face-api.js</code> <a href="https://github.com/justadudewhohacks/face-api.js">library</a>. If any faces in the tweet photo match the face in the user&#8217;s profile image, tweet ids are written to Redis before exiting.</p>
+
+<p>The client-side web page polls for real-time search results by polling the API endpoint for the <code>search_status</code>  <a href="https://github.com/jthomas/findme/blob/master/search_status.js">function</a> with the search job id. Tweets with matching faces are displayed on the web page using the <a href="https://developer.twitter.com/en/docs/twitter-for-websites/embedded-tweets/overview">Twitter JS library</a>.</p>
+
+<h2>challenges</h2>
+
+<p>Since I had found an <a href="https://github.com/justadudewhohacks/face-api.js">NPM library to handle face detection</a>, I could just use this on a serverless platform by including the library within the zip file used to create my serverless application? Sounds easy, right?!</p>
+
+<p><strong>ahem - not so faas-t&#8230;. ✋</strong></p>
+
+<p>As discussed in <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">previous blog posts</a>, there are numerous challenges in using TF.js-based libraries on serverless platforms. Starting with making the packages available in the runtime and loading model files to converting images for classification, these libraries are not like using normal NPM modules.</p>
+
+<p><em>Here are the main challenges I had to overcome to make this serverless application work&#8230;</em></p>
+
+<h3>using tf.js libraries on a serverless platform</h3>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-node">Node.js backend drivers</a> for TensorFlow.js use a native shared C++ library  (<code>libtensorflow.so</code>) to execute models on the CPU or GPU. This native dependency is compiled for the platform during the <code>npm install</code> process. The shared library file is around 142MB, which is too large to include in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">deployment package</a> for most serverless platforms.</p>
+
+<p>Normal workarounds for this issue store large dependencies in an object store. These files are dynamically retrieved during cold starts and stored in the runtime filesystem, as shown in this pseudo-code. This workaround does add an additional delay to cold start invocations.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">let</span> <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">library</span> <span class="o">=</span> <span class="s1">&#39;libtensorflow.so&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">cold_start</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">from_object_store</span><span class="p">(</span><span class="nx">library</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">write_to_fs</span><span class="p">(</span><span class="nx">library</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// rest of function code…</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Fortunately, I had a better solution using Apache OpenWhisk&#8217;s support for custom Docker runtimes!</strong></p>
+
+<p>This feature allows serverless applications to use <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md#creating-native-actions">custom Docker images</a> as the runtime environment. Creating custom images with <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">large libraries pre-installed</a> means they can be excluded from deployment packages. 💯</p>
+
+<p>Apache OpenWhisk publishes all existing <a href="https://hub.docker.com/r/openwhisk/">runtime images</a> on Docker Hub. Using existing runtime images as base images means Dockerfiles for custom runtimes are minimal. Here&#8217;s the Dockerfile needed to build a custom runtime with the TensorFlow.js Node.js backend drivers pre-installed.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once this image has been built and published on Dockerhub, you can use it when creating new functions.</p>
+
+<p><em>I used this approach to build a <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/tags/">custom TensorFlow.js runtime</a> which is available on Docker Hub: <code>jamesthomas/action-nodejs-v8:tfjs-faceapi</code></em></p>
+
+<p>OpenWhisk actions created using the <code>wsk</code> command-line use a configuration flag (<code>--docker</code>) to specify custom runtime images.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">classify</span> <span class="nx">source</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">faceapi</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The OpenWhisk provider plugin for The Serverless Framework also supports <a href="https://github.com/serverless/serverless-openwhisk#custom-runtime-images">custom runtime images</a> through a configuration parameter (<code>image</code>) under the function configuration.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">machine-learning</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">classify</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">source.main</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">image</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">jamesthomas/action-nodejs-v8:tfjs-faceapi</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having fixed the issue of library loading on serverless platforms, I could move onto the next problem, loading the pre-trained models&#8230; 💽</p>
+
+<h3>loading pre-trained models</h3>
+
+<p>Running the <a href="https://github.com/justadudewhohacks/face-api.js#usage-loading-models">example code</a> to load the pre-trained models for face recognition gave me this error:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">ReferenceError</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">fetch is not defined</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I discovered how to manually load TensorFlow.js models from the filesystem using the <code>file://</code> URI prefix. Unfortunately, the <code>face-api.js</code> library doesn&#8217;t support this feature. Models are <a href="https://github.com/justadudewhohacks/tfjs-image-recognition-base/blob/4a7d981dbb37e0d3dabc962e1cbfb6122e535263/src/dom/loadWeightMap.ts#L12">automatically loaded</a> using the <code>fetch</code> HTTP client. This HTTP client is available into modern browsers but not in the Node.js runtime.</p>
+
+<p>Overcoming this issue relies on providing an instance of a compatible HTTP client in the runtime. The <code>node-fetch</code> library is a <a href="https://www.npmjs.com/package/node-fetch">implementation of the fetch client</a> API for the Node.js runtime. By manually installing this module and exporting as a global variable, the library can then use the HTTP client as expected.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// Make HTTP client available in runtime</span>
+</span><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;node-fetch&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Model configuration and weight files can then be loaded from the library&#8217;s Github repository using this URL:</p>
+
+<p>https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="s1">&#39;&lt;GITHUB_URL&gt;&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>face detection in images</h3>
+
+<p>The <code>face-api.js</code> library has a <a href="https://github.com/justadudewhohacks/face-api.js#detecting-faces">utility function</a> (<code>models.allFaces</code>) to automatically detect and calculate descriptors for all faces found in an image. Descriptors are a feature vector (of 128 32-bit float values) which uniquely describes the characteristics of a persons face.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">results</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">allFaces</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="nx">minConfidence</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>The input to this function is the input tensor with the RGB values from an image. In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I explained how to convert an image from the filesystem in Node.js to the input tensor needed by the model.</em></p>
+
+<p>Finding a user by comparing their twitter profile against photos from tweets starts by running face detection against both images. By comparing computed descriptor values, a measure of similarity can be established between faces from the images.</p>
+
+<h3>face comparison</h3>
+
+<p>Once the face descriptors have been calculated the library provides a utility function to compute the euclidian distance between two descriptors vectors. If the difference between two face descriptors is less than a threshold value, this is used to identify the same person in both images.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">distance</span> <span class="o">=</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">euclideanDistance</span><span class="p">(</span><span class="nx">descriptor1</span><span class="p">,</span> <span class="nx">descriptor2</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">distance</span> <span class="o">&lt;</span> <span class="mf">0.6</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;match&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">else</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;no match&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I&#8217;ve no idea why 0.6 is chosen as the threshold value but this seemed to work for me! Even small changes to this value dramatically reduced the precision and recall rates for my test data. I&#8217;m calling it the Goldilocks value, just use it&#8230;</p>
+
+<h2>performance</h2>
+
+<p>Once I had the end to end application working, I wanted to make it was fast as possible. By optimising the performance, I could improve the application responsiveness and reduce compute costs for my backend. Time is literally money with serverless platforms.</p>
+
+<h3>baseline performance</h3>
+
+<p>Before attempting to optimise my application, I needed to understand the baseline performance. Setting up experiments to record invocation durations gave me the following average test results.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~5 seconds</li>
+<li><em>Cold invocations</em>: ~8 seconds</li>
+</ul>
+
+
+<p>Instrumenting the code with <code>console.time</code> statements revealed execution time was comprised of five main sections.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       3200 ms       </td>
+<td>       2000 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 8 seconds</strong>   </td>
+<td>   <strong>~ 5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p><em>Initialisation</em> was the delay during cold starts to create the runtime environment and load all the library files and application code. <em>Model Loading</em> recorded the time spent instantiating the TF.js models from the source files. <em>Image Loading</em> was the time spent converting the RGB values from images into input tensors, this happened twice, once for the twitter profile picture and again for the tweet photo. <em>Face Detection</em> is the elapsed time to execute the <code>models.allFaces</code> method and <code>faceapi.euclideanDistance</code> methods for all the detected faces. <em>Everything else</em> is well&#8230; everything else.</p>
+
+<p>Since model loading was the largest section, this seemed like an obvious place to start optimising. 📈📉</p>
+
+<h3>loading model files from disk</h3>
+
+<p>Overcoming the initial model loading issue relied on manually exposing the expected HTTP client in the Node.js runtime. This allowed models to be dynamically loaded (over HTTP) from the external Github repository. Models files were about 36MB.</p>
+
+<p>My first idea was to load these model files from the filesystem, which should be much faster than downloading from Github. Since I was already building a custom Docker runtime, it was a one-line change to include the model files within the runtime filesystem.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">COPY</span> <span class="nx">weights</span> <span class="nx">weights</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having re-built the image and pushed to Docker Hub, the classification function&#8217;s runtime environment now included models files in the filesystem.</p>
+
+<p><strong>But how do we make the <code>face-api.js</code> library load models files from the filesystem when it is using a HTTP client?</strong></p>
+
+<p>My solution was to write a <code>fetch</code> client that proxied calls to retrieve files from a HTTP endpoint to the local filesystem. 😱 I&#8217;d let you decide whether this is a brilliant or terrible idea!</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">json</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">,</span> <span class="s1">&#39;utf8&#39;</span><span class="p">)),</span>
+</span><span class='line'>    <span class="nx">arrayBuffer</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">load</span><span class="p">(</span><span class="s1">&#39;/weights&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>face-api.js</code> library only used two methods (<code>json()</code> &amp; <code>arrayBuffer()</code>) from the HTTP client. Stubbing out these methods to proxy <code>fs.readFileSync</code> meant files paths were loaded from the filesystem. Amazingly, this seemed to just work, hurrah!</p>
+
+<p><strong>Implementing this feature and re-running performance tests revealed this optimisation saved about 500 ms from the Model Loading section.</strong></p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       1500 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 4.5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>This was less of an improvement than I&#8217;d expected. Parsing all the model files and instantiating the internal objects was more computationally intensive than I realised. This performance improvement did improve both cold and warm invocations, which was a bonus.</p>
+
+<p><em>Despite this optimisation, model loading was still the largest section in the classification function&#8230;</em></p>
+
+<h3>caching loaded models</h3>
+
+<p>There&#8217;s a good strategy to use when optimising serverless functions&#8230;</p>
+
+<p><img src="http://jthomas.github.com/jthomas/images/face-recog/cache-all-the-things.jpg" alt="CACHE ALL THE THINGS" /></p>
+
+<p>Serverless runtimes re-use runtime containers for consecutive requests, known as warm environments. Using local state, like global variables or the runtime filesystem, to cache data between requests can be used to improve performance during those invocations.</p>
+
+<p>Since model loading was such an expensive process, I wanted to cache initialised models. Using a global variable, I could control whether to trigger model loading or return the pre-loaded models. Warm environments would re-use pre-loaded models and remove model loading delay.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">faceapi</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;face-api.js&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">let</span> <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">load</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">location</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">LOADED</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceRecognitionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceLandmarkModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">faceapi</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>This performance improvement had a significant impact of the performance for warm invocations. Model loading became &#8220;free&#8221;.</strong> 👍</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>caching face descriptors</h3>
+
+<p>In the initial implementation, the face comparison function was executing face detection against both the user&#8217;s twitter profile image and tweet photo for comparison. Since the twitter profile image was the same in each search request, running face detection against this image would always return the same results.</p>
+
+<p>Rather than having this work being redundantly computed in each function, caching the results of the computed face descriptor for the profile image meant it could re-used across invocations. This would reduce by 50% the work necessary in the Image &amp; Model Loading sections.</p>
+
+<p>The <code>face-api.js</code> library returns the face descriptor as a typed array with 128 32-bit float values. Encoding this values as a hex string allows them to be stored and retrieved from Redis. This code was used to convert float values to hex strings, whilst maintaining the exact precision of those float values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">encode</span> <span class="o">=</span> <span class="nx">typearr</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">encoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">typearr</span><span class="p">.</span><span class="nx">buffer</span><span class="p">).</span><span class="nx">toString</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">encoded</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">decode</span> <span class="o">=</span> <span class="nx">encoded</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">decoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">encoded</span><span class="p">,</span> <span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">uints</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Uint8Array</span><span class="p">(</span><span class="nx">decoded</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">floats</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Float32Array</span><span class="p">(</span><span class="nx">uints</span><span class="p">.</span><span class="nx">buffer</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">floats</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This optimisation improves the performance of most cold invocations and all warm invocations, removing over 1200 ms of computation time to compute the results.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>                    </th>
+<th align="center"> Cold Starts (Cached) </th>
+<th align="center">    Warm Starts    </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td> Initialisation     </td>
+<td align="center">       1200 ms        </td>
+<td align="center">       0 ms        |</td>
+</tr>
+<tr>
+<td></td>
+<td> Model Loading      </td>
+<td align="center">       2700 ms        </td>
+<td align="center">      1500 ms      |</td>
+</tr>
+<tr>
+<td></td>
+<td> Image Loading      </td>
+<td align="center">        500 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> Face Detection     </td>
+<td align="center">   700 ms - 900 ms    </td>
+<td align="center">  700 ms - 900 ms  |</td>
+</tr>
+<tr>
+<td></td>
+<td> Everything Else    </td>
+<td align="center">       1000 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> <strong>Total Duration</strong> </td>
+<td align="center">   <strong>~ 6 seconds</strong>    </td>
+<td align="center"> <strong>~ 2.5 seconds</strong> |</td>
+</tr>
+</tbody>
+</table>
+
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms      </td>
+<td>     500 ms       </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms  </td>
+<td> 700 ms - 900 ms </td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>final results + cost</h3>
+
+<p>Application performance was massively improved with all these optimisations. As demonstrated in the video above, the application could process tweets in real-time, returning almost instant results. Average invocation durations were now.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~2.5 seconds</li>
+<li><em>Cold invocations (Cached)</em>: ~6 seconds</li>
+</ul>
+
+
+<p>Serverless platforms charge for compute time by the millisecond, so these improvements led to cost savings of 25% for cold invocations (apart the first classification for a user) and 50% for warm invocations.</p>
+
+<p>Classification functions used 512MB of RAM which meant IBM Cloud Functions would provide 320,000 &#8220;warm&#8221; classifications or 133,333 &#8220;cold&#8221; classifications within the free tier each month. Ignoring the free tier, 100,000 &#8220;warm&#8221; classifications would cost $5.10 and 100,000 &#8220;cold&#8221; classifications $2.13.</p>
+
+<h2>conclusion</h2>
+
+<p>Using TensorFlow.js with serverless cloud platforms makes it easy to build scalable machine learning applications in the cloud. Using the horizontal scaling capabilities of serverless platforms, thousands of model classifications can be ran in parallel. This can be more performant than having dedicated hardware with a GPU, especially with compute costs for serverless applications being so cheap.</p>
+
+<p>TensorFlow.js is ideally suited to serverless application due to the JS interface, (relatively) small library size and availability of pre-trained models. Despite having no prior experience in Machine Learning, I was able to use the library to build a face recognition pipeline, processing 100s of images in parallel, for real-time results. This amazing library opens up machine learning to a whole new audience!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Serverless Machine Learning With TensorFlow.js]]></title>
@@ -7163,741 +7759,6 @@ to monitor incoming data values live.</p>
 <p><strong>This means Python functions running on OpenWhisk can now use any third-party library as if it was installed globally.</strong></p>
 
 <p>Hurrah 👌!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Building an SMS Bot for Slack.]]></title>
-    <link href="http://jthomas.github.com/jthomas/blog/2017/03/20/smsbot/"/>
-    <updated>2017-03-20T16:02:00+00:00</updated>
-    <id>http://jthomas.github.com/jthomas/blog/2017/03/20/smsbot</id>
-    <content type="html"><![CDATA[<p>This is <a href="https://github.com/ibmets/smsbot">smsbot</a>.</p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/slack_text_hidden.jpg"></p>
-
-<p>It provides an integration with Slack that connects SMS messages into channels. People can text an external number and have their messages posted into the channel. Channel users can respond to the messages and have their response sent back to the sender using SMS.</p>
-
-<blockquote><p>smsbot was developed in under a few hours and less than one hundred lines of code using a serverless cloud platform.</p></blockquote>
-
-
-<p>Want to understand how it works? Let&#8217;s find out…</p>
-
-<p>The first challenge was how to programmatically send and receive SMS messages.</p>
-
-<p><em><strong>Want to deploy smsbot yourself? Follow the <a href="#Deployment">instructions</a> at the bottom or check out the <a href="https://github.com/ibmets/smsbot">Github repository</a>.</strong></em></p>
-
-<h2>Twilio</h2>
-
-<p><img src="http://www.timothylutts.com/wp-content/uploads/2016/09/twilio.jpg"></p>
-
-<p><a href="https://twilio.com">Twilio</a> provides a platform for building SMS, voice and messaging applications using an API.</p>
-
-<p>Developers can <a href="https://www.twilio.com/console/phone-numbers">register phone numbers</a> through the service that invoke webhooks for incoming calls and SMS messages. Webhooks are passed message details and return a custom markup language (TwilML) to encode the instructions on how to respond to the request.</p>
-
-<p>The platform also provides a REST API to <a href="https://www.twilio.com/sms/api">initiate phone calls and SMS messages</a>.</p>
-
-<p><em>We now have a way to handle text messages for our bot, how do we integrate a new bot in Slack?</em></p>
-
-<h2>Slack</h2>
-
-<p><img src="http://stratejos.ai/img/logos/slack-logo.png"></p>
-
-<p><a href="https://slack.com">Slack</a> also provides a webhook-based mechanism to integrate custom bots into the platform. The platform has two different integrations…</p>
-
-<h3>Incoming Webhooks.</h3>
-
-<p>Provide a way to post messages into Slack from external sources. It provides a custom URL that supports HTTP requests with a JSON payload. These requests are turned into channel messages. The JSON payload is used to control the content and formatting of the message.</p>
-
-<p><a href="https://api.slack.com/incoming-webhooks">https://api.slack.com/incoming-webhooks</a></p>
-
-<h3>Outgoing Webhooks</h3>
-
-<p>Allow you to listen for messages in channels without using the full real-time API. Slack sends HTTP requests to registered URLs when specific trigger words appear in channel messages. The HTTP request body contains the message details.</p>
-
-<p><a href="https://api.slack.com/outgoing-webhooks">https://api.slack.com/outgoing-webhooks</a></p>
-
-<p><em>Now we just need a way to write simple HTTP services to listen for webhook requests…</em></p>
-
-<h2>OpenWhisk</h2>
-
-<p><img src="http://openwhisk.org/images/apache-openwhisk.jpg"></p>
-
-<p><a href="http://openwhisk.org">OpenWhisk</a> is an open-source serverless cloud platform. <a href="https://martinfowler.com/articles/serverless.html">Serverless platforms</a> make it easy to create microservices in the cloud without having to set up or manage any infrastructure.</p>
-
-<p>Developers push their code directly into the platform. The platform will instantiate the runtime and invoke the code on-demand for each request. Serverless functions can be <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">exposed as HTTP endpoints</a> or connected to <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/catalog.md">event sources</a> like <a href="https://github.com/openwhisk/openwhisk-package-kafka/blob/master/README.md">message queues</a> or <a href="https://github.com/openwhisk/openwhisk-package-cloudant/blob/master/README.md">databases</a>.</p>
-
-<p>Serverless platforms make it easy to create simple HTTP services to handle webhook requests.</p>
-
-<h3>Web Actions</h3>
-
-<p><a href="https://medium.com/openwhisk/serverless-http-handlers-with-openwhisk-90a986cc7cdd#.rki6bwjgu">Web Actions</a> are a new feature in OpenWhisk for exposing serverless functions as simple HTTP endpoints. Functions have access to the full HTTP request and can control the HTTP response returned. This method is suitable for simple public endpoints that do not need more enterprise features supported by the <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/apigateway.md">API gateway</a>.</p>
-
-<p>Web Actions are available at the following <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">platform API path</a>.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>https://{APIHOST}/api/v1/experimental/web/{USER_NAMESPACE}/{PACKAGE}/{ACTION_NAME}.{TYPE}</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><em>APIHOST</em> - platform endpoint e.g. <em>openwhisk.ng.bluemix.net.</em></li>
-<li><em>USER_NAMESPACE</em> - must be explicit and cannot use the default namespace (_).</li>
-<li><em>PACKAGE</em> - action package or <code>default</code>.</li>
-<li><em>ACTION_NAME</em> - function identifier.</li>
-<li><em>TYPE</em> - <code>.json</code>, <code>.html</code>, <code>.text</code> or <code>.http</code>.</li>
-</ul>
-
-
-<h3>Example</h3>
-
-<p>Here&#8217;s a simple Web Actions that returns HTML content when invoked through the API.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">msg</span> <span class="o">=</span> <span class="s2">&quot;you didn&amp;#39;t tell me who you are.&quot;</span>
-</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nx">msg</span> <span class="o">=</span> <span class="err">`</span><span class="nx">hello</span> <span class="nx">$</span><span class="p">{</span><span class="nx">args</span><span class="p">.</span><span class="nx">name</span><span class="p">}</span><span class="o">!</span><span class="err">`</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>    <span class="k">return</span> <span class="p">{</span><span class="nx">body</span><span class="o">:</span>
-</span><span class='line'>       <span class="err">`</span><span class="o">&lt;</span><span class="nx">html</span><span class="o">&gt;&lt;</span><span class="nx">body</span><span class="o">&gt;&lt;</span><span class="nx">h3</span><span class="o">&gt;&lt;</span><span class="nx">center</span><span class="o">&gt;</span><span class="nx">$</span><span class="p">{</span><span class="nx">msg</span><span class="p">}</span><span class="o">&lt;</span><span class="err">/center&gt;&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;`}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Actions can be turned into web-accessible actions by setting a custom annotation.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">greeting</span> <span class="nx">source</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">annotation</span> <span class="nx">web</span><span class="o">-</span><span class="kr">export</span> <span class="kc">true</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>greeting</code> function can then be invoked through a HTTP request to the following endpoint.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/greeting.http?name=James</code></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http post https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/html_greeting.http?name<span class="o">=</span>James
-</span><span class='line'>HTTP/1.1 200 OK
-</span><span class='line'>...
-</span><span class='line'>
-</span><span class='line'>&lt;html&gt;&lt;body&gt;&lt;h3&gt;&lt;center&gt;hello James!&lt;/center&gt;&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Twilio &lt;=> Slack</h2>
-
-<p>OpenWhisk Web Actions are a great solution for creating webhook endpoints. Connecting Twilio to Slack (and vice-versa) can be implemented using two different OpenWhisk Web Actions.</p>
-
-<ul>
-<li><strong>Twilio Webhook.</strong> Invoked for SMS messages. Uses the Slack Incoming Webhook to create a bot messages from content.
-​</li>
-<li><strong>Slack Outgoing Webhook.</strong> Invoked for channel replies. Uses Twilio API to send replies as SMS messages.</li>
-</ul>
-
-
-<p>Let&#8217;s have a look at the Twilio webhook first…</p>
-
-<h3>Twilio Webhook</h3>
-
-<p>When a new SMS message is received, we want to post this bot message into our Slack channel.</p>
-
-<p>Twilio allows developers to <a href="https://www.twilio.com/docs/api/twiml/sms/twilio_request">configure webhooks</a> for each registered phone number. The webhook endpoint will be invoked for each SMS message that is received. Twilio can either send a HTTP POST request, with parameters in the body, or a HTTP GET request, with URL query parameters.</p>
-
-<p>OpenWhisk Web Actions support both formats. Request parameters will be available as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md#http-context">properties on the function argument</a>.</p>
-
-<p>Here&#8217;s a simple Web Action that would log the message sender and content for each SMS received.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">Text</span> <span class="nx">message</span> <span class="nx">from</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">From</span><span class="p">}</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">Body</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Creating Bot Messages From SMS</h4>
-
-<p>When an SMS message is received, we need to send a HTTP POST to the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook URL</a>. The JSON body of the HTTP request is used to configure the channel message. Using the <code>username</code>, <code>icon_emoji</code> and and <code>text</code> properties allows us to customise our bot message.</p>
-
-<p>OpenWhisk Actions in Node.js have <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#javascript-runtime-environments">numerous popular NPM modules</a> pre-installed in the environment. This includes a <a href="https://github.com/request/request">HTTP client library</a>. This code snippet demonstrates sending the HTTP request to create out bot message. The Slack Webhook URL is bound as a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameter</a> to the action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">request</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;request&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">slack_message</span> <span class="o">=</span> <span class="nx">text</span> <span class="o">=&gt;</span> <span class="p">({</span>
-</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="s1">&#39;smsbot&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">icon_emoji</span><span class="o">:</span> <span class="s1">&#39;:phone:&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">text</span>
-</span><span class='line'><span class="p">})</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">request</span><span class="p">.</span><span class="nx">post</span><span class="p">({</span>
-</span><span class='line'>      <span class="nx">body</span><span class="o">:</span> <span class="nx">slack_message</span><span class="p">(</span><span class="err">`</span><span class="nx">Text</span> <span class="nx">message</span> <span class="nx">from</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">From</span><span class="p">}</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">Body</span><span class="p">}</span><span class="err">`</span><span class="p">),</span>
-</span><span class='line'>      <span class="nx">json</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span class='line'>      <span class="nx">url</span><span class="o">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">slack</span><span class="p">.</span><span class="nx">webhook</span>
-</span><span class='line'>    <span class="p">},</span> <span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">);</span>
-</span><span class='line'>      <span class="nx">resolve</span><span class="p">();</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Returning a Promise ensures the request is completed before the function exits.</p>
-
-<h4>Sending Acknowledgement Message</h4>
-
-<p>Returning <a href="https://www.twilio.com/docs/api/twiml">TwilML</a> content allows us to control the response from Twilio to the incoming message.</p>
-
-<p>This snippet would send an SMS reply to sender with the content &#8220;Hello World!&#8221;.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="cp">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;</span>
-</span><span class='line'><span class="nt">&lt;Response&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;Message&gt;</span>Hello World!<span class="nt">&lt;/Message&gt;</span>
-</span><span class='line'><span class="nt">&lt;/Response&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><a href="https://www.npmjs.com/package/twilio">Twilio&#8217;s client library</a> for Node.js can be used to programatically generate TwilML.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">resp</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">twilml</span> <span class="o">=</span> <span class="nx">resp</span><span class="p">.</span><span class="nx">message</span><span class="p">(</span><span class="s1">&#39;Thanks for letting us know.&#39;</span><span class="p">).</span><span class="nx">toString</span><span class="p">()</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Returning XML content as the HTTP response requires us to set the response headers, body and status code in the Web Action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">xml</span> <span class="o">=</span> <span class="s1">&#39;...&#39;</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>      <span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span> <span class="s1">&#39;text/xml&#39;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="nx">code</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">body</span><span class="o">:</span> <span class="nx">xml</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Web Action Source</h4>
-
-<p>Adding the XML response code into the existing function completes the OpenWhisk Web Action required to handle incoming SMS messages.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">request</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;request&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">resp</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">twilml</span> <span class="o">=</span> <span class="nx">resp</span><span class="p">.</span><span class="nx">message</span><span class="p">(</span><span class="s1">&#39;Thanks for letting us know.&#39;</span><span class="p">).</span><span class="nx">toString</span><span class="p">()</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">response</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">headers</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span> <span class="s1">&#39;text/xml&#39;</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="nx">code</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">body</span><span class="o">:</span> <span class="nx">twilml</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">slack_message</span> <span class="o">=</span> <span class="nx">text</span> <span class="o">=&gt;</span> <span class="p">({</span>
-</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="s1">&#39;smsbot&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">icon_emoji</span><span class="o">:</span> <span class="s1">&#39;:phone:&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">text</span>
-</span><span class='line'><span class="p">})</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">request</span><span class="p">.</span><span class="nx">post</span><span class="p">({</span>
-</span><span class='line'>      <span class="nx">body</span><span class="o">:</span> <span class="nx">slack_message</span><span class="p">(</span><span class="err">`</span><span class="nx">Text</span> <span class="nx">message</span> <span class="nx">from</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">From</span><span class="p">}</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">params</span><span class="p">.</span><span class="nx">Body</span><span class="p">}</span><span class="err">`</span><span class="p">),</span>
-</span><span class='line'>      <span class="nx">json</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span class='line'>      <span class="nx">url</span><span class="o">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">slack</span><span class="p">.</span><span class="nx">webhook</span>
-</span><span class='line'>    <span class="p">},</span> <span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">);</span>
-</span><span class='line'>      <span class="nx">resolve</span><span class="p">(</span><span class="nx">response</span><span class="p">);</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Register Webhook</h4>
-
-<p>Once we have deployed the Web Action, we can configure the Twilio SMS webhook endpoint to use following URL.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@email.com_dev/default/smsbot-dev-incoming.http</code></p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/twilio_sms_webhook.png"></p>
-
-<h3>Slack Outgoing Webhook</h3>
-
-<p>When someone sends a channel message to the bot, smsbot should send that content as an SMS message to the last person who sent an SMS to the channel. An <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> will be used to trigger the bot.</p>
-
-<p>Outgoing Webhooks have a configurable trigger word. Channel messages which start with this word are send as HTTP requests to the list of URLs registered for that webhook. We will use <code>smsbot</code> as our trigger word.</p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/outgoing_webhook_trigger.png"></p>
-
-<h4>Request Parameters</h4>
-
-<p>Slack sends the following parameters for each channel message.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">token</span><span class="o">=</span><span class="nx">XXXXXXXXXXXXXXXXXX</span>
-</span><span class='line'><span class="nx">team_id</span><span class="o">=</span><span class="nx">T0001</span>
-</span><span class='line'><span class="nx">team_domain</span><span class="o">=</span><span class="nx">example</span>
-</span><span class='line'><span class="nx">channel_id</span><span class="o">=</span><span class="nx">C2147483705</span>
-</span><span class='line'><span class="nx">channel_name</span><span class="o">=</span><span class="nx">test</span>
-</span><span class='line'><span class="nx">timestamp</span><span class="o">=</span><span class="mf">1355517523.000005</span>
-</span><span class='line'><span class="nx">user_id</span><span class="o">=</span><span class="nx">U2147483697</span>
-</span><span class='line'><span class="nx">user_name</span><span class="o">=</span><span class="nx">Steve</span>
-</span><span class='line'><span class="nx">text</span><span class="o">=</span><span class="nx">googlebot</span><span class="o">:</span> <span class="nx">What</span> <span class="nx">is</span> <span class="nx">the</span> <span class="nx">air</span><span class="o">-</span><span class="nx">speed</span> <span class="nx">velocity</span> <span class="nx">of</span> <span class="nx">an</span> <span class="nx">unladen</span> <span class="nx">swallow</span><span class="o">?</span>
-</span><span class='line'><span class="nx">trigger_word</span><span class="o">=</span><span class="nx">googlebot</span><span class="o">:</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In OpenWhisk Web Actions, these parameters will be available on the function argument object.</p>
-
-<p>Here&#8217;s a simple Web Action that would parse and log the message contents when the webhook is fired.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">msg</span> <span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">text</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">trigger_word</span><span class="p">.</span><span class="nx">length</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;channel message:&#39;</span><span class="p">,</span> <span class="nx">msg</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When this webhook is fired, we need to add code to send an SMS message with the channel message.</p>
-
-<h4>Sending SMS Messages</h4>
-
-<p><a href="https://www.twilio.com/docs/api/rest">Twilio&#8217;s API</a> allows us to programatically <a href="https://www.twilio.com/docs/api/rest/sending-messages">send SMS messages</a> from our registered numbers.</p>
-
-<p>This snippet shows you how to use their <a href="http://npmjs.com/package/twilio">Node.js client library</a> to send sample message.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">creds</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">account</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">auth</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span> <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="nx">twilio</span><span class="p">(</span><span class="nx">creds</span><span class="p">.</span><span class="nx">account</span><span class="p">,</span> <span class="nx">creds</span><span class="p">.</span><span class="nx">auth</span><span class="p">)</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">callback</span> <span class="o">=</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">message</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;sent sms message.&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span> <span class="nx">to</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">from</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">body</span><span class="o">:</span> <span class="s1">&#39;hello world&#39;</span> <span class="p">},</span> <span class="nx">callback</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The webhook should use this client library to send a message to the last person who send us an incoming message.</p>
-
-<h4>Reply to Message Sender</h4>
-
-<p>How can we determine who was the last person who sent a message to our bot? The Web Action processing the incoming messages is a separate service to the Web Action sending SMS messages.</p>
-
-<p>Rather than setting up a database to share application state, the service can use Twilio&#8217;s API to retrieve the received message details.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">creds</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">account</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">auth</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span> <span class="p">}</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="nx">twilio</span><span class="p">(</span><span class="nx">creds</span><span class="p">.</span><span class="nx">account</span><span class="p">,</span> <span class="nx">creds</span><span class="p">.</span><span class="nx">auth</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">list</span><span class="p">({</span><span class="nx">to</span><span class="o">:</span> <span class="s1">&#39;+44....&#39;</span><span class="p">},</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">last</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">messages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">last</span> <span class="nx">message</span> <span class="nx">from</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">last</span><span class="p">.</span><span class="nx">from</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>SMSBot Channel Response</h4>
-
-<p><a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhooks</a> which respond with a JSON body will generate a new channel message.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;username&quot;</span><span class="p">:</span> <span class="s2">&quot;smsbot&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;icon_emoji&quot;</span><span class="p">:</span> <span class="s2">&quot;:phone:&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;text&quot;</span><span class="p">:</span> <span class="s2">&quot;sms sent to ...&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Web Action Source</h4>
-
-<p>Combing the channel message parsing code with the snippets for sending SMS messages and obtaining the last message sender completes the Web Action needed to handle the Outgoing Webhook.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">twilio</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;twilio&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">slack_message</span> <span class="o">=</span> <span class="nx">text</span> <span class="o">=&gt;</span> <span class="p">({</span>
-</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="s1">&#39;smsbot&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">icon_emoji</span><span class="o">:</span> <span class="s1">&#39;:phone:&#39;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nx">text</span>
-</span><span class='line'><span class="p">})</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">reply</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">client</span> <span class="o">=</span> <span class="nx">twilio</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">twilio</span><span class="p">.</span><span class="nx">account</span><span class="p">,</span> <span class="nx">params</span><span class="p">.</span><span class="nx">twilio</span><span class="p">.</span><span class="nx">auth</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">list</span><span class="p">({</span><span class="nx">to</span><span class="o">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">twilio</span><span class="p">.</span><span class="nx">number</span><span class="p">},</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">Promise</span><span class="p">.</span><span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="kr">const</span> <span class="nx">last</span> <span class="o">=</span> <span class="nx">data</span><span class="p">.</span><span class="nx">messages</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span class='line'>    <span class="kr">const</span> <span class="nx">msg</span> <span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">text</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">trigger_word</span><span class="p">.</span><span class="nx">length</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-</span><span class='line'>    <span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">to</span><span class="o">:</span> <span class="nx">last</span><span class="p">.</span><span class="nx">from</span><span class="p">,</span> <span class="nx">from</span><span class="o">:</span> <span class="nx">last</span><span class="p">.</span><span class="nx">to</span><span class="p">,</span> <span class="nx">body</span><span class="o">:</span> <span class="nx">msg</span> <span class="p">}</span>
-</span><span class='line'>    <span class="nx">client</span><span class="p">.</span><span class="nx">messages</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="nx">options</span><span class="p">,</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">message</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="nx">Promise</span><span class="p">.</span><span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>        <span class="nx">resolve</span><span class="p">(</span><span class="nx">slack_message</span><span class="p">(</span><span class="err">`</span><span class="nx">sms</span> <span class="nx">reply</span> <span class="nx">sent</span> <span class="nx">to</span> <span class="nx">$</span><span class="p">{</span><span class="nx">last</span><span class="p">.</span><span class="nx">from</span><span class="p">}</span><span class="err">`</span><span class="p">))</span>
-</span><span class='line'>      <span class="p">})</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Twilio account credentials are bound as <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#setting-default-parameters">default parameters</a> to the Web Action during deployment.</p>
-
-<h2>Deployment</h2>
-
-<p><a href="https://github.com/ibmets/smsbot">smsbot</a> is built using <a href="https://serverless.com/">The Serverless Framework</a>.</p>
-
-<p><img src="https://cloud.githubusercontent.com/assets/20538501/24154626/b86ad64a-0e1f-11e7-8e12-979b8d194430.png"></p>
-
-<p>This framework makes building serverless applications really easy. The tool handles the entire configuration and deployment process for your serverless provider. OpenWhisk <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">recently released integration</a> with the framework through a provider plugin.</p>
-
-<p><strong><em>Let&#8217;s look at how to use the framework to deploy our serverless application…</em></strong></p>
-
-<h3>OpenWhisk</h3>
-
-<p>Register for an account with an OpenWhisk provider, e.g. <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>.</p>
-
-<p><a href="https://console.ng.bluemix.net/openwhisk/learn/cli">Set up</a> the <code>wsk</code> CLI and run the command to authenticate against the platform endpoint.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">property</span> <span class="nx">set</span> <span class="o">--</span><span class="nx">apihost</span> <span class="nx">openwhisk</span><span class="p">.</span><span class="nx">ng</span><span class="p">.</span><span class="nx">bluemix</span><span class="p">.</span><span class="nx">net</span> <span class="o">--</span><span class="nx">auth</span> <span class="nx">SECRET</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Serverless Framework</h3>
-
-<p>Install the <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/serverless/serverless-openwhisk">OpenWhisk provider plugin</a>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">npm</span> <span class="nx">install</span> <span class="o">--</span><span class="nx">global</span> <span class="nx">serverless</span> <span class="nx">serverless</span><span class="o">-</span><span class="nx">openwhisk</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Source Code</h3>
-
-<p>Download the <a href="https://github.com/jthomas/smsbot">source code</a> from Github and install the project dependencies.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">git</span> <span class="nx">clone</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//github.com/ibmets/smsbot.git</span>
-</span><span class='line'><span class="nx">$</span> <span class="nx">cd</span> <span class="nx">smsbot</span>
-</span><span class='line'><span class="nx">$</span> <span class="nx">npm</span> <span class="nx">install</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Create a new file called <code>credentials.yml</code> with the following content.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">twilio</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">account</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">auth</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">number</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="l-Scalar-Plain">numbers</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="l-Scalar-Plain">slack</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">webhook</span><span class="p-Indicator">:</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Twilio</h3>
-
-<p>Register an account with Twilio and provision <a href="https://www.twilio.com/console/phone-numbers/search">a new phone number</a>. Make a note of the phone number. Retrieve the account identifier and auth token from the <a href="https://www.twilio.com/console">Twilio console</a>.</p>
-
-<p>Fill in the account identifier, auth token and phone number in the <code>credentials.yml</code> file.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">twilio</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">account</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">AC_USER_ID</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">auth</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">AUTH_TOKEN</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">number</span><span class="p-Indicator">:</span> <span class="s">&#39;+441234567890&#39;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Important: the <code>twilio.number</code> property value must be a quoted string.</em></p>
-
-<h3>Phone Numbers</h3>
-
-<p>During Twilio&#8217;s free trial, you will need <a href="https://support.twilio.com/hc/en-us/articles/223136107-How-does-Twilio-s-Free-Trial-work-">manually verify each phone number</a> that you want to send messages to.</p>
-
-<p>Fill in all verified numbers in <code>credentials.yml</code>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">numbers</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="s">&#39;+441234567890&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Joe Smith</span>
-</span><span class='line'>    <span class="s">&#39;+441234567891&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Jane Smith</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Important: the <code>numbers</code> property values must be a quoted strings.</em></p>
-
-<h3>Incoming Webhook</h3>
-
-<p>Create a new <a href="https://api.slack.com/incoming-webhooks">Incoming Webhook</a> integration for the Slack channel messages should appear in.</p>
-
-<p>Fill in the <code>slack.webhook</code> property in <code>credentials.yml</code> with this url.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">slack</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">webhook</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">https://hooks.slack.com/services/XXXX/YYYY/ZZZZ</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Deploy Application</h3>
-
-<p>Use The Serverless Framework to deploy your application.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">$ serverless deploy</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Packaging service...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Functions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling API Gateway definitions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Rules...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Triggers &amp; Feeds...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deploying Functions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deployment successful!</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">Service Information</span>
-</span><span class='line'><span class="l-Scalar-Plain">platform</span><span class="err">:   </span><span class="l-Scalar-Plain">openwhisk.ng.bluemix.net</span>
-</span><span class='line'><span class="l-Scalar-Plain">namespace</span><span class="err">:  </span><span class="l-Scalar-Plain">_</span>
-</span><span class='line'><span class="l-Scalar-Plain">service</span><span class="err">:    </span><span class="l-Scalar-Plain">smsbot</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">actions</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="l-Scalar-Plain">smsbot-dev-incoming    smsbot-dev-reply</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">triggers</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="err">*</span><span class="nv">*no</span> <span class="l-Scalar-Plain">triggers deployed**</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">rules</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="err">*</span><span class="nv">*no</span> <span class="l-Scalar-Plain">rules deployed**</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">endpoints</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="err">*</span><span class="nv">*no</span> <span class="l-Scalar-Plain">routes deployed**</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Twilio Webhook</h3>
-
-<p>On the <a href="https://www.twilio.com/console/phone-numbers/incoming">Phone Numbers</a> page in the Twilio console, configure the &#8221;<em>Messaging</em>&#8221; webhook URL.</p>
-
-<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-incoming.http</code></p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/twilio_sms_webhook.png"></p>
-
-<h3>Outgoing Webhook</h3>
-
-<p>Create a new <a href="https://api.slack.com/custom-integrations/outgoing-webhooks">Outgoing Webhook</a> integration for the Slack channel messages should appear in. Use <code>smsbot</code> as the <em>Trigger Word</em>.</p>
-
-<p>Use this Web Action URL, replacing <code>user@host.com_dev</code> with your namespace.</p>
-
-<p><code>https://openwhisk.ng.bluemix.net/api/v1/experimental/web/user@host.com_dev/default/smsbot-dev-reply.json</code></p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/outgoing_webhook_trigger.png"></p>
-
-<h3>Test it out!</h3>
-
-<p>Send a text message to the phone number you registered through Twilio. smsbot should post the contents into Slack and send an SMS response with the message &#8221;<em>Thanks for letting us know!</em>&#8221;.</p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/slack_text_hidden.jpg"></p>
-
-<p>If you send a channel message starting with the trigger word (<em>smsbot</em>), the phone number should receive a new SMS message with the message text.</p>
-
-<p><img src="http://jthomas.github.com/jthomas/images/smsbot/sms_app.png"></p>
-
-<p>Awesome-sauce 😎.</p>
-
-<h2>Conclusions</h2>
-
-<p><a href="https://github.com/openwhisk/openwhisk/blob/master/docs/webactions.md">OpenWhisk Web Actions</a> provide a convenient way to expose serverless functions as simple HTTP APIs. This feature is ideal for implementing webhook endpoints.</p>
-
-<p>Both Slack and Twilio provide webhook integration for developers to use their platforms. Using OpenWhisk Web Actions, we can write serverless functions that act as a bridge between these services. With less than a hundred lines of code, we&#8217;ve created a new slack bot that can connect users to channels using SMS messages.</p>
-
-<p>Pretty cool, huh?! 👏👏👏</p>
 ]]></content>
   </entry>
   
