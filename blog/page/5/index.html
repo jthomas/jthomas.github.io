@@ -9,8 +9,9 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Last week, Node.js released the latest version
-of their project, v4.0.0. This release, representing the convergence of io.js with the original Node. &hellip;">
+  <meta name="description" content="Before Christmas, my department
+at IBM had one of our semi-regular Hack Days to
+get everyone together and work on interesting ideas away from the day &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -78,6 +79,102 @@ of their project, v4.0.0. This release, representing the convergence of io.js wi
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/01/04/npm-modules-in-node-red/">NPM Modules in Node-RED</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-01-04T15:40:00+00:00" pubdate data-updated="true">Jan 4<span>th</span>, 2016</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Before Christmas, <a href="https://www-304.ibm.com/connections/blogs/et/entry/home?lang=en_us">my department</a>
+at IBM had one of our semi-regular Hack Days to
+get everyone together and work on interesting ideas away from the day job. I spent
+the time playing with an idea to make exposing NPM packages in <a href="http://nodered.org">Node-RED</a> easier&#8230;</p>
+
+<blockquote><p>Node-RED is a visual tool for wiring the Internet of Things.</p></blockquote>
+
+
+<p>It makes it easy to create, combine and control data flowing between hardware
+devices, web APIs and open protocols. The tool exposes operations through a
+series of <em>nodes</em>, which can be created through the browser-based editor and
+connected to other nodes to create <em>message flows</em>.</p>
+
+<p>The tool comes built-in with a <a href="http://flows.nodered.org/">huge selection of nodes</a>, from connecting to a
+Raspberry Pi to handling HTTP requests, for creating flows. Users <a href="http://nodered.org/docs/creating-nodes/">create their own nodes</a>
+to expose new functionality, by creating small modules using JavaScript and HTML.
+People often wrap existing <a href="https://www.npmjs.com/">NPM modules</a> into custom Node-RED nodes to use that module functionality in flows.</p>
+
+<p><a href="https://www.npmjs.com/">NPM</a> has over two hundred thousand modules, many of which provide simple
+&#8220;stateless&#8221; functions that return a result based upon the input data. These
+modules are ideally suited for using within Node-RED message flows.</p>
+
+<p>Exposing multiple new NPM modules required creating custom Node-RED nodes for every
+module you wanted to use. Whilst the Node-RED node boilerplate is small,
+it becomes a bit laborious and repetitive to keep doing this for extremely simple modules.</p>
+
+<p>Wondering how to make this easier, I started hacking on ideas.</p>
+
+<h2><em>Two days later&#8230;</em></h2>
+
+<blockquote><p>Node-RED node to dynamically expose NPM modules as nodes.</p><footer><strong>node-red-contrib-npm</strong> <cite><a href='http://flows.nodered.org/node/node-red-contrib-npm'>flows.nodered.org/node/&hellip;</a></cite></footer></blockquote>
+
+
+<p><img src="/images/npm-start.png"></p>
+
+<p>This new node allows you to dynamically expose NPM modules as Node-RED nodes
+without needing to manually create new nodes for them.</p>
+
+<p>Using the node editor panel, the user can set the name of the NPM package to
+expose along with the module invocation style.</p>
+
+<p><img src="/images/npm-configure.png"></p>
+
+<p>Incoming flow messages are
+passed as an argument to the function being executed. Users can set up the node
+to call the module, a module function or even run custom setup code in response
+to incoming messages.</p>
+
+<p>Execution results, either returned directly or asynchronously
+(Promises and callback-style supported), are sent as the outgoing message
+payload.</p>
+
+<p>When the flow is deployed, the NPM module will be automatically installed and instantiated.</p>
+
+<p>Now we don&#8217;t have to write lots of extra boilerplate code every time we
+want to use a tiny NPM module in a Node-RED flow, hurrah!</p>
+
+<p><em>Here&#8217;s a short demonstration using the node to expose the <a href="https://www.npmjs.com/package/sentiment">sentiment</a> package
+in a flow:</em></p>
+
+<p><img src="/images/Node-RED-NPM.gif"></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2795,76 +2892,6 @@ Upcoming features are listed in the <a href="https://github.com/IBM-Bluemix/phon
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/04/22/ibm-watson-nodes-for-nodered/">IBM Watson Nodes for Node-RED</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2015-04-22T11:15:00+01:00" pubdate data-updated="true">Apr 22<span>nd</span>, 2015</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><img src="/images/node-red.png"></p>
-
-<p>I&#8217;ve updated the IBM Watson Nodes for Node-RED to include seven extra services.</p>
-
-<p>Previously, the package only provided support for the following services:</p>
-
-<ul>
-<li>Language Identification.</li>
-<li>Machine Translation.</li>
-<li>Question &amp; Answers.</li>
-</ul>
-
-
-<p>With the recent <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/10">code changes</a>,
-users now have access to the additional services:</p>
-
-<ul>
-<li>Message Resonance.</li>
-<li>Personality Insights.</li>
-<li>Relationship Extraction.</li>
-<li>Speech to Text.</li>
-<li>Text to Speech.</li>
-<li>Tradeoff Analytics.</li>
-<li>Visual Recognition.</li>
-</ul>
-
-
-<p><strong>Using Node-RED through the <a href="https://bluemix.net">IBM Bluemix</a> boilerplate will
-automatically include the IBM Watson modules in the palette.</strong></p>
-
-<p>It is possible to use the IBM Watson nodes with Node-RED outside of IBM Bluemix
-provided you have the <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">local environment variables</a>
-configured to provide the service credentials.</p>
-
-<p>For information about the individual services, please see the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">IBM Watson Developer Cloud</a>.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/6/">&larr; Older</a>
@@ -2882,6 +2909,10 @@ configured to provide the service credentials.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2018/12/03/custom-domains-with-ibm-cloud-functions/">Using Custom Domains With IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/">Finding photos on Twitter using face recognition with TensorFlow.js</a>
       </li>
     
@@ -2895,10 +2926,6 @@ configured to provide the service credentials.</p>
     
       <li class="post">
         <a href="/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/">Monitoring Dashboards With Kibana For IBM Cloud Functions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/">Debugging Node.js OpenWhisk Actions</a>
       </li>
     
   </ul>
