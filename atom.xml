@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2018-12-13T08:57:20+00:00</updated>
+  <updated>2019-01-10T10:09:26+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,297 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Highly Available Serverless Apps With Cloudant's Cross-Region Replication]]></title>
+    <link href="http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/"/>
+    <updated>2019-01-10T11:23:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication</id>
+    <content type="html"><![CDATA[<p>Building <a href="https://www.techrepublic.com/blog/the-enterprise-cloud/what-high-availability-for-cloud-services-means-in-the-real-world/">highly available</a> serverless applications relies on eliminating &#8221;<a href="https://en.wikipedia.org/wiki/Single_point_of_failure"><em>single points of failure</em></a>&#8221; from application architectures.</p>
+
+<p><a href="https://cloud.ibm.com/docs/tutorials/multi-region-serverless.html#deploy-serverless-apps-across-multiple-regions">Existing tutorials</a> showed how to deploy the same serverless application on IBM Cloud in different regions. Using the <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> from <a href="https://cloud.ibm.com/catalog/services/internet-svcs">IBM Cloud Internet Services</a>, traffic is distributed across multiple applications from the same hostname. The <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> automatically detects outages in the regional applications and redirects traffics as necessary.</p>
+
+<p><strong>But what if all instances rely on the same database service and that has issues?</strong> 😱🔥</p>
+
+<p>In addition to running multiple instances of the application, independent databases in different regions are also necessary for a highly available serverless application. Maintaining consistent application state across regions needs all database changes to be automatically synchronised between instances. 🤔</p>
+
+<p><strong>In this blog post, we&#8217;re going to look at using <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant&#8217;s</a> <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">replication service</a> to set up a &#8221;<a href="https://en.wikipedia.org/wiki/Multi-master_replication">multi-master</a>&#8221; replication between regional database instances.</strong></p>
+
+<p>Once this is enabled, database changes will automatically be synchronised in real-time between all database instances. Serverless applications can use their regional database instance and be confident application state will be consistent globally (for some definition of <a href="https://en.wikipedia.org/wiki/Eventual_consistency">consistent</a>&#8230;). 💯</p>
+
+<h2>example serverless application - todo backend</h2>
+
+<p>This <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">serverless application</a> implements a <a href="https://www.todobackend.com/">TODO backend</a> using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> and <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant</a>.</p>
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/todo-frontpage.png"></p>
+
+<p>It provides an REST API for interacting with a TODO service. This can be used with the <a href="https://www.todobackend.com/client/index.html">front-end client</a> to add, complete and remove todos from a list.</p>
+
+<p><strong>Let&#8217;s make this <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">example serverless application</a> &#8220;highly available&#8221;. 👍</strong></p>
+
+<p>The application will be deployed to two different IBM Cloud regions (London and Dallas). Separate database instances will be provisioned in each region. Applications will use their regional database instance but share global state via replication.</p>
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/architecture.png"></p>
+
+<h2>deploy serverless app to multiple regions</h2>
+
+<p>This Github <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">repo</a> has an <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis/blob/master/deploy.sh">automatic deployment script</a> to deploy the serverless application (using <code>wskdeploy</code>) and application services (using <code>terraform</code>).</p>
+
+<p><strong><em>Install the prerequisites listed <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis#code-and-tools">here</a> before proceeding with these instructions.</em></strong></p>
+
+<h3>download example application</h3>
+
+<ul>
+<li>Clone the Git repository to a local directory.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Enter the source code directory.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cd ibm-cloud-functions-refarch-serverless-apis</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>create IAM key for serverless app</h3>
+
+<p><em>Have you already signed up for an <a href="https://cloud.ibm.com/registration">IBM Cloud account</a> and <a href="https://cloud.ibm.com/docs/cli/reference/ibmcloud/download_cli.html#install_use">installed the CLI</a>? If not, please do that before proceeding.</em></p>
+
+<ul>
+<li>Create an IAM key which will be used to deploy the serverless application.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud iam api-key-create serverless_api --file serverless_api.apikey</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>configure deployment variables</h3>
+
+<ul>
+<li>Create the <code>local.env</code> file in the current directory will the following contents.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>IBMCLOUD_API_KEY=&lt;IAM_API_KEY&gt;
+</span><span class='line'>IBMCLOUD_ORG=&lt;YOUR_ORG&gt;
+</span><span class='line'>IBMCLOUD_SPACE=&lt;REGION_SPACE&gt;
+</span><span class='line'>IBMCLOUD_REGION=
+</span><span class='line'>PROVISION_INFRASTRUCTURE=true
+</span><span class='line'>API_USE_APPID=false</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Replace the <code>&lt;IAM_API_KEY&gt;</code> value with the <code>apikey</code> value from the <code>serverless_api.apikey</code> file.</li>
+<li>Replace the <code>&lt;IBMCLOUD_ORG&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud organisation</a>.</li>
+<li>Replace the <code>&lt;IBMCLOUD_SPACE&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud space</a>.</li>
+</ul>
+
+
+<p>The <code>PROVISION_INFRASTRUCTURE</code> parameter makes the deployment script automatically provision all application resources using Terraform.</p>
+
+<p>Secured API endpoints are not required for this demonstration. Setting the <code>API_USE_APPID</code> parameter to <code>false</code> disables authentication on the endpoints and provisioning the AppID service.</p>
+
+<h3>deploy to london</h3>
+
+<ul>
+<li>Set the <code>IBMCLOUD_REGION</code> to <code>eu-gb</code> in the <code>local.env</code> file.</li>
+<li>Run the following command to deploy the application and provision all application resources.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>./deploy.sh --install</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If the deployment have succeed, the following message should be printed to the console.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>2019-01-08 10:51:51 All done.
+</span><span class='line'>ok: APIs
+</span><span class='line'>Action                                      Verb  API Name  URL
+</span><span class='line'>/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;UK_APIGW_URL&gt;/todo
+</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the London region.</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/testing-app.gif"></p>
+
+<h3>deploy to dallas</h3>
+
+<ul>
+<li><p><strong>Rename the <code>terraform.tfstate</code> file in the <code>infra</code> folder to <code>terraform.tfstate.london</code></strong></p></li>
+<li><p>Set the <code>IBMCLOUD_REGION</code> to <code>us-south</code> in the <code>local.env</code> file.</p></li>
+<li>Run the following command to deploy the application and provision all application resources.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>./deploy.sh --install</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If the deployment have succeed, the following message should be printed to the console.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>2019-01-08 10:51:51 All done.
+</span><span class='line'>ok: APIs
+</span><span class='line'>Action                                      Verb  API Name  URL
+</span><span class='line'>/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;US_APIGW_URL&gt;/todo
+</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the Dallas region.</li>
+</ul>
+
+
+<h2>configure cloudant cross-region replication</h2>
+
+<p>There are now multiple copies of the same serverless application in different regions. Each region has an independent instance of Cloudant provisioned.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/Cloudant/api/replication.html">Cloudant replication</a> is a one-way synchronisation from a source to a destination database. To set up a <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">bi-directional data synchronisation</a>, two different replications will need to be configured.</p>
+
+<h3>create api keys for replication access</h3>
+
+<p>Before configuring replication between the regional databases, API keys need to be created to allow remote access on both hosts. API keys need to be created per regional instance.</p>
+
+<ul>
+<li>From the <a href="https://cloud.ibm.com/resources">IBM Cloud Resource List</a>, find the cloudant instances provisioned in London and Dallas.</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/resource-list.png"></p>
+
+<ul>
+<li>Open the Cloudant Dashboard for each service instance.</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif"></p>
+
+<p>Follow these instructions on both hosts to generate API keys for replication with the correct permissions.</p>
+
+<ul>
+<li>Click the &#8220;Databases&#8221; icon to show all the databases on this instance.</li>
+<li>Click the 🔒 icon in the &#8220;todos&#8221; database row in the table to open the permissions page.</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/databases-list.png"></p>
+
+<p><em>Can&#8217;t find the &#8220;todos&#8221; database in the Cloudant dashboard? Make sure you interact with the TODO backend from the <a href="https://www.todobackend.com/client/index.html">front-end application</a>. This will automatically create the database if it doesn&#8217;t exist.</em></p>
+
+<ul>
+<li>Click &#8220;Generate API Key&#8221; on the permissions page.</li>
+<li>Make a note of the key identifier and password.</li>
+<li>Set the <code>_reader_</code>, <code>_writer</code> and <code>_replicator</code> permissions for the newly created key.</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/db-api-key.png"></p>
+
+<h3>set up cross-region replication</h3>
+
+<p>Replication jobs need to be configured on both database hosts. These can be created from the Cloudant dashboard. <strong>Repeat these instructions on both hosts.</strong></p>
+
+<ul>
+<li>Open the Cloudant Dashboard for each service instance.</li>
+<li>Click the &#8220;Replication&#8221; icon from the panel menu.</li>
+<li>Click the &#8220;New Replication&#8221; button.</li>
+<li>Set the following &#8220;Source&#8221; values in the &#8220;Job configuration&#8221; panel.
+
+<ul>
+<li>Type: <em>&#8220;Local Database&#8221;</em></li>
+<li>Name: <em>&#8220;todos&#8221;</em></li>
+<li>Authentication: <em>&#8220;Cloudant username or API Key&#8221;</em></li>
+<li>Fill in the API key and password for this local database host in the input fields.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/task-source.png"></p>
+
+<ul>
+<li>Set the following &#8220;Target&#8221; values in the &#8220;Job configuration&#8221; panel.
+
+<ul>
+<li>Type: <em>&#8220;Existing Remote Database&#8221;</em></li>
+<li>Name: <em>&#8220;https://<REMOTE_CLOUDANT_HOST>/todos&#8221;</em></li>
+<li>Authentication: <em>&#8220;Cloudant username or API Key&#8221;</em></li>
+<li>Fill in the API key and password for the remote database host in the input fields.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/task-target.png"></p>
+
+<p><em>Wondering what the REMOTE_CLOUDANT_HOST is? Use hostname from the Cloudant dashboard, e.g. XXXX-bluemix.cloudant.com</em></p>
+
+<ul>
+<li>Set the following &#8220;Options&#8221; values in the &#8220;Job configuration&#8221; panel.
+
+<ul>
+<li>Replication type: <em>&#8220;Continuous&#8221;</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/task-options.png"></p>
+
+<ul>
+<li>Click &#8220;Start Replication&#8221;</li>
+<li>Verify the replication table shows the new replication task state as &#8221;<em>Running</em>&#8221;. 👍</li>
+</ul>
+
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/replication-jobs-table.png"></p>
+
+<h2>test it out!</h2>
+
+<p>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the APIGW URLs for each region simultaneously. Interactions with the todo list in one region should automatically propagate to the other region.</p>
+
+<p><img src="http://jamesthom.as/images/ha-serverless-apps-todo/todo-app.gif"></p>
+
+<p>The &#8220;Active Tasks&#8221; panel on the Cloudant Dashboard shows the documents replicated between instances and pending changes. If there are errors synchronising changes to the replication target, the host uses exponential backoff to re-try the replication tasks.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/Cloudant/guides/conflicts.html#finding-conflicts">Conflicts</a> between document changes are handled using CouchDB&#8217;s <a href="http://guide.couchdb.org/draft/conflicts.html">conflict mechanism</a>. Applications are responsible for detecting and resolving document conflicts in the front-end.</p>
+
+<h2>conclusion</h2>
+
+<p>Running the same serverless application in multiple regions, using the GLB to proxy traffic, allows applications to manage regional outages. But what if all the application instances rely on the same database service? The &#8220;single point of failure&#8221; has shifted from the application runtime to the database host. 👎</p>
+
+<p>Provisioning independent databases in each application regions is one solution. Applications use their regional database instance and are protected from issues in other regions. This strategy relies on database changes being synchronised between instances to keep the application state consistent. 👍</p>
+
+<p>IBM Cloudant has a built-in replication service to synchronised changes between source and host databases. Setting up bi-directional replication tasks between all instances enables a  &#8220;multi-master&#8221; replication strategy. This allows applications to access any database instance and have the same state available globally. 🕺🕺🕺</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Using Custom Domains With IBM Cloud Functions]]></title>
@@ -7275,456 +7566,6 @@ to monitor incoming data values live.</p>
 <p><a href="https://github.com/serverless/serverless-openwhisk/releases/tag/v0.8.0">Recent updates</a> to the OpenWhisk provider plugin for The Serverless Framework also added support for pre-compiled Swift binaries. Combined with other plugins, the framework can now <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">completely automate the process of building binaries</a> for the Swift runtime.</p>
 
 <p><strong>Building binaries for Swift OpenWhisk actions has never been easier!</strong> 😎</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Serverless Swift with OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/"/>
-    <updated>2017-06-28T10:08:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk</id>
-    <content type="html"><![CDATA[<p>Swift is one of the <a href="https://www.macrumors.com/2017/03/10/apple-swift-programming-language-popularity/">fastest growing programming languages</a> with developers.</p>
-
-<p><img src="http://jamesthom.as/images/serverless_swift/language_rank.png"></p>
-
-<blockquote><p>Swift has reached a Top 15 ranking faster than any other language we have tracked.</p><footer><strong>RedMonk Programming Language Rankings</strong> <cite><a href='http://redmonk.com/sogrady/2017/03/17/language-rankings-1-17/'>redmonk.com/sogrady/2017/03/17/&hellip;</a></cite></footer></blockquote>
-
-
-<p>Created for building mobile applications, the language is now popular with backend development.</p>
-
-<p>But for Swift developers beginning to build backend applications, they now find themselves having to manage computing infrastructure to run their applications in the cloud.</p>
-
-<p><em>Enter serverless cloud platforms… ☁️☁️☁️</em></p>
-
-<p>These services <a href="https://en.wikipedia.org/wiki/Serverless_computing">allow developers to push code</a>, rather than VMs, into the cloud. The platforms allow you to connect external event sources like API requests or message queues to functions in your code. As events occur, your code is instantiated and executed to process each request. Developers are only billed for the milliseconds needed to process each request.</p>
-
-<p>Serverless platforms let you run applications in the cloud without worrying about infrastructure. 😎</p>
-
-<p><strong><a href="http://openwhisk.org">Apache OpenWhisk</a> is currently the only serverless platform to support Swift language functions.</strong></p>
-
-<p><em>Let&#8217;s have a look at how you can use Swift with OpenWhisk before diving into how the platform implements this feature to give us some tips and tricks for Swift on OpenWhisk…</em></p>
-
-<h2>Swift On OpenWhisk</h2>
-
-<h3>Using the CLI</h3>
-
-<p>Create a Swift file with the following source code in.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>func main(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    if let name = args["name"] as? String {
-</span><span class='line'>        return [ "greeting" : "Hello \(name)!" ]
-</span><span class='line'>    } else {
-</span><span class='line'>        return [ "greeting" : "Hello stranger!" ]
-</span><span class='line'>    }
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-swift-actions">Swift actions</a> must consume and return a dictionary. The dictionary passed as the function argument will contain event parameters. Returned dictionary values must support serialisation to JSON.</p>
-
-<p>Create and invoke a new OpenWhisk action using the command-line utility.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk action create swift action.swift
-</span><span class='line'>ok: created action swift
-</span><span class='line'>$ wsk action invoke swift --result
-</span><span class='line'>{
-</span><span class='line'>    "greeting": "Hello stranger!"
-</span><span class='line'>}
-</span><span class='line'>$ wsk action invoke swift --result --param name World
-</span><span class='line'>{
-</span><span class='line'>    "greeting": "Hello World!"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>result</code> flag will only show the action output in the console rather than the full API response.</p>
-
-<p>The source file must have a function called <code>main</code>. Each invocation executes this function. The function name to invoke can be overridden as shown below.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>func foo(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    return [ "greeting" : "Hello foo!" ]
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk action create foobar action.swift --main foo
-</span><span class='line'>ok: created action foobar
-</span><span class='line'>$ wsk action invoke foobar --result
-</span><span class='line'>{
-</span><span class='line'>    "greeting": "Hello foo!"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Choosing the runtime for the action can be set using the <code>kind</code> flag. If the source file has the <code>.swift</code> extension this will be automatically set to <code>swift:default</code>.</p>
-
-<p>OpenWhisk uses Swift 3.0.2 that runs on the Linux environment. There are open issues to support <a href="https://github.com/apache/incubator-openwhisk/issues/2079">Swift 3.1</a> and <a href="https://github.com/apache/incubator-openwhisk/issues/2200">Swift 4</a>.</p>
-
-<h3>Using the Serverless Framework</h3>
-
-<p><a href="https://serverless.com/">The Serverless Framework</a> is a popular open-source framework for building serverless applications. It provides CLI tools and a workflow for managing serverless development.</p>
-
-<p>Developers use a YAML file to define their application functions, events and resources. The framework handles deploying the application to their serverless provider.</p>
-
-<p>Having started as a tool for AWS Lambda, the framework recently <a href="https://serverless.com/blog/openwhisk-integration-with-serverless/">added multi-provider support</a>. It now also works with Apache OpenWhisk, Azure Functions and Google Cloud Functions.</p>
-
-<p>Let&#8217;s look at an example of using this framework to create a new OpenWhisk Swift application. Using a provider name and runtime, the framework <a href="https://serverless.com/framework/docs/providers/openwhisk/cli-reference/create/">can scaffold a new serverless application</a>.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ serverless create -t openwhisk-swift -p swift-action
-</span><span class='line'>Serverless: Generating boilerplate...
-</span><span class='line'>Serverless: Generating boilerplate in "/home/me/swift-action"
-</span><span class='line'> _______                             __
-</span><span class='line'>|   _   .-----.----.--.--.-----.----|  .-----.-----.-----.
-</span><span class='line'>|   |___|  -__|   _|  |  |  -__|   _|  |  -__|__ --|__ --|
-</span><span class='line'>|____   |_____|__|  \___/|_____|__| |__|_____|_____|_____|
-</span><span class='line'>|   |   |             The Serverless Application Framework
-</span><span class='line'>|       |                           serverless.com, v1.16.0
-</span><span class='line'> -------'
-</span><span class='line'>
-</span><span class='line'>Serverless: Successfully generated boilerplate for template: "openwhisk-swift"
-</span><span class='line'>$ tree swift-action/
-</span><span class='line'>swift-action/
-</span><span class='line'>├── README.md
-</span><span class='line'>├── package.json
-</span><span class='line'>├── ping.swift
-</span><span class='line'>└── serverless.yml
-</span><span class='line'>
-</span><span class='line'>0 directories, 4 files</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>openwhisk-swift</code> directory contains the boilerplate application ready to deploy. It includes a sample action (<code>ping.swift</code>) and the configuration file (<code>serverless.yml</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>func main(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    let formatter = DateFormatter()
-</span><span class='line'>    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-</span><span class='line'>    let now = formatter.string(from: Date())
-</span><span class='line'>
-</span><span class='line'>    if let name = args["name"] as? String {
-</span><span class='line'>      return [ "greeting" : "Hello \(name)! The time is \(now)" ]
-</span><span class='line'>    } else {
-</span><span class='line'>      return [ "greeting" : "Hello stranger! The time is \(now)" ]
-</span><span class='line'>    }
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>service: swift-action
-</span><span class='line'>
-</span><span class='line'>provider:
-</span><span class='line'>  name: openwhisk
-</span><span class='line'>  runtime: swift
-</span><span class='line'>
-</span><span class='line'>functions:
-</span><span class='line'>  hello:
-</span><span class='line'>    handler: ping.main
-</span><span class='line'>
-</span><span class='line'>plugins:
-</span><span class='line'>  - serverless-openwhisk</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Install the provider plugin using <code>npm install</code> and type <code>serverless deploy</code> to deploy this application.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ serverless deploy
-</span><span class='line'>Serverless: Packaging service...
-</span><span class='line'>Serverless: Compiling Functions...
-</span><span class='line'>Serverless: Compiling API Gateway definitions...
-</span><span class='line'>Serverless: Compiling Rules...
-</span><span class='line'>Serverless: Compiling Triggers & Feeds...
-</span><span class='line'>Serverless: Deploying Functions...
-</span><span class='line'>Serverless: Deployment successful!
-</span><span class='line'>
-</span><span class='line'>Service Information
-</span><span class='line'>platform: openwhisk.ng.bluemix.net
-</span><span class='line'>namespace:    _
-</span><span class='line'>service:  swift-action
-</span><span class='line'>
-</span><span class='line'>actions:
-</span><span class='line'>swift-action-dev-hello
-</span><span class='line'>...
-</span><span class='line'>$ serverless invoke -f hello
-</span><span class='line'>{
-</span><span class='line'>    "greeting": "Hello stranger! The time is 2017-06-23 10:52:02"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>For more information on using the Serverless Framework with OpenWhisk, please see this documentation: <a href="https://serverless.com/framework/docs/providers/openwhisk/">https://serverless.com/framework/docs/providers/openwhisk/</a>.</p>
-
-<h2>How It Works</h2>
-
-<p>Swift is a statically typed compiled language. Unlike JavaScript or Python, Swift source code must be compiled into a binary for execution.</p>
-
-<p>Swift actions in OpenWhisk can be created from Swift source files, rather than binaries, meaning the platform must run this compilation step.</p>
-
-<h3>Swift on Docker</h3>
-
-<p>OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Docker containers</a> to manage the action runtime environments. <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/swift3Action/Dockerfile">This Dockerfile</a> documents the build steps for generating the Swift runtime image used in OpenWhisk.</p>
-
-<p>Images for each of the OpenWhisk runtime environments are <a href="https://hub.docker.com/u/openwhisk/">available on Docker Hub</a>. Creating containers from these images allows you to explore the Swift runtime environment.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker pull openwhisk/swift3action
-</span><span class='line'>$ docker run -it --rm openwhisk/swift3action bash</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>For more information on the API exposed by runtime containers to initialise and invoke actions, please see <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions">this blog post</a>.</em></p>
-
-<h3>Building Swift actions</h3>
-
-<p>Swift runtime environments has a template package available in the <code>/swift3Action/spm-build</code> directory.</p>
-
-<p>All the Swift sources files provided by the user are written into that package&#8217;s <code>main.swift</code> file. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/swift3Action/epilogue.swift">following source code</a> is appended to <code>main.swift</code> to support execution within the OpenWhisk runtime. It parses the input parameters from the environment, invokes the registered function name and returns the computation response as a JSON string.</p>
-
-<p>Dependencies for the following packages are included in the existing <code>Package.swift</code> file. These packages can be used from the action source code without further configuration.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
-</span><span class='line'>
-</span><span class='line'>let package = Package(
-</span><span class='line'>    name: "Action",
-</span><span class='line'>        dependencies: [
-</span><span class='line'>          .Package(url: "https://github.com/IBM-Swift/Kitura-net.git", "1.0.1"),
-</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/SwiftyJSON.git", "14.2.0"),
-</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/swift-watson-sdk.git", "0.4.1")
-</span><span class='line'>        ]
-</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>During initialisation, the Swift build process is executed to generate the action binary.</p>
-
-<p>This artifact (<code>/swift3Action/spm-build/.build/release/Action</code>) will be executed for each invocation received by the platform.</p>
-
-<h3>Container re-use</h3>
-
-<p>Containers used for action runtimes are re-used with subsequent requests. This means any initialisation cost, e.g. compiling Swift source code, will only be incurred once per runtime container.</p>
-
-<p>Runtime containers are evicted from the cache ten minutes after the last activation. Future invocations for that runtime will use a new container and have to run the initialisation step again.</p>
-
-<p>Additionally, runtimes containers cannot process concurrent requests. If a request arrives before the previous one has finished processing, a new environment will need to be initialised.</p>
-
-<h3>Improving cold start time</h3>
-
-<p>Swift build times are <a href="https://thatthinginswift.com/debug-long-compile-times-swift/">not known for being fast</a>.</p>
-
-<p>Build time is included in the request processing time for each new runtime container provisioned.</p>
-
-<p>In an attempt to reduce this delay, OpenWhisk runs the minimum build steps necessary to compile the source code, rather than a full release build.</p>
-
-<p>During the Docker build for the Swift runtime image, the full release build is executed for the empty action package. This generates object files and other intermediary build outputs which are stored in the build cache.</p>
-
-<p>Logs from the build process are parsed to retrieve the individual compilation and linking commands for the <code>main.swift</code> file. These commands are written into a new shell script  (<code>/swift3Action/spm-build/swiftbuildandlink.sh</code>).</p>
-
-<p>When a new Swift runtime container is initialised, the source code for the action is written into the <code>main.swift</code> file. Rather than running a full re-build, the runtime just executes the shell script containing the compilation and linking steps. This re-uses the cached build objects and reduces compilation time.</p>
-
-<h3>Modifying package dependencies</h3>
-
-<p>Swift packages uses a manifest file (<code>Packages.swift</code>) to list <a href="https://swift.org/package-manager/">package dependencies</a>. Dependencies are automatically downloaded and compiling during the package build process.</p>
-
-<p>The Swift environment used by OpenWhisk uses the package manifest shown above. This includes dependencies for JSON and HTTP libraries.</p>
-
-<p>Swift actions can be created from Swift source code or zip files. Zip files are expanded into the package directory (<code>/swift3action/spm-build</code>) before initialisation.</p>
-
-<p>If the zip file contains a new package manifest, this will overwrite the default manifest in the environment.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
-</span><span class='line'>
-</span><span class='line'>let package = Package(
-</span><span class='line'>    name: "Action",
-</span><span class='line'>        dependencies: [
-</span><span class='line'>          .Package(url: "https://github.com/IBM-Swift/Kitura-net.git", "1.0.1"),
-</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/SwiftyJSON.git", "14.2.0"),
-</span><span class='line'>            .Package(url: "https://github.com/IBM-Swift/swift-watson-sdk.git", "0.4.1"),
-</span><span class='line'>          .Package(url: "https://github.com/IBM-Swift/swift-html-entities", majorVersion: 3, minor: 0),
-</span><span class='line'>        ]
-</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Running a full build will download new package dependencies and make them available for use in our action.</p>
-
-<p>OpenWhisk uses a shell script (<code>swiftbuildandlink.sh</code>) to manage the build process during initialisation. This defaults to only running the compiler and linker commands for the <code>main.swift</code> file, rather than a full release build.</p>
-
-<p>Including a replacement <code>swiftbuildandlink.sh</code> file in the zip file will allow us to modify the build command used, e.g. <code>swift build -v -c release</code>.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>#!/bin/bash
-</span><span class='line'>echo "Release build running..."
-</span><span class='line'>swift build -v -c release
-</span><span class='line'>echo "Release build finished."</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Downloading additional packages will add a significant delay to initialising new runtime containers.</p>
-
-<p>If this is an issue, let&#8217;s look at skipping the compile step entirely…</p>
-
-<h3>Compiling binaries locally</h3>
-
-<p>Swift actions execute a binary that is available at the following path: <code>/swift3action/spm-build/.build/release/Action</code>.</p>
-
-<p>The runtime uses the existence of this binary to control running the build process. If the file does not exist, the build step is executed. It ensures that compilation is only ran once per runtime container.</p>
-
-<p>This also means that developers can include a locally compiled Swift binary inside the action zip file. During initialisation, the existence of this file will stop the build process from running.</p>
-
-<p>If you want to use lots of additional Swift packages, the compile time penalty won&#8217;t have to be incurred during action invocations. This will dramatically speed up invocation times for &#8220;cold&#8221; actions.</p>
-
-<p><strong>Binaries must be compatible with the platform environment they are being executed within. OpenWhisk uses Swift 3.0.2 on Linux.</strong></p>
-
-<p>OpenWhisk publishes the runtime environments as Docker images. Using containers from these images to compile our action binaries will ensure the binary is compatible.</p>
-
-<p>These <a href="https://medium.com/openwhisk/run-swiftly-precompiled-swift-actions-775addae0345">instructions</a> show you how to compile your source code into a compatible platform binary.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># run an interactive Swift action container
-</span><span class='line'>docker run -it -v `pwd`:/ow openwhisk/swift3action bash
-</span><span class='line'>cd /ow
-</span><span class='line'># now inside the docker shell
-</span><span class='line'># copy the source code and prepare to build it
-</span><span class='line'>cat /swift3Action/epilogue.swift &gt;&gt; main.swift
-</span><span class='line'>echo '_run_main(mainFunction:main)' &gt;&gt; main.swift
-</span><span class='line'># build and link (the expensive step)
-</span><span class='line'>swift build -v -c release
-</span><span class='line'># create the zip archive
-</span><span class='line'>zip action.zip .build/release/Action
-</span><span class='line'># exit the docker shell
-</span><span class='line'>exit</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>action.zip</code> file can then be deployed as a new action using the following command-line.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>wsk action create static-swift action.zip --kind swift:3</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Conclusion</h2>
-
-<p>Swift is one of the fastest growing programming languages with developers. People are increasingly using it to develop backend APIs and services. Being able to use Swift on serverless cloud platforms means developers can focus on writing code, rather than managing infrastructure.</p>
-
-<p>Apache OpenWhisk, an open-source serverless platform, supports Swift as a first-class language. Developers can provide Swift source code and have the platform execute these functions in response to external events.</p>
-
-<p>Because OpenWhisk is open-source, we can discover how the platform executes the code using the Swift runtime. Understanding this process allows us to modify the build step to use additional Swift packages within our actions. We can also improve performance by skipping the compilation stage entirely by providing a native binary.</p>
 ]]></content>
   </entry>
   

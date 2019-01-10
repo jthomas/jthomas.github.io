@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2018-12-13T08:57:31+00:00</updated>
+  <updated>2019-01-10T10:09:26+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,284 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Highly Available Serverless Apps With Cloudant's Cross-Region Replication]]></title>
+    <link href="http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/"/>
+    <updated>2019-01-10T11:23:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication</id>
+    <content type="html"><![CDATA[<p>Building <a href="https://www.techrepublic.com/blog/the-enterprise-cloud/what-high-availability-for-cloud-services-means-in-the-real-world/">highly available</a> serverless applications relies on eliminating "<a href="https://en.wikipedia.org/wiki/Single_point_of_failure"><em>single points of failure</em></a>" from application architectures.</p>
+
+<p><a href="https://cloud.ibm.com/docs/tutorials/multi-region-serverless.html#deploy-serverless-apps-across-multiple-regions">Existing tutorials</a> showed how to deploy the same serverless application on IBM Cloud in different regions. Using the <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> from <a href="https://cloud.ibm.com/catalog/services/internet-svcs">IBM Cloud Internet Services</a>, traffic is distributed across multiple applications from the same hostname. The <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> automatically detects outages in the regional applications and redirects traffics as necessary.</p>
+
+<p><strong>But what if all instances rely on the same database service and that has issues?</strong> 😱🔥</p>
+
+<p>In addition to running multiple instances of the application, independent databases in different regions are also necessary for a highly available serverless application. Maintaining consistent application state across regions needs all database changes to be automatically synchronised between instances. 🤔</p>
+
+<p><strong>In this blog post, we're going to look at using <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant's</a> <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">replication service</a> to set up a "<a href="https://en.wikipedia.org/wiki/Multi-master_replication">multi-master</a>" replication between regional database instances.</strong></p>
+
+<p>Once this is enabled, database changes will automatically be synchronised in real-time between all database instances. Serverless applications can use their regional database instance and be confident application state will be consistent globally (for some definition of <a href="https://en.wikipedia.org/wiki/Eventual_consistency">consistent</a>...). 💯</p>
+
+<h2>example serverless application - todo backend</h2>
+
+<p>This <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">serverless application</a> implements a <a href="https://www.todobackend.com/">TODO backend</a> using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> and <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant</a>.</p>
+
+<p><img src="/images/ha-serverless-apps-todo/todo-frontpage.png"></p>
+
+<p>It provides an REST API for interacting with a TODO service. This can be used with the <a href="https://www.todobackend.com/client/index.html">front-end client</a> to add, complete and remove todos from a list.</p>
+
+<p><strong>Let's make this <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">example serverless application</a> "highly available". 👍</strong></p>
+
+<p>The application will be deployed to two different IBM Cloud regions (London and Dallas). Separate database instances will be provisioned in each region. Applications will use their regional database instance but share global state via replication.</p>
+
+<p><img src="/images/ha-serverless-apps-todo/architecture.png"></p>
+
+<h2>deploy serverless app to multiple regions</h2>
+
+<p>This Github <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">repo</a> has an <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis/blob/master/deploy.sh">automatic deployment script</a> to deploy the serverless application (using <code>wskdeploy</code>) and application services (using <code>terraform</code>).</p>
+
+<p><strong><em>Install the prerequisites listed <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis#code-and-tools">here</a> before proceeding with these instructions.</em></strong></p>
+
+<h3>download example application</h3>
+
+<ul>
+<li>Clone the Git repository to a local directory.</li>
+</ul>
+
+
+<p><code>
+git clone https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis
+</code></p>
+
+<ul>
+<li>Enter the source code directory.</li>
+</ul>
+
+
+<p><code>
+cd ibm-cloud-functions-refarch-serverless-apis
+</code></p>
+
+<h3>create IAM key for serverless app</h3>
+
+<p><em>Have you already signed up for an <a href="https://cloud.ibm.com/registration">IBM Cloud account</a> and <a href="https://cloud.ibm.com/docs/cli/reference/ibmcloud/download_cli.html#install_use">installed the CLI</a>? If not, please do that before proceeding.</em></p>
+
+<ul>
+<li>Create an IAM key which will be used to deploy the serverless application.</li>
+</ul>
+
+
+<p><code>
+ibmcloud iam api-key-create serverless_api --file serverless_api.apikey
+</code></p>
+
+<h3>configure deployment variables</h3>
+
+<ul>
+<li>Create the <code>local.env</code> file in the current directory will the following contents.</li>
+</ul>
+
+
+<p><code>
+IBMCLOUD_API_KEY=&lt;IAM_API_KEY&gt;
+IBMCLOUD_ORG=&lt;YOUR_ORG&gt;
+IBMCLOUD_SPACE=&lt;REGION_SPACE&gt;
+IBMCLOUD_REGION=
+PROVISION_INFRASTRUCTURE=true
+API_USE_APPID=false
+</code></p>
+
+<ul>
+<li>Replace the <code>&lt;IAM_API_KEY&gt;</code> value with the <code>apikey</code> value from the <code>serverless_api.apikey</code> file.</li>
+<li>Replace the <code>&lt;IBMCLOUD_ORG&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud organisation</a>.</li>
+<li>Replace the <code>&lt;IBMCLOUD_SPACE&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud space</a>.</li>
+</ul>
+
+
+<p>The <code>PROVISION_INFRASTRUCTURE</code> parameter makes the deployment script automatically provision all application resources using Terraform.</p>
+
+<p>Secured API endpoints are not required for this demonstration. Setting the <code>API_USE_APPID</code> parameter to <code>false</code> disables authentication on the endpoints and provisioning the AppID service.</p>
+
+<h3>deploy to london</h3>
+
+<ul>
+<li>Set the <code>IBMCLOUD_REGION</code> to <code>eu-gb</code> in the <code>local.env</code> file.</li>
+<li>Run the following command to deploy the application and provision all application resources.</li>
+</ul>
+
+
+<p><code>
+./deploy.sh --install
+</code></p>
+
+<p>If the deployment have succeed, the following message should be printed to the console.</p>
+
+<p><code>
+2019-01-08 10:51:51 All done.
+ok: APIs
+Action                                      Verb  API Name  URL
+/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;UK_APIGW_URL&gt;/todo
+...
+</code></p>
+
+<ul>
+<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the London region.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/testing-app.gif"></p>
+
+<h3>deploy to dallas</h3>
+
+<ul>
+<li><p><strong>Rename the <code>terraform.tfstate</code> file in the <code>infra</code> folder to <code>terraform.tfstate.london</code></strong></p></li>
+<li><p>Set the <code>IBMCLOUD_REGION</code> to <code>us-south</code> in the <code>local.env</code> file.</p></li>
+<li>Run the following command to deploy the application and provision all application resources.</li>
+</ul>
+
+
+<p><code>
+./deploy.sh --install
+</code></p>
+
+<p>If the deployment have succeed, the following message should be printed to the console.</p>
+
+<p><code>
+2019-01-08 10:51:51 All done.
+ok: APIs
+Action                                      Verb  API Name  URL
+/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;US_APIGW_URL&gt;/todo
+...
+</code></p>
+
+<ul>
+<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the Dallas region.</li>
+</ul>
+
+
+<h2>configure cloudant cross-region replication</h2>
+
+<p>There are now multiple copies of the same serverless application in different regions. Each region has an independent instance of Cloudant provisioned.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/Cloudant/api/replication.html">Cloudant replication</a> is a one-way synchronisation from a source to a destination database. To set up a <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">bi-directional data synchronisation</a>, two different replications will need to be configured.</p>
+
+<h3>create api keys for replication access</h3>
+
+<p>Before configuring replication between the regional databases, API keys need to be created to allow remote access on both hosts. API keys need to be created per regional instance.</p>
+
+<ul>
+<li>From the <a href="https://cloud.ibm.com/resources">IBM Cloud Resource List</a>, find the cloudant instances provisioned in London and Dallas.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/resource-list.png"></p>
+
+<ul>
+<li>Open the Cloudant Dashboard for each service instance.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif"></p>
+
+<p>Follow these instructions on both hosts to generate API keys for replication with the correct permissions.</p>
+
+<ul>
+<li>Click the "Databases" icon to show all the databases on this instance.</li>
+<li>Click the 🔒 icon in the "todos" database row in the table to open the permissions page.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/databases-list.png"></p>
+
+<p><em>Can't find the "todos" database in the Cloudant dashboard? Make sure you interact with the TODO backend from the <a href="https://www.todobackend.com/client/index.html">front-end application</a>. This will automatically create the database if it doesn't exist.</em></p>
+
+<ul>
+<li>Click "Generate API Key" on the permissions page.</li>
+<li>Make a note of the key identifier and password.</li>
+<li>Set the <code>_reader_</code>, <code>_writer</code> and <code>_replicator</code> permissions for the newly created key.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/db-api-key.png"></p>
+
+<h3>set up cross-region replication</h3>
+
+<p>Replication jobs need to be configured on both database hosts. These can be created from the Cloudant dashboard. <strong>Repeat these instructions on both hosts.</strong></p>
+
+<ul>
+<li>Open the Cloudant Dashboard for each service instance.</li>
+<li>Click the "Replication" icon from the panel menu.</li>
+<li>Click the "New Replication" button.</li>
+<li>Set the following "Source" values in the "Job configuration" panel.
+
+<ul>
+<li>Type: <em>"Local Database"</em></li>
+<li>Name: <em>"todos"</em></li>
+<li>Authentication: <em>"Cloudant username or API Key"</em></li>
+<li>Fill in the API key and password for this local database host in the input fields.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/task-source.png"></p>
+
+<ul>
+<li>Set the following "Target" values in the "Job configuration" panel.
+
+<ul>
+<li>Type: <em>"Existing Remote Database"</em></li>
+<li>Name: <em>"https://<REMOTE_CLOUDANT_HOST>/todos"</em></li>
+<li>Authentication: <em>"Cloudant username or API Key"</em></li>
+<li>Fill in the API key and password for the remote database host in the input fields.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/task-target.png"></p>
+
+<p><em>Wondering what the REMOTE_CLOUDANT_HOST is? Use hostname from the Cloudant dashboard, e.g. XXXX-bluemix.cloudant.com</em></p>
+
+<ul>
+<li>Set the following "Options" values in the "Job configuration" panel.
+
+<ul>
+<li>Replication type: <em>"Continuous"</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/task-options.png"></p>
+
+<ul>
+<li>Click "Start Replication"</li>
+<li>Verify the replication table shows the new replication task state as "<em>Running</em>". 👍</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/replication-jobs-table.png"></p>
+
+<h2>test it out!</h2>
+
+<p>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the APIGW URLs for each region simultaneously. Interactions with the todo list in one region should automatically propagate to the other region.</p>
+
+<p><img src="/images/ha-serverless-apps-todo/todo-app.gif"></p>
+
+<p>The "Active Tasks" panel on the Cloudant Dashboard shows the documents replicated between instances and pending changes. If there are errors synchronising changes to the replication target, the host uses exponential backoff to re-try the replication tasks.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/Cloudant/guides/conflicts.html#finding-conflicts">Conflicts</a> between document changes are handled using CouchDB's <a href="http://guide.couchdb.org/draft/conflicts.html">conflict mechanism</a>. Applications are responsible for detecting and resolving document conflicts in the front-end.</p>
+
+<h2>conclusion</h2>
+
+<p>Running the same serverless application in multiple regions, using the GLB to proxy traffic, allows applications to manage regional outages. But what if all the application instances rely on the same database service? The "single point of failure" has shifted from the application runtime to the database host. 👎</p>
+
+<p>Provisioning independent databases in each application regions is one solution. Applications use their regional database instance and are protected from issues in other regions. This strategy relies on database changes being synchronised between instances to keep the application state consistent. 👍</p>
+
+<p>IBM Cloudant has a built-in replication service to synchronised changes between source and host databases. Setting up bi-directional replication tasks between all instances enables a  "multi-master" replication strategy. This allows applications to access any database instance and have the same state available globally. 🕺🕺🕺</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Using Custom Domains With IBM Cloud Functions]]></title>
@@ -159,7 +437,7 @@ IMPORTANT NOTES:
 
 <p>After importing the certificate, check the certificate properties match the expected values</p>
 
-<p>{% img /images/custom-domains/import-certs.gif %}</p>
+<p><img src="/images/custom-domains/import-certs.gif"></p>
 
 <h2>Binding Domain to IBM Cloud Functions APIs</h2>
 
@@ -173,7 +451,7 @@ IMPORTANT NOTES:
 </ul>
 
 
-<p>{% img /images/custom-domains/open-apis-settings.gif %}</p>
+<p><img src="/images/custom-domains/open-apis-settings.gif"></p>
 
 <h3>domain validation</h3>
 
@@ -219,7 +497,7 @@ api.&lt;YOUR_DOMAIN&gt;. 3599 IN  TXT "&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.
 
 <p>Once the domain has been validated, the form will redirect to the custom domains overview. The "Custom Domain" field will now show the sub-domain bound to the correct default domain alias.</p>
 
-<p>{% img /images/custom-domains/bind-custom-domain.gif %}</p>
+<p><img src="/images/custom-domains/bind-custom-domain.gif"></p>
 
 <h3>add CNAME record</h3>
 
@@ -811,7 +1089,7 @@ const encode = typearr => {
 
 <p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
 
-<p>{% img /images/tfjs-serverless/tf-js-example.gif Serverless TensorFlow.js Function %}</p>
+<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
 
 <p>Sounds easy, right? It's just a JavaScript library? So, zip it up and away we go... <strong><em>ahem</em></strong> 👊</p>
 
@@ -974,7 +1252,7 @@ ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
 </ul>
 
 
-<p>{% img https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG %}</p>
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
 
 <p><code>sh
 wget http://bit.ly/2JYSal9 -O panda.jpg
@@ -1044,13 +1322,13 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <h3>warm invocations</h3>
 
-<p>{% img /images/tfjs-serverless/warm-activations.png Warm Activation Performance Results %}</p>
+<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
 
 <p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
 
 <h3>cold invocations</h3>
 
-<p>{% img /images/tfjs-serverless/cold-activations.png Cold Activation Performance Results %}</p>
+<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
 
 <p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
 
@@ -1081,7 +1359,7 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
     <id>http://jamesthom.as/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions</id>
     <content type="html"><![CDATA[<p>Following all the events from the World Cup can be hard. So many matches, so many goals. Rather than manually refreshing BBC Football to check the scores, I decided to created a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> that would automatically tweet out each goal.</p>
 
-<p>{% img /images/monitoring-goalbot/wcgoalbot.png World Cup Goal Bot %}</p>
+<p><img src="/images/monitoring-goalbot/wcgoalbot.png" title="World Cup Goal Bot" ></p>
 
 <p><a href="https://github.com/jthomas/goalbot">The Twitter bot</a> runs on <a href="https://console.bluemix.net/openwhisk">IBM Cloud Functions</a>. It is called once a minute to check for new goals, using the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a>. If new goals have been scored, it calls another action to send the tweet messages.</p>
 
@@ -1093,7 +1371,7 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <p>Once it was running, I need to ensure it was working correctly for the duration of the tournament. Using the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service, I built a custom monitoring dashboard to help to me recognise and diagnose issues.</p>
 
-<p>{% img /images/monitoring-goalbot/dashboard-overview.png Monitoring Dashboard %}</p>
+<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
 
 <p>The dashboard showed counts for successful and failed activations, when they occurred and a list of failed activations. If issues have occurred, I can retrieve the failed activation identifiers and investigate further.</p>
 
@@ -1103,11 +1381,11 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <p><a href="https://console.bluemix.net/docs/services/CloudLogAnalysis/index.html">IBM Cloud Logging</a> can be accessed <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_logs.html#openwhisk_logs">using the link</a> on the IBM Cloud Functions dashboard. This will open the logging service for the current organisation and space.</p>
 
-<p>{% img /images/monitoring-goalbot/open-logging.gif Opening Logging Service %}</p>
+<p><img src="/images/monitoring-goalbot/open-logging.gif" title="Opening Logging Service" ></p>
 
 <p>All activation records and application logs are automatically forwarded to the logging service by IBM Cloud Functions.</p>
 
-<p>{% img /images/monitoring-goalbot/discover.png Kibana Discover Screen %}</p>
+<p><img src="/images/monitoring-goalbot/discover.png" title="Kibana Discover Screen" ></p>
 
 <h3>Log Message Fields</h3>
 
@@ -1155,7 +1433,7 @@ activationId_str: &lt;ACTIVATION_ID&gt;
 
 <h2>Monitoring Dashboard</h2>
 
-<p>{% img /images/monitoring-goalbot/dashboard-overview.png Monitoring Dashboard %}</p>
+<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
 
 <p>This is the monitoring dashboard I created. It contains visualisations showing counts for successful and failed activations, histograms of when they occurred and a list of the recent failed activation identifiers.</p>
 
@@ -1165,7 +1443,7 @@ activationId_str: &lt;ACTIVATION_ID&gt;
 
 <h3>Saved Searches</h3>
 
-<p>{% img /images/monitoring-goalbot/saved-searches.png Saving Search Queries %}</p>
+<p><img src="/images/monitoring-goalbot/saved-searches.png" title="Saving Search Queries" ></p>
 
 <p>Kibana supports saving and referring to search queries from visualisations using explicit names.</p>
 
@@ -1205,7 +1483,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p>{% img /images/monitoring-goalbot/refresh-fields.gif Refresh field index %}</p>
+<p><img src="/images/monitoring-goalbot/refresh-fields.gif" title="Refresh field index" ></p>
 
 <h3>Visualisations</h3>
 
@@ -1228,7 +1506,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p>{% img /images/monitoring-goalbot/metrics-success.png Activation success metric %}</p>
+<p><img src="/images/monitoring-goalbot/metrics-success.png" title="Activation success metric" ></p>
 
 <ul>
 <li>Repeat this process to create the failed activation count visualisation.</li>
@@ -1237,7 +1515,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p>{% img /images/monitoring-goalbot/metrics-fail.png Activation failed metric %}</p>
+<p><img src="/images/monitoring-goalbot/metrics-fail.png" title="Activation failed metric" ></p>
 
 <h4>Activation Times</h4>
 
@@ -1253,7 +1531,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p>{% img /images/monitoring-goalbot/activation-times.png Activation times chart %}</p>
+<p><img src="/images/monitoring-goalbot/activation-times.png" title="Activation times chart" ></p>
 
 <ul>
 <li>Repeat this process to create the failed activation times visualisation.</li>
@@ -1277,7 +1555,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p>{% img /images/monitoring-goalbot/activations-table.png Failed activation table %}</p>
+<p><img src="/images/monitoring-goalbot/activations-table.png" title="Failed activation table" ></p>
 
 <h3>Creating the dashboard</h3>
 
@@ -1306,7 +1584,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p>{% img /images/monitoring-goalbot/dashboard-overview.png Monitoring Dashboard %}</p>
+<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
 
 <p>Having saved the dashboard with time window, re-opening the dashboard will show our visualisations with data for the previous 24 hours. This dashboard can be used to quickly review recent application issues.</p>
 
@@ -1317,292 +1595,6 @@ type: activation_record AND NOT status_str: 0
 <p><a href="https://console.bluemix.net/openwhisk/dashboard">IBM Cloud Functions</a> provides automatic integration with the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service. All activation records and application logs from serverless applications are automatically forwarded as log records. This makes it simple to build custom monitoring dashboards using these records for serverless applications running on IBM Cloud Functions.</p>
 
 <p>Using this service with World Cup Twitter bot allowed me to easily monitor the application for issues. This was much easier than manually retrieving and reviewing activation records using the CLI!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Debugging Node.js OpenWhisk Actions]]></title>
-    <link href="http://jamesthom.as/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/"/>
-    <updated>2018-07-10T09:00:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions</id>
-    <content type="html"><![CDATA[<p>Debugging serverless applications is one of the <a href="https://www.stackery.io/blog/the-serverless-learning-curve/">most challenging issues</a> developers face when using serverless platforms. How can you use debugging tools without any access to the runtime environment?</p>
-
-<p>Last week, I worked out <a href="https://twitter.com/thomasj/status/1013006648439443458">how to expose the Node.js debugger</a> in the Docker environment used for the application runtime in Apache OpenWhisk.</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Want to use Node.js debugger for <a href="https://twitter.com/openwhisk?ref_src=twsrc%5Etfw">@openwhisk</a> actions? Start runtime container locally with this command to expose v8 inspector.<br>$ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js<br>Then connect Chrome Dev Tools or <a href="https://twitter.com/code?ref_src=twsrc%5Etfw">@code</a>. 💯 <a href="https://t.co/X4i01QEOmg">pic.twitter.com/X4i01QEOmg</a></p>&mdash; James Thomas (@thomasj) <a href="https://twitter.com/thomasj/status/1013006648439443458?ref_src=twsrc%5Etfw">June 30, 2018</a></blockquote>
-
-
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p>Using the remote debugging service, we can set breakpoints and step through action handlers live, rather than just being reliant on logs and metrics to diagnose bugs.</p>
-
-<p><strong>So, how does this work?</strong></p>
-
-<p><em>Let's find out more about how Apache OpenWhisk executes serverless functions...</em></p>
-
-<h2>Background</h2>
-
-<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is the open-source serverless platform which powers <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. OpenWhisk <a href="https://medium.com/openwhisk/uncovering-the-magic-how-serverless-platforms-really-work-3cb127b05f71">uses Docker containers</a> to create isolated runtime environments for executing serverless functions.</p>
-
-<p>Containers are started on-demand as invocation requests arrive. Serverless function source files are dynamically injected into the runtime and executed for each invocation. Between invocations, containers are paused and kept in a cache for re-use with further invocations.</p>
-
-<p>The benefit of using an open-source serverless platform is that the <a href="https://github.com/search?q=incubator-openwhisk-runtime">build files</a> used to create runtime images are also open-source. OpenWhisk also automatically builds and publishes all <a href="https://hub.docker.com/r/openwhisk/">runtime images externally</a> on Docker Hub. Running containers using these images allows us to simulate the remote serverless runtime environment.</p>
-
-<h3>Runtime Images</h3>
-
-<p>All OpenWhisk runtime images are <a href="https://hub.docker.com/r/openwhisk/">published externally</a> on Docker Hub.</p>
-
-<p>Runtime images <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">start a HTTP server</a> which listens on port 8080. This HTTP server must implement two API endpoints (<code>/init</code> &amp; <code>/run</code>) accepting HTTP POST requests. The platform uses these endpoints to initialise the runtime with action code and then invoke the action with event parameters.</p>
-
-<p>More details on the API endpoints can be found in this <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">blog post</a> on creating Docker-based actions.</p>
-
-<h3>Node.js Runtime Image</h3>
-
-<p>This repository contains the source code used to create <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">Node.js runtime environment image</a>.</p>
-
-<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">https://github.com/apache/incubator-openwhisk-runtime-nodejs</a></p>
-
-<p>Both <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs8Action">Node.js 8</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">6 runtimes</a>  are built from a <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejsActionBase">common base image</a>. This base image contains an <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/app.js">Express.js server</a> which handles the platform API requests. The <code>app.js</code> file containing the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">is executed</a> when the containers starts.</p>
-
-<p>JavaScript code is injected into the runtime using the <code>/init</code> API. Actions created from source code are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">dynamically evaluated</a> to instantiate the code in the runtime. Actions created from zip files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">extracted into a temporary directory</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">imported as a Node.js module</a>.</p>
-
-<p>Once instantiated, actions are executed using the <code>/run</code> API. Event parameters are come from the request body. Each time a new request is received, the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">calls the action handler with event parameters</a>. Returned values are serialised as the JSON body in the API response.</p>
-
-<h3>Starting Node.js Runtime Containers</h3>
-
-<p><a href="https://docs.docker.com/engine/reference/commandline/run/">Use this command</a> to start the Node.js runtime container locally.</p>
-
-<p><code>
-$ docker run -it -p 8080:8080 openwhisk/action-nodejs-v8
-</code></p>
-
-<p>Once the container has started, port 8080 on localhost will be mapped to the HTTP service exposed by the runtime environment. This can be used to inject serverless applications into the runtime environment and invoke the serverless function handler with event parameters.</p>
-
-<h2>Node.js Remote Debugging</h2>
-
-<p>Modern versions of the Node.js runtime have a command-line flag (<code>--inspect</code>) to expose a <a href="https://nodejs.org/api/debugger.html#debugger_advanced_usage">remote debugging service</a>. This service runs a WebSocket server on localhost which implements the <a href="https://chromedevtools.github.io/devtools-protocol/">Chrome DevTools Protocol</a>.</p>
-
-<p><code>
-$ node --inspect index.js
-Debugger listening on 127.0.0.1:9229.
-</code></p>
-
-<p>External tools can connect to this port to provide debugging capabilities for Node.js code.</p>
-
-<p>Docker images for the OpenWhisk Node.js runtimes use the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">following command</a> to start the internal Node.js process. <strong>Remote debugging is not enabled by default.</strong></p>
-
-<p><code>
-node --expose-gc app.js
-</code></p>
-
-<p>Docker allows containers to override the default image start command using a <a href="https://docs.docker.com/engine/reference/run/">command line argument</a>.</p>
-
-<p><strong>This command will start the OpenWhisk Node.js runtime container with the remote debugging service enabled.</strong> Binding the HTTP API and WebSocket ports to the host machine allows us to access those services remotely.</p>
-
-<p><code>
-docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js
-</code></p>
-
-<p><em>Once a container from the runtime image has started, we can connect our favourite debugging tools...</em></p>
-
-<h3>Chrome Dev Tools</h3>
-
-<p>To connect <a href="https://developers.google.com/web/tools/chrome-devtools/">Chrome Dev Tools</a> to the remote Node.js debugging service, follow these steps.</p>
-
-<ul>
-<li>Open the following page in Chrome: <a href="chrome://inspect/#devices">chrome://inspect/#devices</a></li>
-</ul>
-
-
-<p>{% img /images/debugging/devtools.png Chrome Dev Tools %}</p>
-
-<p>Chrome Dev Tools is configured to open a connection on port 9229 on localhost. If the web socket connection succeeds, the debugging target should be listed in the "Remote Target" section.</p>
-
-<ul>
-<li>Click the "<em>Open dedicated DevTools for Node</em>" link.</li>
-</ul>
-
-
-<p>In the "Sources" panel the JavaScript files loaded by the Node.js process are available.</p>
-
-<p>{% img /images/debugging/devtools-debugging.png Chrome Dev Tools Debugging %}</p>
-
-<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
-
-<h3>VSCode</h3>
-
-<p><a href="https://code.visualstudio.com/">Visual Studio Code</a> supports remote debugging of Node.js code using the Chrome Dev Tools protocol. Follow these steps to connect the editor to the remote debugging service.</p>
-
-<ul>
-<li>Click the menu item "<em>Debug -> Add Configuration</em>"</li>
-<li>Select the "<em>Node.js: Attach to Remote Program</em>" from the Intellisense menu.</li>
-<li>Edit the default configuration to have the following values.</li>
-</ul>
-
-
-<p><code>json
-{
-  "type": "node",
-  "request": "attach",
-  "name": "Attach to Remote",
-  "address": "127.0.0.1",
-  "port": 9229,
-  "localRoot": "${workspaceFolder}"
-}
-</code></p>
-
-<p>{% img /images/debugging/vscode.png Visual Studio Code %}</p>
-
-<ul>
-<li>Choose the new "<em>attach to remote</em>" debugging profile and click the Run button.</li>
-</ul>
-
-
-<p>The "<em>Loaded Scripts</em>" window will show all the JavaScript files loaded by the Node.js process.</p>
-
-<p>{% img /images/debugging/vscode-debugging.png Visual Studio Code Debugging %}</p>
-
-<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
-
-<h3>Breakpoint Locations</h3>
-
-<p>Here are some useful locations to set breakpoints to catch errors in your serverless functions for the OpenWhisk Node.js runtime environments.</p>
-
-<h4>Initialisation Errors - Source Actions</h4>
-
-<p>If you are creating OpenWhisk actions from JavaScript source files, the code is dynamically evaluated during  the <code>/init</code> request at <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">this location</a>. Putting a breakpoint here will allow you to catch errors thrown during that <code>eval()</code> call.</p>
-
-<h4>Initialisation Errors - Binary Actions</h4>
-
-<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">this location</a> is where the archive is extracted in the runtime filesystem. Putting a breakpoint here will catch errors from the extraction call and runtime checks for a valid JavaScript module.</p>
-
-<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">This code</a> is where the JavaScript module is imported once it has been extracted. Putting a breakpoint here will catch errors thrown importing the module into the Node.js environment.</p>
-
-<h4>Action Handler Errors</h4>
-
-<p>For both source file and zipped module actions, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">this location</a> is where the action handler is invoked on each <code>/run</code> request. Putting a breakpoint here will catch errors thrown from within action handlers.</p>
-
-<h2>Invoking OpenWhisk Actions</h2>
-
-<p>Once you have attached the debugger to the remote Node.js process, you need to send the API requests to simulate the platform invocations. Runtime containers use separate HTTP endpoints to import the action source code into the runtime environment (<code>/init</code>)  and then fire the invocation requests (<code>/run</code>).</p>
-
-<h4>Generating Init Request Body - Source Files</h4>
-
-<p>If you are creating OpenWhisk actions from JavaScript source files, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
-
-<p>```json
-{
-  "value": {</p>
-
-<pre><code>"main": "&lt;FUNCTION NAME IN SOURCE FILE&gt;",
-"code": "&lt;INSERT SOURCE HERE&gt;"
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p><code>code</code> is the JavaScript source to be evaluated which contains the action handler. <code>main</code> is the function name in the source file used for the action handler.</p>
-
-<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the source code in <code>file.js</code>.</p>
-
-<p><code>sh
-$ cat file.js | jq -sR  '{value: {main: "main", code: .}}'
-</code></p>
-
-<h4>Generating Init Request Body - Zipped Modules</h4>
-
-<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
-
-<p>```json
-{
-  "value": {</p>
-
-<pre><code>"main": "&lt;FUNCTION NAME ON JS MODULE&gt;",
-"code": "&lt;INSERT BASE64 ENCODED STRING FROM ZIP FILE HERE&gt;",
-"binary": true
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<p><code>code</code> must be a Base64 encoded string for the zip file. <code>main</code> is the function name returned in the imported JavaScript module to call as the action handler.</p>
-
-<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the zip file in <code>action.zip</code>.</p>
-
-<p><code>sh
-$ base64 action.zip | tr -d '\n' | jq -sR '{value: {main: "main", binary: true, code: .}}'
-</code></p>
-
-<h4>Sending Init Request</h4>
-
-<p>The <a href="https://httpie.org/">HTTPie</a> tool makes it simple to send HTTP requests from the command-line.</p>
-
-<p>Using this tool, the following command will initialise the runtime container with an OpenWhisk action.</p>
-
-<p>```sh
-$ http post localhost:8080/init &lt; init.json
-HTTP/1.1 200 OK
-...
-{</p>
-
-<pre><code>"OK": true
-</code></pre>
-
-<p>}
-```</p>
-
-<p>If this HTTP request returns without an error, the action is ready to be invoked.</p>
-
-<p><em>No further initialisation requests are needed unless you want to modify the action deployed.</em></p>
-
-<h4>Generating Run Request Body</h4>
-
-<p>Invocations of the action handler functions are triggered from a HTTP POST to the <code>/run</code> API endpoint.</p>
-
-<p>Invocations parameters are sent in the JSON request body, using a JSON object with a <code>value</code> field.</p>
-
-<p>```json
-{
-  "value": {</p>
-
-<pre><code>"some-param-name": "some-param-value",
-"another-param-name": "another-param-value",
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<h4>Sending Run Request</h4>
-
-<p>Using the <a href="https://httpie.org/">HTTPie</a> tool, the following command will invoke the OpenWhisk action.</p>
-
-<p>```sh
-$ http post localhost:8080/run &lt; run.json
-HTTP/1.1 200 OK
-...
-{</p>
-
-<pre><code>"msg": "Hello world"
-</code></pre>
-
-<p>}
-```</p>
-
-<p>Returned values from the action handler are serialised as the JSON body in the HTTP response. Issuing further HTTP POST requests to the <code>/run</code> endpoint allows us to re-invoke the action.</p>
-
-<h2>Conclusion</h2>
-
-<p>Lack of debugging tools is one of the biggest complaints from developers migrating to serverless platforms.</p>
-
-<p>Using an open-source serverless platform helps with this problem, by making it simple to run the same containers locally that are used for the platform's runtime environments. Debugging tools can then be started from inside these local environments to simulate remote access.</p>
-
-<p>In this example, this approach was used to enable the remote debugging service from the OpenWhisk Node.js runtime environment. The same approach could be used for any language and debugging tool needing local access to the runtime environment.</p>
-
-<p>Having access to the Node.js debugger is huge improvement when debugging challenging issues, rather than just being reliant on logs and metrics collected by the platform.</p>
 ]]></content>
   </entry>
   
