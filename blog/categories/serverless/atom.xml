@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-01-10T10:09:26+00:00</updated>
+  <updated>2019-01-18T15:22:17+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,225 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[loosely-coupled serverless functions with Apache Openwhisk]]></title>
+    <link href="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/"/>
+    <updated>2019-01-18T15:10:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk</id>
+    <content type="html"><![CDATA[<p>Just like software engineering, <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">best practices for serverless applications</a> advise keeping functions small and focused on a single task, aka "<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">do one thing and do it well</a>". Small single-purpose functions are easier to develop, test and debug. 👍</p>
+
+<p><strong>But what happens when you need execute multiple asynchronous tasks (implemented as separate functions) from an incoming event, like an API request?</strong> 🤔</p>
+
+<h2>Functions Calling Functions?</h2>
+
+<p>Functions can invoke other functions directly, using asynchronous calls through the client SDK. This works at the cost of introducing <a href="https://en.wikipedia.org/wiki/Coupling_%28computer_programming%29">tighter coupling</a> between functions, which is generally avoided in software engineering! Disadvantages of this approach include...</p>
+
+<ul>
+<li><em>Functions which call other functions can be more difficult to test. Test cases needs to mock out the client SDK to remove side-effects during unit or integration tests.</em></li>
+<li><em>It can lead to repetitive code if you want to fire multiple tasks with the same event. Each invocation needs to manually handle error conditions and re-tries on network or other issues, which complicates the business logic.</em></li>
+<li><em>Modifying the functions being invoked cannot be changed dynamically. The function doing the invoking has to be re-deployed with updated code.</em></li>
+</ul>
+
+
+<p><a href="https://twitter.com/PaulDJohnston">Some people</a> have even labelled "<em>functions calling functions</em>" an <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">anti-pattern</a> in serverless development! 😱</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Most common Serverless mistake?<br><br>Functions calling other functions<br><br>Why do people make this mistake?<br><br>Because people assume they should build functions like microservices and then use them in a similar way.<br><br>Causes no end of problems</p>&mdash; Serverless / Green Data Advocate (@PaulDJohnston) <a href="https://twitter.com/PaulDJohnston/status/1085106548270088193?ref_src=twsrc%5Etfw">January 15, 2019</a></blockquote>
+
+
+<p><strong>Hmmm... so what should we do?</strong></p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problem, triggers and rules! 👏</p>
+
+<h2>OpenWhisk Triggers &amp; Rules</h2>
+
+<p>Triggers and Rules in OpenWhisk are similar to the <a href="https://en.wikipedia.org/wiki/Observer_pattern">Observer pattern</a> from software engineering.</p>
+
+<p>Users can fire "events" in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to "subscribe" actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple "listeners" to the same trigger events. Event senders are decoupled from event receivers.</p>
+
+<p>{% img /images/loose-coupling-openwhisk/t-r-a.png %}</p>
+
+<p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
+
+<p><strong>But triggers can be fired manually from actions to provide custom event streams!</strong> 🙌</p>
+
+<p>```javascript
+const openwhisk = require('openwhisk')
+const params = {msg: 'event parameters'}</p>
+
+<p>// replace code like this...
+const result = await ow.actions.invoke({name: "some-action", params})</p>
+
+<p>// ...with this
+const result = await ow.triggers.invoke({name: "some-trigger", params})
+```</p>
+
+<p>This allows applications to move towards an <a href="https://en.wikipedia.org/wiki/Event-driven_architecture">event-driven architecture</a> and promotes loose-coupling between functions with all the associated benefits for testing, deployment and scalability. 👌</p>
+
+<h3>creating triggers</h3>
+
+<p>Triggers are managed through the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. They can be created, deleted, retrieved and fired using  HTTP requests. Users normally interact with triggers through the <a href="https://github.com/apache/incubator-openwhisk-cli">CLI</a> or <a href="https://github.com/apache/incubator-openwhisk-client-js/">platform SDKs</a>.</p>
+
+<p>Triggers can be created using the following CLI command.</p>
+
+<p><code>
+wsk trigger create &lt;TRIGGER_NAME&gt;
+</code></p>
+
+<h3>default parameters</h3>
+
+<p>Triggers support <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/parameters.md#setting-default-parameters-on-an-action">default parameters</a> like actions. Default parameters are stored in the platform and included in all trigger events. If the event object includes parameters with the same key, default parameter values are ignored.</p>
+
+<p><code>
+wsk trigger create &lt;TRIGGER_NAME&gt; -p &lt;PARAM&gt; &lt;PARAM_VALUE&gt; -p &lt;PARAM_2&gt; &lt;PARAM_VALUE&gt; ...
+</code></p>
+
+<h3>binding triggers to actions with rules</h3>
+
+<p>Rules bind triggers to actions. When triggers are fired, all actions connected via rules are invoked with the trigger event. Multiple rules can refer to the same trigger supporting multiple listeners to the same event.</p>
+
+<p>Rules can also be created using the following CLI command.</p>
+
+<p><code>
+wsk rule create RULE_NAME TRIGGER_NAME ACTION_NAME
+</code></p>
+
+<p>Tools like <a href="https://github.com/serverless/serverless-openwhisk">The Serverless Framework</a> and <a href="https://github.com/apache/incubator-openwhisk-wskdeploy">wskdeploy</a> allow users to configure triggers and rules declaratively through YAML configuration files.</p>
+
+<h3>firing triggers</h3>
+
+<p>The JS SDK can be used to <a href="https://github.com/apache/incubator-openwhisk-client-js#fire-trigger">fire triggers programatically</a> from applications.</p>
+
+<p><code>javascript
+const openwhisk = require('openwhisk')
+const name = 'sample-trigger'
+const params = {msg: 'event parameters'}
+const result = ow.triggers.invoke({name, params})
+</code></p>
+
+<p>CLI commands (<code>wsk trigger fire</code>) can fire triggers manually with event parameters for testing.</p>
+
+<p><code>
+wsk trigger fire sample-trigger -p msg "event parameters"
+</code></p>
+
+<h3>activation records for triggers</h3>
+
+<p>Activation records are created for trigger events. These activation records contain event parameters, rules fired, activations ids and invocation status for each action invoked. This is useful for debugging trigger events when issues are occurring.</p>
+
+<p><code>
+$ wsk trigger fire sample-trigger -p hello world
+ok: triggered /_/sample-trigger with id &lt;ACTIVATION_ID&gt;
+$ wsk activation get &lt;ACTIVATION_ID&gt;
+ok: got activation &lt;ACTIVATION_ID&gt;
+{
+ ...
+}
+</code></p>
+
+<p>The <code>response.result</code> property in the activation record contains the fired trigger event (combining default and event parameter values).</p>
+
+<p>Rules fired by the trigger are recorded in activation records as the JSON values under the <code>logs</code> parameter.</p>
+
+<p><code>json
+{
+  "statusCode": 0,
+  "success": true,
+  "activationId": "&lt;ACTION_ACTIVATION_ID&gt;",
+  "rule": "&lt;RULE_NAME&gt;",
+  "action": "&lt;ACTION_NAME&gt;"
+}
+</code></p>
+
+<p><em>Activation records are only generated when triggers have enabled rules with valid actions attached</em></p>
+
+<h2>Example - WC Goal Bot</h2>
+
+<p>This is great in theory but what about in practice?</p>
+
+<p><a href="https://github.com/jthomas/goalbot">Goal Bot</a> was a small serverless application I built in 2018 for the World Cup. It was a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> which tweeted out all goals scored in real-time. The application used the  "actions connected via triggers events" architecture pattern. This made development and testing easier and faster.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>This function has two functions <code>goals</code> and <code>twitter</code>.</p>
+
+<p><code>goals</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L11-L16">responsible</a> for detecting new goals scored using an external API. When invoked, it would retrieve all goals currently scored in the World Cup. Comparing the API response to a previous cached version calculated new goals scored. This function was connected to the alarm event source to run once a minute.</p>
+
+<p><code>twitter</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L17-L22">responsible</a> for sending tweets from the @WC_Goals account. Twitter's API was used to create  goal tweets constructed from the event parameters.</p>
+
+<p><strong>Goal events detected in the <code>goals</code> function need to be used to invoke the <code>twitter</code> function.</strong></p>
+
+<p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
+
+<p>{% img /images/loose-coupling-openwhisk/goalbot.png %}</p>
+
+<p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits...</p>
+
+<ul>
+<li><p>The <code>goals</code> function could be invoked in testing without tweets being sent. By disabling the rule binding the <code>twitter</code> function to the trigger, the goals function can fire events without causing side-effects.</p></li>
+<li><p>Compared to having a "mono-function" combining both tasks, splitting tasks into functions means the <code>twitter</code> function can be tested with manual events, rather than having to manipulate the database and stub API responses to generate the correct test data.</p></li>
+<li><p>It would also be easy to extend this architecture with additional notification services, like slack bots. New notification services could be attached to the same trigger source with an additional rule. This would not require any changes to the <code>goals</code> or <code>twitter</code> functions.</p></li>
+</ul>
+
+
+<h2>Triggers versus Queues</h2>
+
+<p>Another common solution to de-coupling functions in serverless architectures is using <a href="https://theburningmonk.com/2018/04/what-is-the-best-event-source-for-doing-pub-sub-with-aws-lambda/">message queues</a>.</p>
+
+<p>Functions push events in external queues, rather than invoking triggers directly. Event sources are responsible for firing the registered functions with new messages. Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk-package-kafka">supports Kafka</a> as an event source which could be used with this approach.</p>
+
+<p><em>How does firing triggers directly compare to pushing events into an external queue (or other event source)?</em></p>
+
+<p>Both queues and triggers can be used to achieve the same goal ("<em>connect functions via events</em>") but have different semantics. It is important to understand the benefits of both to choose the most appropriate architecture for your application.</p>
+
+<h3>benefits of using triggers against queues</h3>
+
+<p>Triggers are built into the Apache OpenWhisk platform. There is no configuration needed to use them. External event sources like queues need to be provisioned and managed as additional cloud services.</p>
+
+<p>Trigger invocations are free in IBM Cloud Functions. IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">charges only</a> for execution time and memory used in functions. Queues will incur additional usage costs based on the service's pricing plan.</p>
+
+<h3>disadvantages of using triggers against queues</h3>
+
+<p>Triggers are not queues. Triggers are not queues. Triggers are not queues. 💯</p>
+
+<p>If a trigger is fired and no actions are connected, the event is lost. Trigger events are not persisted until listeners are attached. <strong>If you need event persistence, message priorities, disaster recovery and other advanced features provided by message queues, use a message queue!</strong></p>
+
+<p>Triggers are subject to <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_reference.html#openwhisk_syslimits">rate limiting</a> in Apache OpenWhisk. In IBM Cloud Functions, this defaults to 1000 concurrent invocations and 5000 total invocations per namespace per minute. These limits can be raised through a support ticket but there are practical limits to the maximum rates allowed. Queues have support for much higher throughput rates.</p>
+
+<p>External event providers are also responsible for handling the retries when triggers have been rate-limited due to excess events. Invoking triggers manually relies on the invoking function to handle this. Emulating retry behaviour from an event provider is impractical due to costs and limits on function duration.</p>
+
+<h2>Other hints and tips</h2>
+
+<p><strong><em>Want to invoke an action which fires triggers without setting off listeners?</em></strong></p>
+
+<p>Rules can be dynamically disabled without having to remove them. This can be used during integration testing or debugging issues in production.</p>
+
+<p><code>
+wsk rule disable RULE_NAME
+wsk rule enable RULE_NAME
+</code></p>
+
+<p><strong><em>Want to verify triggers are fired with correct events without mocking client libraries?</em></strong></p>
+
+<p>Trigger events are not logged unless there is at least one enabled rule. Create a new rule which binds the <code>/whisk.system/utils/echo</code> action to the trigger. This built-in function just returns input parameters as the function response. This means the activation records with trigger events will now be available.</p>
+
+<h2>conclusion</h2>
+
+<p>Building event-driven serverless applications from loosely-coupled functions has numerous benefits including development speed, improved testability, deployment velocity, lower costs and more.</p>
+
+<p>Decomposing "monolithic" apps into independent serverless functions often needs event handling functions to trigger off multiple backend operations, implemented in separate serverless functions. Developers unfamiliar with serverless often resort to direct function invocations.</p>
+
+<p>Whilst this works, it introduces tight coupling between those functions, which is normally avoided in software engineering. This approach has even been highlighted as a "serverless" anti-pattern.</p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
+
+<p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Highly Available Serverless Apps With Cloudant's Cross-Region Replication]]></title>
@@ -34,7 +253,7 @@
 
 <p>This <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">serverless application</a> implements a <a href="https://www.todobackend.com/">TODO backend</a> using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> and <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant</a>.</p>
 
-<p><img src="/images/ha-serverless-apps-todo/todo-frontpage.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/todo-frontpage.png %}</p>
 
 <p>It provides an REST API for interacting with a TODO service. This can be used with the <a href="https://www.todobackend.com/client/index.html">front-end client</a> to add, complete and remove todos from a list.</p>
 
@@ -42,7 +261,7 @@
 
 <p>The application will be deployed to two different IBM Cloud regions (London and Dallas). Separate database instances will be provisioned in each region. Applications will use their regional database instance but share global state via replication.</p>
 
-<p><img src="/images/ha-serverless-apps-todo/architecture.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/architecture.png %}</p>
 
 <h2>deploy serverless app to multiple regions</h2>
 
@@ -137,7 +356,7 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/testing-app.gif"></p>
+<p>{% img /images/ha-serverless-apps-todo/testing-app.gif %}</p>
 
 <h3>deploy to dallas</h3>
 
@@ -182,14 +401,14 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/resource-list.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/resource-list.png %}</p>
 
 <ul>
 <li>Open the Cloudant Dashboard for each service instance.</li>
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif"></p>
+<p>{% img /images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif %}</p>
 
 <p>Follow these instructions on both hosts to generate API keys for replication with the correct permissions.</p>
 
@@ -199,7 +418,7 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/databases-list.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/databases-list.png %}</p>
 
 <p><em>Can't find the "todos" database in the Cloudant dashboard? Make sure you interact with the TODO backend from the <a href="https://www.todobackend.com/client/index.html">front-end application</a>. This will automatically create the database if it doesn't exist.</em></p>
 
@@ -210,7 +429,7 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/db-api-key.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/db-api-key.png %}</p>
 
 <h3>set up cross-region replication</h3>
 
@@ -232,7 +451,7 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/task-source.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/task-source.png %}</p>
 
 <ul>
 <li>Set the following "Target" values in the "Job configuration" panel.
@@ -247,7 +466,7 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/task-target.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/task-target.png %}</p>
 
 <p><em>Wondering what the REMOTE_CLOUDANT_HOST is? Use hostname from the Cloudant dashboard, e.g. XXXX-bluemix.cloudant.com</em></p>
 
@@ -261,7 +480,7 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/task-options.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/task-options.png %}</p>
 
 <ul>
 <li>Click "Start Replication"</li>
@@ -269,13 +488,13 @@ Action                                      Verb  API Name  URL
 </ul>
 
 
-<p><img src="/images/ha-serverless-apps-todo/replication-jobs-table.png"></p>
+<p>{% img /images/ha-serverless-apps-todo/replication-jobs-table.png %}</p>
 
 <h2>test it out!</h2>
 
 <p>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the APIGW URLs for each region simultaneously. Interactions with the todo list in one region should automatically propagate to the other region.</p>
 
-<p><img src="/images/ha-serverless-apps-todo/todo-app.gif"></p>
+<p>{% img /images/ha-serverless-apps-todo/todo-app.gif %}</p>
 
 <p>The "Active Tasks" panel on the Cloudant Dashboard shows the documents replicated between instances and pending changes. If there are errors synchronising changes to the replication target, the host uses exponential backoff to re-try the replication tasks.</p>
 
@@ -437,7 +656,7 @@ IMPORTANT NOTES:
 
 <p>After importing the certificate, check the certificate properties match the expected values</p>
 
-<p><img src="/images/custom-domains/import-certs.gif"></p>
+<p>{% img /images/custom-domains/import-certs.gif %}</p>
 
 <h2>Binding Domain to IBM Cloud Functions APIs</h2>
 
@@ -451,7 +670,7 @@ IMPORTANT NOTES:
 </ul>
 
 
-<p><img src="/images/custom-domains/open-apis-settings.gif"></p>
+<p>{% img /images/custom-domains/open-apis-settings.gif %}</p>
 
 <h3>domain validation</h3>
 
@@ -497,7 +716,7 @@ api.&lt;YOUR_DOMAIN&gt;. 3599 IN  TXT "&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.
 
 <p>Once the domain has been validated, the form will redirect to the custom domains overview. The "Custom Domain" field will now show the sub-domain bound to the correct default domain alias.</p>
 
-<p><img src="/images/custom-domains/bind-custom-domain.gif"></p>
+<p>{% img /images/custom-domains/bind-custom-domain.gif %}</p>
 
 <h3>add CNAME record</h3>
 
@@ -1089,7 +1308,7 @@ const encode = typearr => {
 
 <p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
 
-<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
+<p>{% img /images/tfjs-serverless/tf-js-example.gif Serverless TensorFlow.js Function %}</p>
 
 <p>Sounds easy, right? It's just a JavaScript library? So, zip it up and away we go... <strong><em>ahem</em></strong> 👊</p>
 
@@ -1252,7 +1471,7 @@ ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
 </ul>
 
 
-<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+<p>{% img https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG %}</p>
 
 <p><code>sh
 wget http://bit.ly/2JYSal9 -O panda.jpg
@@ -1322,13 +1541,13 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <h3>warm invocations</h3>
 
-<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
+<p>{% img /images/tfjs-serverless/warm-activations.png Warm Activation Performance Results %}</p>
 
 <p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
 
 <h3>cold invocations</h3>
 
-<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
+<p>{% img /images/tfjs-serverless/cold-activations.png Cold Activation Performance Results %}</p>
 
 <p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
 
@@ -1349,252 +1568,6 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 <p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
 
 <p>Fortunately, Apache OpenWhisk's custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Monitoring Dashboards With Kibana For IBM Cloud Functions]]></title>
-    <link href="http://jamesthom.as/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/"/>
-    <updated>2018-07-18T16:08:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions</id>
-    <content type="html"><![CDATA[<p>Following all the events from the World Cup can be hard. So many matches, so many goals. Rather than manually refreshing BBC Football to check the scores, I decided to created a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> that would automatically tweet out each goal.</p>
-
-<p><img src="/images/monitoring-goalbot/wcgoalbot.png" title="World Cup Goal Bot" ></p>
-
-<p><a href="https://github.com/jthomas/goalbot">The Twitter bot</a> runs on <a href="https://console.bluemix.net/openwhisk">IBM Cloud Functions</a>. It is called once a minute to check for new goals, using the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a>. If new goals have been scored, it calls another action to send the tweet messages.</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
-
-
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p>Once it was running, I need to ensure it was working correctly for the duration of the tournament. Using the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service, I built a custom monitoring dashboard to help to me recognise and diagnose issues.</p>
-
-<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
-
-<p>The dashboard showed counts for successful and failed activations, when they occurred and a list of failed activations. If issues have occurred, I can retrieve the failed activation identifiers and investigate further.</p>
-
-<p><em>Let's walk through the steps used to create this dashboard to help you create custom visualisations for serverless applications running on IBM Cloud Functions...</em></p>
-
-<h2>IBM Cloud Logging</h2>
-
-<p><a href="https://console.bluemix.net/docs/services/CloudLogAnalysis/index.html">IBM Cloud Logging</a> can be accessed <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_logs.html#openwhisk_logs">using the link</a> on the IBM Cloud Functions dashboard. This will open the logging service for the current organisation and space.</p>
-
-<p><img src="/images/monitoring-goalbot/open-logging.gif" title="Opening Logging Service" ></p>
-
-<p>All activation records and application logs are automatically forwarded to the logging service by IBM Cloud Functions.</p>
-
-<p><img src="/images/monitoring-goalbot/discover.png" title="Kibana Discover Screen" ></p>
-
-<h3>Log Message Fields</h3>
-
-<p>Activation records and application log messages have a number of common record fields.</p>
-
-<ul>
-<li><code>activationId_str</code> - <em>activation identifier for log message.</em></li>
-<li><code>timestamp</code> - <em>log draining time.</em></li>
-<li><code>@timestamp</code> - <em>message ingestion time.</em></li>
-<li><code>action_str</code> - <em>fully qualified action name</em></li>
-</ul>
-
-
-<p>Log records for different message types are identified using the <code>type</code> field. This is either <code>activation_record</code> or <code>user_logs</code> for IBM Cloud Functions records.</p>
-
-<p>Activation records have the following custom fields.</p>
-
-<ul>
-<li><code>duration_int</code> - <em>activation duration in milliseconds</em></li>
-<li><code>status_str</code> - <em>activation status response (non-zero for errors)</em></li>
-<li><code>message</code> - <em>activation response returned from action</em></li>
-<li><code>time_date</code> - <em>activation record start time</em></li>
-<li><code>end_date</code> - <em>activation record end time</em></li>
-</ul>
-
-
-<p>Applications log lines, written to stdout or stderr, are forwarded as individual records. One application log line per record. Log message records have the following custom fields.</p>
-
-<ul>
-<li><code>message</code> - <em>single application log line output</em></li>
-<li><code>stream_str</code> - <em>log message source, either <code>stdout</code> or <code>stderr</code></em></li>
-<li><code>time_date</code> - <em>timestamp parsed from application log line</em></li>
-</ul>
-
-
-<h3>Finding Log Messages For One Activation</h3>
-
-<p>Use this query string in the "<a href="https://www.elastic.co/guide/en/kibana/current/discover.html"><em>Discover</em>"</a> tab to retrieve all logs messages from a particular activation.</p>
-
-<p><code>
-activationId_str: &lt;ACTIVATION_ID&gt;
-</code></p>
-
-<p>Search queries are executed against log records within a <a href="https://www.elastic.co/guide/en/kibana/current/set-time-filter.html">configurable time window</a>.</p>
-
-<h2>Monitoring Dashboard</h2>
-
-<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
-
-<p>This is the monitoring dashboard I created. It contains visualisations showing counts for successful and failed activations, histograms of when they occurred and a list of the recent failed activation identifiers.</p>
-
-<p>It allows me to quickly review the previous 24 hours activations for issues. If there are notable issues, I can retrieve the failed activation identifiers and investigate further.</p>
-
-<p>Before being able to create the dashboard, I needed to define two resources: <strong><em>saved searches</em></strong> and <strong><em>visualisations</em></strong>.</p>
-
-<h3>Saved Searches</h3>
-
-<p><img src="/images/monitoring-goalbot/saved-searches.png" title="Saving Search Queries" ></p>
-
-<p>Kibana supports saving and referring to search queries from visualisations using explicit names.</p>
-
-<p>Using <a href="https://www.elastic.co/guide/en/kibana/current/managing-saved-objects.html">saved searches</a> with visualisations, rather than explicit queries, removes the need to manually update visualisations' configuration when queries change.</p>
-
-<p>This dashboard uses two custom queries in visualisations. Queries are needed to find activation records from both successful and failed invocations.</p>
-
-<ul>
-<li>Create a new <em>"Saved Search"</em> named <em>"activation records (success)"</em> using the following search query.</li>
-</ul>
-
-
-<p><code>
-type: activation_record AND status_str: 0
-</code></p>
-
-<ul>
-<li>Create a new <em>"Saved Search"</em> named <em>"activation records (failed)"</em> using the following search query.</li>
-</ul>
-
-
-<p><code>
-type: activation_record AND NOT status_str: 0
-</code></p>
-
-<p><em>The <code>status_str</code> field is set to a non-zero value for failures. Using the <code>type</code> field ensures log messages from other sources are excluded from the results.</em></p>
-
-<h3>Indexed Fields</h3>
-
-<p>Before referencing log record fields in visualisations, those fields <a href="https://www.elastic.co/guide/en/kibana/current/index-patterns.html#reload-fields">need to be indexed</a> correctly. Use these instructions to verify activation records fields are available.</p>
-
-<ul>
-<li>Check IBM Cloud Functions logs are available in IBM Cloud Logging using the "<em>Discover</em>" tab.</li>
-<li>Click the "⚙️ <em>(Management)</em>" menu item on the left-hand drop-down menu in IBM Cloud Logging.</li>
-<li>Click the "<em>Index Patterns</em>" link.</li>
-<li>Click the 🔄 button to refresh the field list.</li>
-</ul>
-
-
-<p><img src="/images/monitoring-goalbot/refresh-fields.gif" title="Refresh field index" ></p>
-
-<h3>Visualisations</h3>
-
-<p>Three types of <a href="https://www.elastic.co/guide/en/kibana/current/visualize.html">visualisation</a> are used on the monitoring dashboard. Metric displays are used for the activation counts, vertical bar charts for the activation times and a data table to list failed activations.</p>
-
-<p><em>Visualisations <a href="https://www.elastic.co/guide/en/kibana/current/createvis.html">can be created</a> by opening the "Visualize" menu item and select a new visualisation type under the "Create New Visualization" menu.</em></p>
-
-<p>Create five different visualisations, using the instructions below, before moving on to create the dashboard.</p>
-
-<h4>Activation Counts</h4>
-
-<p>Counts for successful and failed activations are displayed as singular <a href="https://www.elastic.co/guide/en/kibana/current/metric-chart.html">metric values</a>.</p>
-
-<ul>
-<li>Select the "Metric" visualisation from the visualisation type list.</li>
-<li>Use the "activation records (success)" saved search as the data source.</li>
-<li>Ensure the Metric Aggregation is set to "Count"</li>
-<li>Set the "Font Size" under the Options menu to 120pt.</li>
-<li>Save the visualisation as "Activation Counts (Success)"</li>
-</ul>
-
-
-<p><img src="/images/monitoring-goalbot/metrics-success.png" title="Activation success metric" ></p>
-
-<ul>
-<li>Repeat this process to create the failed activation count visualisation.</li>
-<li>Use the "activation records (failed)" saved search as the data source.</li>
-<li>Save the visualisation as "Activation Counts (Failed)".</li>
-</ul>
-
-
-<p><img src="/images/monitoring-goalbot/metrics-fail.png" title="Activation failed metric" ></p>
-
-<h4>Activation Times</h4>
-
-<p>Activation counts over time, for successful and failed invocations, are displayed in <a href="https://www.elastic.co/guide/en/kibana/current/xy-chart.html">vertical bar charts</a>.</p>
-
-<ul>
-<li>Select the "Vertical bar chart" visualisation from the visualisation type list.</li>
-<li>Use the "activation records (success)" saved search as the data source.</li>
-<li>Set the "Custom Label" to Invocations</li>
-<li>Add an "X-Axis" bucket type under the Buckets section.</li>
-<li>Choose "Date Histogram" for the aggregation, "@timestamp" for the field and "Minute" for the interval.</li>
-<li>Save the visualisation as "Activation Times (Success)"</li>
-</ul>
-
-
-<p><img src="/images/monitoring-goalbot/activation-times.png" title="Activation times chart" ></p>
-
-<ul>
-<li>Repeat this process to create the failed activation times visualisation.</li>
-<li>Use the "activation records (failed)" saved search as the data source.</li>
-<li>Save the visualisation as "Activation Times (Failed)"</li>
-</ul>
-
-
-<h4>Failed Activations List</h4>
-
-<p>Activation identifiers for failed invocations are shown using a <a href="https://www.elastic.co/guide/en/kibana/current/data-table.html">data table</a>.</p>
-
-<ul>
-<li>Select the "Data table" visualisation from the visualisation type list.</li>
-<li>Use the "activation records (failed)" saved search as the data source.</li>
-<li>Add a "Split Rows" bucket type under the Buckets section.</li>
-<li>Choose "Date Histogram" for the aggregation, "@timestamp" for the field and "Second" for the interval.</li>
-<li>Add a "sub-bucket" with the "Split Rows" type.</li>
-<li>Set sub aggregation to "Terms", field to "activationId_str" and order by "Term".</li>
-<li>Save the visualisation as "Errors Table"</li>
-</ul>
-
-
-<p><img src="/images/monitoring-goalbot/activations-table.png" title="Failed activation table" ></p>
-
-<h3>Creating the dashboard</h3>
-
-<p>Having created the individual visualisations components, the <a href="https://www.elastic.co/guide/en/kibana/current/dashboard.html">monitoring dashboard</a> can be constructed.</p>
-
-<ul>
-<li>Click the "Dashboard" menu item from the left-and menu panel.</li>
-<li>Click the "Add" button to import visualisations into the current dashboard.</li>
-<li>Add each of the five visualisations created above.</li>
-</ul>
-
-
-<p><em>Hovering the mouse cursor over visualisations will reveal icons for moving and re-sizing.</em></p>
-
-<ul>
-<li>Re-order the visualisations into the following rows:
-
-<ul>
-<li>Activations Metrics</li>
-<li>Activation Times</li>
-<li>Failed Activations List</li>
-</ul>
-</li>
-<li>Select the "Last 24 hours" time window, available from the relative time ranges menu.</li>
-<li>Save the dashboard as "<em>Cloud Functions Monitoring</em>". Tick the "<em>store time with dashboard</em>" option.</li>
-</ul>
-
-
-<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
-
-<p>Having saved the dashboard with time window, re-opening the dashboard will show our visualisations with data for the previous 24 hours. This dashboard can be used to quickly review recent application issues.</p>
-
-<h2>Conclusion</h2>
-
-<p>Monitoring serverless applications is crucial to diagnosing issues on serverless platforms.</p>
-
-<p><a href="https://console.bluemix.net/openwhisk/dashboard">IBM Cloud Functions</a> provides automatic integration with the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service. All activation records and application logs from serverless applications are automatically forwarded as log records. This makes it simple to build custom monitoring dashboards using these records for serverless applications running on IBM Cloud Functions.</p>
-
-<p>Using this service with World Cup Twitter bot allowed me to easily monitor the application for issues. This was much easier than manually retrieving and reviewing activation records using the CLI!</p>
 ]]></content>
   </entry>
   

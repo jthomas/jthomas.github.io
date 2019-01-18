@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-01-10T10:09:26+00:00</updated>
+  <updated>2019-01-18T15:22:17+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,225 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[loosely-coupled serverless functions with Apache Openwhisk]]></title>
+    <link href="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/"/>
+    <updated>2019-01-18T15:10:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk</id>
+    <content type="html"><![CDATA[<p>Just like software engineering, <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">best practices for serverless applications</a> advise keeping functions small and focused on a single task, aka "<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">do one thing and do it well</a>". Small single-purpose functions are easier to develop, test and debug. 👍</p>
+
+<p><strong>But what happens when you need execute multiple asynchronous tasks (implemented as separate functions) from an incoming event, like an API request?</strong> 🤔</p>
+
+<h2>Functions Calling Functions?</h2>
+
+<p>Functions can invoke other functions directly, using asynchronous calls through the client SDK. This works at the cost of introducing <a href="https://en.wikipedia.org/wiki/Coupling_%28computer_programming%29">tighter coupling</a> between functions, which is generally avoided in software engineering! Disadvantages of this approach include...</p>
+
+<ul>
+<li><em>Functions which call other functions can be more difficult to test. Test cases needs to mock out the client SDK to remove side-effects during unit or integration tests.</em></li>
+<li><em>It can lead to repetitive code if you want to fire multiple tasks with the same event. Each invocation needs to manually handle error conditions and re-tries on network or other issues, which complicates the business logic.</em></li>
+<li><em>Modifying the functions being invoked cannot be changed dynamically. The function doing the invoking has to be re-deployed with updated code.</em></li>
+</ul>
+
+
+<p><a href="https://twitter.com/PaulDJohnston">Some people</a> have even labelled "<em>functions calling functions</em>" an <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">anti-pattern</a> in serverless development! 😱</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Most common Serverless mistake?<br><br>Functions calling other functions<br><br>Why do people make this mistake?<br><br>Because people assume they should build functions like microservices and then use them in a similar way.<br><br>Causes no end of problems</p>&mdash; Serverless / Green Data Advocate (@PaulDJohnston) <a href="https://twitter.com/PaulDJohnston/status/1085106548270088193?ref_src=twsrc%5Etfw">January 15, 2019</a></blockquote>
+
+
+<p><strong>Hmmm... so what should we do?</strong></p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problem, triggers and rules! 👏</p>
+
+<h2>OpenWhisk Triggers &amp; Rules</h2>
+
+<p>Triggers and Rules in OpenWhisk are similar to the <a href="https://en.wikipedia.org/wiki/Observer_pattern">Observer pattern</a> from software engineering.</p>
+
+<p>Users can fire "events" in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to "subscribe" actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple "listeners" to the same trigger events. Event senders are decoupled from event receivers.</p>
+
+<p>{% img /images/loose-coupling-openwhisk/t-r-a.png %}</p>
+
+<p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
+
+<p><strong>But triggers can be fired manually from actions to provide custom event streams!</strong> 🙌</p>
+
+<p>```javascript
+const openwhisk = require('openwhisk')
+const params = {msg: 'event parameters'}</p>
+
+<p>// replace code like this...
+const result = await ow.actions.invoke({name: "some-action", params})</p>
+
+<p>// ...with this
+const result = await ow.triggers.invoke({name: "some-trigger", params})
+```</p>
+
+<p>This allows applications to move towards an <a href="https://en.wikipedia.org/wiki/Event-driven_architecture">event-driven architecture</a> and promotes loose-coupling between functions with all the associated benefits for testing, deployment and scalability. 👌</p>
+
+<h3>creating triggers</h3>
+
+<p>Triggers are managed through the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. They can be created, deleted, retrieved and fired using  HTTP requests. Users normally interact with triggers through the <a href="https://github.com/apache/incubator-openwhisk-cli">CLI</a> or <a href="https://github.com/apache/incubator-openwhisk-client-js/">platform SDKs</a>.</p>
+
+<p>Triggers can be created using the following CLI command.</p>
+
+<p><code>
+wsk trigger create &lt;TRIGGER_NAME&gt;
+</code></p>
+
+<h3>default parameters</h3>
+
+<p>Triggers support <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/parameters.md#setting-default-parameters-on-an-action">default parameters</a> like actions. Default parameters are stored in the platform and included in all trigger events. If the event object includes parameters with the same key, default parameter values are ignored.</p>
+
+<p><code>
+wsk trigger create &lt;TRIGGER_NAME&gt; -p &lt;PARAM&gt; &lt;PARAM_VALUE&gt; -p &lt;PARAM_2&gt; &lt;PARAM_VALUE&gt; ...
+</code></p>
+
+<h3>binding triggers to actions with rules</h3>
+
+<p>Rules bind triggers to actions. When triggers are fired, all actions connected via rules are invoked with the trigger event. Multiple rules can refer to the same trigger supporting multiple listeners to the same event.</p>
+
+<p>Rules can also be created using the following CLI command.</p>
+
+<p><code>
+wsk rule create RULE_NAME TRIGGER_NAME ACTION_NAME
+</code></p>
+
+<p>Tools like <a href="https://github.com/serverless/serverless-openwhisk">The Serverless Framework</a> and <a href="https://github.com/apache/incubator-openwhisk-wskdeploy">wskdeploy</a> allow users to configure triggers and rules declaratively through YAML configuration files.</p>
+
+<h3>firing triggers</h3>
+
+<p>The JS SDK can be used to <a href="https://github.com/apache/incubator-openwhisk-client-js#fire-trigger">fire triggers programatically</a> from applications.</p>
+
+<p><code>javascript
+const openwhisk = require('openwhisk')
+const name = 'sample-trigger'
+const params = {msg: 'event parameters'}
+const result = ow.triggers.invoke({name, params})
+</code></p>
+
+<p>CLI commands (<code>wsk trigger fire</code>) can fire triggers manually with event parameters for testing.</p>
+
+<p><code>
+wsk trigger fire sample-trigger -p msg "event parameters"
+</code></p>
+
+<h3>activation records for triggers</h3>
+
+<p>Activation records are created for trigger events. These activation records contain event parameters, rules fired, activations ids and invocation status for each action invoked. This is useful for debugging trigger events when issues are occurring.</p>
+
+<p><code>
+$ wsk trigger fire sample-trigger -p hello world
+ok: triggered /_/sample-trigger with id &lt;ACTIVATION_ID&gt;
+$ wsk activation get &lt;ACTIVATION_ID&gt;
+ok: got activation &lt;ACTIVATION_ID&gt;
+{
+ ...
+}
+</code></p>
+
+<p>The <code>response.result</code> property in the activation record contains the fired trigger event (combining default and event parameter values).</p>
+
+<p>Rules fired by the trigger are recorded in activation records as the JSON values under the <code>logs</code> parameter.</p>
+
+<p><code>json
+{
+  "statusCode": 0,
+  "success": true,
+  "activationId": "&lt;ACTION_ACTIVATION_ID&gt;",
+  "rule": "&lt;RULE_NAME&gt;",
+  "action": "&lt;ACTION_NAME&gt;"
+}
+</code></p>
+
+<p><em>Activation records are only generated when triggers have enabled rules with valid actions attached</em></p>
+
+<h2>Example - WC Goal Bot</h2>
+
+<p>This is great in theory but what about in practice?</p>
+
+<p><a href="https://github.com/jthomas/goalbot">Goal Bot</a> was a small serverless application I built in 2018 for the World Cup. It was a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> which tweeted out all goals scored in real-time. The application used the  "actions connected via triggers events" architecture pattern. This made development and testing easier and faster.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>This function has two functions <code>goals</code> and <code>twitter</code>.</p>
+
+<p><code>goals</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L11-L16">responsible</a> for detecting new goals scored using an external API. When invoked, it would retrieve all goals currently scored in the World Cup. Comparing the API response to a previous cached version calculated new goals scored. This function was connected to the alarm event source to run once a minute.</p>
+
+<p><code>twitter</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L17-L22">responsible</a> for sending tweets from the @WC_Goals account. Twitter's API was used to create  goal tweets constructed from the event parameters.</p>
+
+<p><strong>Goal events detected in the <code>goals</code> function need to be used to invoke the <code>twitter</code> function.</strong></p>
+
+<p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
+
+<p>{% img /images/loose-coupling-openwhisk/goalbot.png %}</p>
+
+<p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits...</p>
+
+<ul>
+<li><p>The <code>goals</code> function could be invoked in testing without tweets being sent. By disabling the rule binding the <code>twitter</code> function to the trigger, the goals function can fire events without causing side-effects.</p></li>
+<li><p>Compared to having a "mono-function" combining both tasks, splitting tasks into functions means the <code>twitter</code> function can be tested with manual events, rather than having to manipulate the database and stub API responses to generate the correct test data.</p></li>
+<li><p>It would also be easy to extend this architecture with additional notification services, like slack bots. New notification services could be attached to the same trigger source with an additional rule. This would not require any changes to the <code>goals</code> or <code>twitter</code> functions.</p></li>
+</ul>
+
+
+<h2>Triggers versus Queues</h2>
+
+<p>Another common solution to de-coupling functions in serverless architectures is using <a href="https://theburningmonk.com/2018/04/what-is-the-best-event-source-for-doing-pub-sub-with-aws-lambda/">message queues</a>.</p>
+
+<p>Functions push events in external queues, rather than invoking triggers directly. Event sources are responsible for firing the registered functions with new messages. Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk-package-kafka">supports Kafka</a> as an event source which could be used with this approach.</p>
+
+<p><em>How does firing triggers directly compare to pushing events into an external queue (or other event source)?</em></p>
+
+<p>Both queues and triggers can be used to achieve the same goal ("<em>connect functions via events</em>") but have different semantics. It is important to understand the benefits of both to choose the most appropriate architecture for your application.</p>
+
+<h3>benefits of using triggers against queues</h3>
+
+<p>Triggers are built into the Apache OpenWhisk platform. There is no configuration needed to use them. External event sources like queues need to be provisioned and managed as additional cloud services.</p>
+
+<p>Trigger invocations are free in IBM Cloud Functions. IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">charges only</a> for execution time and memory used in functions. Queues will incur additional usage costs based on the service's pricing plan.</p>
+
+<h3>disadvantages of using triggers against queues</h3>
+
+<p>Triggers are not queues. Triggers are not queues. Triggers are not queues. 💯</p>
+
+<p>If a trigger is fired and no actions are connected, the event is lost. Trigger events are not persisted until listeners are attached. <strong>If you need event persistence, message priorities, disaster recovery and other advanced features provided by message queues, use a message queue!</strong></p>
+
+<p>Triggers are subject to <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_reference.html#openwhisk_syslimits">rate limiting</a> in Apache OpenWhisk. In IBM Cloud Functions, this defaults to 1000 concurrent invocations and 5000 total invocations per namespace per minute. These limits can be raised through a support ticket but there are practical limits to the maximum rates allowed. Queues have support for much higher throughput rates.</p>
+
+<p>External event providers are also responsible for handling the retries when triggers have been rate-limited due to excess events. Invoking triggers manually relies on the invoking function to handle this. Emulating retry behaviour from an event provider is impractical due to costs and limits on function duration.</p>
+
+<h2>Other hints and tips</h2>
+
+<p><strong><em>Want to invoke an action which fires triggers without setting off listeners?</em></strong></p>
+
+<p>Rules can be dynamically disabled without having to remove them. This can be used during integration testing or debugging issues in production.</p>
+
+<p><code>
+wsk rule disable RULE_NAME
+wsk rule enable RULE_NAME
+</code></p>
+
+<p><strong><em>Want to verify triggers are fired with correct events without mocking client libraries?</em></strong></p>
+
+<p>Trigger events are not logged unless there is at least one enabled rule. Create a new rule which binds the <code>/whisk.system/utils/echo</code> action to the trigger. This built-in function just returns input parameters as the function response. This means the activation records with trigger events will now be available.</p>
+
+<h2>conclusion</h2>
+
+<p>Building event-driven serverless applications from loosely-coupled functions has numerous benefits including development speed, improved testability, deployment velocity, lower costs and more.</p>
+
+<p>Decomposing "monolithic" apps into independent serverless functions often needs event handling functions to trigger off multiple backend operations, implemented in separate serverless functions. Developers unfamiliar with serverless often resort to direct function invocations.</p>
+
+<p>Whilst this works, it introduces tight coupling between those functions, which is normally avoided in software engineering. This approach has even been highlighted as a "serverless" anti-pattern.</p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
+
+<p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Finding photos on Twitter using face recognition with TensorFlow.js]]></title>
@@ -553,7 +772,7 @@ const encode = typearr => {
 
 <p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
 
-<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
+<p>{% img /images/tfjs-serverless/tf-js-example.gif Serverless TensorFlow.js Function %}</p>
 
 <p>Sounds easy, right? It's just a JavaScript library? So, zip it up and away we go... <strong><em>ahem</em></strong> 👊</p>
 
@@ -716,7 +935,7 @@ ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
 </ul>
 
 
-<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+<p>{% img https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG %}</p>
 
 <p><code>sh
 wget http://bit.ly/2JYSal9 -O panda.jpg
@@ -786,13 +1005,13 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <h3>warm invocations</h3>
 
-<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
+<p>{% img /images/tfjs-serverless/warm-activations.png Warm Activation Performance Results %}</p>
 
 <p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
 
 <h3>cold invocations</h3>
 
-<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
+<p>{% img /images/tfjs-serverless/cold-activations.png Cold Activation Performance Results %}</p>
 
 <p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
 
@@ -823,7 +1042,7 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
     <id>http://jamesthom.as/blog/2018/07/18/monitoring-dashboards-with-kibana-for-ibm-cloud-functions</id>
     <content type="html"><![CDATA[<p>Following all the events from the World Cup can be hard. So many matches, so many goals. Rather than manually refreshing BBC Football to check the scores, I decided to created a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> that would automatically tweet out each goal.</p>
 
-<p><img src="/images/monitoring-goalbot/wcgoalbot.png" title="World Cup Goal Bot" ></p>
+<p>{% img /images/monitoring-goalbot/wcgoalbot.png World Cup Goal Bot %}</p>
 
 <p><a href="https://github.com/jthomas/goalbot">The Twitter bot</a> runs on <a href="https://console.bluemix.net/openwhisk">IBM Cloud Functions</a>. It is called once a minute to check for new goals, using the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a>. If new goals have been scored, it calls another action to send the tweet messages.</p>
 
@@ -835,7 +1054,7 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <p>Once it was running, I need to ensure it was working correctly for the duration of the tournament. Using the <a href="https://console.bluemix.net/catalog/services/log-analysis">IBM Cloud Logging</a> service, I built a custom monitoring dashboard to help to me recognise and diagnose issues.</p>
 
-<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+<p>{% img /images/monitoring-goalbot/dashboard-overview.png Monitoring Dashboard %}</p>
 
 <p>The dashboard showed counts for successful and failed activations, when they occurred and a list of failed activations. If issues have occurred, I can retrieve the failed activation identifiers and investigate further.</p>
 
@@ -845,11 +1064,11 @@ memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.5
 
 <p><a href="https://console.bluemix.net/docs/services/CloudLogAnalysis/index.html">IBM Cloud Logging</a> can be accessed <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_logs.html#openwhisk_logs">using the link</a> on the IBM Cloud Functions dashboard. This will open the logging service for the current organisation and space.</p>
 
-<p><img src="/images/monitoring-goalbot/open-logging.gif" title="Opening Logging Service" ></p>
+<p>{% img /images/monitoring-goalbot/open-logging.gif Opening Logging Service %}</p>
 
 <p>All activation records and application logs are automatically forwarded to the logging service by IBM Cloud Functions.</p>
 
-<p><img src="/images/monitoring-goalbot/discover.png" title="Kibana Discover Screen" ></p>
+<p>{% img /images/monitoring-goalbot/discover.png Kibana Discover Screen %}</p>
 
 <h3>Log Message Fields</h3>
 
@@ -897,7 +1116,7 @@ activationId_str: &lt;ACTIVATION_ID&gt;
 
 <h2>Monitoring Dashboard</h2>
 
-<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+<p>{% img /images/monitoring-goalbot/dashboard-overview.png Monitoring Dashboard %}</p>
 
 <p>This is the monitoring dashboard I created. It contains visualisations showing counts for successful and failed activations, histograms of when they occurred and a list of the recent failed activation identifiers.</p>
 
@@ -907,7 +1126,7 @@ activationId_str: &lt;ACTIVATION_ID&gt;
 
 <h3>Saved Searches</h3>
 
-<p><img src="/images/monitoring-goalbot/saved-searches.png" title="Saving Search Queries" ></p>
+<p>{% img /images/monitoring-goalbot/saved-searches.png Saving Search Queries %}</p>
 
 <p>Kibana supports saving and referring to search queries from visualisations using explicit names.</p>
 
@@ -947,7 +1166,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p><img src="/images/monitoring-goalbot/refresh-fields.gif" title="Refresh field index" ></p>
+<p>{% img /images/monitoring-goalbot/refresh-fields.gif Refresh field index %}</p>
 
 <h3>Visualisations</h3>
 
@@ -970,7 +1189,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p><img src="/images/monitoring-goalbot/metrics-success.png" title="Activation success metric" ></p>
+<p>{% img /images/monitoring-goalbot/metrics-success.png Activation success metric %}</p>
 
 <ul>
 <li>Repeat this process to create the failed activation count visualisation.</li>
@@ -979,7 +1198,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p><img src="/images/monitoring-goalbot/metrics-fail.png" title="Activation failed metric" ></p>
+<p>{% img /images/monitoring-goalbot/metrics-fail.png Activation failed metric %}</p>
 
 <h4>Activation Times</h4>
 
@@ -995,7 +1214,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p><img src="/images/monitoring-goalbot/activation-times.png" title="Activation times chart" ></p>
+<p>{% img /images/monitoring-goalbot/activation-times.png Activation times chart %}</p>
 
 <ul>
 <li>Repeat this process to create the failed activation times visualisation.</li>
@@ -1019,7 +1238,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p><img src="/images/monitoring-goalbot/activations-table.png" title="Failed activation table" ></p>
+<p>{% img /images/monitoring-goalbot/activations-table.png Failed activation table %}</p>
 
 <h3>Creating the dashboard</h3>
 
@@ -1048,7 +1267,7 @@ type: activation_record AND NOT status_str: 0
 </ul>
 
 
-<p><img src="/images/monitoring-goalbot/dashboard-overview.png" title="Monitoring Dashboard" ></p>
+<p>{% img /images/monitoring-goalbot/dashboard-overview.png Monitoring Dashboard %}</p>
 
 <p>Having saved the dashboard with time window, re-opening the dashboard will show our visualisations with data for the previous 24 hours. This dashboard can be used to quickly review recent application issues.</p>
 
@@ -1157,7 +1376,7 @@ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspe
 </ul>
 
 
-<p><img src="/images/debugging/devtools.png" title="Chrome Dev Tools" ></p>
+<p>{% img /images/debugging/devtools.png Chrome Dev Tools %}</p>
 
 <p>Chrome Dev Tools is configured to open a connection on port 9229 on localhost. If the web socket connection succeeds, the debugging target should be listed in the "Remote Target" section.</p>
 
@@ -1168,7 +1387,7 @@ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspe
 
 <p>In the "Sources" panel the JavaScript files loaded by the Node.js process are available.</p>
 
-<p><img src="/images/debugging/devtools-debugging.png" title="Chrome Dev Tools Debugging" ></p>
+<p>{% img /images/debugging/devtools-debugging.png Chrome Dev Tools Debugging %}</p>
 
 <p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
 
@@ -1194,7 +1413,7 @@ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspe
 }
 </code></p>
 
-<p><img src="/images/debugging/vscode.png" title="Visual Studio Code" ></p>
+<p>{% img /images/debugging/vscode.png Visual Studio Code %}</p>
 
 <ul>
 <li>Choose the new "<em>attach to remote</em>" debugging profile and click the Run button.</li>
@@ -1203,7 +1422,7 @@ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspe
 
 <p>The "<em>Loaded Scripts</em>" window will show all the JavaScript files loaded by the Node.js process.</p>
 
-<p><img src="/images/debugging/vscode-debugging.png" title="Visual Studio Code Debugging" ></p>
+<p>{% img /images/debugging/vscode-debugging.png Visual Studio Code Debugging %}</p>
 
 <p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
 
@@ -1345,219 +1564,6 @@ HTTP/1.1 200 OK
 <p>In this example, this approach was used to enable the remote debugging service from the OpenWhisk Node.js runtime environment. The same approach could be used for any language and debugging tool needing local access to the runtime environment.</p>
 
 <p>Having access to the Node.js debugger is huge improvement when debugging challenging issues, rather than just being reliant on logs and metrics collected by the platform.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Binding IAM Services To IBM Cloud Functions]]></title>
-    <link href="http://jamesthom.as/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/"/>
-    <updated>2018-06-05T09:47:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions</id>
-    <content type="html"><![CDATA[<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
-
-<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
-
-<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
-
-<p><blockquote><p></p></p><p><p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p></p><p><p></p></blockquote></p>
-
-<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
-
-<p><em>Let's look at how this works...</em></p>
-
-<h2>Binding IAM Credentials</h2>
-
-<h3>Requirements</h3>
-
-<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
-
-<ul>
-<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
-<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
-</ul>
-
-
-<p>You will need the following information to bind a service credentials.</p>
-
-<ul>
-<li>Service name.</li>
-<li><em>(Optional)</em> Instance name.</li>
-<li><em>(Optional)</em> Credentials identifier.</li>
-</ul>
-
-
-<h3>Using the CLI</h3>
-
-<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
-
-<p><code>
-bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;
-</code></p>
-
-<p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
-
-<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
-
-<h3>Accessing from actions</h3>
-
-<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
-
-<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
-
-<p>```json
-{
-   "__bx_creds":{</p>
-
-<pre><code>  "service-name":{
-     "apikey":"&lt;API_KEY&gt;",
-     ...
-  }
-</code></pre>
-
-<p>   }
-}
-```</p>
-
-<p>Default parameters are automatically merged into the request parameters during invocations.</p>
-
-<h2>Common Questions</h2>
-
-<h4>How can I tell whether a service instance uses IAM-based authentication?</h4>
-
-<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
-
-<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
-
-<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
-
-<h4>How can I find the service name for an IAM-based service instance?</h4>
-
-<p>Run the <code>ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
-
-<p>Service names are shown as the <code>Service Name:</code> field value.</p>
-
-<h4>How can I list available service credentials for an IAM-based service instance?</h4>
-
-<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt; </code> command.</p>
-
-<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
-
-<h4>How can I manually retrieve IAM-based credentials for an instance?</h4>
-
-<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
-
-<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
-
-<h4>How can I create new service credentials?</h4>
-
-<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
-
-<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
-
-<h2>Example - Cloud Object Storage</h2>
-
-<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let's look at an example....</em></p>
-
-<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
-
-<p><strong>Let's look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
-
-<p>Using the CLI, we can check an instance of this service is available...</p>
-
-<p><code>sh
-$ ibmcloud resource service-instances
-Retrieving service instances in resource group default..
-OK
-Name                     Location   State    Type               Tags
-my-cos-storage           global     active   service_instance
-</code></p>
-
-<p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
-
-<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
-
-<p>```sh
-$ ibmcloud resource service-instance my-cos-storage
-Retrieving service instance my-cos-storage in resource group default..
-OK</p>
-
-<p>Name:                  my-cos-storage
-ID:                    crn:v1:bluemix:public:cloud-object-storage:global:<GUID>:
-GUID:                  <GUID>
-Location:              global
-Service Name:          cloud-object-storage
-Service Plan Name:     lite
-Resource Group Name:   default
-State:                 active
-Type:                  service_instance
-Tags:
-```</p>
-
-<p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
-
-<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
-
-<p><code>
-$ ibmcloud resource service-keys --instance-name my-cos-storage
-Retrieving service keys in resource group default...
-OK
-Name                     State    Created At
-serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
-</code></p>
-
-<p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
-
-<p>Retrieving the service key details shows us the API secret for this credential.</p>
-
-<p>```
-$ ibmcloud resource service-key serverless-credentials
-Retrieving service key serverless-credentials in resource group default...
-OK</p>
-
-<p>Name:          serverless-credentials
-ID:            <ID>
-Created At:    Tue Jun  5 09:11:06 UTC 2018
-State:         active
-Credentials:</p>
-
-<pre><code>           ...
-           apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
-</code></pre>
-
-<p>```</p>
-
-<p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
-
-<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
-
-<p><code>
-$ bx wsk service bind cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
-Credentials 'serverless-credentials' from 'cloud-object-storage' service instance 'my-cos-storage' bound to 'params'.
-</code></p>
-
-<p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
-
-<p>```
-$ bx wsk action get params
-ok: got action params
-{
-  ...
-  "parameters": [{</p>
-
-<pre><code>"key": "__bx_creds",
-"value": {
-  "cloud-object-storage": {
-    "apikey": "&lt;API_KEY_SECRET&gt;",
-    ...
-  }
-}
-</code></pre>
-
-<p>  }]
-}
-```</p>
-
-<p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
 ]]></content>
   </entry>
   

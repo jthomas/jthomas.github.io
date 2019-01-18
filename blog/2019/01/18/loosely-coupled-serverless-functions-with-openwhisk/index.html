@@ -1,0 +1,549 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>loosely-coupled serverless functions with Apache Openwhisk - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="How can serverless applications trigger asynchronous tasks with loosely-coupled functions? Apache OpenWhisk provides an event publishing mechanism ( &hellip;">
+  <meta name="keywords" content="serverless ibmcloud openwhisk ibmcloudfunctions architecture patterns">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Loosely-coupled Serverless Functions With Apache Openwhisk</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-01-18T15:10:00+00:00" pubdate data-updated="true">Jan 18<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Just like software engineering, <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">best practices for serverless applications</a> advise keeping functions small and focused on a single task, aka &#8221;<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">do one thing and do it well</a>&#8221;. Small single-purpose functions are easier to develop, test and debug. 👍</p>
+
+<p><strong>But what happens when you need execute multiple asynchronous tasks (implemented as separate functions) from an incoming event, like an API request?</strong> 🤔</p>
+
+<h2>Functions Calling Functions?</h2>
+
+<p>Functions can invoke other functions directly, using asynchronous calls through the client SDK. This works at the cost of introducing <a href="https://en.wikipedia.org/wiki/Coupling_%28computer_programming%29">tighter coupling</a> between functions, which is generally avoided in software engineering! Disadvantages of this approach include&#8230;</p>
+
+<ul>
+<li><em>Functions which call other functions can be more difficult to test. Test cases needs to mock out the client SDK to remove side-effects during unit or integration tests.</em></li>
+<li><em>It can lead to repetitive code if you want to fire multiple tasks with the same event. Each invocation needs to manually handle error conditions and re-tries on network or other issues, which complicates the business logic.</em></li>
+<li><em>Modifying the functions being invoked cannot be changed dynamically. The function doing the invoking has to be re-deployed with updated code.</em></li>
+</ul>
+
+
+<p><a href="https://twitter.com/PaulDJohnston">Some people</a> have even labelled &#8221;<em>functions calling functions</em>&#8221; an <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">anti-pattern</a> in serverless development! 😱</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Most common Serverless mistake?<br><br>Functions calling other functions<br><br>Why do people make this mistake?<br><br>Because people assume they should build functions like microservices and then use them in a similar way.<br><br>Causes no end of problems</p>&mdash; Serverless / Green Data Advocate (@PaulDJohnston) <a href="https://twitter.com/PaulDJohnston/status/1085106548270088193?ref_src=twsrc%5Etfw">January 15, 2019</a></blockquote>
+
+
+<p><strong>Hmmm&#8230; so what should we do?</strong></p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problem, triggers and rules! 👏</p>
+
+<h2>OpenWhisk Triggers &amp; Rules</h2>
+
+<p>Triggers and Rules in OpenWhisk are similar to the <a href="https://en.wikipedia.org/wiki/Observer_pattern">Observer pattern</a> from software engineering.</p>
+
+<p>Users can fire &#8220;events&#8221; in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to &#8220;subscribe&#8221; actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple &#8220;listeners&#8221; to the same trigger events. Event senders are decoupled from event receivers.</p>
+
+<p><img src="/images/loose-coupling-openwhisk/t-r-a.png"></p>
+
+<p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
+
+<p><strong>But triggers can be fired manually from actions to provide custom event streams!</strong> 🙌</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">msg</span><span class="o">:</span> <span class="s1">&#39;event parameters&#39;</span><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// replace code like this...</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">actions</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;some-action&quot;</span><span class="p">,</span> <span class="nx">params</span><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ...with this</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">triggers</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;some-trigger&quot;</span><span class="p">,</span> <span class="nx">params</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This allows applications to move towards an <a href="https://en.wikipedia.org/wiki/Event-driven_architecture">event-driven architecture</a> and promotes loose-coupling between functions with all the associated benefits for testing, deployment and scalability. 👌</p>
+
+<h3>creating triggers</h3>
+
+<p>Triggers are managed through the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. They can be created, deleted, retrieved and fired using  HTTP requests. Users normally interact with triggers through the <a href="https://github.com/apache/incubator-openwhisk-cli">CLI</a> or <a href="https://github.com/apache/incubator-openwhisk-client-js/">platform SDKs</a>.</p>
+
+<p>Triggers can be created using the following CLI command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="o">&lt;</span><span class="nx">TRIGGER_NAME</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>default parameters</h3>
+
+<p>Triggers support <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/parameters.md#setting-default-parameters-on-an-action">default parameters</a> like actions. Default parameters are stored in the platform and included in all trigger events. If the event object includes parameters with the same key, default parameter values are ignored.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="o">&lt;</span><span class="nx">TRIGGER_NAME</span><span class="o">&gt;</span> <span class="o">-</span><span class="nx">p</span> <span class="o">&lt;</span><span class="nx">PARAM</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">PARAM_VALUE</span><span class="o">&gt;</span> <span class="o">-</span><span class="nx">p</span> <span class="o">&lt;</span><span class="nx">PARAM_2</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">PARAM_VALUE</span><span class="o">&gt;</span> <span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>binding triggers to actions with rules</h3>
+
+<p>Rules bind triggers to actions. When triggers are fired, all actions connected via rules are invoked with the trigger event. Multiple rules can refer to the same trigger supporting multiple listeners to the same event.</p>
+
+<p>Rules can also be created using the following CLI command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">create</span> <span class="nx">RULE_NAME</span> <span class="nx">TRIGGER_NAME</span> <span class="nx">ACTION_NAME</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Tools like <a href="https://github.com/serverless/serverless-openwhisk">The Serverless Framework</a> and <a href="https://github.com/apache/incubator-openwhisk-wskdeploy">wskdeploy</a> allow users to configure triggers and rules declaratively through YAML configuration files.</p>
+
+<h3>firing triggers</h3>
+
+<p>The JS SDK can be used to <a href="https://github.com/apache/incubator-openwhisk-client-js#fire-trigger">fire triggers programatically</a> from applications.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">name</span> <span class="o">=</span> <span class="s1">&#39;sample-trigger&#39;</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">msg</span><span class="o">:</span> <span class="s1">&#39;event parameters&#39;</span><span class="p">}</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">triggers</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="p">,</span> <span class="nx">params</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>CLI commands (<code>wsk trigger fire</code>) can fire triggers manually with event parameters for testing.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">fire</span> <span class="nx">sample</span><span class="o">-</span><span class="nx">trigger</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">msg</span> <span class="s2">&quot;event parameters&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>activation records for triggers</h3>
+
+<p>Activation records are created for trigger events. These activation records contain event parameters, rules fired, activations ids and invocation status for each action invoked. This is useful for debugging trigger events when issues are occurring.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">fire</span> <span class="nx">sample</span><span class="o">-</span><span class="nx">trigger</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">hello</span> <span class="nx">world</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">triggered</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">sample</span><span class="o">-</span><span class="nx">trigger</span> <span class="kd">with</span> <span class="nx">id</span> <span class="o">&lt;</span><span class="nx">ACTIVATION_ID</span><span class="o">&gt;</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">get</span> <span class="o">&lt;</span><span class="nx">ACTIVATION_ID</span><span class="o">&gt;</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">got</span> <span class="nx">activation</span> <span class="o">&lt;</span><span class="nx">ACTIVATION_ID</span><span class="o">&gt;</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>response.result</code> property in the activation record contains the fired trigger event (combining default and event parameter values).</p>
+
+<p>Rules fired by the trigger are recorded in activation records as the JSON values under the <code>logs</code> parameter.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;statusCode&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;success&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;activationId&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;ACTION_ACTIVATION_ID&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;rule&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;RULE_NAME&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;action&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;ACTION_NAME&gt;&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Activation records are only generated when triggers have enabled rules with valid actions attached</em></p>
+
+<h2>Example - WC Goal Bot</h2>
+
+<p>This is great in theory but what about in practice?</p>
+
+<p><a href="https://github.com/jthomas/goalbot">Goal Bot</a> was a small serverless application I built in 2018 for the World Cup. It was a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> which tweeted out all goals scored in real-time. The application used the  &#8220;actions connected via triggers events&#8221; architecture pattern. This made development and testing easier and faster.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>This function has two functions <code>goals</code> and <code>twitter</code>.</p>
+
+<p><code>goals</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L11-L16">responsible</a> for detecting new goals scored using an external API. When invoked, it would retrieve all goals currently scored in the World Cup. Comparing the API response to a previous cached version calculated new goals scored. This function was connected to the alarm event source to run once a minute.</p>
+
+<p><code>twitter</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L17-L22">responsible</a> for sending tweets from the @WC_Goals account. Twitter&#8217;s API was used to create  goal tweets constructed from the event parameters.</p>
+
+<p><strong>Goal events detected in the <code>goals</code> function need to be used to invoke the <code>twitter</code> function.</strong></p>
+
+<p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
+
+<p><img src="/images/loose-coupling-openwhisk/goalbot.png"></p>
+
+<p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits&#8230;</p>
+
+<ul>
+<li><p>The <code>goals</code> function could be invoked in testing without tweets being sent. By disabling the rule binding the <code>twitter</code> function to the trigger, the goals function can fire events without causing side-effects.</p></li>
+<li><p>Compared to having a &#8220;mono-function&#8221; combining both tasks, splitting tasks into functions means the <code>twitter</code> function can be tested with manual events, rather than having to manipulate the database and stub API responses to generate the correct test data.</p></li>
+<li><p>It would also be easy to extend this architecture with additional notification services, like slack bots. New notification services could be attached to the same trigger source with an additional rule. This would not require any changes to the <code>goals</code> or <code>twitter</code> functions.</p></li>
+</ul>
+
+
+<h2>Triggers versus Queues</h2>
+
+<p>Another common solution to de-coupling functions in serverless architectures is using <a href="https://theburningmonk.com/2018/04/what-is-the-best-event-source-for-doing-pub-sub-with-aws-lambda/">message queues</a>.</p>
+
+<p>Functions push events in external queues, rather than invoking triggers directly. Event sources are responsible for firing the registered functions with new messages. Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk-package-kafka">supports Kafka</a> as an event source which could be used with this approach.</p>
+
+<p><em>How does firing triggers directly compare to pushing events into an external queue (or other event source)?</em></p>
+
+<p>Both queues and triggers can be used to achieve the same goal (&#8221;<em>connect functions via events</em>&#8221;) but have different semantics. It is important to understand the benefits of both to choose the most appropriate architecture for your application.</p>
+
+<h3>benefits of using triggers against queues</h3>
+
+<p>Triggers are built into the Apache OpenWhisk platform. There is no configuration needed to use them. External event sources like queues need to be provisioned and managed as additional cloud services.</p>
+
+<p>Trigger invocations are free in IBM Cloud Functions. IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">charges only</a> for execution time and memory used in functions. Queues will incur additional usage costs based on the service&#8217;s pricing plan.</p>
+
+<h3>disadvantages of using triggers against queues</h3>
+
+<p>Triggers are not queues. Triggers are not queues. Triggers are not queues. 💯</p>
+
+<p>If a trigger is fired and no actions are connected, the event is lost. Trigger events are not persisted until listeners are attached. <strong>If you need event persistence, message priorities, disaster recovery and other advanced features provided by message queues, use a message queue!</strong></p>
+
+<p>Triggers are subject to <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_reference.html#openwhisk_syslimits">rate limiting</a> in Apache OpenWhisk. In IBM Cloud Functions, this defaults to 1000 concurrent invocations and 5000 total invocations per namespace per minute. These limits can be raised through a support ticket but there are practical limits to the maximum rates allowed. Queues have support for much higher throughput rates.</p>
+
+<p>External event providers are also responsible for handling the retries when triggers have been rate-limited due to excess events. Invoking triggers manually relies on the invoking function to handle this. Emulating retry behaviour from an event provider is impractical due to costs and limits on function duration.</p>
+
+<h2>Other hints and tips</h2>
+
+<p><strong><em>Want to invoke an action which fires triggers without setting off listeners?</em></strong></p>
+
+<p>Rules can be dynamically disabled without having to remove them. This can be used during integration testing or debugging issues in production.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">wsk</span> <span class="err">rule</span> <span class="err">disable</span> <span class="err">RULE_NAME</span>
+</span><span class='line'><span class="err">wsk</span> <span class="err">rule</span> <span class="err">enable</span> <span class="err">RULE_NAME</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong><em>Want to verify triggers are fired with correct events without mocking client libraries?</em></strong></p>
+
+<p>Trigger events are not logged unless there is at least one enabled rule. Create a new rule which binds the <code>/whisk.system/utils/echo</code> action to the trigger. This built-in function just returns input parameters as the function response. This means the activation records with trigger events will now be available.</p>
+
+<h2>conclusion</h2>
+
+<p>Building event-driven serverless applications from loosely-coupled functions has numerous benefits including development speed, improved testability, deployment velocity, lower costs and more.</p>
+
+<p>Decomposing &#8220;monolithic&#8221; apps into independent serverless functions often needs event handling functions to trigger off multiple backend operations, implemented in separate serverless functions. Developers unfamiliar with serverless often resort to direct function invocations.</p>
+
+<p>Whilst this works, it introduces tight coupling between those functions, which is normally avoided in software engineering. This approach has even been highlighted as a &#8220;serverless&#8221; anti-pattern.</p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
+
+<p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-01-18T15:10:00+00:00" pubdate data-updated="true">Jan 18<span>th</span>, 2019</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/architecture/'>architecture</a>, <a class='category' href='/blog/categories/ibmcloud/'>ibmcloud</a>, <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/" title="Previous Post: Highly Available Serverless Apps With Cloudant's Cross-Region Replication">&laquo; Highly Available Serverless Apps With Cloudant's Cross-Region Replication</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/">loosely-coupled serverless functions with Apache Openwhisk</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/">Highly Available Serverless Apps With Cloudant's Cross-Region Replication</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/03/custom-domains-with-ibm-cloud-functions/">Using Custom Domains With IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/">Finding photos on Twitter using face recognition with TensorFlow.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">Serverless Machine Learning With TensorFlow.js</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/';
+        var disqus_url = 'http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

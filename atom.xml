@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-01-10T10:09:26+00:00</updated>
+  <updated>2019-01-18T15:22:05+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,257 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[loosely-coupled serverless functions with Apache Openwhisk]]></title>
+    <link href="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/"/>
+    <updated>2019-01-18T15:10:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk</id>
+    <content type="html"><![CDATA[<p>Just like software engineering, <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">best practices for serverless applications</a> advise keeping functions small and focused on a single task, aka &#8221;<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">do one thing and do it well</a>&#8221;. Small single-purpose functions are easier to develop, test and debug. 👍</p>
+
+<p><strong>But what happens when you need execute multiple asynchronous tasks (implemented as separate functions) from an incoming event, like an API request?</strong> 🤔</p>
+
+<h2>Functions Calling Functions?</h2>
+
+<p>Functions can invoke other functions directly, using asynchronous calls through the client SDK. This works at the cost of introducing <a href="https://en.wikipedia.org/wiki/Coupling_%28computer_programming%29">tighter coupling</a> between functions, which is generally avoided in software engineering! Disadvantages of this approach include&#8230;</p>
+
+<ul>
+<li><em>Functions which call other functions can be more difficult to test. Test cases needs to mock out the client SDK to remove side-effects during unit or integration tests.</em></li>
+<li><em>It can lead to repetitive code if you want to fire multiple tasks with the same event. Each invocation needs to manually handle error conditions and re-tries on network or other issues, which complicates the business logic.</em></li>
+<li><em>Modifying the functions being invoked cannot be changed dynamically. The function doing the invoking has to be re-deployed with updated code.</em></li>
+</ul>
+
+
+<p><a href="https://twitter.com/PaulDJohnston">Some people</a> have even labelled &#8221;<em>functions calling functions</em>&#8221; an <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">anti-pattern</a> in serverless development! 😱</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Most common Serverless mistake?<br><br>Functions calling other functions<br><br>Why do people make this mistake?<br><br>Because people assume they should build functions like microservices and then use them in a similar way.<br><br>Causes no end of problems</p>&mdash; Serverless / Green Data Advocate (@PaulDJohnston) <a href="https://twitter.com/PaulDJohnston/status/1085106548270088193?ref_src=twsrc%5Etfw">January 15, 2019</a></blockquote>
+
+
+<p><strong>Hmmm&#8230; so what should we do?</strong></p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problem, triggers and rules! 👏</p>
+
+<h2>OpenWhisk Triggers &amp; Rules</h2>
+
+<p>Triggers and Rules in OpenWhisk are similar to the <a href="https://en.wikipedia.org/wiki/Observer_pattern">Observer pattern</a> from software engineering.</p>
+
+<p>Users can fire &#8220;events&#8221; in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to &#8220;subscribe&#8221; actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple &#8220;listeners&#8221; to the same trigger events. Event senders are decoupled from event receivers.</p>
+
+<p><img src="http://jamesthom.as/images/loose-coupling-openwhisk/t-r-a.png"></p>
+
+<p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
+
+<p><strong>But triggers can be fired manually from actions to provide custom event streams!</strong> 🙌</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">msg</span><span class="o">:</span> <span class="s1">&#39;event parameters&#39;</span><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// replace code like this...</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">actions</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;some-action&quot;</span><span class="p">,</span> <span class="nx">params</span><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ...with this</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">triggers</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;some-trigger&quot;</span><span class="p">,</span> <span class="nx">params</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This allows applications to move towards an <a href="https://en.wikipedia.org/wiki/Event-driven_architecture">event-driven architecture</a> and promotes loose-coupling between functions with all the associated benefits for testing, deployment and scalability. 👌</p>
+
+<h3>creating triggers</h3>
+
+<p>Triggers are managed through the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. They can be created, deleted, retrieved and fired using  HTTP requests. Users normally interact with triggers through the <a href="https://github.com/apache/incubator-openwhisk-cli">CLI</a> or <a href="https://github.com/apache/incubator-openwhisk-client-js/">platform SDKs</a>.</p>
+
+<p>Triggers can be created using the following CLI command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="o">&lt;</span><span class="nx">TRIGGER_NAME</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>default parameters</h3>
+
+<p>Triggers support <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/parameters.md#setting-default-parameters-on-an-action">default parameters</a> like actions. Default parameters are stored in the platform and included in all trigger events. If the event object includes parameters with the same key, default parameter values are ignored.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="o">&lt;</span><span class="nx">TRIGGER_NAME</span><span class="o">&gt;</span> <span class="o">-</span><span class="nx">p</span> <span class="o">&lt;</span><span class="nx">PARAM</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">PARAM_VALUE</span><span class="o">&gt;</span> <span class="o">-</span><span class="nx">p</span> <span class="o">&lt;</span><span class="nx">PARAM_2</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">PARAM_VALUE</span><span class="o">&gt;</span> <span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>binding triggers to actions with rules</h3>
+
+<p>Rules bind triggers to actions. When triggers are fired, all actions connected via rules are invoked with the trigger event. Multiple rules can refer to the same trigger supporting multiple listeners to the same event.</p>
+
+<p>Rules can also be created using the following CLI command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">create</span> <span class="nx">RULE_NAME</span> <span class="nx">TRIGGER_NAME</span> <span class="nx">ACTION_NAME</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Tools like <a href="https://github.com/serverless/serverless-openwhisk">The Serverless Framework</a> and <a href="https://github.com/apache/incubator-openwhisk-wskdeploy">wskdeploy</a> allow users to configure triggers and rules declaratively through YAML configuration files.</p>
+
+<h3>firing triggers</h3>
+
+<p>The JS SDK can be used to <a href="https://github.com/apache/incubator-openwhisk-client-js#fire-trigger">fire triggers programatically</a> from applications.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">name</span> <span class="o">=</span> <span class="s1">&#39;sample-trigger&#39;</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">msg</span><span class="o">:</span> <span class="s1">&#39;event parameters&#39;</span><span class="p">}</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">triggers</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="p">,</span> <span class="nx">params</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>CLI commands (<code>wsk trigger fire</code>) can fire triggers manually with event parameters for testing.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">fire</span> <span class="nx">sample</span><span class="o">-</span><span class="nx">trigger</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">msg</span> <span class="s2">&quot;event parameters&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>activation records for triggers</h3>
+
+<p>Activation records are created for trigger events. These activation records contain event parameters, rules fired, activations ids and invocation status for each action invoked. This is useful for debugging trigger events when issues are occurring.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">fire</span> <span class="nx">sample</span><span class="o">-</span><span class="nx">trigger</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">hello</span> <span class="nx">world</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">triggered</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">sample</span><span class="o">-</span><span class="nx">trigger</span> <span class="kd">with</span> <span class="nx">id</span> <span class="o">&lt;</span><span class="nx">ACTIVATION_ID</span><span class="o">&gt;</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">get</span> <span class="o">&lt;</span><span class="nx">ACTIVATION_ID</span><span class="o">&gt;</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">got</span> <span class="nx">activation</span> <span class="o">&lt;</span><span class="nx">ACTIVATION_ID</span><span class="o">&gt;</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>response.result</code> property in the activation record contains the fired trigger event (combining default and event parameter values).</p>
+
+<p>Rules fired by the trigger are recorded in activation records as the JSON values under the <code>logs</code> parameter.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;statusCode&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;success&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;activationId&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;ACTION_ACTIVATION_ID&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;rule&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;RULE_NAME&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;action&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;ACTION_NAME&gt;&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Activation records are only generated when triggers have enabled rules with valid actions attached</em></p>
+
+<h2>Example - WC Goal Bot</h2>
+
+<p>This is great in theory but what about in practice?</p>
+
+<p><a href="https://github.com/jthomas/goalbot">Goal Bot</a> was a small serverless application I built in 2018 for the World Cup. It was a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> which tweeted out all goals scored in real-time. The application used the  &#8220;actions connected via triggers events&#8221; architecture pattern. This made development and testing easier and faster.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p>This function has two functions <code>goals</code> and <code>twitter</code>.</p>
+
+<p><code>goals</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L11-L16">responsible</a> for detecting new goals scored using an external API. When invoked, it would retrieve all goals currently scored in the World Cup. Comparing the API response to a previous cached version calculated new goals scored. This function was connected to the alarm event source to run once a minute.</p>
+
+<p><code>twitter</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L17-L22">responsible</a> for sending tweets from the @WC_Goals account. Twitter&#8217;s API was used to create  goal tweets constructed from the event parameters.</p>
+
+<p><strong>Goal events detected in the <code>goals</code> function need to be used to invoke the <code>twitter</code> function.</strong></p>
+
+<p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
+
+<p><img src="http://jamesthom.as/images/loose-coupling-openwhisk/goalbot.png"></p>
+
+<p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits&#8230;</p>
+
+<ul>
+<li><p>The <code>goals</code> function could be invoked in testing without tweets being sent. By disabling the rule binding the <code>twitter</code> function to the trigger, the goals function can fire events without causing side-effects.</p></li>
+<li><p>Compared to having a &#8220;mono-function&#8221; combining both tasks, splitting tasks into functions means the <code>twitter</code> function can be tested with manual events, rather than having to manipulate the database and stub API responses to generate the correct test data.</p></li>
+<li><p>It would also be easy to extend this architecture with additional notification services, like slack bots. New notification services could be attached to the same trigger source with an additional rule. This would not require any changes to the <code>goals</code> or <code>twitter</code> functions.</p></li>
+</ul>
+
+
+<h2>Triggers versus Queues</h2>
+
+<p>Another common solution to de-coupling functions in serverless architectures is using <a href="https://theburningmonk.com/2018/04/what-is-the-best-event-source-for-doing-pub-sub-with-aws-lambda/">message queues</a>.</p>
+
+<p>Functions push events in external queues, rather than invoking triggers directly. Event sources are responsible for firing the registered functions with new messages. Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk-package-kafka">supports Kafka</a> as an event source which could be used with this approach.</p>
+
+<p><em>How does firing triggers directly compare to pushing events into an external queue (or other event source)?</em></p>
+
+<p>Both queues and triggers can be used to achieve the same goal (&#8221;<em>connect functions via events</em>&#8221;) but have different semantics. It is important to understand the benefits of both to choose the most appropriate architecture for your application.</p>
+
+<h3>benefits of using triggers against queues</h3>
+
+<p>Triggers are built into the Apache OpenWhisk platform. There is no configuration needed to use them. External event sources like queues need to be provisioned and managed as additional cloud services.</p>
+
+<p>Trigger invocations are free in IBM Cloud Functions. IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">charges only</a> for execution time and memory used in functions. Queues will incur additional usage costs based on the service&#8217;s pricing plan.</p>
+
+<h3>disadvantages of using triggers against queues</h3>
+
+<p>Triggers are not queues. Triggers are not queues. Triggers are not queues. 💯</p>
+
+<p>If a trigger is fired and no actions are connected, the event is lost. Trigger events are not persisted until listeners are attached. <strong>If you need event persistence, message priorities, disaster recovery and other advanced features provided by message queues, use a message queue!</strong></p>
+
+<p>Triggers are subject to <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_reference.html#openwhisk_syslimits">rate limiting</a> in Apache OpenWhisk. In IBM Cloud Functions, this defaults to 1000 concurrent invocations and 5000 total invocations per namespace per minute. These limits can be raised through a support ticket but there are practical limits to the maximum rates allowed. Queues have support for much higher throughput rates.</p>
+
+<p>External event providers are also responsible for handling the retries when triggers have been rate-limited due to excess events. Invoking triggers manually relies on the invoking function to handle this. Emulating retry behaviour from an event provider is impractical due to costs and limits on function duration.</p>
+
+<h2>Other hints and tips</h2>
+
+<p><strong><em>Want to invoke an action which fires triggers without setting off listeners?</em></strong></p>
+
+<p>Rules can be dynamically disabled without having to remove them. This can be used during integration testing or debugging issues in production.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">wsk</span> <span class="err">rule</span> <span class="err">disable</span> <span class="err">RULE_NAME</span>
+</span><span class='line'><span class="err">wsk</span> <span class="err">rule</span> <span class="err">enable</span> <span class="err">RULE_NAME</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong><em>Want to verify triggers are fired with correct events without mocking client libraries?</em></strong></p>
+
+<p>Trigger events are not logged unless there is at least one enabled rule. Create a new rule which binds the <code>/whisk.system/utils/echo</code> action to the trigger. This built-in function just returns input parameters as the function response. This means the activation records with trigger events will now be available.</p>
+
+<h2>conclusion</h2>
+
+<p>Building event-driven serverless applications from loosely-coupled functions has numerous benefits including development speed, improved testability, deployment velocity, lower costs and more.</p>
+
+<p>Decomposing &#8220;monolithic&#8221; apps into independent serverless functions often needs event handling functions to trigger off multiple backend operations, implemented in separate serverless functions. Developers unfamiliar with serverless often resort to direct function invocations.</p>
+
+<p>Whilst this works, it introduces tight coupling between those functions, which is normally avoided in software engineering. This approach has even been highlighted as a &#8220;serverless&#8221; anti-pattern.</p>
+
+<p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
+
+<p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Highly Available Serverless Apps With Cloudant's Cross-Region Replication]]></title>
@@ -7099,473 +7350,6 @@ to monitor incoming data values live.</p>
 <p>Building new runtimes is really simple using pre-existing base images published on Dockerhub.</p>
 
 <p><strong>The possibilities are endless!</strong></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Creating Swift Binaries for OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk/"/>
-    <updated>2017-07-17T12:12:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2017/07/17/creating-swift-binaries-for-openwhisk</id>
-    <content type="html"><![CDATA[<p>In the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, we explained how to write Serverless Swift functions using <a href="http://openwhisk.incubator.apache.org/">OpenWhisk actions</a>.</p>
-
-<p>Swift sources files are compiled into a binary by the platform before processing requests.</p>
-
-<p>This compilation process adds a delay on the invocation time for &#8220;cold&#8221; runtimes. If the action has not been invoked for a while, the system is under heavy load or multiple invocations are received in parallel, a new runtime will need to be initialised.</p>
-
-<p>Pre-compiled binaries can be deployed to remove this delay. Binaries must be compiled for the correct platform architecture and support execution through the OpenWhisk runtime.</p>
-
-<p><strong>There is now a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> to make the process of building pre-compiled binaries much easier.</strong></p>
-
-<p><em>Let&#8217;s have a look at how this works…</em></p>
-
-<h2>Swift Packages</h2>
-
-<p>Swift introduced a <a href="https://swift.org/package-manager/">package manager</a> in Swift 3.0. The package manager integrates with the build system to <em>&#8220;automate the process of downloading, compiling, and linking dependencies&#8221;.</em></p>
-
-<p>Swift uses a <a href="https://medium.com/@jp_pancake/the-manifest-file-of-the-swift-package-manager-swiftlang-6eedf0f2f805">manifest file</a> (<code>Packages.swift</code>) to define package properties including dependencies.</p>
-
-<h3>Example Swift Package</h3>
-
-<p>Here&#8217;s an <a href="https://github.com/apple/example-package-deckofplayingcards/blob/master/Package.swift">example manifest file</a> from a <a href="https://github.com/apple/example-package-dealer">sample package</a> with external dependencies.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
-</span><span class='line'>
-</span><span class='line'>let package = Package(
-</span><span class='line'>    name: "DeckOfPlayingCards",
-</span><span class='line'>    targets: [],
-</span><span class='line'>    dependencies: [
-</span><span class='line'>        .Package(url: "https://github.com/apple/example-package-fisheryates.git",
-</span><span class='line'>                 majorVersion: 1),
-</span><span class='line'>        .Package(url: "https://github.com/apple/example-package-playingcard.git",
-</span><span class='line'>                 majorVersion: 1),
-</span><span class='line'>    ]
-</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Packages are referenced through a URL which resolves to a Git repository. <a href="http://semver.org/">Semantic versioning</a> conventions are used to control the package version installed.</p>
-
-<p>External packages are downloaded, compiled and linked in the project during the build process.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ swift build
-</span><span class='line'>Fetching https://github.com/apple/example-package-deckofplayingcards.git
-</span><span class='line'>Fetching https://github.com/apple/example-package-fisheryates.git
-</span><span class='line'>Fetching https://github.com/apple/example-package-playingcard.git
-</span><span class='line'>Cloning https://github.com/apple/example-package-fisheryates.git
-</span><span class='line'>Resolving https://github.com/apple/example-package-fisheryates.git at 2.0.3
-</span><span class='line'>Cloning https://github.com/apple/example-package-playingcard.git
-</span><span class='line'>Resolving https://github.com/apple/example-package-playingcard.git at 3.0.2
-</span><span class='line'>Cloning https://github.com/apple/example-package-deckofplayingcards.git
-</span><span class='line'>Resolving https://github.com/apple/example-package-deckofplayingcards.git at 3.0.3
-</span><span class='line'>Compile Swift Module 'PlayingCard' (3 sources)
-</span><span class='line'>Compile Swift Module 'FisherYates' (2 sources)
-</span><span class='line'>Compile Swift Module 'DeckOfPlayingCards' (1 sources)
-</span><span class='line'>Compile Swift Module 'Dealer' (1 sources)
-</span><span class='line'>Linking ./.build/debug/Dealer
-</span><span class='line'>$</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>OpenWhiskAction Package</h2>
-
-<p><a href="https://github.com/jthomas/OpenWhiskAction">OpenWhiskAction</a> is a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">Swift package</a> for registering Swift functions as OpenWhisk actions.</p>
-
-<p>It bundles the Swift source files used to <a href="https://github.com/apache/incubator-openwhisk/tree/master/core/swift3Action/spm-build">implement the runtime handler</a> for OpenWhisk as a library. Using this package means developers do not have to manually import those source files into their projects.</p>
-
-<h3>usage</h3>
-
-<p>This package exposes a public function (<code>OpenWhiskAction</code> ) that should be called with a function reference (<code>([String: Any]) -&gt; [String: Any])</code>) as a named parameter (<code>main</code>). The callback will be executed with the invocation parameters. Returned values will be serialised as the invocation response.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import OpenWhiskAction
-</span><span class='line'>
-</span><span class='line'>func hello(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    if let name = args["name"] as? String {
-</span><span class='line'>      return [ "greeting" : "Hello \(name)!" ]
-</span><span class='line'>    } else {
-</span><span class='line'>      return [ "greeting" : "Hello stranger!" ]
-</span><span class='line'>    }
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'>OpenWhiskAction(main: hello)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>example</h3>
-
-<p>Let&#8217;s show an example of using the package to build a pre-compiled Swift action for OpenWhisk.</p>
-
-<h4>create new package</h4>
-
-<p>Create a new directory and use the <code>swift package init</code> command to generate the boilerplate package.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ mkdir Action
-</span><span class='line'>$ cd Action/
-</span><span class='line'>$ swift package init
-</span><span class='line'>Creating library package: Action
-</span><span class='line'>Creating Package.swift
-</span><span class='line'>Creating .gitignore
-</span><span class='line'>Creating Sources/
-</span><span class='line'>Creating Sources/Action.swift
-</span><span class='line'>Creating Tests/
-</span><span class='line'>Creating Tests/LinuxMain.swift
-</span><span class='line'>Creating Tests/ActionTests/
-</span><span class='line'>Creating Tests/ActionTests/ActionTests.swift</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>add package dependency</h4>
-
-<p>Add the OpenWhiskAction package as a dependency to the manifest file (<code>Package.swift</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import PackageDescription
-</span><span class='line'>
-</span><span class='line'>let package = Package(
-</span><span class='line'>    name: "Action",
-</span><span class='line'>    dependencies: [
-</span><span class='line'>        .Package(url: "https://github.com/jthomas/OpenWhiskAction.git", majorVersion: 0)
-</span><span class='line'>    ]
-</span><span class='line'>)</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>write serverless function</h4>
-
-<p>Create a new <code>main.swift</code> file under the <code>Sources</code> directory containing the following source code.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>import OpenWhiskAction
-</span><span class='line'>
-</span><span class='line'>func hello(args: [String:Any]) -&gt; [String:Any] {
-</span><span class='line'>    if let name = args["name"] as? String {
-</span><span class='line'>      return [ "greeting" : "Hello \(name)!" ]
-</span><span class='line'>    } else {
-</span><span class='line'>      return [ "greeting" : "Hello stranger!" ]
-</span><span class='line'>    }
-</span><span class='line'>}
-</span><span class='line'>
-</span><span class='line'>OpenWhiskAction(main: hello)</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Swift&#8217;s build process will produce an executable if the package contains a <code>main.swift</code> file. That file will be compiled as the package binary.</em></p>
-
-<h4>compiling with docker</h4>
-
-<p>OpenWhisk Swift actions use a <a href="https://github.com/jthomas/OpenWhiskAction/blob/master">custom Docker image</a> as the runtime environment. Compiling application binaries from this image will ensure it is compatible with the platform runtime.</p>
-
-<p>This command will run the <code>swift build</code> command within a container from this image. The host filesystem is mounted into the container at <code>/swift-package</code>. Binaries and other build artifacts will be available in <code>./.build/release/</code> after the command has executed.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>docker run --rm -it -v $(pwd):/swift-package openwhisk/action-swift-v3.1.1 bash -e -c "cd /swift-package && swift build -v -c release"</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>deploying to openwhisk</h3>
-
-<p>OpenWhisk actions can be created from a zip file containing action artifacts. The zip file will be expanded prior to execution. In the Swift environment, the Swift binary executed by the platform should be at <code>./.build/release/Action</code>.</p>
-
-<p>If an action is deployed from a zip file which contains this file, the runtime will execute this binary rather than compiling a new binary from source code within the zip file.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ zip action.zip .build/release/Action
-</span><span class='line'>  adding: .build/release/Action (deflated 67%)
-</span><span class='line'>$ wsk action create swift-action --kind swift action.zip
-</span><span class='line'>ok: created action swift-action
-</span><span class='line'>$ wsk action invoke --blocking --result -p name "Bernie Sanders" swift-action
-</span><span class='line'>{
-</span><span class='line'>    "greeting": "Hello Bernie Sanders!"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Using With The Serverless Framework</h2>
-
-<p>As shown in the <a href="http://jamesthom.as/blog/2017/06/28/serverless-swift-with-openwhisk/">previous blog post</a>, <a href="https://serverless.com/">The Serverless Framework</a> supports the Swift runtime. Actions can either be created from <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---swift">Swift source files</a> or <a href="https://github.com/serverless/serverless-openwhisk#writing-functions---pre-compiled-swift-binaries">pre-compiled binaries</a>.</p>
-
-<p>This <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">example project</a> demonstrates how to integrate pre-compiled binaries into a serverless framework application.</p>
-
-<h3>example project</h3>
-
-<p>The project contains two Swift source files under the <code>Sources</code> directory. Using the <code>main.swift</code> file name means these files will be compiled into separate binaries under the <code>.build/release</code> directory.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ tree .
-</span><span class='line'>.
-</span><span class='line'>├── Package.swift
-</span><span class='line'>├── README.md
-</span><span class='line'>├── Sources
-</span><span class='line'>│   ├── hello
-</span><span class='line'>│   │   └── main.swift
-</span><span class='line'>│   └── welcome
-</span><span class='line'>│       └── main.swift
-</span><span class='line'>├── package.json
-</span><span class='line'>└── serverless.yml
-</span><span class='line'>
-</span><span class='line'>3 directories, 6 files</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The package manifest (<code>Package.swift</code>) contains the <code>OpenWhiskAction</code> dependency.</p>
-
-<h3>serverless.yml</h3>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">swift-packages</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">runtime</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">swift</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">hello</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">.build/release/hello</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">welcome</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">.build/release/welcome</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">custom</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">scripts</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">hooks</span><span class="p-Indicator">:</span>
-</span><span class='line'>      <span class="s">&#39;package:initialize&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">npm run-script compile</span>
-</span><span class='line'><span class="l-Scalar-Plain">plugins</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-openwhisk</span>
-</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-plugin-scripts</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This configuration file describes two actions (<code>hello</code> and <code>welcome</code>) using the <code>swift</code> runtime. The handler property for those actions refers to a binary, produced by the build process, rather than source file.</p>
-
-<h3>compile during deployment</h3>
-
-<p>Before using <code>serverless deploy</code> command to create our application, we need to compile binaries for the OpenWhisk runtime.</p>
-
-<p>Manually running the Swift build command before each deployment is cumbersome and error-prone.</p>
-
-<p><em>Let&#8217;s automate this process…</em></p>
-
-<p>Using NPM&#8217;s <a href="https://docs.npmjs.com/cli/run-script">scripts feature</a>, the project exports a new command <code>npm run-script compile</code> which triggers the build process using the OpenWhisk Docker runtime for Swift.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;openwhisk-swift-package-with-precompiled-binaries&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Swift packages and pre-compiled binaries on OpenWhisk.&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;handler.js&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;scripts&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;postinstall&quot;</span><span class="p">:</span> <span class="s2">&quot;npm link serverless-openwhisk&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;compile&quot;</span><span class="p">:</span> <span class="s2">&quot;docker run --rm -it -v $(pwd):/swift-package openwhisk/action-swift-v3.1.1 bash -e -c &#39;cd /swift-package &amp;&amp; swift build -v -c release&#39;&quot;</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="nt">&quot;keywords&quot;</span><span class="p">:</span> <span class="p">[</span>
-</span><span class='line'>    <span class="s2">&quot;serverless&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;openwhisk&quot;</span>
-</span><span class='line'>  <span class="p">],</span>
-</span><span class='line'>  <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;serverless-plugin-scripts&quot;</span><span class="p">:</span> <span class="s2">&quot;^1.0.2&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>serverless-plugin-scripts</code> <a href="https://www.npmjs.com/package/serverless-plugin-scripts">plugin</a> provides a mechanism for running shell commands when framework commands are executed. Using this plugin we can use the <code>package:initialize</code> event to execute the <code>npm run-script compile</code> command.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">custom</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">scripts</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">hooks</span><span class="p-Indicator">:</span>
-</span><span class='line'>      <span class="s">&#39;package:initialize&#39;</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">npm run-script compile</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>package:initialize</code> event is fired when the <code>serverless deploy</code> command executes.</p>
-
-<p><strong>Swift binaries will be compiled prior to deployment without any manual steps from the developer.</strong></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">$ serverless deploy</span>
-</span><span class='line'><span class="l-Scalar-Plain">&gt; openwhisk-swift-package-with-precompiled-binaries@1.0.0 compile /Users/james/code/bluemix/serverless-examples/openwhisk-swift-precompiled-binaries</span>
-</span><span class='line'><span class="l-Scalar-Plain">&gt; docker run --rm -it -v $(pwd):/swift-package openwhisk/action-swift-v3.1.1 bash -e -c &#39;cd /swift-package &amp;&amp; swift build -v -c release&#39;</span>
-</span><span class='line'><span class="nn">...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Packaging service...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Functions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling API Gateway definitions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Rules...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Compiling Triggers &amp; Feeds...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deploying Functions...</span>
-</span><span class='line'><span class="l-Scalar-Plain">Serverless</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">Deployment successful!</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">Service Information</span>
-</span><span class='line'><span class="l-Scalar-Plain">platform</span><span class="err">:   </span><span class="l-Scalar-Plain">openwhisk.ng.bluemix.net</span>
-</span><span class='line'><span class="l-Scalar-Plain">namespace</span><span class="err">:  </span><span class="l-Scalar-Plain">_</span>
-</span><span class='line'><span class="l-Scalar-Plain">service</span><span class="err">:    </span><span class="l-Scalar-Plain">swift-packages</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">actions</span><span class="p-Indicator">:</span>
-</span><span class='line'><span class="l-Scalar-Plain">swift-packages-dev-hello    swift-packages-dev-welcome</span>
-</span><span class='line'><span class="nn">...</span>
-</span><span class='line'><span class="l-Scalar-Plain">$ serverless invoke -f hello</span>
-</span><span class='line'><span class="l-Scalar-Plain">{</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">&quot;greeting&quot;</span><span class="p-Indicator">:</span> <span class="s">&quot;Hello</span><span class="nv"> </span><span class="s">stranger!&quot;</span>
-</span><span class='line'><span class="err">}</span>
-</span><span class='line'><span class="l-Scalar-Plain">$ serverless invoke -f welcome</span>
-</span><span class='line'><span class="p-Indicator">{</span>
-</span><span class='line'>    <span class="s">&quot;greeting&quot;</span><span class="p-Indicator">:</span> <span class="s">&quot;Welcome</span><span class="nv"> </span><span class="s">stranger!&quot;</span>
-</span><span class='line'><span class="p-Indicator">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Conclusion</h2>
-
-<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-swift-actions">creating Swift actions</a> from source files and pre-compiled binaries. Using binaries <a href="https://medium.com/openwhisk/run-swiftly-precompiled-swift-actions-775addae0345">reduces the startup time</a> for &#8220;cold&#8221; environments. This is important for latency sensitive applications like API endpoints.</p>
-
-<p>Swift binaries for OpenWhisk must be compiled for the correct architecture and support execution through the platform runtime. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-swift-executable">Previous instruction</a> for producing these binaries involved numerous manual and error-prone steps.</p>
-
-<p>This process has now been improved through a <a href="https://packagecatalog.com/package/jthomas/OpenWhiskAction">new Swift package</a> which wraps the runtime handler source files. Adding this dependency into the package manifest file means the downloading, compiling and linking of these source files will be handled by the Swift package manager.</p>
-
-<p><a href="https://github.com/serverless/serverless-openwhisk/releases/tag/v0.8.0">Recent updates</a> to the OpenWhisk provider plugin for The Serverless Framework also added support for pre-compiled Swift binaries. Combined with other plugins, the framework can now <a href="https://github.com/serverless/examples/tree/master/openwhisk-swift-precompiled-binaries">completely automate the process of building binaries</a> for the Swift runtime.</p>
-
-<p><strong>Building binaries for Swift OpenWhisk actions has never been easier!</strong> 😎</p>
 ]]></content>
   </entry>
   
