@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="How do you manage files for a serverless application? 🤔 Previous blog posts discussed this common problem and introduced the most popular solution, &hellip;">
+  <meta name="description" content="Binding service credentials to actions and packages is a much better approach to handling authentication credentials in IBM Cloud Functions, than &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,297 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/">Binding IAM Services to IBM Cloud Functions</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-06-05T09:47:00+01:00" pubdate data-updated="true">Jun 5<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
+
+<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
+
+<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
+
+<blockquote><p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p></blockquote>
+
+
+<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
+
+<p><em>Let&#8217;s look at how this works&#8230;</em></p>
+
+<h2>Binding IAM Credentials</h2>
+
+<h3>Requirements</h3>
+
+<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
+
+<ul>
+<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
+<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
+</ul>
+
+
+<p>You will need the following information to bind a service credentials.</p>
+
+<ul>
+<li>Service name.</li>
+<li><em>(Optional)</em> Instance name.</li>
+<li><em>(Optional)</em> Credentials identifier.</li>
+</ul>
+
+
+<h3>Using the CLI</h3>
+
+<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
+
+<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
+
+<h3>Accessing from actions</h3>
+
+<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
+
+<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>   <span class="nt">&quot;__bx_creds&quot;</span><span class="p">:{</span>
+</span><span class='line'>      <span class="nt">&quot;service-name&quot;</span><span class="p">:{</span>
+</span><span class='line'>         <span class="nt">&quot;apikey&quot;</span><span class="p">:</span><span class="s2">&quot;&lt;API_KEY&gt;&quot;</span><span class="p">,</span>
+</span><span class='line'>         <span class="err">...</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>   <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Default parameters are automatically merged into the request parameters during invocations.</p>
+
+<h2>Common Questions</h2>
+
+<h4>How can I tell whether a service instance uses IAM-based authentication?</h4>
+
+<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
+
+<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
+
+<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
+
+<h4>How can I find the service name for an IAM-based service instance?</h4>
+
+<p>Run the <code>ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
+
+<p>Service names are shown as the <code>Service Name:</code> field value.</p>
+
+<h4>How can I list available service credentials for an IAM-based service instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt; </code> command.</p>
+
+<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
+
+<h4>How can I manually retrieve IAM-based credentials for an instance?</h4>
+
+<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
+
+<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
+
+<h4>How can I create new service credentials?</h4>
+
+<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
+
+<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
+
+<h2>Example - Cloud Object Storage</h2>
+
+<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let&#8217;s look at an example&#8230;.</em></p>
+
+<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
+
+<p><strong>Let&#8217;s look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
+
+<p>Using the CLI, we can check an instance of this service is available&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-instances
+</span><span class='line'>Retrieving service instances in resource group default..
+</span><span class='line'>OK
+</span><span class='line'>Name                     Location   State    Type               Tags
+</span><span class='line'>my-cos-storage           global     active   service_instance
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
+
+<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-instance my-cos-storage
+</span><span class='line'>Retrieving service instance my-cos-storage in resource group default..
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>Name:                  my-cos-storage
+</span><span class='line'>ID:                    crn:v1:bluemix:public:cloud-object-storage:global:&lt;GUID&gt;:
+</span><span class='line'>GUID:                  &lt;GUID&gt;
+</span><span class='line'>Location:              global
+</span><span class='line'>Service Name:          cloud-object-storage
+</span><span class='line'>Service Plan Name:     lite
+</span><span class='line'>Resource Group Name:   default
+</span><span class='line'>State:                 active
+</span><span class='line'>Type:                  service_instance
+</span><span class='line'>Tags:
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
+
+<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-keys --instance-name my-cos-storage
+</span><span class='line'>Retrieving service keys in resource group default...
+</span><span class='line'>OK
+</span><span class='line'>Name                     State    Created At
+</span><span class='line'>serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
+
+<p>Retrieving the service key details shows us the API secret for this credential.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-key serverless-credentials
+</span><span class='line'>Retrieving service key serverless-credentials in resource group default...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>Name:          serverless-credentials
+</span><span class='line'>ID:            &lt;ID&gt;
+</span><span class='line'>Created At:    Tue Jun  5 09:11:06 UTC 2018
+</span><span class='line'>State:         active
+</span><span class='line'>Credentials:
+</span><span class='line'>               ...
+</span><span class='line'>               apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
+
+<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>bx wsk service <span class="nb">bind </span>cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
+</span><span class='line'>Credentials <span class="s1">&#39;serverless-credentials&#39;</span> from <span class="s1">&#39;cloud-object-storage&#39;</span> service instance <span class="s1">&#39;my-cos-storage&#39;</span> bound to <span class="s1">&#39;params&#39;</span>.
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>bx wsk action get params
+</span><span class='line'>ok: got action params
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>  ...
+</span><span class='line'>  <span class="s2">&quot;parameters&quot;</span>: <span class="o">[{</span>
+</span><span class='line'>    <span class="s2">&quot;key&quot;</span>: <span class="s2">&quot;__bx_creds&quot;</span>,
+</span><span class='line'>    <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
+</span><span class='line'>      <span class="s2">&quot;cloud-object-storage&quot;</span>: <span class="o">{</span>
+</span><span class='line'>        <span class="s2">&quot;apikey&quot;</span>: <span class="s2">&quot;&lt;API_KEY_SECRET&gt;&quot;</span>,
+</span><span class='line'>        ...
+</span><span class='line'>      <span class="o">}</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>  <span class="o">}]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3953,593 +4244,6 @@ to monitor incoming data values live.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2017/10/31/openwhisk-alarm-trigger-schedules/">Advanced Openwhisk Alarm Schedules</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2017-10-31T12:00:00+00:00" pubdate data-updated="true">Oct 31<span>st</span>, 2017</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
-
-<p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
-
-<p><strong>Using a <a href="http://crontab.org/">cron-based schedule pattern</a>, running functions once a minute, every two hours or 5pm on Mondays is simple, but what about more complex schedule patterns?</strong> 🤔</p>
-
-<p>What if we need to…</p>
-
-<ul>
-<li>⏰ <em>Fire a <a href="https://stackoverflow.com/questions/45898048/can-i-schedule-a-one-shot-action-in-openwhisk">single one-off event</a> at a specific time in the future?</em></li>
-<li>⏰ <em>Fire events a fixed period of time from an action finishing?</em></li>
-<li>⏰ <em>Fire events on an irregular schedule?</em></li>
-</ul>
-
-
-<p>It is possible to implement all these examples with a few tricks… 🤹‍♂️🤹‍♂️🤹‍♂️.</p>
-
-<p><em>Before we dive into the details, let&#8217;s review how the alarm feed provider works…</em></p>
-
-<h2>Alarm Trigger Feeds</h2>
-
-<p>OpenWhisk triggers are connected to external event sources <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#creating-and-using-trigger-feeds">using feed providers</a>.</p>
-
-<p>Feed providers listen to event sources, like message queues, <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">firing triggers with event parameters</a> as external events occur.</p>
-
-<p>There are a number of <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#browsing-packages">pre-installed feed providers</a> in the <code>whisk.system</code> namespace. This includes the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarms package</a> which includes a feed provider (<code>/whisk.system/alarms/alarm</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk package get /whisk.system/alarms --summary
-</span><span class='line'>package /whisk.system/alarms: Alarms and periodic utility
-</span><span class='line'>   (parameters: *apihost, *cron, *trigger_payload)
-</span><span class='line'> feed   /whisk.system/alarms/alarm: Fire trigger when alarm occurs
-</span><span class='line'>   (parameters: none defined)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>feed parameters</h3>
-
-<p>The following parameters are used to configure the feed provider.</p>
-
-<ul>
-<li><code>cron</code> - <em>crontab syntax used to configure timer schedule.</em></li>
-<li><code>trigger_payload</code> - <em>event parameters to fire trigger with.</em></li>
-<li><code>maxTriggers</code> - <em>maximum number of triggers to fire (-1 for no limit).</em></li>
-</ul>
-
-
-<p><code>cron</code> is the parameter which controls when triggers will be fired. It uses the <a href="http://crontab.org/">cron syntax</a> to specify the schedule expression.</p>
-
-<h3>cron schedule format</h3>
-
-<p>Cron schedule values are a string containing sections for the following time fields. Field values can be integers or patterns including wild cards.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ┌────────────── second (0 - 59, optional & defaults to 0)
-</span><span class='line'># │ ┌────────────── minute (0 - 59)
-</span><span class='line'># │ │ ┌────────────── hour (0 - 23)
-</span><span class='line'># │ │ │ ┌────────────── day of month (1 - 31)
-</span><span class='line'># │ │ │ │ ┌────────────── month (0 - 11)
-</span><span class='line'># │ │ │ │ │ ┌────────────── day of week (0 - 6) (Sunday to Saturday)
-</span><span class='line'># │ │ │ │ │ │
-</span><span class='line'># │ │ │ │ │ │
-</span><span class='line'># * * * * * *  </span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong><em>NOTE: Month field starts from 0 not 1, 0 is January with December being 11. Day of week also starts from 0. Sunday is first day of the week.</em></strong></p>
-
-<p>The second field is a non-standard cron field and does not need to be used. The Node.js module <a href="https://github.com/kelektiv/node-cron">used to parse the cron schedules</a> supports a value with five or six fields.</p>
-
-<h3>crontab examples</h3>
-
-<p>Here are some example patterns…</p>
-
-<ul>
-<li><code>*/10 * * * * *</code> - run every 10 seconds</li>
-<li><code>* * * * *</code> - run every minute</li>
-<li><code>0 * * * *</code> - run every hour</li>
-<li><code>0 */2 * * *</code> - run every two hours</li>
-<li><code>30 11 * * 1-5</code>  - run Monday to Friday at 11:30AM</li>
-<li><code>0 0 1 * *</code> - run at midnight the first day of the month</li>
-</ul>
-
-
-<p><a href="https://crontab.guru/">https://crontab.guru/</a> is an online editor for generating cron schedule expressions.</p>
-
-<h2>Creating Alarm Triggers</h2>
-
-<p>Using the <code>wsk</code> cli triggers can be created using the <code>alarm</code> feed. Schedule and event parameters are passed in using command-line arguments (<code>-p name value</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk trigger create periodic --feed /whisk.system/alarms/alarm -p cron '* * * * * *' -p trigger_payload '{"hello":"world"}'
-</span><span class='line'>ok: invoked /whisk.system/alarms/alarm with id 42ca80fbe7cf47318a80fbe7cff73177
-</span><span class='line'>...
-</span><span class='line'>ok: created trigger feed periodic</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Trigger invocations are recorded in the activation records.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk activation list periodic
-</span><span class='line'>activations
-</span><span class='line'>d55d15297781474b9d15297781974b92 periodic
-</span><span class='line'>...
-</span><span class='line'>$ wsk activation get d55d15297781474b9d15297781974b92
-</span><span class='line'>ok: got activation d55d15297781474b9d15297781974b92
-</span><span class='line'>{
-</span><span class='line'>    "namespace": "user@host.com_dev",
-</span><span class='line'>    "name": "periodic",
-</span><span class='line'>    ...
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Deleting the trigger will automatically remove the trigger from the alarm scheduler.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk delete periodic
-</span><span class='line'>ok: invoked /whisk.system/alarms/alarm with id 44e8fc5e76c64175a8fc5e76c6c175dd
-</span><span class='line'>...
-</span><span class='line'>ok: deleted trigger periodic</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Programmatic Creation</h3>
-
-<p>The <a href="https://github.com/apache/incubator-openwhisk-client-js">OpenWhisk JavaScript library</a> can also register and remove triggers with feed providers.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">cron</span><span class="o">:</span> <span class="s1">&#39;* * * * * *&#39;</span><span class="p">,</span> <span class="nx">trigger_payload</span><span class="o">:</span> <span class="p">{</span><span class="s2">&quot;hello&quot;</span><span class="o">:</span><span class="s2">&quot;world&quot;</span><span class="p">}}</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">name</span> <span class="o">=</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">trigger</span> <span class="o">=</span> <span class="s1">&#39;periodic&#39;</span>
-</span><span class='line'><span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span><span class="nx">name</span><span class="p">,</span> <span class="nx">trigger</span><span class="p">,</span> <span class="nx">params</span><span class="p">}).</span><span class="nx">then</span><span class="p">(</span><span class="kr">package</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;alarm trigger feed created&#39;</span><span class="p">,</span> <span class="kr">package</span><span class="p">)</span>
-</span><span class='line'><span class="p">}).</span><span class="k">catch</span><span class="p">(</span><span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;failed to create alarm trigger&#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Triggers must already exist before registering with the feed provider using the client library.</em></p>
-
-<p>Using the client library provides a mechanism for actions to dynamically set up scheduled events.</p>
-
-<h2>Advanced Examples</h2>
-
-<p>Having reviewed how the alarm feed works, let&#8217;s look at some more advanced use-cases for the scheduler…</p>
-
-<h3>Schedule one-off event at a specific time in the future</h3>
-
-<p>Creating one-off events, that fire at a specific date and time, is possible using the <code>cron</code> and <code>maxTriggers</code> parameters together.</p>
-
-<p>Using the minute, hour, day of the month and month fields in the cron parameter, the schedule can be configured to run once a year. The day of the week field will use the wildcard value.</p>
-
-<p>Setting the <code>maxTriggers</code> parameter to 1, the trigger is removed from the scheduler after firing.</p>
-
-<h4>happy new year example</h4>
-
-<p><em>What if we want to fire an event when the New Year starts?</em></p>
-
-<p>Here&#8217;s the cron schedule for 00:00 on January 1st.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="err">#</span> <span class="err">┌─────────────</span> <span class="nx">minute</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">59</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">hour</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">23</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">day</span> <span class="nx">of</span> <span class="nx">month</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="mi">31</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">month</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">11</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">day</span> <span class="nx">of</span> <span class="nx">week</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">6</span><span class="p">)</span> <span class="p">(</span><span class="nx">Sunday</span> <span class="nx">to</span> <span class="nx">Saturday</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span>
-</span><span class='line'><span class="err">#</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">1</span> <span class="mi">0</span> <span class="o">*</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Here are the cli commands to set up a trigger to run at 01/01/2018 @ 00:00 to celebrate the new year.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">new_year</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">cron</span> <span class="s1">&#39;0 0 1 0 *&#39;</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">maxTriggers</span> <span class="mi">1</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">trigger_payload</span> <span class="s1">&#39;{&quot;message&quot;:&quot;Happy New Year!&quot;}&#39;</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">754</span><span class="nx">bec0a58b944a68bec0a58b9f4a6c1</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">trigger</span> <span class="nx">new_year</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Firing events a fixed period of time from an action finishing</h3>
-
-<p>Imagine you want to run an action on a loop, with a 60 second delay between invocations. Start times for future invocations are dependent on the finishing time of previous invocations. This means we can&#8217;t use the alarm feed with a fixed schedule like &#8217;<code>* * * * *</code>&#8217;.</p>
-
-<p><strong><em>Instead we&#8217;ll schedule the first invocation as a one-off event and then have the action re-schedule itself using the JavaScript client library!</em></strong></p>
-
-<h4>action code</h4>
-
-<p>Here&#8217;s the sample JavaScript code for an action which does that….</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">calculateSchedule</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">now</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Date</span><span class="p">()</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">seconds</span> <span class="o">=</span> <span class="nx">now</span><span class="p">.</span><span class="nx">getSeconds</span><span class="p">()</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">nextMinute</span> <span class="o">=</span> <span class="p">(</span><span class="nx">now</span><span class="p">.</span><span class="nx">getMinutes</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">60</span>
-</span><span class='line'>  <span class="k">return</span> <span class="err">`</span><span class="nx">$</span><span class="p">{</span><span class="nx">seconds</span><span class="p">}</span> <span class="nx">$</span><span class="p">{</span><span class="nx">nextMinute</span><span class="p">}</span> <span class="o">*</span> <span class="o">*</span> <span class="o">*</span> <span class="o">*</span><span class="err">`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">ow</span> <span class="o">=</span> <span class="nx">openwhisk</span><span class="p">();</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">cron</span><span class="o">:</span> <span class="nx">calculateSchedule</span><span class="p">(),</span> <span class="nx">maxTriggers</span><span class="o">:</span> <span class="mi">1</span><span class="p">}</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="k">delete</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;delay&#39;</span><span class="p">}).</span><span class="nx">then</span><span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;delay trigger feed deleted.&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;delay&#39;</span><span class="p">,</span> <span class="nx">params</span><span class="o">:</span> <span class="nx">params</span><span class="p">})</span>
-</span><span class='line'>    <span class="p">}).</span><span class="nx">then</span><span class="p">(</span><span class="nx">result</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;delay trigger feed created.&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>    <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;failed to create/delete delay trigger&#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>      <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;ERROR&quot;</span><span class="p">,</span> <span class="nx">err</span><span class="p">.</span><span class="nx">error</span><span class="p">.</span><span class="nx">response</span><span class="p">.</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>setting up</h4>
-
-<ul>
-<li>Create an action called <code>reschedule</code> with code from above.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">reschedule</span> <span class="nx">reschedule</span><span class="p">.</span><span class="nx">js</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">reschedule</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a trigger (<code>delay</code>)  using the alarm feed, set to run in the next 60 seconds.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">delay</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">cron</span> <span class="s1">&#39;* * * * * *&#39;</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="kd">with</span> <span class="nx">id</span> <span class="nx">b3da4de5726b41679a4de5726b0167c8</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">trigger</span> <span class="nx">delay</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Connect the action (<code>reschedule</code>) to the trigger (<code>delay</code>) with a rule (<code>reschedule_delay</code>).</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">create</span> <span class="nx">reschedule_delay</span> <span class="nx">delay</span> <span class="nx">reschedule</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">rule</span> <span class="nx">reschedule_delay</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>This action will continue to re-schedule itself indefinitely.</strong></p>
-
-<p>Stop this infinite loop by disabling or removing the rule connecting the action to the trigger.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">disable</span> <span class="nx">reschedule_delay</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">disabled</span> <span class="nx">rule</span> <span class="nx">reschedule_delay</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Firing events on an irregular schedule</h3>
-
-<p>How can you schedule events to occur from a predictable but irregular pattern, e.g. sending a daily message to users at sunrise?</p>
-
-<p>Sunrise happens at a different time each morning. This schedule cannot be defined using a static cron-based pattern.</p>
-
-<p><em>Using the same approach as above, where actions re-schedule triggers at runtime, events can created to follow an irregular schedule.</em></p>
-
-<h4>sunrise times</h4>
-
-<p>This <a href="https://sunrise-sunset.org/api">external API</a> provides the sunrise times for a location. Retrieving the sunrise times for tomorrow during execution will provide the date time used to re-schedule the action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;results&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nt">&quot;astronomical_twilight_begin&quot;</span><span class="p">:</span> <span class="s2">&quot;5:13:40 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;astronomical_twilight_end&quot;</span><span class="p">:</span> <span class="s2">&quot;6:48:52 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;civil_twilight_begin&quot;</span><span class="p">:</span> <span class="s2">&quot;6:14:23 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;civil_twilight_end&quot;</span><span class="p">:</span> <span class="s2">&quot;5:48:09 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;day_length&quot;</span><span class="p">:</span> <span class="s2">&quot;10:40:26&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;nautical_twilight_begin&quot;</span><span class="p">:</span> <span class="s2">&quot;5:43:50 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;nautical_twilight_end&quot;</span><span class="p">:</span> <span class="s2">&quot;6:18:42 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;solar_noon&quot;</span><span class="p">:</span> <span class="s2">&quot;12:01:16 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;sunrise&quot;</span><span class="p">:</span> <span class="s2">&quot;6:41:03 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;sunset&quot;</span><span class="p">:</span> <span class="s2">&quot;5:21:29 PM&quot;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;OK&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>action code</h4>
-
-<p>Here&#8217;s the sample JavaScript action that will re-schedule itself at sunrise.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">);</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">request</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;request-promise&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">getNextSunrise</span><span class="p">(</span><span class="nx">lat</span><span class="p">,</span> <span class="nx">lng</span><span class="p">,</span> <span class="nx">when</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">uri</span><span class="o">:</span> <span class="s1">&#39;https://api.sunrise-sunset.org/json&#39;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">qs</span><span class="o">:</span> <span class="p">{</span> <span class="nx">lat</span><span class="o">:</span> <span class="nx">lat</span><span class="p">,</span> <span class="nx">lng</span><span class="o">:</span> <span class="nx">lng</span><span class="p">,</span> <span class="nx">when</span><span class="o">:</span> <span class="nx">when</span> <span class="p">},</span>
-</span><span class='line'>    <span class="nx">json</span><span class="o">:</span> <span class="kc">true</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">request</span><span class="p">(</span><span class="nx">options</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">result</span> <span class="o">=&gt;</span> <span class="nx">result</span><span class="p">.</span><span class="nx">results</span><span class="p">.</span><span class="nx">sunrise</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">calculateSchedule</span><span class="p">(</span><span class="nx">sunrise</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;Next sunrise:&#39;</span><span class="p">,</span> <span class="nx">sunrise</span><span class="p">)</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">sections</span> <span class="o">=</span> <span class="nx">sunrise</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">hour</span> <span class="o">=</span> <span class="nx">sections</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nx">minute</span> <span class="o">=</span> <span class="nx">sections</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>  <span class="k">return</span> <span class="err">`</span><span class="nx">$</span><span class="p">{</span><span class="nx">minute</span><span class="p">}</span> <span class="nx">$</span><span class="p">{</span><span class="nx">hour</span><span class="p">}</span> <span class="o">*</span> <span class="o">*</span> <span class="o">*</span><span class="err">`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">scheduleSunriseEvent</span> <span class="p">(</span><span class="nx">sunrise</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">ow</span> <span class="o">=</span> <span class="nx">openwhisk</span><span class="p">();</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">cron</span><span class="o">:</span> <span class="nx">sunrise</span><span class="p">,</span> <span class="nx">maxTriggers</span><span class="o">:</span> <span class="mi">1</span><span class="p">}</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="k">delete</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;sunrise&#39;</span><span class="p">}).</span><span class="nx">then</span><span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;trigger feed deleted.&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;sunrise&#39;</span><span class="p">,</span> <span class="nx">params</span><span class="o">:</span> <span class="nx">params</span><span class="p">})</span>
-</span><span class='line'>  <span class="p">}).</span><span class="nx">then</span><span class="p">(</span><span class="nx">result</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;trigger feed created.&#39;</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'>  <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;failed to create/delete trigger&#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;ERROR&quot;</span><span class="p">,</span> <span class="nx">err</span><span class="p">.</span><span class="nx">error</span><span class="p">.</span><span class="nx">response</span><span class="p">.</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;GOOD MORNING!&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">getNextSunrise</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">lat</span><span class="p">,</span> <span class="nx">params</span><span class="p">.</span><span class="nx">lng</span><span class="p">,</span> <span class="s1">&#39;tomorrow&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">calculateSchedule</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">scheduleSunriseEvent</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>setting up</h4>
-
-<ul>
-<li>Create an action called <code>wake_up</code> with code from above. <code>lat</code> and <code>lng</code> parameters define location for sunrise.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">wake_up</span> <span class="nx">wake_up</span><span class="p">.</span><span class="nx">js</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">lat</span> <span class="mf">51.50</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">lng</span> <span class="o">-</span><span class="mf">0.076</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">wake_up</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a trigger (<code>sunrise</code>)  with the alarm feed, scheduled for the next sunrise.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">sunrise</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">cron</span> <span class="s1">&#39;03 41 06 * * *&#39;</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">606</span><span class="nx">dafe276f24400adafe276f2240082</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">trigger</span> <span class="nx">sunrise</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Connect the action (<code>wake_up</code>) to the trigger (<code>sunrise</code>) with a rule (<code>wake_up_at_sunrise</code>).</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">create</span> <span class="nx">wake_up_at_sunrise</span> <span class="nx">sunrise</span> <span class="nx">wake_up</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">rule</span> <span class="nx">wake_up_at_sunrise</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Checking the activation logs the following morning will show the trigger being fired, which invokes the action, which re-schedules the one-off event!</em> 🌅🌅🌅</p>
-
-<h2>Caveats</h2>
-
-<p>Here&#8217;s a few issues you might encounter using the alarm feed that I ran into….</p>
-
-<ul>
-<li>Month field in cron schedule starts from zero not one. January is 0, December is 11.</li>
-<li>Day of the week field starts from zero. First day of the week is Sunday, not Monday.</li>
-<li>Feeds <a href="https://github.com/apache/incubator-openwhisk/issues/1925">cannot be updated</a> with a new schedule once created. Feeds must be <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">deleted before being re-created</a> to use a different schedule.</li>
-</ul>
-
-
-<h2>Future Plans</h2>
-
-<p>Extending the alarm feed to support even more features and improve the developer experience is in-progress. There are a number of Github issues in the official OpenWhisk repository around this work.</p>
-
-<ul>
-<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/102">Enhancements for startDate, stopDate, fire once, interval (#102)</a></em></li>
-<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/89">Add fire once triggers (#89)</a></em></li>
-<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/pull/101">Support read and updating trigger details (#101)</a></em></li>
-</ul>
-
-
-<p>If you have feature requests, discover bugs with the feed or have other suggestions, please comment on the existing issues or open new ones.</p>
-
-<h2>Conclusion</h2>
-
-<p>Scheduled events are a necessary feature of serverless cloud platforms. Due to the ephemeral nature of runtime environments, scheduling background tasks must be managed by the platform.</p>
-
-<p>In Apache OpenWhisk, the alarm feed allows static events to be generated on a customisable schedule. Using a cron-based schedule pattern, running functions once a minute, every two hours or 5pm on Mondays, is simple but what about more complex schedule patterns?</p>
-
-<p>Using the <code>cron</code> and <code>maxTriggers</code> parameters with the OpenWhisk client library, much more advanced event schedules can be utilised within the platform. In the examples above, we looked at how to schedule one-off events, events using a predictable but irregular schedule and how actions can re-schedule events at runtime. 💯💯💯</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/3/">&larr; Older</a>
@@ -4557,6 +4261,10 @@ to monitor incoming data values live.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/02/05/large-java-applications-on-openwhisk/">Large (Java) Applications on Apache OpenWhisk</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/01/25/provisioning-ibm-cloud-services-with-terraform/">Provisioning IBM Cloud Services With Terraform</a>
       </li>
     
@@ -4570,10 +4278,6 @@ to monitor incoming data values live.</p>
     
       <li class="post">
         <a href="/blog/2018/12/03/custom-domains-with-ibm-cloud-functions/">Using Custom Domains With IBM Cloud Functions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/">Finding photos on Twitter using face recognition with TensorFlow.js</a>
       </li>
     
   </ul>

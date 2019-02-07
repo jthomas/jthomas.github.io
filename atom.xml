@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-01-25T16:18:49+00:00</updated>
+  <updated>2019-02-07T11:48:08+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,185 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Large (Java) Applications on Apache OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2019/02/05/large-java-applications-on-openwhisk/"/>
+    <updated>2019-02-05T10:49:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/02/05/large-java-applications-on-openwhisk</id>
+    <content type="html"><![CDATA[<p>This blog post will explain how to run large <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-java.md">Java applications</a> on <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>.</p>
+
+<p>Java actions are <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-java.md">deployed from JAR files</a> containing application class files. External libraries can be used by bundling those dependencies into a <a href="https://stackoverflow.com/questions/19150811/what-is-a-fat-jar">fat JAR file</a>. The JAR file must be less than the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-default-48mb">maximum action size</a> of 48MB.</p>
+
+<blockquote><p>So, what if the application uses lots of external libraries and the JAR file is larger than 48MB? 🤔</p></blockquote>
+
+<p>Apache OpenWhisk&#8217;s support for <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">custom Docker runtimes</a> provides a workaround. In a <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">previous blog post</a>, we showed how this feature could be used with Python applications which rely on lots of external libraries.</p>
+
+<p>Using the same approach with Java, a <a href="https://github.com/apache/incubator-openwhisk-runtime-java/">custom Java runtime</a> can be created with additional libraries pre-installed. Those libraries do not need to be included in the application jar, which will just contain private class files. This should hopefully reduce the JAR file to under the action size limit.</p>
+
+<p><em>Let&#8217;s walk through an example to show how this works&#8230;.</em></p>
+
+<h2>Example Java Class using External Libraries</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='java'><span class='line'><span class="kn">import</span> <span class="nn">com.google.gson.JsonObject</span><span class="o">;</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">org.apache.commons.text.WordUtils</span><span class="o">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">public</span> <span class="kd">class</span> <span class="nc">Capitialize</span> <span class="o">{</span>
+</span><span class='line'>    <span class="kd">public</span> <span class="kd">static</span> <span class="n">JsonObject</span> <span class="nf">main</span><span class="o">(</span><span class="n">JsonObject</span> <span class="n">args</span><span class="o">)</span> <span class="o">{</span>
+</span><span class='line'>        <span class="n">String</span> <span class="n">name</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="na">getAsJsonPrimitive</span><span class="o">(</span><span class="s">&quot;message&quot;</span><span class="o">).</span><span class="na">getAsString</span><span class="o">();</span>
+</span><span class='line'>        <span class="n">JsonObject</span> <span class="n">response</span> <span class="o">=</span> <span class="k">new</span> <span class="n">JsonObject</span><span class="o">();</span>
+</span><span class='line'>        <span class="n">response</span><span class="o">.</span><span class="na">addProperty</span><span class="o">(</span><span class="s">&quot;capitalized&quot;</span><span class="o">,</span> <span class="n">WordUtils</span><span class="o">.</span><span class="na">capitalize</span><span class="o">(</span><span class="n">name</span><span class="o">));</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">response</span><span class="o">;</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This example Java action capitalises sentences from the input event. It uses the <a href="https://commons.apache.org/proper/commons-text/">Apache Commons Text library</a> to handle <a href="https://commons.apache.org/proper/commons-text/javadocs/api-release/org/apache/commons/text/WordUtils.html#capitalize(java.lang.String)">capitialisation</a> of input strings. This external library will be installed in the runtime, rather than bundled in the application JAR file.</p>
+
+<h2>Build Custom Java Runtime</h2>
+
+<ul>
+<li>Clone the existing <a href="https://github.com/apache/incubator-openwhisk-runtime-java/">Apache OpenWhisk Java runtime repository</a>.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>git clone https://github.com/apache/incubator-openwhisk-runtime-java
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Edit the <code>core/java8/proxy/build.gradle</code> file and update the <code>dependencies</code> <a href="https://github.com/apache/incubator-openwhisk-runtime-java/blob/master/core/java8/proxy/build.gradle#L24-L26">configuration</a> with extra dependencies needed in the runtime.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>dependencies <span class="o">{</span>
+</span><span class='line'>    compile <span class="s1">&#39;com.google.code.gson:gson:2.6.2&#39;</span>
+</span><span class='line'>    compile <span class="s1">&#39;org.apache.commons:commons-text:1.6&#39;</span> // &lt;-- the additional library
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Note: <code>com.google.code.gson:gson:2.6.2</code> is used by the runtime to handle JSON encoding/decoding. Do not remove this dependency.</em></p>
+
+<ul>
+<li>Execute the following command to build the custom <a href="https://en.wikipedia.org/wiki/Docker_%28software%29">Docker</a> image.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>./gradlew core:java8:distDocker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Push Image To Docker Hub</h2>
+
+<p>If the build process succeeds, a local Docker image named <code>java8action</code> should be available. This needs to be pushed to <a href="https://hub.docker.com/">Docker Hub</a> to allow Apache OpenWhisk to use it.</p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag</a> the custom image with a <a href="https://hub.docker.com/signup">Docker Hub username</a>.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker tag java8action &lt;DOCKERHUB_USERNAME&gt;/java8action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push</a> the tagged custom image to Docker Hub.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker push &lt;DOCKERHUB_USERNAME&gt;/java8action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Create OpenWhisk Action With Custom Runtime</h2>
+
+<ul>
+<li>Compile the Java source file.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>javac Capitialize.java
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create the application JAR from the class file.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>jar cvf capitialize.jar Capitialize.class
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create the Java action with the custom runtime.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>wsk action create capitialize capitialize.jar --main Capitialize --docker &lt;DOCKERHUB_USERNAME&gt;/java8action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em><code>--main</code> is the class file name containing the action handler in the JAR file. <code>--docker</code> is the Docker image name for the custom runtime.</em></p>
+
+<h2>Test it out!</h2>
+
+<ul>
+<li>Execute the <code>capitialize</code> action with input text to returned capitalised sentences.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>wsk action invoke capitialize -b -r -p message <span class="s2">&quot;this is a sentence&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If this works, the following JSON should be printed to the console.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;capitalized&quot;</span><span class="p">:</span> <span class="s2">&quot;This Is A Sentence&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The external library has been used in the application without including it in the application JAR file! 💯💯💯</p>
+
+<h2>Conclusion</h2>
+
+<p>Apache OpenWhisk supports running Java applications using fat JARs, which bundle application source code and external dependencies. JAR files cannot be more than 48MB, which can be challenging when applications uses lots of external libraries.</p>
+
+<p>If application source files and external libraries result in JAR files larger than this limit, Apache OpenWhisk&#8217;s support for custom Docker runtimes provide a solution for running large Java applications on the platform.</p>
+
+<p>By building a custom Java runtime, extra libraries can be pre-installed in the runtime. These dependencies do not need to be included in the application JAR file, which reduces the file size to under the action size limit. 👍</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Provisioning IBM Cloud Services With Terraform]]></title>
@@ -7020,566 +7199,6 @@ to monitor incoming data values live.</p>
 <p>This project needs an instance of OpenWhisk platform and an ELK-stack service accessible on a public IP address.</p>
 
 <p>This project can be deployed using <a href="https://serverless.com/">The Serverless Framework</a> or the <a href="https://github.com/apache/incubator-openwhisk-cli">OpenWhisk CLI</a>.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[advanced openwhisk alarm schedules]]></title>
-    <link href="http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules/"/>
-    <updated>2017-10-31T12:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/10/31/openwhisk-alarm-trigger-schedules</id>
-    <content type="html"><![CDATA[<p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
-
-<p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
-
-<p><strong>Using a <a href="http://crontab.org/">cron-based schedule pattern</a>, running functions once a minute, every two hours or 5pm on Mondays is simple, but what about more complex schedule patterns?</strong> 🤔</p>
-
-<p>What if we need to…</p>
-
-<ul>
-<li>⏰ <em>Fire a <a href="https://stackoverflow.com/questions/45898048/can-i-schedule-a-one-shot-action-in-openwhisk">single one-off event</a> at a specific time in the future?</em></li>
-<li>⏰ <em>Fire events a fixed period of time from an action finishing?</em></li>
-<li>⏰ <em>Fire events on an irregular schedule?</em></li>
-</ul>
-
-
-<p>It is possible to implement all these examples with a few tricks… 🤹‍♂️🤹‍♂️🤹‍♂️.</p>
-
-<p><em>Before we dive into the details, let&#8217;s review how the alarm feed provider works…</em></p>
-
-<h2>Alarm Trigger Feeds</h2>
-
-<p>OpenWhisk triggers are connected to external event sources <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#creating-and-using-trigger-feeds">using feed providers</a>.</p>
-
-<p>Feed providers listen to event sources, like message queues, <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">firing triggers with event parameters</a> as external events occur.</p>
-
-<p>There are a number of <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#browsing-packages">pre-installed feed providers</a> in the <code>whisk.system</code> namespace. This includes the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarms package</a> which includes a feed provider (<code>/whisk.system/alarms/alarm</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk package get /whisk.system/alarms --summary
-</span><span class='line'>package /whisk.system/alarms: Alarms and periodic utility
-</span><span class='line'>   (parameters: *apihost, *cron, *trigger_payload)
-</span><span class='line'> feed   /whisk.system/alarms/alarm: Fire trigger when alarm occurs
-</span><span class='line'>   (parameters: none defined)</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>feed parameters</h3>
-
-<p>The following parameters are used to configure the feed provider.</p>
-
-<ul>
-<li><code>cron</code> - <em>crontab syntax used to configure timer schedule.</em></li>
-<li><code>trigger_payload</code> - <em>event parameters to fire trigger with.</em></li>
-<li><code>maxTriggers</code> - <em>maximum number of triggers to fire (-1 for no limit).</em></li>
-</ul>
-
-
-<p><code>cron</code> is the parameter which controls when triggers will be fired. It uses the <a href="http://crontab.org/">cron syntax</a> to specify the schedule expression.</p>
-
-<h3>cron schedule format</h3>
-
-<p>Cron schedule values are a string containing sections for the following time fields. Field values can be integers or patterns including wild cards.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'># ┌────────────── second (0 - 59, optional & defaults to 0)
-</span><span class='line'># │ ┌────────────── minute (0 - 59)
-</span><span class='line'># │ │ ┌────────────── hour (0 - 23)
-</span><span class='line'># │ │ │ ┌────────────── day of month (1 - 31)
-</span><span class='line'># │ │ │ │ ┌────────────── month (0 - 11)
-</span><span class='line'># │ │ │ │ │ ┌────────────── day of week (0 - 6) (Sunday to Saturday)
-</span><span class='line'># │ │ │ │ │ │
-</span><span class='line'># │ │ │ │ │ │
-</span><span class='line'># * * * * * *  </span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong><em>NOTE: Month field starts from 0 not 1, 0 is January with December being 11. Day of week also starts from 0. Sunday is first day of the week.</em></strong></p>
-
-<p>The second field is a non-standard cron field and does not need to be used. The Node.js module <a href="https://github.com/kelektiv/node-cron">used to parse the cron schedules</a> supports a value with five or six fields.</p>
-
-<h3>crontab examples</h3>
-
-<p>Here are some example patterns…</p>
-
-<ul>
-<li><code>*/10 * * * * *</code> - run every 10 seconds</li>
-<li><code>* * * * *</code> - run every minute</li>
-<li><code>0 * * * *</code> - run every hour</li>
-<li><code>0 */2 * * *</code> - run every two hours</li>
-<li><code>30 11 * * 1-5</code>  - run Monday to Friday at 11:30AM</li>
-<li><code>0 0 1 * *</code> - run at midnight the first day of the month</li>
-</ul>
-
-
-<p><a href="https://crontab.guru/">https://crontab.guru/</a> is an online editor for generating cron schedule expressions.</p>
-
-<h2>Creating Alarm Triggers</h2>
-
-<p>Using the <code>wsk</code> cli triggers can be created using the <code>alarm</code> feed. Schedule and event parameters are passed in using command-line arguments (<code>-p name value</code>).</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk trigger create periodic --feed /whisk.system/alarms/alarm -p cron '* * * * * *' -p trigger_payload '{"hello":"world"}'
-</span><span class='line'>ok: invoked /whisk.system/alarms/alarm with id 42ca80fbe7cf47318a80fbe7cff73177
-</span><span class='line'>...
-</span><span class='line'>ok: created trigger feed periodic</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Trigger invocations are recorded in the activation records.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk activation list periodic
-</span><span class='line'>activations
-</span><span class='line'>d55d15297781474b9d15297781974b92 periodic
-</span><span class='line'>...
-</span><span class='line'>$ wsk activation get d55d15297781474b9d15297781974b92
-</span><span class='line'>ok: got activation d55d15297781474b9d15297781974b92
-</span><span class='line'>{
-</span><span class='line'>    "namespace": "user@host.com_dev",
-</span><span class='line'>    "name": "periodic",
-</span><span class='line'>    ...
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Deleting the trigger will automatically remove the trigger from the alarm scheduler.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk delete periodic
-</span><span class='line'>ok: invoked /whisk.system/alarms/alarm with id 44e8fc5e76c64175a8fc5e76c6c175dd
-</span><span class='line'>...
-</span><span class='line'>ok: deleted trigger periodic</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Programmatic Creation</h3>
-
-<p>The <a href="https://github.com/apache/incubator-openwhisk-client-js">OpenWhisk JavaScript library</a> can also register and remove triggers with feed providers.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">cron</span><span class="o">:</span> <span class="s1">&#39;* * * * * *&#39;</span><span class="p">,</span> <span class="nx">trigger_payload</span><span class="o">:</span> <span class="p">{</span><span class="s2">&quot;hello&quot;</span><span class="o">:</span><span class="s2">&quot;world&quot;</span><span class="p">}}</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">name</span> <span class="o">=</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">trigger</span> <span class="o">=</span> <span class="s1">&#39;periodic&#39;</span>
-</span><span class='line'><span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span><span class="nx">name</span><span class="p">,</span> <span class="nx">trigger</span><span class="p">,</span> <span class="nx">params</span><span class="p">}).</span><span class="nx">then</span><span class="p">(</span><span class="kr">package</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;alarm trigger feed created&#39;</span><span class="p">,</span> <span class="kr">package</span><span class="p">)</span>
-</span><span class='line'><span class="p">}).</span><span class="k">catch</span><span class="p">(</span><span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;failed to create alarm trigger&#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Triggers must already exist before registering with the feed provider using the client library.</em></p>
-
-<p>Using the client library provides a mechanism for actions to dynamically set up scheduled events.</p>
-
-<h2>Advanced Examples</h2>
-
-<p>Having reviewed how the alarm feed works, let&#8217;s look at some more advanced use-cases for the scheduler…</p>
-
-<h3>Schedule one-off event at a specific time in the future</h3>
-
-<p>Creating one-off events, that fire at a specific date and time, is possible using the <code>cron</code> and <code>maxTriggers</code> parameters together.</p>
-
-<p>Using the minute, hour, day of the month and month fields in the cron parameter, the schedule can be configured to run once a year. The day of the week field will use the wildcard value.</p>
-
-<p>Setting the <code>maxTriggers</code> parameter to 1, the trigger is removed from the scheduler after firing.</p>
-
-<h4>happy new year example</h4>
-
-<p><em>What if we want to fire an event when the New Year starts?</em></p>
-
-<p>Here&#8217;s the cron schedule for 00:00 on January 1st.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="err">#</span> <span class="err">┌─────────────</span> <span class="nx">minute</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">59</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">hour</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">23</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">day</span> <span class="nx">of</span> <span class="nx">month</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="mi">31</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">month</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">11</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">┌─────────────</span> <span class="nx">day</span> <span class="nx">of</span> <span class="nx">week</span> <span class="p">(</span><span class="mi">0</span> <span class="o">-</span> <span class="mi">6</span><span class="p">)</span> <span class="p">(</span><span class="nx">Sunday</span> <span class="nx">to</span> <span class="nx">Saturday</span><span class="p">)</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span>
-</span><span class='line'><span class="err">#</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span> <span class="err">│</span>
-</span><span class='line'><span class="err">#</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">1</span> <span class="mi">0</span> <span class="o">*</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Here are the cli commands to set up a trigger to run at 01/01/2018 @ 00:00 to celebrate the new year.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">new_year</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">cron</span> <span class="s1">&#39;0 0 1 0 *&#39;</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">maxTriggers</span> <span class="mi">1</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">trigger_payload</span> <span class="s1">&#39;{&quot;message&quot;:&quot;Happy New Year!&quot;}&#39;</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">754</span><span class="nx">bec0a58b944a68bec0a58b9f4a6c1</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">trigger</span> <span class="nx">new_year</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Firing events a fixed period of time from an action finishing</h3>
-
-<p>Imagine you want to run an action on a loop, with a 60 second delay between invocations. Start times for future invocations are dependent on the finishing time of previous invocations. This means we can&#8217;t use the alarm feed with a fixed schedule like &#8217;<code>* * * * *</code>&#8217;.</p>
-
-<p><strong><em>Instead we&#8217;ll schedule the first invocation as a one-off event and then have the action re-schedule itself using the JavaScript client library!</em></strong></p>
-
-<h4>action code</h4>
-
-<p>Here&#8217;s the sample JavaScript code for an action which does that….</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">calculateSchedule</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">now</span> <span class="o">=</span> <span class="k">new</span> <span class="nb">Date</span><span class="p">()</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">seconds</span> <span class="o">=</span> <span class="nx">now</span><span class="p">.</span><span class="nx">getSeconds</span><span class="p">()</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">nextMinute</span> <span class="o">=</span> <span class="p">(</span><span class="nx">now</span><span class="p">.</span><span class="nx">getMinutes</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">60</span>
-</span><span class='line'>  <span class="k">return</span> <span class="err">`</span><span class="nx">$</span><span class="p">{</span><span class="nx">seconds</span><span class="p">}</span> <span class="nx">$</span><span class="p">{</span><span class="nx">nextMinute</span><span class="p">}</span> <span class="o">*</span> <span class="o">*</span> <span class="o">*</span> <span class="o">*</span><span class="err">`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">ow</span> <span class="o">=</span> <span class="nx">openwhisk</span><span class="p">();</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">cron</span><span class="o">:</span> <span class="nx">calculateSchedule</span><span class="p">(),</span> <span class="nx">maxTriggers</span><span class="o">:</span> <span class="mi">1</span><span class="p">}</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="k">delete</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;delay&#39;</span><span class="p">}).</span><span class="nx">then</span><span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;delay trigger feed deleted.&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;delay&#39;</span><span class="p">,</span> <span class="nx">params</span><span class="o">:</span> <span class="nx">params</span><span class="p">})</span>
-</span><span class='line'>    <span class="p">}).</span><span class="nx">then</span><span class="p">(</span><span class="nx">result</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;delay trigger feed created.&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>    <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;failed to create/delete delay trigger&#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>      <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;ERROR&quot;</span><span class="p">,</span> <span class="nx">err</span><span class="p">.</span><span class="nx">error</span><span class="p">.</span><span class="nx">response</span><span class="p">.</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>setting up</h4>
-
-<ul>
-<li>Create an action called <code>reschedule</code> with code from above.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">reschedule</span> <span class="nx">reschedule</span><span class="p">.</span><span class="nx">js</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">reschedule</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a trigger (<code>delay</code>)  using the alarm feed, set to run in the next 60 seconds.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">delay</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">cron</span> <span class="s1">&#39;* * * * * *&#39;</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="kd">with</span> <span class="nx">id</span> <span class="nx">b3da4de5726b41679a4de5726b0167c8</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">trigger</span> <span class="nx">delay</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Connect the action (<code>reschedule</code>) to the trigger (<code>delay</code>) with a rule (<code>reschedule_delay</code>).</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">create</span> <span class="nx">reschedule_delay</span> <span class="nx">delay</span> <span class="nx">reschedule</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">rule</span> <span class="nx">reschedule_delay</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>This action will continue to re-schedule itself indefinitely.</strong></p>
-
-<p>Stop this infinite loop by disabling or removing the rule connecting the action to the trigger.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">disable</span> <span class="nx">reschedule_delay</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">disabled</span> <span class="nx">rule</span> <span class="nx">reschedule_delay</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Firing events on an irregular schedule</h3>
-
-<p>How can you schedule events to occur from a predictable but irregular pattern, e.g. sending a daily message to users at sunrise?</p>
-
-<p>Sunrise happens at a different time each morning. This schedule cannot be defined using a static cron-based pattern.</p>
-
-<p><em>Using the same approach as above, where actions re-schedule triggers at runtime, events can created to follow an irregular schedule.</em></p>
-
-<h4>sunrise times</h4>
-
-<p>This <a href="https://sunrise-sunset.org/api">external API</a> provides the sunrise times for a location. Retrieving the sunrise times for tomorrow during execution will provide the date time used to re-schedule the action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;results&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nt">&quot;astronomical_twilight_begin&quot;</span><span class="p">:</span> <span class="s2">&quot;5:13:40 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;astronomical_twilight_end&quot;</span><span class="p">:</span> <span class="s2">&quot;6:48:52 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;civil_twilight_begin&quot;</span><span class="p">:</span> <span class="s2">&quot;6:14:23 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;civil_twilight_end&quot;</span><span class="p">:</span> <span class="s2">&quot;5:48:09 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;day_length&quot;</span><span class="p">:</span> <span class="s2">&quot;10:40:26&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;nautical_twilight_begin&quot;</span><span class="p">:</span> <span class="s2">&quot;5:43:50 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;nautical_twilight_end&quot;</span><span class="p">:</span> <span class="s2">&quot;6:18:42 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;solar_noon&quot;</span><span class="p">:</span> <span class="s2">&quot;12:01:16 PM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;sunrise&quot;</span><span class="p">:</span> <span class="s2">&quot;6:41:03 AM&quot;</span><span class="p">,</span>
-</span><span class='line'>        <span class="nt">&quot;sunset&quot;</span><span class="p">:</span> <span class="s2">&quot;5:21:29 PM&quot;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;OK&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>action code</h4>
-
-<p>Here&#8217;s the sample JavaScript action that will re-schedule itself at sunrise.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-<span class='line-number'>33</span>
-<span class='line-number'>34</span>
-<span class='line-number'>35</span>
-<span class='line-number'>36</span>
-<span class='line-number'>37</span>
-<span class='line-number'>38</span>
-<span class='line-number'>39</span>
-<span class='line-number'>40</span>
-<span class='line-number'>41</span>
-<span class='line-number'>42</span>
-<span class='line-number'>43</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">);</span>
-</span><span class='line'><span class="kr">const</span> <span class="nx">request</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;request-promise&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">getNextSunrise</span><span class="p">(</span><span class="nx">lat</span><span class="p">,</span> <span class="nx">lng</span><span class="p">,</span> <span class="nx">when</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">uri</span><span class="o">:</span> <span class="s1">&#39;https://api.sunrise-sunset.org/json&#39;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nx">qs</span><span class="o">:</span> <span class="p">{</span> <span class="nx">lat</span><span class="o">:</span> <span class="nx">lat</span><span class="p">,</span> <span class="nx">lng</span><span class="o">:</span> <span class="nx">lng</span><span class="p">,</span> <span class="nx">when</span><span class="o">:</span> <span class="nx">when</span> <span class="p">},</span>
-</span><span class='line'>    <span class="nx">json</span><span class="o">:</span> <span class="kc">true</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">request</span><span class="p">(</span><span class="nx">options</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">result</span> <span class="o">=&gt;</span> <span class="nx">result</span><span class="p">.</span><span class="nx">results</span><span class="p">.</span><span class="nx">sunrise</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">calculateSchedule</span><span class="p">(</span><span class="nx">sunrise</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;Next sunrise:&#39;</span><span class="p">,</span> <span class="nx">sunrise</span><span class="p">)</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">sections</span> <span class="o">=</span> <span class="nx">sunrise</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">hour</span> <span class="o">=</span> <span class="nx">sections</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nx">minute</span> <span class="o">=</span> <span class="nx">sections</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>  <span class="k">return</span> <span class="err">`</span><span class="nx">$</span><span class="p">{</span><span class="nx">minute</span><span class="p">}</span> <span class="nx">$</span><span class="p">{</span><span class="nx">hour</span><span class="p">}</span> <span class="o">*</span> <span class="o">*</span> <span class="o">*</span><span class="err">`</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">scheduleSunriseEvent</span> <span class="p">(</span><span class="nx">sunrise</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">ow</span> <span class="o">=</span> <span class="nx">openwhisk</span><span class="p">();</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">cron</span><span class="o">:</span> <span class="nx">sunrise</span><span class="p">,</span> <span class="nx">maxTriggers</span><span class="o">:</span> <span class="mi">1</span><span class="p">}</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="k">delete</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;sunrise&#39;</span><span class="p">}).</span><span class="nx">then</span><span class="p">(()</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;trigger feed deleted.&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="k">return</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">feeds</span><span class="p">.</span><span class="nx">create</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;/whisk.system/alarms/alarm&#39;</span><span class="p">,</span> <span class="nx">trigger</span><span class="o">:</span> <span class="s1">&#39;sunrise&#39;</span><span class="p">,</span> <span class="nx">params</span><span class="o">:</span> <span class="nx">params</span><span class="p">})</span>
-</span><span class='line'>  <span class="p">}).</span><span class="nx">then</span><span class="p">(</span><span class="nx">result</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;trigger feed created.&#39;</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'>  <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">err</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;failed to create/delete trigger&#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;ERROR&quot;</span><span class="p">,</span> <span class="nx">err</span><span class="p">.</span><span class="nx">error</span><span class="p">.</span><span class="nx">response</span><span class="p">.</span><span class="nx">result</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">})</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;GOOD MORNING!&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">getNextSunrise</span><span class="p">(</span><span class="nx">params</span><span class="p">.</span><span class="nx">lat</span><span class="p">,</span> <span class="nx">params</span><span class="p">.</span><span class="nx">lng</span><span class="p">,</span> <span class="s1">&#39;tomorrow&#39;</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">calculateSchedule</span><span class="p">)</span>
-</span><span class='line'>    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">scheduleSunriseEvent</span><span class="p">)</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>setting up</h4>
-
-<ul>
-<li>Create an action called <code>wake_up</code> with code from above. <code>lat</code> and <code>lng</code> parameters define location for sunrise.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">wake_up</span> <span class="nx">wake_up</span><span class="p">.</span><span class="nx">js</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">lat</span> <span class="mf">51.50</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">lng</span> <span class="o">-</span><span class="mf">0.076</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">wake_up</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a trigger (<code>sunrise</code>)  with the alarm feed, scheduled for the next sunrise.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">sunrise</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">cron</span> <span class="s1">&#39;03 41 06 * * *&#39;</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">whisk</span><span class="p">.</span><span class="nx">system</span><span class="o">/</span><span class="nx">alarms</span><span class="o">/</span><span class="nx">alarm</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">606</span><span class="nx">dafe276f24400adafe276f2240082</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">trigger</span> <span class="nx">sunrise</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Connect the action (<code>wake_up</code>) to the trigger (<code>sunrise</code>) with a rule (<code>wake_up_at_sunrise</code>).</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">rule</span> <span class="nx">create</span> <span class="nx">wake_up_at_sunrise</span> <span class="nx">sunrise</span> <span class="nx">wake_up</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">rule</span> <span class="nx">wake_up_at_sunrise</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Checking the activation logs the following morning will show the trigger being fired, which invokes the action, which re-schedules the one-off event!</em> 🌅🌅🌅</p>
-
-<h2>Caveats</h2>
-
-<p>Here&#8217;s a few issues you might encounter using the alarm feed that I ran into….</p>
-
-<ul>
-<li>Month field in cron schedule starts from zero not one. January is 0, December is 11.</li>
-<li>Day of the week field starts from zero. First day of the week is Sunday, not Monday.</li>
-<li>Feeds <a href="https://github.com/apache/incubator-openwhisk/issues/1925">cannot be updated</a> with a new schedule once created. Feeds must be <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">deleted before being re-created</a> to use a different schedule.</li>
-</ul>
-
-
-<h2>Future Plans</h2>
-
-<p>Extending the alarm feed to support even more features and improve the developer experience is in-progress. There are a number of Github issues in the official OpenWhisk repository around this work.</p>
-
-<ul>
-<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/102">Enhancements for startDate, stopDate, fire once, interval (#102)</a></em></li>
-<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/89">Add fire once triggers (#89)</a></em></li>
-<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/pull/101">Support read and updating trigger details (#101)</a></em></li>
-</ul>
-
-
-<p>If you have feature requests, discover bugs with the feed or have other suggestions, please comment on the existing issues or open new ones.</p>
-
-<h2>Conclusion</h2>
-
-<p>Scheduled events are a necessary feature of serverless cloud platforms. Due to the ephemeral nature of runtime environments, scheduling background tasks must be managed by the platform.</p>
-
-<p>In Apache OpenWhisk, the alarm feed allows static events to be generated on a customisable schedule. Using a cron-based schedule pattern, running functions once a minute, every two hours or 5pm on Mondays, is simple but what about more complex schedule patterns?</p>
-
-<p>Using the <code>cron</code> and <code>maxTriggers</code> parameters with the OpenWhisk client library, much more advanced event schedules can be utilised within the platform. In the examples above, we looked at how to schedule one-off events, events using a predictable but irregular schedule and how actions can re-schedule events at runtime. 💯💯💯</p>
 ]]></content>
   </entry>
   

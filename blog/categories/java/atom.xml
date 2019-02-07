@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: java | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/java/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-02-07T11:48:08+00:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Large (Java) Applications on Apache OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2019/02/05/large-java-applications-on-openwhisk/"/>
+    <updated>2019-02-05T10:49:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/02/05/large-java-applications-on-openwhisk</id>
+    <content type="html"><![CDATA[<p>This blog post will explain how to run large <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-java.md">Java applications</a> on <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>.</p>
+
+<p>Java actions are <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-java.md">deployed from JAR files</a> containing application class files. External libraries can be used by bundling those dependencies into a <a href="https://stackoverflow.com/questions/19150811/what-is-a-fat-jar">fat JAR file</a>. The JAR file must be less than the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-default-48mb">maximum action size</a> of 48MB.</p>
+
+<blockquote><p>So, what if the application uses lots of external libraries and the JAR file is larger than 48MB? 🤔</p></blockquote>
+
+<p>Apache OpenWhisk's support for <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">custom Docker runtimes</a> provides a workaround. In a <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">previous blog post</a>, we showed how this feature could be used with Python applications which rely on lots of external libraries.</p>
+
+<p>Using the same approach with Java, a <a href="https://github.com/apache/incubator-openwhisk-runtime-java/">custom Java runtime</a> can be created with additional libraries pre-installed. Those libraries do not need to be included in the application jar, which will just contain private class files. This should hopefully reduce the JAR file to under the action size limit.</p>
+
+<p><em>Let's walk through an example to show how this works....</em></p>
+
+<h2>Example Java Class using External Libraries</h2>
+
+<p>```java
+import com.google.gson.JsonObject;
+import org.apache.commons.text.WordUtils;</p>
+
+<p>public class Capitialize {</p>
+
+<pre><code>public static JsonObject main(JsonObject args) {
+    String name = args.getAsJsonPrimitive("message").getAsString();
+    JsonObject response = new JsonObject();
+    response.addProperty("capitalized", WordUtils.capitalize(name));
+    return response;
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>This example Java action capitalises sentences from the input event. It uses the <a href="https://commons.apache.org/proper/commons-text/">Apache Commons Text library</a> to handle <a href="https://commons.apache.org/proper/commons-text/javadocs/api-release/org/apache/commons/text/WordUtils.html#capitalize(java.lang.String)">capitialisation</a> of input strings. This external library will be installed in the runtime, rather than bundled in the application JAR file.</p>
+
+<h2>Build Custom Java Runtime</h2>
+
+<ul>
+<li>Clone the existing <a href="https://github.com/apache/incubator-openwhisk-runtime-java/">Apache OpenWhisk Java runtime repository</a>.</li>
+</ul>
+
+
+<p><code>sh
+git clone https://github.com/apache/incubator-openwhisk-runtime-java
+</code></p>
+
+<ul>
+<li>Edit the <code>core/java8/proxy/build.gradle</code> file and update the <code>dependencies</code> <a href="https://github.com/apache/incubator-openwhisk-runtime-java/blob/master/core/java8/proxy/build.gradle#L24-L26">configuration</a> with extra dependencies needed in the runtime.</li>
+</ul>
+
+
+<p>```
+dependencies {</p>
+
+<pre><code>compile 'com.google.code.gson:gson:2.6.2'
+compile 'org.apache.commons:commons-text:1.6' // &lt;-- the additional library
+</code></pre>
+
+<p>}
+```</p>
+
+<p><em>Note: <code>com.google.code.gson:gson:2.6.2</code> is used by the runtime to handle JSON encoding/decoding. Do not remove this dependency.</em></p>
+
+<ul>
+<li>Execute the following command to build the custom <a href="https://en.wikipedia.org/wiki/Docker_%28software%29">Docker</a> image.</li>
+</ul>
+
+
+<p><code>
+./gradlew core:java8:distDocker
+</code></p>
+
+<h2>Push Image To Docker Hub</h2>
+
+<p>If the build process succeeds, a local Docker image named <code>java8action</code> should be available. This needs to be pushed to <a href="https://hub.docker.com/">Docker Hub</a> to allow Apache OpenWhisk to use it.</p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag</a> the custom image with a <a href="https://hub.docker.com/signup">Docker Hub username</a>.</li>
+</ul>
+
+
+<p><code>
+docker tag java8action &lt;DOCKERHUB_USERNAME&gt;/java8action
+</code></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push</a> the tagged custom image to Docker Hub.</li>
+</ul>
+
+
+<p><code>
+docker push &lt;DOCKERHUB_USERNAME&gt;/java8action
+</code></p>
+
+<h2>Create OpenWhisk Action With Custom Runtime</h2>
+
+<ul>
+<li>Compile the Java source file.</li>
+</ul>
+
+
+<p><code>
+javac Capitialize.java
+</code></p>
+
+<ul>
+<li>Create the application JAR from the class file.</li>
+</ul>
+
+
+<p><code>
+jar cvf capitialize.jar Capitialize.class
+</code></p>
+
+<ul>
+<li>Create the Java action with the custom runtime.</li>
+</ul>
+
+
+<p><code>
+wsk action create capitialize capitialize.jar --main Capitialize --docker &lt;DOCKERHUB_USERNAME&gt;/java8action
+</code></p>
+
+<p><em><code>--main</code> is the class file name containing the action handler in the JAR file. <code>--docker</code> is the Docker image name for the custom runtime.</em></p>
+
+<h2>Test it out!</h2>
+
+<ul>
+<li>Execute the <code>capitialize</code> action with input text to returned capitalised sentences.</li>
+</ul>
+
+
+<p><code>
+wsk action invoke capitialize -b -r -p message "this is a sentence"
+</code></p>
+
+<p>If this works, the following JSON should be printed to the console.</p>
+
+<p>```json
+{</p>
+
+<pre><code>"capitalized": "This Is A Sentence"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>The external library has been used in the application without including it in the application JAR file! 💯💯💯</p>
+
+<h2>Conclusion</h2>
+
+<p>Apache OpenWhisk supports running Java applications using fat JARs, which bundle application source code and external dependencies. JAR files cannot be more than 48MB, which can be challenging when applications uses lots of external libraries.</p>
+
+<p>If application source files and external libraries result in JAR files larger than this limit, Apache OpenWhisk's support for custom Docker runtimes provide a solution for running large Java applications on the platform.</p>
+
+<p>By building a custom Java runtime, extra libraries can be pre-installed in the runtime. These dependencies do not need to be included in the application JAR file, which reduces the file size to under the action size limit. 👍</p>
+]]></content>
+  </entry>
+  
+</feed>
