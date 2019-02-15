@@ -4,7 +4,7 @@
   <title><![CDATA[Category: couchdb | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/couchdb/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-02-07T11:48:08+00:00</updated>
+  <updated>2019-02-15T18:19:00+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,152 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[CouchDB Filters with OpenWhisk Triggers]]></title>
+    <link href="http://jamesthom.as/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/"/>
+    <updated>2019-02-12T14:22:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers</id>
+    <content type="html"><![CDATA[<p>Imagine you have an <a href="http://openwhisk.incubator.apache.org/">OpenWhisk</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">action</a> to send emails to users to verify their email addresses. User profiles, containing email addresses and verification statuses, are maintained in a <a href="https://couchdb.apache.org/">CouchDB</a> database.</p>
+
+<p>```json
+{</p>
+
+<pre><code>...
+"email": {
+    "address": "user@host.com",
+    "status": "unverified"
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Setting up a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed</a> allows the email action <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md">to be invoked</a> when the user profile changes. When user profiles have unverified email addresses, the action can send verification emails.</p>
+
+<p>Whilst this works fine - it will result in a lot of unnecessary invocations. All modifications to user profiles, not just the email field, will result in the action being invoked. This will incur a cost despite the action having nothing to do.</p>
+
+<blockquote><p>How can we restrict document change events to just those we care about?</p></blockquote>
+
+<p>CouchDB <a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html#filter-functions">filter functions</a> to the rescue 🦸‍♂️🦸‍.</p>
+
+<h2>CouchDB Filter Functions</h2>
+
+<p><a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html#filter-functions">Filter functions</a> are Javascript functions executed against (potential) <a href="http://guide.couchdb.org/draft/notifications.html">change feed events</a>. The function is invoked with each document update. The return value is evaluated as a boolean variable. If true, the document is published on the changes feed. Otherwise, the event is filtered from the changes feed.</p>
+
+<h3>example</h3>
+
+<p>Filter functions are created through <a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html">design documents</a>. Function source strings are stored as properties under the <code>filters</code> document attribute. Key names are used as filter identifiers.</p>
+
+<p>Filter functions should have the following interface.</p>
+
+<p>```javascript
+function(doc, req){</p>
+
+<pre><code>// document passes test
+if (doc.property == 'value'){
+    return true;
+}
+
+// ... else ignore document upate
+return false;
+</code></pre>
+
+<p>}
+```</p>
+
+<p> <code>doc</code> is the modified document object and <code>req</code> contains (optional) request parameters.</p>
+
+<p><em>Let's now explain how to create a filter function to restrict profile update events to just those with unverified email addresses...</em></p>
+
+<h2>Filtering Profile Updates</h2>
+
+<h3>user profile documents</h3>
+
+<p>In this example, email addresses are stored in user profile documents under the <code>email</code> property. <code>address</code> contains the user's email address and <code>status</code> records the verification status (<code>unverified</code> or <code>verified</code>).</p>
+
+<p>When a new user is added, or an existing user changes their email address, the <code>status</code> attribute is set to <code>unverified</code>. This indicates a verification message needs to be sent to the email address.</p>
+
+<p>```json
+{</p>
+
+<pre><code>...
+"email": {
+    "address": "user@host.com",
+    "status": "unverified"
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>unverified email filter</h3>
+
+<p>Here is the CouchDB filter function that will ignore document updates with verified email addresses.</p>
+
+<p>```
+function(doc){</p>
+
+<pre><code>if (doc.email.status == 'unverified'){
+    return true;
+}
+
+return false
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>design document with filters</h3>
+
+<p>Save the following JSON document in CouchDB. This creates a new design document (<code>profile</code>) containing a filter function (<code>unverified-emails</code>).</p>
+
+<p>```json
+{
+  "<em>id": "</em>design/profile",<br/>
+  "filters": {</p>
+
+<pre><code>"unverified-emails": "function (doc) {\n  if (doc.email.status == 'unverified') {\n    return true\n  }\n  return false\n}"
+</code></pre>
+
+<p>  },
+  "language": "javascript"
+}
+```</p>
+
+<h3>trigger feed with filter</h3>
+
+<p>Once the design document is created, the filter name can be used as a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant#create-the-trigger-using-the-filter-function">trigger feed parameter</a>.</p>
+
+<p><code>
+wsk trigger create verify_emails --feed /_/myCloudant/changes \
+--param dbname user_profiles \
+--param filter "profile/unverified-emails"
+</code></p>
+
+<p>The trigger only fires when a profile change contains an unverified email address. No more unnecessary invocations, which saves us money! 😎</p>
+
+<h3>caveats</h3>
+
+<p><em>"Why are users getting multiple verification emails?"</em> 😡</p>
+
+<p>If a user changes their profile information, whilst leaving their email address the same but before clicking the verification email, an additional email will be sent.</p>
+
+<p>This is because the <code>status</code> field is still in the <code>unverified</code> state when the next document update occurs. Filter functions are stateless and can't decide if this email address has already been seen.</p>
+
+<p>Instead of leaving the <code>status</code> field as <code>unverified</code>, the email action should change the state to another value, e.g. <code>pending</code>, to indicate the verification email has been sent.</p>
+
+<p>Any further document updates, whilst waiting for the verification response, won't pass the filter and users won't receive multiple emails. 👍</p>
+
+<h2>Conclusion</h2>
+
+<p>CouchDB filters are an easy way to subscribe to a subset of events from the changes feed. Combining CouchDB trigger feeds with filters allows actions to ignore irrelevant document updates. Multiple trigger feeds can be set up from a single database using filter functions.</p>
+
+<p>As well as saving unnecessary invocations (and therefore money), this can simplify data models. A single database can be used to store all documents, rather than having to split different types into multiple databases, whilst still supporting changes feeds per document type.</p>
+
+<p>This is an awesome feature of CouchDB!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[GeoPix Live Photos]]></title>
@@ -24,7 +170,11 @@ application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www
 <iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
 
 
-<p><blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.</p></p><p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote></p>
+<p>{% blockquote Andrew Trice http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/ %}
+GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.</p>
+
+<p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.
+{% endblockquote %}</p>
 
 <p>I've been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
 enhancement...</p>
@@ -81,7 +231,10 @@ feed.follow();
 
 <p>Introducing <a href="">Socket.IO</a>...</p>
 
-<p><blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote></p>
+<p>{% blockquote %}
+Socket.IO enables real-time bidirectional event-based communication.
+It works on every platform, browser or device, focusing equally on reliability and speed.
+{% endblockquote %}</p>
 
 <p>Sounds great!</p>
 

@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-02-07T11:48:08+00:00</updated>
+  <updated>2019-02-15T18:18:48+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,177 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[CouchDB Filters with OpenWhisk Triggers]]></title>
+    <link href="http://jamesthom.as/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/"/>
+    <updated>2019-02-12T14:22:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers</id>
+    <content type="html"><![CDATA[<p>Imagine you have an <a href="http://openwhisk.incubator.apache.org/">OpenWhisk</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">action</a> to send emails to users to verify their email addresses. User profiles, containing email addresses and verification statuses, are maintained in a <a href="https://couchdb.apache.org/">CouchDB</a> database.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="err">...</span>
+</span><span class='line'>    <span class="nt">&quot;email&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;address&quot;</span><span class="p">:</span> <span class="s2">&quot;user@host.com&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;unverified&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Setting up a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed</a> allows the email action <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md">to be invoked</a> when the user profile changes. When user profiles have unverified email addresses, the action can send verification emails.</p>
+
+<p>Whilst this works fine - it will result in a lot of unnecessary invocations. All modifications to user profiles, not just the email field, will result in the action being invoked. This will incur a cost despite the action having nothing to do.</p>
+
+<blockquote><p>How can we restrict document change events to just those we care about?</p></blockquote>
+
+<p>CouchDB <a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html#filter-functions">filter functions</a> to the rescue 🦸‍♂️🦸‍.</p>
+
+<h2>CouchDB Filter Functions</h2>
+
+<p><a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html#filter-functions">Filter functions</a> are Javascript functions executed against (potential) <a href="http://guide.couchdb.org/draft/notifications.html">change feed events</a>. The function is invoked with each document update. The return value is evaluated as a boolean variable. If true, the document is published on the changes feed. Otherwise, the event is filtered from the changes feed.</p>
+
+<h3>example</h3>
+
+<p>Filter functions are created through <a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html">design documents</a>. Function source strings are stored as properties under the <code>filters</code> document attribute. Key names are used as filter identifiers.</p>
+
+<p>Filter functions should have the following interface.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span><span class="p">(</span><span class="nx">doc</span><span class="p">,</span> <span class="nx">req</span><span class="p">){</span>
+</span><span class='line'>    <span class="c1">// document passes test</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">doc</span><span class="p">.</span><span class="nx">property</span> <span class="o">==</span> <span class="s1">&#39;value&#39;</span><span class="p">){</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// ... else ignore document upate</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> <code>doc</code> is the modified document object and <code>req</code> contains (optional) request parameters.</p>
+
+<p><em>Let&#8217;s now explain how to create a filter function to restrict profile update events to just those with unverified email addresses&#8230;</em></p>
+
+<h2>Filtering Profile Updates</h2>
+
+<h3>user profile documents</h3>
+
+<p>In this example, email addresses are stored in user profile documents under the <code>email</code> property. <code>address</code> contains the user&#8217;s email address and <code>status</code> records the verification status (<code>unverified</code> or <code>verified</code>).</p>
+
+<p>When a new user is added, or an existing user changes their email address, the <code>status</code> attribute is set to <code>unverified</code>. This indicates a verification message needs to be sent to the email address.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="err">...</span>
+</span><span class='line'>    <span class="nt">&quot;email&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;address&quot;</span><span class="p">:</span> <span class="s2">&quot;user@host.com&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;unverified&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>unverified email filter</h3>
+
+<p>Here is the CouchDB filter function that will ignore document updates with verified email addresses.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">function(doc)</span><span class="p">{</span>
+</span><span class='line'>    <span class="err">if</span> <span class="err">(doc.email.status</span> <span class="err">==</span> <span class="err">&#39;unverified&#39;){</span>
+</span><span class='line'>        <span class="err">return</span> <span class="err">true;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="err">return</span> <span class="kc">false</span>
+</span><span class='line'><span class="err">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>design document with filters</h3>
+
+<p>Save the following JSON document in CouchDB. This creates a new design document (<code>profile</code>) containing a filter function (<code>unverified-emails</code>).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;_id&quot;</span><span class="p">:</span> <span class="s2">&quot;_design/profile&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;filters&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;unverified-emails&quot;</span><span class="p">:</span> <span class="s2">&quot;function (doc) {\n  if (doc.email.status == &#39;unverified&#39;) {\n    return true\n  }\n  return false\n}&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="nt">&quot;language&quot;</span><span class="p">:</span> <span class="s2">&quot;javascript&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>trigger feed with filter</h3>
+
+<p>Once the design document is created, the filter name can be used as a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant#create-the-trigger-using-the-filter-function">trigger feed parameter</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">wsk</span> <span class="err">trigger</span> <span class="err">create</span> <span class="err">verify_emails</span> <span class="err">--feed</span> <span class="err">/_/myCloudant/changes</span> <span class="err">\</span>
+</span><span class='line'><span class="err">--param</span> <span class="err">dbname</span> <span class="err">user_profiles</span> <span class="err">\</span>
+</span><span class='line'><span class="err">--param</span> <span class="err">filter</span> <span class="s2">&quot;profile/unverified-emails&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The trigger only fires when a profile change contains an unverified email address. No more unnecessary invocations, which saves us money! 😎</p>
+
+<h3>caveats</h3>
+
+<p><em>&#8220;Why are users getting multiple verification emails?&#8221;</em> 😡</p>
+
+<p>If a user changes their profile information, whilst leaving their email address the same but before clicking the verification email, an additional email will be sent.</p>
+
+<p>This is because the <code>status</code> field is still in the <code>unverified</code> state when the next document update occurs. Filter functions are stateless and can&#8217;t decide if this email address has already been seen.</p>
+
+<p>Instead of leaving the <code>status</code> field as <code>unverified</code>, the email action should change the state to another value, e.g. <code>pending</code>, to indicate the verification email has been sent.</p>
+
+<p>Any further document updates, whilst waiting for the verification response, won&#8217;t pass the filter and users won&#8217;t receive multiple emails. 👍</p>
+
+<h2>Conclusion</h2>
+
+<p>CouchDB filters are an easy way to subscribe to a subset of events from the changes feed. Combining CouchDB trigger feeds with filters allows actions to ignore irrelevant document updates. Multiple trigger feeds can be set up from a single database using filter functions.</p>
+
+<p>As well as saving unnecessary invocations (and therefore money), this can simplify data models. A single database can be used to store all documents, rather than having to split different types into multiple databases, whilst still supporting changes feeds per document type.</p>
+
+<p>This is an awesome feature of CouchDB!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Large (Java) Applications on Apache OpenWhisk]]></title>
@@ -7138,67 +7309,6 @@ to monitor incoming data values live.</p>
 <li><strong>$actions</strong> => ibm.public.cloud-functions.$region.$namespace.*</li>
 </ul>
 
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Openwhisk Logstash Forwarder]]></title>
-    <link href="http://jamesthom.as/blog/2017/11/21/openwhisk-logstash-forwarder/"/>
-    <updated>2017-11-21T17:15:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2017/11/21/openwhisk-logstash-forwarder</id>
-    <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/kibana_copy.png" title="Kibana Dashboard with OpenWhisk Logs" alt="Kibana Dashboard" /></p>
-
-<p>Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing into the machine and attaching a debugger to a process or using strace to dump system calls.</p>
-
-<p>Storing, searching and analysing serverless application logs is crucial to diagnosing and fixing bugs on serverless platforms.</p>
-
-<p>The &#8221;<a href="https://www.oreilly.com/ideas/understanding-the-elk-stack">ELK Stack</a>&#8221; has become a popular solution for managing applications logs. Combining three open-source projects (<a href="https://github.com/elastic/elasticsearch">ElasticSearch</a>, <a href="https://github.com/elastic/logstash">Logstash</a> and <a href="https://github.com/elastic/kibana">Kibana</a>), this solution provides a scalable platform for importing, storing and searching application logs.</p>
-
-<p><strong><em>How can we use the ELK stack to manage logs for serverless applications running on Apache OpenWhisk?</em></strong></p>
-
-<h3>ELK and OpenWhisk</h3>
-
-<p>In traditional application runtimes, like a VM or a Docker container, a <a href="https://michael.bouvy.net/blog/en/2013/12/06/use-lumberjack-logstash-forwarder-to-forward-logs-logstash/">background agent</a> is used to automatically forward application and system logs to the ingestion service for the ELK stack.</p>
-
-<p>However, serverless applications run in an <a href="https://martinfowler.com/articles/serverless.html">ephemeral environment</a>. Runtimes are instantiated on-demand per request and destroyed after the function returns. These runtimes do not support the use of background agents.</p>
-
-<p>One solution for this is the <a href="https://github.com/jthomas/logstash-input-openwhisk">custom OpenWhisk plugin</a> for Logstash. This plugin polls the platform for new logs and automatically ingests them into ElasticSearch.</p>
-
-<p><strong><em>But what if you are using a hosted ELK service that does not support installing custom plugins?</em></strong></p>
-
-<h3>OpenWhisk Logstash Forwarder</h3>
-
-<p>&#8220;<a href="https://github.com/jthomas/openwhisk-logstash-forwarder">OpenWhisk Logstash Forwarder</a>&#8221; is designed for this scenario. It can ingest logs into ElasticSearch using standard Logstash input plugins.</p>
-
-<p><a href="https://github.com/jthomas/openwhisk-logstash-forwarder">https://github.com/jthomas/openwhisk-logstash-forwarder</a></p>
-
-<p>This project contains an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">OpenWhisk action</a> which acts as a &#8220;serverless&#8221; version of the logstash-forwarder agent. When the action executes, it retrieves all new logs from a user-provided list of actions to monitor. Log messages are pushed into Logstash using the <a href="https://www.elastic.co/guide/en/logstash/current/plugins-inputs-lumberjack.html">Lumberjack protocol</a>.</p>
-
-<p>The action is connected to an <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm trigger feed</a> with a <a href="https://github.com/apache/incubator-openwhisk-package-alarms#firing-a-trigger-event-periodically">customisable schedule</a>. This event source will ensure all logs are forwarded on a regular schedule.</p>
-
-<h3>Demo</h3>
-
-<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-logstash-forwarder/master/.resources/demo.gif" title="OpenWhisk Logs with ElasticSearch Demo" alt="Demo" /></p>
-
-<p>In this example, the developer has the serverless logstash forwarder agent deployed in their workspace. The agent is configured to monitor logs from the <code>forecast</code> action. The alarm trigger feed is connected to the monitoring action and runs once per minute.</p>
-
-<p>Invoking the <code>forecast</code> action generates log messages to be ingested.</p>
-
-<p>When the alarm trigger feed next fires, the monitoring action is executed. It retrieves log messages generated by new <code>forecast</code> activations and pushes those logs into the configured ELK instance.</p>
-
-<p>Opening Kibana and refreshing the monitoring dashboard, new log messages are shown as individual documents. Selecting the individual documents shows the log message contents with activation record details.</p>
-
-<h3>Source Code</h3>
-
-<p>The source code for this project is now available on Github:</p>
-
-<p><a href="https://github.com/jthomas/openwhisk-logstash-forwarder">https://github.com/jthomas/openwhisk-logstash-forwarder</a></p>
-
-<p>See the <a href="https://github.com/jthomas/openwhisk-logstash-forwarder#installation">installation instructions</a> for how to deploy this project on an OpenWhisk platform.</p>
-
-<p>This project needs an instance of OpenWhisk platform and an ELK-stack service accessible on a public IP address.</p>
-
-<p>This project can be deployed using <a href="https://serverless.com/">The Serverless Framework</a> or the <a href="https://github.com/apache/incubator-openwhisk-cli">OpenWhisk CLI</a>.</p>
 ]]></content>
   </entry>
   
