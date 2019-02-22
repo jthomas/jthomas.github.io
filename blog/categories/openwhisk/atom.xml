@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-02-15T18:19:00+00:00</updated>
+  <updated>2019-02-22T09:55:37+00:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,219 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Pluggable Event Providers for Apache OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/"/>
+    <updated>2019-02-20T11:53:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk</id>
+    <content type="html"><![CDATA[<p>Recently I presented my work building "<em><a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">pluggable event providers</a></em>" for <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> to the open-source community on the <a href="https://www.youtube.com/openwhisk">bi-weekly video meeting</a>.</p>
+
+<p>This was based on my experience building a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">new event provider</a> for Apache OpenWhisk, which led me to prototype an <strong>easier way to add event sources to platform</strong> whilst <strong>cutting down on the boilerplate code</strong> required.</p>
+
+<p>Slides from the talk are <a href="https://speakerdeck.com/jthomas/apache-openwhisk-pluggable-event-providers">here</a> and there's also a video recording <a href="https://www.youtube.com/watch?v=krm7X5YpGy0">available</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/krm7X5YpGy0?start=89" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+
+<p>This blog post is overview of what I talked about on the call, explaining the background for the project and what was built. Based on positive feedback from the community, I have now open-sourced <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">both</a> <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">components</a> of the experiment and will be merging it back upstream into Apache OpenWhisk in future.</p>
+
+<h2>pluggable event providers - why?</h2>
+
+<p>At the end of last year, I was asked to prototype an <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">S3-compatible</a> Object Store event source for Apache OpenWhisk. Reviewing the <a href="https://github.com/search?q=incubator-openwhisk-package">existing event providers</a> helped me understand how they work and what was needed to build a new event source.</p>
+
+<p>This led me to an interesting question...</p>
+
+<blockquote><p>Why do we have relatively few community contributions for event sources?</p></blockquote>
+
+<p>Most of the existing event sources in the project were contributed by IBM. There hasn't been a new event source from an external community member. This is in stark contrast to <a href="https://github.com/search?q=incubator-openwhisk-runtime">additional platform runtimes</a>. Support for PHP, Ruby, DotNet, Go and many more languages all came from community contributions.</p>
+
+<p><em>Digging into the source code for the existing feed providers, I came to the following conclusions....</em></p>
+
+<ul>
+<li><strong>Trigger feed providers are not simple to implement.</strong></li>
+<li><strong>Documentation how existing providers work is lacking.</strong></li>
+</ul>
+
+
+<p>Feed providers can feel a bit like magic to users. You call the <code>wsk</code> CLI with a <code>feed</code> parameter and that's it, the platform handles everything else. But what actually happens to bind triggers to external event sources?</p>
+
+<p><em>Let's start by explaining how trigger feeds are implemented in Apache OpenWhisk, before moving onto my idea to make contributing new feed providers easier.</em></p>
+
+<h2>how trigger feeds work</h2>
+
+<p>Users normally interact with trigger feeds using the <code>wsk</code> CLI. Whilst creating a trigger, the <code>feed</code> parameter can be included to connect that trigger to an external event source. Feed provider options as provided as further CLI parameters.</p>
+
+<p><code>
+wsk trigger create periodic \
+  --feed /whisk.system/alarms/alarm \
+  --param cron "*/2 * * * *" \
+  --param trigger_payload “{…}” \
+  --param startDate "2019-01-01T00:00:00.000Z" \
+  --param stopDate "2019-01-31T23:59:00.000Z"
+</code></p>
+
+<p><em>But what are those trigger feed identifiers used with the <code>feed</code> parameter?</em></p>
+
+<p><strong>It turns out they are just normal actions which have been shared in a public package!</strong></p>
+
+<p>The CLI creates the trigger (using the platform API) and then invokes the referenced feed action. Invocation parameters include the following values used to manage the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">trigger feed lifecycle</a>.</p>
+
+<ul>
+<li><code>lifecycleEvent</code> - Feed operation (<code>CREATE</code>, <code>READ</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>PAUSE</code>, or <code>UNPAUSE</code>).</li>
+<li><code>triggerName</code> - Trigger identifier.</li>
+<li><code>authKey</code> - API key provided to invoke trigger.</li>
+</ul>
+
+
+<p>Custom feed parameters from the user are also included in the event parameters.</p>
+
+<p><strong>This is the entire interaction of the platform with the feed provider.</strong></p>
+
+<p>Providers are responsible for the full management lifecycle of trigger feed event sources. They have to maintain the list of registered triggers and auth keys, manage connections to user-provided event sources, fire triggers upon external events, handle retries and back-offs in cases of rate-limiting and much more.</p>
+
+<p>Feed providers used with a trigger are stored as custom annotations. This allows the CLI to call the same feed action to stop the event binding when the trigger is deleted.</p>
+
+<h3>trigger management</h3>
+
+<p>Reading the source code for the <a href="https://github.com/search?q=incubator-openwhisk-package">existing feed providers</a>, nearly all of the code is responsible for handling the lifecycle of trigger management events, rather than integrating with the external event source.</p>
+
+<p>Despite this, all of the existing providers are in separate repositories and don't share code explicitly, although the same source files have been replicated in different repos.</p>
+
+<p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB feed provider</a> is a good example of how feed providers can be implemented.</p>
+
+<h3>couchdb feed provider</h3>
+
+<p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed provider</a> uses a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">public action</a> to handle the lifecycle events from the <code>wsk</code> CLI.</p>
+
+<p><img src="/images/pluggable-providers/feeds-overview.png" title="" ></p>
+
+<p>This <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">action</a> just proxies the incoming requests to a separate <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changesWebAction.js">web actio</a>n. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">web action</a> implements the logic to handle the trigger lifecycle event. The web action uses a CouchDB database used to store registered triggers. Based upon the lifecycle event details, the web action updates the database document for that trigger.</p>
+
+<p><img src="/images/pluggable-providers/feeds-provider.png" title="" ></p>
+
+<p>The feed provider also runs a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/tree/master/provider">seperate Docker container</a>, which handles listening to CouchDB change feeds from user-provided credentials. It uses the changes feed from the trigger management database, modified from the web action, to listen for triggers being added, removed, disabled or re-enabled.</p>
+
+<p><img src="/images/pluggable-providers/feeds-fire-trigger.png" title="" ></p>
+
+<p>When database change events <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L78">occur</a>, the container <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L66-L76">fires triggers</a> on the platform with the event details.</p>
+
+<h2>building a new event provider?</h2>
+
+<p>Having understood how feed providers work (and how the existing providers were designed), I started to think about the new event source for an S3-compatible object store.</p>
+
+<p>Realising ~90% of the code between providers was the same, I wondered if there was a different approach to creating new event providers, rather than cloning an existing provider and changing the small amount of code used to interact with the event sources.</p>
+
+<p><strong>What about building a generic event provider which a pluggable event source?</strong></p>
+
+<p>This generic event provider would handle all the trigger management logic, which isn't specific to individual event sources. The event source plugin would manage connecting to external event sources and then firing triggers as event occurred. Event source plugins would implement a standard interface and be registered dynamically during startup.</p>
+
+<p><img src="/images/pluggable-providers/generic-provider.png" title="" ></p>
+
+<h3>advantages</h3>
+
+<p>Using this approach would make it much easier to contribute and maintain new event sources.</p>
+
+<ul>
+<li><p>Users would be able to create new event sources with a few lines of custom integration code, rather than replicating all the generic trigger lifecycle management code.</p></li>
+<li><p>Maintaining a single repo for the generic event provider is easier than having the same code copied and pasted in multiple independent repositories.</p></li>
+</ul>
+
+
+<p>I started hacking away at the existing CouchDB event provider to replace the event source integration with a generic plugin interface. Having completed this, I then wrote a new S3-compatible event source using the plugin model. After a couple of weeks I had something working....</p>
+
+<h2>generic event provider</h2>
+
+<p>The <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">generic event provider</a> is based on the exiting CouchDB feed provider source code. The project contains the stateful container code and feed package actions (public &amp; web). It uses the same platform services (CouchDB and Redis) as the existing provider to maintain trigger details.</p>
+
+<p>The event provider plugin is integrated through the <code>EVENT_PROVIDER</code> environment variable. The name should refer to a Node.js module from NPM with the following <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider#plugin-interface">interface</a>.</p>
+
+<p>```javascript
+// initialise plugin instance (must be a JS constructor)
+module.exports = function (trigger_manager, logger) {</p>
+
+<pre><code>// register new trigger feed
+const add = async (trigger_id, trigger_params) =&gt; {}
+// remove existing trigger feed
+const remove = async trigger_id =&gt; {}
+</code></pre>
+
+<p>   return { add, remove }
+}</p>
+
+<p>// valiate feed parameters
+module.exports.validate = async trigger_params => {}
+```</p>
+
+<p>When a new trigger is added to the trigger feeds' database, the details will be passed to the <code>add</code> method. Trigger parameters will be used to set up listening to the external event source. When external events occur, the <code>trigger_manager</code> can be use to automatically fire triggers.</p>
+
+<p>When users delete triggers with feeds, the trigger will be removed from the database. This will lead to the <code>remove</code> method being called. Plugins should stop listening to messages for this event source.</p>
+
+<h3>firing trigger events</h3>
+
+<p>As event arrive from the external source, the plugin can use the <code>trigger_manager</code> instance, passed in through the constructor, to fire triggers with the identifier.</p>
+
+<p>The <code>trigger_manager</code> parameter exposes two async functions:</p>
+
+<ul>
+<li><code>fireTrigger(id, params)</code> - fire trigger given by id passed into <code>add</code> method with event parameters.</li>
+<li><code>disableTrigger(id, status_code, message)</code> - disable trigger feed due to external event source issues.</li>
+</ul>
+
+
+<p>Both functions handle the retry logic and error handling for those operations. These should be used by the event provider plugin to fire  triggers when events arrive from external sources and then disable triggers due to external event source issues.</p>
+
+<h3>validating event source parameters</h3>
+
+<p>This static function on the plugin constructor is used to validate incoming trigger feed parameters for correctness, e.g. checking  authentication credentials for an event source. It is passed the trigger  parameters from the user.</p>
+
+<h2>S3 event feed provider</h2>
+
+<p>Using this new generic event provider, I was able to create an event source for an <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">S3-compatible object store</a>. Most importantly, this new event source was implemented using just <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed/tree/master/lib">~300 lines</a> of JavaScript! This is much smaller than the 7500 lines of code in the generic event provider.</p>
+
+<p>The feed provider polls buckets on an interval using the <code>ListObjects</code> <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/v2-RESTBucketGET.html">API call</a>. Results are cached in Redis to allow comparison between intervals. Comparing the differences in bucket file name and etags, allows file change events to be detected.</p>
+
+<p>Users can call the feed provider with a bucket name, endpoint, API key and polling interval.</p>
+
+<p><code>
+wsk trigger create test-s3-trigger --feed /&lt;PROVIDER_NS&gt;/s3-trigger-feed/changes --param bucket &lt;BUCKET_NAME&gt; --param interval &lt;MINS&gt; --param s3_endpoint &lt;S3_ENDPOINT&gt; --param s3_apikey &lt;COS_KEY&gt;
+</code></p>
+
+<p>File events are fired as the bucket files change with the following trigger events.</p>
+
+<p>```
+{
+  "file": {</p>
+
+<pre><code>"ETag": "\"fb47672a6f7c34339ca9f3ed55c6e3a9\"",
+"Key": "file-86.txt",
+"LastModified": "2018-12-19T08:33:27.388Z",
+"Owner": {
+  "DisplayName": "80a2054e-8d16-4a47-a46d-4edf5b516ef6",
+  "ID": "80a2054e-8d16-4a47-a46d-4edf5b516ef6"
+},
+"Size": 25,
+"StorageClass": "STANDARD"
+</code></pre>
+
+<p>  },
+  "status": "deleted"
+}
+```</p>
+
+<p><em>Pssst - if you are using <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> - I actually have this deployed and running so you can try it out. Use the <code>/james.thomas@uk.ibm.com_dev/s3-trigger-feed/changes</code> feed action name. This package is only available in the London region.</em></p>
+
+<h2>next steps</h2>
+
+<p>Feedback on the call was overwhelming positive on my experiment. Based upon this, I've now open-sourced both the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">generic event provider</a> and <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">s3 event source plugin</a> to allow the community to evaluate the project further.</p>
+
+<p>I'd like to build a few more example event providers to validate the approach further before moving towards contributing this code back upstream.</p>
+
+<p>If you want to try this generic event provider out with your own install of OpenWhisk, please see the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider/blob/master/README.md#running-the-provider--plugin">documentation</a> in the README for how to get started.</p>
+
+<p>If you want to build new event sources, please see the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider/blob/master/README.md#plugin-interface">instructions</a> in the generic feed provider repository and take a look at the S3 plugin for an example to follow.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[CouchDB Filters with OpenWhisk Triggers]]></title>
@@ -356,7 +569,7 @@ wsk action invoke capitialize -b -r -p message "this is a sentence"
 
 <p>Users can fire "events" in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to "subscribe" actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple "listeners" to the same trigger events. Event senders are decoupled from event receivers.</p>
 
-<p>{% img /images/loose-coupling-openwhisk/t-r-a.png %}</p>
+<p><img src="/images/loose-coupling-openwhisk/t-r-a.png"></p>
 
 <p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
 
@@ -474,7 +687,7 @@ ok: got activation &lt;ACTIVATION_ID&gt;
 
 <p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
 
-<p>{% img /images/loose-coupling-openwhisk/goalbot.png %}</p>
+<p><img src="/images/loose-coupling-openwhisk/goalbot.png"></p>
 
 <p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits...</p>
 
@@ -1068,278 +1281,6 @@ const encode = typearr => {
 <p>Using TensorFlow.js with serverless cloud platforms makes it easy to build scalable machine learning applications in the cloud. Using the horizontal scaling capabilities of serverless platforms, thousands of model classifications can be ran in parallel. This can be more performant than having dedicated hardware with a GPU, especially with compute costs for serverless applications being so cheap.</p>
 
 <p>TensorFlow.js is ideally suited to serverless application due to the JS interface, (relatively) small library size and availability of pre-trained models. Despite having no prior experience in Machine Learning, I was able to use the library to build a face recognition pipeline, processing 100s of images in parallel, for real-time results. This amazing library opens up machine learning to a whole new audience!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Serverless Machine Learning With TensorFlow.js]]></title>
-    <link href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/"/>
-    <updated>2018-08-13T12:16:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js</id>
-    <content type="html"><![CDATA[<p>In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to use <a href="https://js.tensorflow.org/">TensorFlow.js</a> on Node.js to run <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d#file-script-js">visual recognition on images from the local filesystem</a>. TensorFlow.js is a JavaScript version of the open-source machine learning library from Google.</p>
-
-<p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
-
-<p>{% img /images/tfjs-serverless/tf-js-example.gif Serverless TensorFlow.js Function %}</p>
-
-<p>Sounds easy, right? It's just a JavaScript library? So, zip it up and away we go... <strong><em>ahem</em></strong> 👊</p>
-
-<p><em>Converting the image classification script to run in a serverless environment had the following challenges...</em></p>
-
-<ul>
-<li><strong>TensorFlow.js libraries need to be available in the runtime.</strong></li>
-<li><strong>Native bindings for the library must be compiled against the platform architecture.</strong></li>
-<li><strong>Models files need to be loaded from the filesystem.</strong></li>
-</ul>
-
-
-<p>Some of these issues were more challenging than others to fix! Let's start by looking at the details of each issue, before explaining how <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">Docker support</a> in Apache OpenWhisk can be used to resolve them all.</p>
-
-<h2>Challenges</h2>
-
-<h3>TensorFlow.js Libraries</h3>
-
-<p>TensorFlow.js libraries are not included in the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js runtimes</a> provided by the Apache OpenWhisk.</p>
-
-<p>External libraries <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">can be imported</a> into the runtime by deploying applications from a zip file. Custom <code>node_modules</code> folders included in the zip file will be extracted in the runtime. Zip files are limited to a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">maximum size of 48MB</a>.</p>
-
-<h4>Library Size</h4>
-
-<p>Running <code>npm install</code> for the TensorFlow.js libraries used revealed the first problem... the resulting <code>node_modules</code> directory was 175MB. 😱</p>
-
-<p>Looking at the contents of this folder, the <code>tfjs-node</code> module compiles a <a href="https://github.com/tensorflow/tfjs-node/tree/master/src">native shared library</a> (<code>libtensorflow.so</code>) that is 135M. This means no amount of JavaScript minification is going to get those external dependencies under the magic 48 MB limit. 👎</p>
-
-<h4>Native Dependencies</h4>
-
-<p>The <code>libtensorflow.so</code> native shared library must be compiled using the platform runtime. Running <code>npm install</code>  locally automatically compiles native dependencies against the host platform. Local environments may use different CPU architectures (Mac vs Linux) or link against shared libraries not available in the serverless runtime.</p>
-
-<h3>MobileNet Model Files</h3>
-
-<p>TensorFlow models files <a href="https://js.tensorflow.org/tutorials/model-save-load.html">need loading from the filesystem</a> in Node.js. Serverless runtimes do provide a temporary filesystem inside the runtime environment. Files from deployment zip files are automatically extracted into this environment before invocations. There is no external access to this filesystem outside the lifecycle of the serverless function.</p>
-
-<p>Models files for the MobileNet model were 16MB. If these files are included in the deployment package, it leaves 32MB for the rest of the application source code. Although the model files are small enough to include in the zip file, what about the TensorFlow.js libraries? Is this the end of the blog post? Not so fast....</p>
-
-<p><strong>Apache OpenWhisk's support for custom runtimes provides a simple solution to all these issues!</strong></p>
-
-<h2>Custom Runtimes</h2>
-
-<p>Apache OpenWhisk uses Docker containers as the runtime environments for serverless functions (actions). All platform runtime images are <a href="https://hub.docker.com/r/openwhisk/">published on Docker Hub</a>, allowing developers to start these environments locally.</p>
-
-<p>Developers can also <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">specify custom runtime images</a> when creating actions. These images must be publicly available on Docker Hub. Custom runtimes have to expose the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">same HTTP API</a> used by the platform for invoking actions.</p>
-
-<p>Using platform runtime images as <a href="https://docs.docker.com/glossary/?term=parent%20image">parent images</a> makes it simple to build custom runtimes. Users can run commands during the Docker build to install additional libraries and other dependencies. The parent image already contains source files with the HTTP API service handling platform requests.</p>
-
-<h3>TensorFlow.js Runtime</h3>
-
-<p>Here is the Docker build file for the Node.js action runtime with additional TensorFlow.js dependencies.</p>
-
-<p>```
-FROM openwhisk/action-nodejs-v8:latest</p>
-
-<p>RUN npm install @tensorflow/tfjs @tensorflow-models/mobilenet @tensorflow/tfjs-node jpeg-js</p>
-
-<p>COPY mobilenet mobilenet
-```</p>
-
-<p><code>openwhisk/action-nodejs-v8:latest</code> is the Node.js action runtime image <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">published by OpenWhisk</a>.</p>
-
-<p>TensorFlow libraries and other dependencies are installed using <code>npm install</code> in the build process. Native dependencies for the <code>@tensorflow/tfjs-node</code> library are automatically compiled for the correct platform by installing during the build process.</p>
-
-<p>Since I'm building a new runtime, I've also added the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model files</a> to the image. Whilst not strictly necessary, removing them from the action zip file reduces deployment times.</p>
-
-<p><strong><em>Want to skip the next step? Use this image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/"><code>jamesthomas/action-nodejs-v8:tfjs</code></a> rather than building your own.</em></strong></p>
-
-<h3>Building The Runtime</h3>
-
-<p><em>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to download model files from the public storage bucket.</em></p>
-
-<ul>
-<li>Download a version of the MobileNet model and place all files in the <code>mobilenet</code> directory.</li>
-<li>Copy the Docker build file from above to a local file named <code>Dockerfile</code>.</li>
-<li>Run the Docker <a href="https://docs.docker.com/engine/reference/commandline/build/">build command</a> to generate a local image.</li>
-</ul>
-
-
-<p><code>sh
-docker build -t tfjs .
-</code></p>
-
-<ul>
-<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag the local image</a> with a remote username and repository.</li>
-</ul>
-
-
-<p><code>sh
-docker tag tfjs &lt;USERNAME&gt;/action-nodejs-v8:tfjs
-</code></p>
-
-<p><em>Replace <code>&lt;USERNAME&gt;</code> with your Docker Hub username.</em></p>
-
-<ul>
-<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push the local image</a> to Docker Hub</li>
-</ul>
-
-
-<p><code>sh
- docker push &lt;USERNAME&gt;/action-nodejs-v8:tfjs
-</code></p>
-
-<p>Once the image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/">is available</a> on Docker Hub, actions can be created using that runtime image. 😎</p>
-
-<h2>Example Code</h2>
-
-<p>This source code implements image classification as an OpenWhisk action. Image files are provided as a Base64 encoded string using the <code>image</code> property on the event parameters. Classification results are returned as the <code>results</code> property in the response.</p>
-
-<script src="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5.js"></script>
-
-
-<h3>Caching Loaded Models</h3>
-
-<p>Serverless platforms initialise runtime environments on-demand to handle invocations. Once a runtime environment has been created, it will be <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">re-used for further invocations</a> with some limits. This improves performance by removing the initialisation delay ("cold start") from request processing.</p>
-
-<p>Applications can exploit this behaviour by using global variables to maintain state across requests. This is often use to <a href="https://blog.rowanudell.com/database-connections-in-lambda/">cache opened database connections</a> or store initialisation data loaded from external systems.</p>
-
-<p>I have used this pattern to <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L80-L82">cache the MobileNet model</a> used for classification. During cold invocations, the model is loaded from the filesystem and stored in a global variable. Warm invocations then use the existence of that global variable to skip the model loading process with further requests.</p>
-
-<p>Caching the model reduces the time (and therefore cost) for classifications on warm invocations.</p>
-
-<h3>Memory Leak</h3>
-
-<p>Running the Node.js script from blog post on IBM Cloud Functions was possible with minimal modifications. Unfortunately, performance testing revealed a memory leak in the handler function. 😢</p>
-
-<p><em>Reading more about <a href="https://js.tensorflow.org/tutorials/core-concepts.html">how TensorFlow.js works</a> on Node.js uncovered the issue...</em></p>
-
-<p>TensorFlow.js's Node.js extensions use a native C++ library to execute the Tensors on a CPU or GPU engine. Memory allocated for Tensor objects in the native library is retained until the application explicitly releases it or the process exits. TensorFlow.js provides a <code>dispose</code> method on the individual objects to free allocated memory. There is also a <code>tf.tidy</code> method to automatically clean up all allocated objects within a frame.</p>
-
-<p>Reviewing the code, tensors were being created as <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L51-L59">model input from images</a> on each request. These objects were not disposed before returning from the request handler. This meant native memory grew unbounded. Adding an explicit <code>dispose</code> call to free these objects before returning <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L91">fixed the issue</a>.</p>
-
-<h3>Profiling &amp; Performance</h3>
-
-<p>Action code records memory usage and elapsed time at different stages in classification process.</p>
-
-<p>Recording <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L12-L20">memory usage</a> allows me to modify the maximum memory allocated to the function for optimal performance and cost. Node.js provides a <a href="https://nodejs.org/docs/v0.4.11/api/all.html#process.memoryUsage">standard library API</a> to retrieve memory usage for the current process. Logging these values allows me to inspect memory usage at different stages.</p>
-
-<p>Timing <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L71">different tasks</a> in the classification process, i.e. model loading, image classification, gives me an insight into how efficient classification is compared to other methods. Node.js has a <a href="https://nodejs.org/api/console.html#console_console_time_label">standard library API</a> for timers to record and print elapsed time to the console.</p>
-
-<h2>Demo</h2>
-
-<h3>Deploy Action</h3>
-
-<ul>
-<li>Run the following command with the <a href="https://console.bluemix.net/openwhisk/learn/cli">IBM Cloud CLI</a> to create the action.</li>
-</ul>
-
-
-<p><code>sh
-ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
-</code></p>
-
-<p><em>Replace <code>&lt;IMAGE_NAME&gt;</code> with the public Docker Hub image identifier for the custom runtime. Use <code>jamesthomas/action-nodejs-v8:tfjs</code> if you haven't built this manually.</em></p>
-
-<h3>Testing It Out</h3>
-
-<ul>
-<li>Download <a href="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG">this image</a> of a Panda from Wikipedia.</li>
-</ul>
-
-
-<p>{% img https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG %}</p>
-
-<p><code>sh
-wget http://bit.ly/2JYSal9 -O panda.jpg
-</code></p>
-
-<ul>
-<li>Invoke the action with the Base64 encoded image as an input parameter.</li>
-</ul>
-
-
-<p><code>sh
- ibmcloud fn action invoke classify -r -p image $(base64 panda.jpg)
-</code></p>
-
-<ul>
-<li>Returned JSON message contains classification probabilities. 🐼🐼🐼</li>
-</ul>
-
-
-<p>```json
-{
-  "results":  [{</p>
-
-<pre><code>className: 'giant panda, panda, panda bear, coon bear',
-probability: 0.9993536472320557
-</code></pre>
-
-<p>  }]
-}
-```</p>
-
-<h3>Activation Details</h3>
-
-<ul>
-<li>Retrieve logging output for the last activation to show performance data.</li>
-</ul>
-
-
-<p><code>sh
-ibmcloud fn activation logs --last
-</code></p>
-
-<p><strong><em>Profiling and memory usage details are logged to stdout</em></strong></p>
-
-<p><code>sh
-prediction function called.
-memory used: rss=150.46 MB, heapTotal=32.83 MB, heapUsed=20.29 MB, external=67.6 MB
-loading image and model...
-decodeImage: 74.233ms
-memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.05 MB, external=40.63 MB
-imageByteArray: 5.676ms
-memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.05 MB, external=45.51 MB
-imageToInput: 5.952ms
-memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.06 MB, external=45.51 MB
-mn_model.classify: 274.805ms
-memory used: rss=149.83 MB, heapTotal=24.33 MB, heapUsed=20.57 MB, external=45.51 MB
-classification results: [...]
-main: 356.639ms
-memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.51 MB
-</code></p>
-
-<p><code>main</code> is the total elapsed time for the action handler. <code>mn_model.classify</code> is the elapsed time for the image classification. Cold start requests print an extra log message with model loading time, <code>loadModel: 394.547ms</code>.</p>
-
-<h2>Performance Results</h2>
-
-<p>Invoking the <code>classify</code> action 1000 times for both cold and warm activations (using 256MB memory) generated the following performance results.</p>
-
-<h3>warm invocations</h3>
-
-<p>{% img /images/tfjs-serverless/warm-activations.png Warm Activation Performance Results %}</p>
-
-<p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
-
-<h3>cold invocations</h3>
-
-<p>{% img /images/tfjs-serverless/cold-activations.png Cold Activation Performance Results %}</p>
-
-<p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
-
-<p><em>One disadvantage of using custom runtime images in Apache OpenWhisk is the lack of <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">pre-warmed containers</a>. Pre-warming is used to reduce cold start times by starting runtime containers before they are needed. This is not supported for non-standard runtime images.</em></p>
-
-<h3>classification cost</h3>
-
-<p>IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">provides a free tier</a> of 400,000 GB/s per month. Each further second of execution is charged at $0.000017 per GB of memory allocated. Execution time is rounded up to the nearest 100ms.</p>
-
-<p>If all activations were warm, a user could execute <strong>more than 4,000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 600,000 further invocations would cost just over $1.</p>
-
-<p>If all activations were cold, a user could execute <strong>more than 1,2000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 180,000 further invocations would cost just over $1.</p>
-
-<h2>Conclusion</h2>
-
-<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
-
-<p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
-
-<p>Fortunately, Apache OpenWhisk's custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
 ]]></content>
   </entry>
   
