@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: web actions | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/web-actions/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-02-28T11:21:27+00:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[OpenWhisk Web Action Errors With Sequences]]></title>
+    <link href="http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/"/>
+    <updated>2019-02-27T10:00:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences</id>
+    <content type="html"><![CDATA[<p>This week, I came across an interesting problem when building HTTP APIs on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</p>
+
+<p>{% blockquote  %}
+How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?
+{% endblockquote %}</p>
+
+<p>This came from wanting to add custom <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication">HTTP authentication</a> to existing Web Actions. I had decided to enhance existing Web Actions with authentication using action sequences. This would combine a new action for authentication validation with the existing API route handlers.</p>
+
+<p>{% img /images/sequences-and-web-actions/outline.png  %}</p>
+
+<p>When the HTTP authentication is valid, the authentication action becomes a "<a href="https://en.wikipedia.org/wiki/NOP_(code)">no-op</a>", which passes along the HTTP request to the route handler action to process as normal.</p>
+
+<p><strong>But what happens when authentication fails?</strong></p>
+
+<p>The authentication action needs to stop request processing and return a <a href="https://httpstatuses.com/401">HTTP 401</a> response immediately.</p>
+
+<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
+
+<p><em>Does Apache OpenWhisk even support this?</em></p>
+
+<p>Fortunately, it does (phew) and I eventually worked out how to do this (based on a combination of re-reading <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/">documentation</a>, the platform <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/scala/org/apache/openwhisk/core/controller/WebActions.scala">source code</a> and just trying stuff out!).</p>
+
+<p><em>Before explaining how to return custom HTTP responses using web action errors in sequences, let's review web actions, actions sequences and why developers often use them together...</em></p>
+
+<h2>Web Actions</h2>
+
+<p><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> are OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> that can be invoked using external HTTP requests.</p>
+
+<p>Incoming HTTP requests are provided as event parameters. HTTP responses are controlled using attributes (<code>statusCode</code>, <code>body</code>, <code>headers</code>) in the action result.</p>
+
+<p>Web Actions can be invoked directly, using the platform API, or connected to <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway endpoints</a>.</p>
+
+<h3>example</h3>
+
+<p>Here is an example Web Action that returns a static HTML page.</p>
+
+<p>```javascript
+function main() {
+  return {</p>
+
+<pre><code>headers: {      
+  'Content-Type': 'text/html'
+},
+statusCode: 200,
+body: '&lt;html&gt;&lt;body&gt;&lt;h3&gt;hello&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;'
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h3>exposing web actions</h3>
+
+<p>Web actions can be exported from any existing action by setting an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/annotations.md#annotations-specific-to-web-actions">annotation</a>.</p>
+
+<p>This is handled automatically by CLI using the <code>—web</code> configuration flag when creating or updating actions.</p>
+
+<p><code>
+wsk action create ACTION_NAME ACTION_CODE --web true
+</code></p>
+
+<h2>Action Sequences</h2>
+
+<p>Multiple actions can be composed together into a "meta-action" using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-action-sequences">sequences</a>.</p>
+
+<p>Sequence configuration defines a series of existing actions to be called sequentially upon invocation.  Actions connected in sequences can use different runtimes and even be sequences themselves.</p>
+
+<p><code>
+wsk action create mySequence --sequence action_a,action_b,action_c
+</code></p>
+
+<p>Input events are passed to the first action in the sequence. Action results from each action in the sequence are passed to the next action in the sequence. The response from the last action in the sequence is returned as the action result.</p>
+
+<h3>example</h3>
+
+<p>Here is a sequence (<code>mySequence</code>) composed of three actions (<code>action_a</code>, <code>action_b</code>, <code>action_c</code>).</p>
+
+<p><code>
+wsk action create mySequence --sequence action_a,action_b,action_c
+</code></p>
+
+<p>Invoking <code>mySequence</code> will invoke <code>action_a</code> with the input parameters. <code>action_b</code> will be invoked with the result from <code>action_a</code>.  <code>action_c</code> will be invoked with the result from <code>action_b</code>. The result returned by <code>action_c</code> will be returned as the sequence result.</p>
+
+<h2>Web Actions from Action Sequences</h2>
+
+<p>Using Action Sequences as Web Actions is a useful pattern for externalising common HTTP request and response processing tasks into separate serverless functions.</p>
+
+<p>These common actions can be included in multiple Web Actions, rather than manually duplicating the same boilerplate code in each HTTP route action. This is similar to the "<a href="https://dzone.com/articles/understanding-middleware-pattern-in-expressjs">middleware</a>" pattern used by lots of common web application frameworks.</p>
+
+<p>Web Actions using this approach are easier to test, maintain and allows API handlers to implement core business logic rather than lots of duplicate boilerplate code.</p>
+
+<h3>authentication example</h3>
+
+<p>In my application, new authenticated web actions were composed of two actions (<code>check_auth</code> and the API route handler, e.g. <code>route_handler</code>).</p>
+
+<p>Here is an outline of the <code>check_auth</code> function in Node.js.</p>
+
+<p>```javascript
+const check_auth = (params) => {
+  const headers = params.__ow_headers
+  const auth = headers['authorization']</p>
+
+<p>  if (!is_auth_valid(auth)) {</p>
+
+<pre><code>// stop sequence processing and return HTTP 401?
+</code></pre>
+
+<p>  }</p>
+
+<p>  // ...else pass along request to next sequence action
+  return params
+}
+```</p>
+
+<p>The <code>check_auth</code> function will inspect the HTTP request and validate the authorisation token. If the token is valid, the function returns the input parameters untouched, which leads the platform the invoke the <code>route_handler</code> to generate the HTTP response from the API route.</p>
+
+<p><strong>But what happens if the authentication is invalid?</strong></p>
+
+<p>The  <code>check_auth</code> action needs to return a HTTP 401 response immediately, rather than proceeding to the  <code>route_handler</code> action.</p>
+
+<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
+
+<h3>handling errors - synchronous results</h3>
+
+<p>Sequence actions can stop sequence processing by returning an error. Action errors are indicated by action results which include an "error" property or return rejected promises (for asynchronous results). Upon detecting an error, the platform will return the error result as the sequence action response.</p>
+
+<p><em>If <code>check_auth</code> returns an error upon authentication failures, sequence processing can be halted, but how to control the HTTP response?</em></p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#error-handling">Error responses</a> can also control the HTTP response, using the same properties (<code>statusCode</code>, <code>headers</code> and <code>body</code>) as a successful invocation result, with one difference: <strong>those properties must be the children of the <code>error</code> property rather than top-level properties.</strong></p>
+
+<p>This example shows the error result needed to generate an immediate HTTP 401 response.</p>
+
+<p>```json
+{
+   "error": {</p>
+
+<pre><code>  "statusCode": 401,
+  "body": "Authentication credentials are invalid."
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>In Node.js, this can be returned using a synchronous result as shown here.</p>
+
+<p>```javascript
+const check_auth = (params) => {
+  const headers = params.__ow_headers
+  const auth = headers['authorization']</p>
+
+<p>  if (!is_auth_valid(auth)) {</p>
+
+<pre><code>const response = { statusCode: 401, body: "Authentication credentials are invalid." }
+return { error: response }
+</code></pre>
+
+<p>  }</p>
+
+<p>  return params
+}
+```</p>
+
+<h3>handling errors - using promises</h3>
+
+<p>If a rejected Promise is used to return an error from an asynchronous operation, the promise result needs to contain the HTTP response properties as <strong>top-level properties</strong>, rather than under an <code>error</code> parent. This is because the Node.js runtime automatically <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L118">serialises the promise value</a> to an <code>error</code> property on the activation result.</p>
+
+<p>```javascript
+const check_auth = (params) => {
+  const headers = params.__ow_headers
+  const auth = headers['authorization']</p>
+
+<p>  if (!is_auth_valid(auth)) {</p>
+
+<pre><code>const response = { statusCode: 401, body: "Authentication credentials are invalid." }
+return Promise.reject(response)
+</code></pre>
+
+<p>  }</p>
+
+<p>  return params
+}
+```</p>
+
+<h2>conclusion</h2>
+
+<p>Creating web actions from sequences is a novel way to implement the "HTTP middleware" pattern on serverless platforms. Surrounding route handlers with pre-HTTP request modifier actions for common tasks, allows route handlers to remove boilerplate code and focus on the core business logic.</p>
+
+<p>In my application, I wanted to use this pattern was being used for custom HTTP authentication validation.</p>
+
+<p>When the HTTP request contains the correct credentials, the request is passed along unmodified. When the credentials are invalid, the action needs to stop sequence processing and return a HTTP 401 response.</p>
+
+<p>Working out how to do this wasn't immediately obvious from the documentation. HTTP response parameters need to included under the <code>error</code> property for synchronous results. I have now opened a PR to improve the project documentation about this.</p>
+]]></content>
+  </entry>
+  
+</feed>
