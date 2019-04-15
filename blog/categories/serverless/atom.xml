@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-02-28T11:21:27+00:00</updated>
+  <updated>2019-04-15T11:53:59+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,19 +14,278 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/"/>
+    <updated>2019-04-10T15:00:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless</id>
+    <content type="html"><![CDATA[<p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p><em>Automating this process has the following benefits...</em></p>
+
+<ul>
+<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
+<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
+<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
+</ul>
+
+
+<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
+
+<h2>background</h2>
+
+<h3>apache software foundation</h3>
+
+<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>...</p>
+
+<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF's official release infrastructure.</p>
+
+<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
+
+<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
+
+<ul>
+<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
+<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
+<li><em>All source files have license headers.</em></li>
+<li><em>No compiled archives bundled in source archives.</em></li>
+</ul>
+
+
+<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
+
+<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
+
+<h3>apache openwhisk releases</h3>
+
+<p>As a committer and PMC member on the Apache OpenWhisk project, I'm eligible to vote on new releases.</p>
+
+<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
+
+<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
+
+<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
+
+<h1>apache openwhisk release verifier</h1>
+
+<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
+
+<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
+
+<p><img src="/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
+
+<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
+
+<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
+
+<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
+
+<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
+
+<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
+
+<h3>available release candidates</h3>
+
+<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
+
+<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"versions": [
+    "apache-openwhisk-0.11.0-incubating-rc1",
+    "apache-openwhisk-0.11.0-incubating-rc2",
+    "apache-openwhisk-1.13.0-incubating-rc1",
+    "apache-openwhisk-1.13.0-incubating-rc2",
+    "apache-openwhisk-2.0.0-incubating-rc2",
+    "apache-openwhisk-3.19.0-incubating-rc1"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release candidate version info</h3>
+
+<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
+
+<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
+HTTP/1.1 200 OK
+...</p>
+
+<p>{</p>
+
+<pre><code>"files": [
+    "openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release verification</h3>
+
+<p>Having selected a release candidate version, clicking the "<em>Validate</em>" button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
+
+<p><em>This serverless function will carry out the following verification steps...</em></p>
+
+<h4>checking download links</h4>
+
+<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
+
+<h4>checking SHA512 hash values</h4>
+
+<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
+
+<p><code>sh
+openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
+3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
+ B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
+</code></p>
+
+<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
+
+<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
+
+<p>```javascript
+const hash = async (file_stream, hash_file, name) => {
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>const sha512 = parse_hash_from_file(hash_file)
+
+const hmac = crypto.createHash('sha512')
+file_stream.pipe(hmac)
+
+hmac.on('readable', () =&gt; {
+  const stream_hash = hmac.read().toString('hex')
+  const valid = stream_hash === sha512.signature
+  logger.log(`file (${name}) calculated hash: ${stream_hash}`)
+  logger.log(`file (${name}) hash from file:  ${sha512.signature}`)
+  resolve({valid})
+})
+
+hmac.on('error', err =&gt; reject(err))
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<h4>validating PGP signatures</h4>
+
+<p><strong>Node.js' crypto library does not support validating PGP signatures.</strong></p>
+
+<p>I've used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
+
+<ul>
+<li><em>Message contents to check.</em></li>
+<li><em>PGP signature for the message.</em></li>
+<li><em>Public key for the private key used to sign the release.</em></li>
+</ul>
+
+
+<p>The "message" to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
+
+<p>```
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1</p>
+
+<p>iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP+wbtJ1ONZJQKjyDVx8uASMDQ
+...
+-----END PGP SIGNATURE-----
+```</p>
+
+<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
+
+<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
+
+<p>```javascript
+const signature = async (file_stream, signature, public_keys, name) => {
+  const options = {</p>
+
+<pre><code>message: openpgp.message.fromBinary(file_stream),
+signature: await openpgp.signature.readArmored(signature),
+publicKeys: (await openpgp.key.readArmored(public_keys)).keys
+</code></pre>
+
+<p>  }</p>
+
+<p>  const verified = await openpgp.verify(options)
+  await openpgp.stream.readToEnd(verified.data)
+  const valid = await verified.signatures[0].verified</p>
+
+<p>  return { valid }
+}
+```</p>
+
+<h4>scanning archive files</h4>
+
+<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
+
+<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
+
+<h3>capturing validation logs</h3>
+
+<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
+
+<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
+
+<h3>showing results</h3>
+
+<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
+
+<p><img src="/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
+
+<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
+
+<p><img src="/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
+
+<h2>other tools</h2>
+
+<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
+
+<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
+
+<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
+
+<h2>conclusion</h2>
+
+<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
+
+<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a "better" PMC member.</p>
+
+<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I've also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
+
+<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[OpenWhisk Web Action Errors With Sequences]]></title>
     <link href="http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/"/>
     <updated>2019-02-27T10:00:00+00:00</updated>
     <id>http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences</id>
     <content type="html"><![CDATA[<p>This week, I came across an interesting problem when building HTTP APIs on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</p>
 
-<p>{% blockquote  %}
-How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?
-{% endblockquote %}</p>
+<p><blockquote><p>How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?</p></blockquote></p>
 
 <p>This came from wanting to add custom <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication">HTTP authentication</a> to existing Web Actions. I had decided to enhance existing Web Actions with authentication using action sequences. This would combine a new action for authentication validation with the existing API route handlers.</p>
 
-<p>{% img /images/sequences-and-web-actions/outline.png  %}</p>
+<p><img src="/images/sequences-and-web-actions/outline.png" title="" ></p>
 
 <p>When the HTTP authentication is valid, the authentication action becomes a "<a href="https://en.wikipedia.org/wiki/NOP_(code)">no-op</a>", which passes along the HTTP request to the route handler action to process as normal.</p>
 
@@ -34,7 +293,7 @@ How can Apache OpenWhisk Web Actions, implemented using action sequences, handle
 
 <p>The authentication action needs to stop request processing and return a <a href="https://httpstatuses.com/401">HTTP 401</a> response immediately.</p>
 
-<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
+<p><img src="/images/sequences-and-web-actions/options.png" title="" ></p>
 
 <p><em>Does Apache OpenWhisk even support this?</em></p>
 
@@ -138,7 +397,7 @@ const check_auth = (params) => {
 
 <p>The  <code>check_auth</code> action needs to return a HTTP 401 response immediately, rather than proceeding to the  <code>route_handler</code> action.</p>
 
-<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
+<p><img src="/images/sequences-and-web-actions/options.png" title="" ></p>
 
 <h3>handling errors - synchronous results</h3>
 
@@ -298,15 +557,15 @@ wsk trigger create periodic \
 
 <p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed provider</a> uses a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">public action</a> to handle the lifecycle events from the <code>wsk</code> CLI.</p>
 
-<p>{% img /images/pluggable-providers/feeds-overview.png  %}</p>
+<p><img src="/images/pluggable-providers/feeds-overview.png" title="" ></p>
 
 <p>This <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">action</a> just proxies the incoming requests to a separate <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changesWebAction.js">web actio</a>n. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">web action</a> implements the logic to handle the trigger lifecycle event. The web action uses a CouchDB database used to store registered triggers. Based upon the lifecycle event details, the web action updates the database document for that trigger.</p>
 
-<p>{% img /images/pluggable-providers/feeds-provider.png  %}</p>
+<p><img src="/images/pluggable-providers/feeds-provider.png" title="" ></p>
 
 <p>The feed provider also runs a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/tree/master/provider">seperate Docker container</a>, which handles listening to CouchDB change feeds from user-provided credentials. It uses the changes feed from the trigger management database, modified from the web action, to listen for triggers being added, removed, disabled or re-enabled.</p>
 
-<p>{% img /images/pluggable-providers/feeds-fire-trigger.png  %}</p>
+<p><img src="/images/pluggable-providers/feeds-fire-trigger.png" title="" ></p>
 
 <p>When database change events <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L78">occur</a>, the container <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L66-L76">fires triggers</a> on the platform with the event details.</p>
 
@@ -320,7 +579,7 @@ wsk trigger create periodic \
 
 <p>This generic event provider would handle all the trigger management logic, which isn't specific to individual event sources. The event source plugin would manage connecting to external event sources and then firing triggers as event occurred. Event source plugins would implement a standard interface and be registered dynamically during startup.</p>
 
-<p>{% img /images/pluggable-providers/generic-provider.png  %}</p>
+<p><img src="/images/pluggable-providers/generic-provider.png" title="" ></p>
 
 <h3>advantages</h3>
 
@@ -608,7 +867,7 @@ wsk trigger create verify_emails --feed /_/myCloudant/changes \
 
 <p>Users can fire "events" in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to "subscribe" actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple "listeners" to the same trigger events. Event senders are decoupled from event receivers.</p>
 
-<p>{% img /images/loose-coupling-openwhisk/t-r-a.png %}</p>
+<p><img src="/images/loose-coupling-openwhisk/t-r-a.png"></p>
 
 <p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
 
@@ -726,7 +985,7 @@ ok: got activation &lt;ACTIVATION_ID&gt;
 
 <p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
 
-<p>{% img /images/loose-coupling-openwhisk/goalbot.png %}</p>
+<p><img src="/images/loose-coupling-openwhisk/goalbot.png"></p>
 
 <p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits...</p>
 
@@ -789,284 +1048,6 @@ wsk rule enable RULE_NAME
 <p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
 
 <p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Highly Available Serverless Apps With Cloudant's Cross-Region Replication]]></title>
-    <link href="http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/"/>
-    <updated>2019-01-10T11:23:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication</id>
-    <content type="html"><![CDATA[<p>Building <a href="https://www.techrepublic.com/blog/the-enterprise-cloud/what-high-availability-for-cloud-services-means-in-the-real-world/">highly available</a> serverless applications relies on eliminating "<a href="https://en.wikipedia.org/wiki/Single_point_of_failure"><em>single points of failure</em></a>" from application architectures.</p>
-
-<p><a href="https://cloud.ibm.com/docs/tutorials/multi-region-serverless.html#deploy-serverless-apps-across-multiple-regions">Existing tutorials</a> showed how to deploy the same serverless application on IBM Cloud in different regions. Using the <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> from <a href="https://cloud.ibm.com/catalog/services/internet-svcs">IBM Cloud Internet Services</a>, traffic is distributed across multiple applications from the same hostname. The <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> automatically detects outages in the regional applications and redirects traffics as necessary.</p>
-
-<p><strong>But what if all instances rely on the same database service and that has issues?</strong> 😱🔥</p>
-
-<p>In addition to running multiple instances of the application, independent databases in different regions are also necessary for a highly available serverless application. Maintaining consistent application state across regions needs all database changes to be automatically synchronised between instances. 🤔</p>
-
-<p><strong>In this blog post, we're going to look at using <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant's</a> <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">replication service</a> to set up a "<a href="https://en.wikipedia.org/wiki/Multi-master_replication">multi-master</a>" replication between regional database instances.</strong></p>
-
-<p>Once this is enabled, database changes will automatically be synchronised in real-time between all database instances. Serverless applications can use their regional database instance and be confident application state will be consistent globally (for some definition of <a href="https://en.wikipedia.org/wiki/Eventual_consistency">consistent</a>...). 💯</p>
-
-<h2>example serverless application - todo backend</h2>
-
-<p>This <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">serverless application</a> implements a <a href="https://www.todobackend.com/">TODO backend</a> using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> and <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant</a>.</p>
-
-<p>{% img /images/ha-serverless-apps-todo/todo-frontpage.png %}</p>
-
-<p>It provides an REST API for interacting with a TODO service. This can be used with the <a href="https://www.todobackend.com/client/index.html">front-end client</a> to add, complete and remove todos from a list.</p>
-
-<p><strong>Let's make this <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">example serverless application</a> "highly available". 👍</strong></p>
-
-<p>The application will be deployed to two different IBM Cloud regions (London and Dallas). Separate database instances will be provisioned in each region. Applications will use their regional database instance but share global state via replication.</p>
-
-<p>{% img /images/ha-serverless-apps-todo/architecture.png %}</p>
-
-<h2>deploy serverless app to multiple regions</h2>
-
-<p>This Github <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">repo</a> has an <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis/blob/master/deploy.sh">automatic deployment script</a> to deploy the serverless application (using <code>wskdeploy</code>) and application services (using <code>terraform</code>).</p>
-
-<p><strong><em>Install the prerequisites listed <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis#code-and-tools">here</a> before proceeding with these instructions.</em></strong></p>
-
-<h3>download example application</h3>
-
-<ul>
-<li>Clone the Git repository to a local directory.</li>
-</ul>
-
-
-<p><code>
-git clone https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis
-</code></p>
-
-<ul>
-<li>Enter the source code directory.</li>
-</ul>
-
-
-<p><code>
-cd ibm-cloud-functions-refarch-serverless-apis
-</code></p>
-
-<h3>create IAM key for serverless app</h3>
-
-<p><em>Have you already signed up for an <a href="https://cloud.ibm.com/registration">IBM Cloud account</a> and <a href="https://cloud.ibm.com/docs/cli/reference/ibmcloud/download_cli.html#install_use">installed the CLI</a>? If not, please do that before proceeding.</em></p>
-
-<ul>
-<li>Create an IAM key which will be used to deploy the serverless application.</li>
-</ul>
-
-
-<p><code>
-ibmcloud iam api-key-create serverless_api --file serverless_api.apikey
-</code></p>
-
-<h3>configure deployment variables</h3>
-
-<ul>
-<li>Create the <code>local.env</code> file in the current directory will the following contents.</li>
-</ul>
-
-
-<p><code>
-IBMCLOUD_API_KEY=&lt;IAM_API_KEY&gt;
-IBMCLOUD_ORG=&lt;YOUR_ORG&gt;
-IBMCLOUD_SPACE=&lt;REGION_SPACE&gt;
-IBMCLOUD_REGION=
-PROVISION_INFRASTRUCTURE=true
-API_USE_APPID=false
-</code></p>
-
-<ul>
-<li>Replace the <code>&lt;IAM_API_KEY&gt;</code> value with the <code>apikey</code> value from the <code>serverless_api.apikey</code> file.</li>
-<li>Replace the <code>&lt;IBMCLOUD_ORG&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud organisation</a>.</li>
-<li>Replace the <code>&lt;IBMCLOUD_SPACE&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud space</a>.</li>
-</ul>
-
-
-<p>The <code>PROVISION_INFRASTRUCTURE</code> parameter makes the deployment script automatically provision all application resources using Terraform.</p>
-
-<p>Secured API endpoints are not required for this demonstration. Setting the <code>API_USE_APPID</code> parameter to <code>false</code> disables authentication on the endpoints and provisioning the AppID service.</p>
-
-<h3>deploy to london</h3>
-
-<ul>
-<li>Set the <code>IBMCLOUD_REGION</code> to <code>eu-gb</code> in the <code>local.env</code> file.</li>
-<li>Run the following command to deploy the application and provision all application resources.</li>
-</ul>
-
-
-<p><code>
-./deploy.sh --install
-</code></p>
-
-<p>If the deployment have succeed, the following message should be printed to the console.</p>
-
-<p><code>
-2019-01-08 10:51:51 All done.
-ok: APIs
-Action                                      Verb  API Name  URL
-/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;UK_APIGW_URL&gt;/todo
-...
-</code></p>
-
-<ul>
-<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the London region.</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/testing-app.gif %}</p>
-
-<h3>deploy to dallas</h3>
-
-<ul>
-<li><p><strong>Rename the <code>terraform.tfstate</code> file in the <code>infra</code> folder to <code>terraform.tfstate.london</code></strong></p></li>
-<li><p>Set the <code>IBMCLOUD_REGION</code> to <code>us-south</code> in the <code>local.env</code> file.</p></li>
-<li>Run the following command to deploy the application and provision all application resources.</li>
-</ul>
-
-
-<p><code>
-./deploy.sh --install
-</code></p>
-
-<p>If the deployment have succeed, the following message should be printed to the console.</p>
-
-<p><code>
-2019-01-08 10:51:51 All done.
-ok: APIs
-Action                                      Verb  API Name  URL
-/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;US_APIGW_URL&gt;/todo
-...
-</code></p>
-
-<ul>
-<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the Dallas region.</li>
-</ul>
-
-
-<h2>configure cloudant cross-region replication</h2>
-
-<p>There are now multiple copies of the same serverless application in different regions. Each region has an independent instance of Cloudant provisioned.</p>
-
-<p><a href="https://console.bluemix.net/docs/services/Cloudant/api/replication.html">Cloudant replication</a> is a one-way synchronisation from a source to a destination database. To set up a <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">bi-directional data synchronisation</a>, two different replications will need to be configured.</p>
-
-<h3>create api keys for replication access</h3>
-
-<p>Before configuring replication between the regional databases, API keys need to be created to allow remote access on both hosts. API keys need to be created per regional instance.</p>
-
-<ul>
-<li>From the <a href="https://cloud.ibm.com/resources">IBM Cloud Resource List</a>, find the cloudant instances provisioned in London and Dallas.</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/resource-list.png %}</p>
-
-<ul>
-<li>Open the Cloudant Dashboard for each service instance.</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif %}</p>
-
-<p>Follow these instructions on both hosts to generate API keys for replication with the correct permissions.</p>
-
-<ul>
-<li>Click the "Databases" icon to show all the databases on this instance.</li>
-<li>Click the 🔒 icon in the "todos" database row in the table to open the permissions page.</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/databases-list.png %}</p>
-
-<p><em>Can't find the "todos" database in the Cloudant dashboard? Make sure you interact with the TODO backend from the <a href="https://www.todobackend.com/client/index.html">front-end application</a>. This will automatically create the database if it doesn't exist.</em></p>
-
-<ul>
-<li>Click "Generate API Key" on the permissions page.</li>
-<li>Make a note of the key identifier and password.</li>
-<li>Set the <code>_reader_</code>, <code>_writer</code> and <code>_replicator</code> permissions for the newly created key.</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/db-api-key.png %}</p>
-
-<h3>set up cross-region replication</h3>
-
-<p>Replication jobs need to be configured on both database hosts. These can be created from the Cloudant dashboard. <strong>Repeat these instructions on both hosts.</strong></p>
-
-<ul>
-<li>Open the Cloudant Dashboard for each service instance.</li>
-<li>Click the "Replication" icon from the panel menu.</li>
-<li>Click the "New Replication" button.</li>
-<li>Set the following "Source" values in the "Job configuration" panel.
-
-<ul>
-<li>Type: <em>"Local Database"</em></li>
-<li>Name: <em>"todos"</em></li>
-<li>Authentication: <em>"Cloudant username or API Key"</em></li>
-<li>Fill in the API key and password for this local database host in the input fields.</li>
-</ul>
-</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/task-source.png %}</p>
-
-<ul>
-<li>Set the following "Target" values in the "Job configuration" panel.
-
-<ul>
-<li>Type: <em>"Existing Remote Database"</em></li>
-<li>Name: <em>"https://<REMOTE_CLOUDANT_HOST>/todos"</em></li>
-<li>Authentication: <em>"Cloudant username or API Key"</em></li>
-<li>Fill in the API key and password for the remote database host in the input fields.</li>
-</ul>
-</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/task-target.png %}</p>
-
-<p><em>Wondering what the REMOTE_CLOUDANT_HOST is? Use hostname from the Cloudant dashboard, e.g. XXXX-bluemix.cloudant.com</em></p>
-
-<ul>
-<li>Set the following "Options" values in the "Job configuration" panel.
-
-<ul>
-<li>Replication type: <em>"Continuous"</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/task-options.png %}</p>
-
-<ul>
-<li>Click "Start Replication"</li>
-<li>Verify the replication table shows the new replication task state as "<em>Running</em>". 👍</li>
-</ul>
-
-
-<p>{% img /images/ha-serverless-apps-todo/replication-jobs-table.png %}</p>
-
-<h2>test it out!</h2>
-
-<p>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the APIGW URLs for each region simultaneously. Interactions with the todo list in one region should automatically propagate to the other region.</p>
-
-<p>{% img /images/ha-serverless-apps-todo/todo-app.gif %}</p>
-
-<p>The "Active Tasks" panel on the Cloudant Dashboard shows the documents replicated between instances and pending changes. If there are errors synchronising changes to the replication target, the host uses exponential backoff to re-try the replication tasks.</p>
-
-<p><a href="https://console.bluemix.net/docs/services/Cloudant/guides/conflicts.html#finding-conflicts">Conflicts</a> between document changes are handled using CouchDB's <a href="http://guide.couchdb.org/draft/conflicts.html">conflict mechanism</a>. Applications are responsible for detecting and resolving document conflicts in the front-end.</p>
-
-<h2>conclusion</h2>
-
-<p>Running the same serverless application in multiple regions, using the GLB to proxy traffic, allows applications to manage regional outages. But what if all the application instances rely on the same database service? The "single point of failure" has shifted from the application runtime to the database host. 👎</p>
-
-<p>Provisioning independent databases in each application regions is one solution. Applications use their regional database instance and are protected from issues in other regions. This strategy relies on database changes being synchronised between instances to keep the application state consistent. 👍</p>
-
-<p>IBM Cloudant has a built-in replication service to synchronised changes between source and host databases. Setting up bi-directional replication tasks between all instances enables a  "multi-master" replication strategy. This allows applications to access any database instance and have the same state available globally. 🕺🕺🕺</p>
 ]]></content>
   </entry>
   

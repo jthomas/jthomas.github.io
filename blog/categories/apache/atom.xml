@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: apache | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/apache/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-04-15T11:53:59+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/"/>
+    <updated>2019-04-10T15:00:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless</id>
+    <content type="html"><![CDATA[<p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p><em>Automating this process has the following benefits...</em></p>
+
+<ul>
+<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
+<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
+<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
+</ul>
+
+
+<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
+
+<h2>background</h2>
+
+<h3>apache software foundation</h3>
+
+<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>...</p>
+
+<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF's official release infrastructure.</p>
+
+<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
+
+<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
+
+<ul>
+<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
+<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
+<li><em>All source files have license headers.</em></li>
+<li><em>No compiled archives bundled in source archives.</em></li>
+</ul>
+
+
+<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
+
+<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
+
+<h3>apache openwhisk releases</h3>
+
+<p>As a committer and PMC member on the Apache OpenWhisk project, I'm eligible to vote on new releases.</p>
+
+<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
+
+<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
+
+<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
+
+<h1>apache openwhisk release verifier</h1>
+
+<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
+
+<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
+
+<p><img src="/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
+
+<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
+
+<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
+
+<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
+
+<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
+
+<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
+
+<h3>available release candidates</h3>
+
+<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
+
+<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"versions": [
+    "apache-openwhisk-0.11.0-incubating-rc1",
+    "apache-openwhisk-0.11.0-incubating-rc2",
+    "apache-openwhisk-1.13.0-incubating-rc1",
+    "apache-openwhisk-1.13.0-incubating-rc2",
+    "apache-openwhisk-2.0.0-incubating-rc2",
+    "apache-openwhisk-3.19.0-incubating-rc1"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release candidate version info</h3>
+
+<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
+
+<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
+HTTP/1.1 200 OK
+...</p>
+
+<p>{</p>
+
+<pre><code>"files": [
+    "openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release verification</h3>
+
+<p>Having selected a release candidate version, clicking the "<em>Validate</em>" button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
+
+<p><em>This serverless function will carry out the following verification steps...</em></p>
+
+<h4>checking download links</h4>
+
+<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
+
+<h4>checking SHA512 hash values</h4>
+
+<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
+
+<p><code>sh
+openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
+3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
+ B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
+</code></p>
+
+<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
+
+<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
+
+<p>```javascript
+const hash = async (file_stream, hash_file, name) => {
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>const sha512 = parse_hash_from_file(hash_file)
+
+const hmac = crypto.createHash('sha512')
+file_stream.pipe(hmac)
+
+hmac.on('readable', () =&gt; {
+  const stream_hash = hmac.read().toString('hex')
+  const valid = stream_hash === sha512.signature
+  logger.log(`file (${name}) calculated hash: ${stream_hash}`)
+  logger.log(`file (${name}) hash from file:  ${sha512.signature}`)
+  resolve({valid})
+})
+
+hmac.on('error', err =&gt; reject(err))
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<h4>validating PGP signatures</h4>
+
+<p><strong>Node.js' crypto library does not support validating PGP signatures.</strong></p>
+
+<p>I've used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
+
+<ul>
+<li><em>Message contents to check.</em></li>
+<li><em>PGP signature for the message.</em></li>
+<li><em>Public key for the private key used to sign the release.</em></li>
+</ul>
+
+
+<p>The "message" to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
+
+<p>```
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1</p>
+
+<p>iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP+wbtJ1ONZJQKjyDVx8uASMDQ
+...
+-----END PGP SIGNATURE-----
+```</p>
+
+<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
+
+<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
+
+<p>```javascript
+const signature = async (file_stream, signature, public_keys, name) => {
+  const options = {</p>
+
+<pre><code>message: openpgp.message.fromBinary(file_stream),
+signature: await openpgp.signature.readArmored(signature),
+publicKeys: (await openpgp.key.readArmored(public_keys)).keys
+</code></pre>
+
+<p>  }</p>
+
+<p>  const verified = await openpgp.verify(options)
+  await openpgp.stream.readToEnd(verified.data)
+  const valid = await verified.signatures[0].verified</p>
+
+<p>  return { valid }
+}
+```</p>
+
+<h4>scanning archive files</h4>
+
+<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
+
+<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
+
+<h3>capturing validation logs</h3>
+
+<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
+
+<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
+
+<h3>showing results</h3>
+
+<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
+
+<p><img src="/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
+
+<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
+
+<p><img src="/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
+
+<h2>other tools</h2>
+
+<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
+
+<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
+
+<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
+
+<h2>conclusion</h2>
+
+<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
+
+<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a "better" PMC member.</p>
+
+<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I've also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
+
+<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
+]]></content>
+  </entry>
+  
+</feed>

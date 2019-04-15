@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-02-28T11:21:27+00:00</updated>
+  <updated>2019-04-15T11:53:59+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,19 +14,278 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/"/>
+    <updated>2019-04-10T15:00:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless</id>
+    <content type="html"><![CDATA[<p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p><em>Automating this process has the following benefits...</em></p>
+
+<ul>
+<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
+<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
+<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
+</ul>
+
+
+<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
+
+<h2>background</h2>
+
+<h3>apache software foundation</h3>
+
+<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>...</p>
+
+<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF's official release infrastructure.</p>
+
+<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
+
+<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
+
+<ul>
+<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
+<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
+<li><em>All source files have license headers.</em></li>
+<li><em>No compiled archives bundled in source archives.</em></li>
+</ul>
+
+
+<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
+
+<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
+
+<h3>apache openwhisk releases</h3>
+
+<p>As a committer and PMC member on the Apache OpenWhisk project, I'm eligible to vote on new releases.</p>
+
+<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
+
+<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
+
+<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
+
+<h1>apache openwhisk release verifier</h1>
+
+<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
+
+<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
+
+<p><img src="/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
+
+<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
+
+<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
+
+<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
+
+<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
+
+<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
+
+<h3>available release candidates</h3>
+
+<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
+
+<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"versions": [
+    "apache-openwhisk-0.11.0-incubating-rc1",
+    "apache-openwhisk-0.11.0-incubating-rc2",
+    "apache-openwhisk-1.13.0-incubating-rc1",
+    "apache-openwhisk-1.13.0-incubating-rc2",
+    "apache-openwhisk-2.0.0-incubating-rc2",
+    "apache-openwhisk-3.19.0-incubating-rc1"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release candidate version info</h3>
+
+<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
+
+<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
+HTTP/1.1 200 OK
+...</p>
+
+<p>{</p>
+
+<pre><code>"files": [
+    "openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release verification</h3>
+
+<p>Having selected a release candidate version, clicking the "<em>Validate</em>" button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
+
+<p><em>This serverless function will carry out the following verification steps...</em></p>
+
+<h4>checking download links</h4>
+
+<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
+
+<h4>checking SHA512 hash values</h4>
+
+<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
+
+<p><code>sh
+openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
+3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
+ B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
+</code></p>
+
+<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
+
+<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
+
+<p>```javascript
+const hash = async (file_stream, hash_file, name) => {
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>const sha512 = parse_hash_from_file(hash_file)
+
+const hmac = crypto.createHash('sha512')
+file_stream.pipe(hmac)
+
+hmac.on('readable', () =&gt; {
+  const stream_hash = hmac.read().toString('hex')
+  const valid = stream_hash === sha512.signature
+  logger.log(`file (${name}) calculated hash: ${stream_hash}`)
+  logger.log(`file (${name}) hash from file:  ${sha512.signature}`)
+  resolve({valid})
+})
+
+hmac.on('error', err =&gt; reject(err))
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<h4>validating PGP signatures</h4>
+
+<p><strong>Node.js' crypto library does not support validating PGP signatures.</strong></p>
+
+<p>I've used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
+
+<ul>
+<li><em>Message contents to check.</em></li>
+<li><em>PGP signature for the message.</em></li>
+<li><em>Public key for the private key used to sign the release.</em></li>
+</ul>
+
+
+<p>The "message" to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
+
+<p>```
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1</p>
+
+<p>iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP+wbtJ1ONZJQKjyDVx8uASMDQ
+...
+-----END PGP SIGNATURE-----
+```</p>
+
+<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
+
+<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
+
+<p>```javascript
+const signature = async (file_stream, signature, public_keys, name) => {
+  const options = {</p>
+
+<pre><code>message: openpgp.message.fromBinary(file_stream),
+signature: await openpgp.signature.readArmored(signature),
+publicKeys: (await openpgp.key.readArmored(public_keys)).keys
+</code></pre>
+
+<p>  }</p>
+
+<p>  const verified = await openpgp.verify(options)
+  await openpgp.stream.readToEnd(verified.data)
+  const valid = await verified.signatures[0].verified</p>
+
+<p>  return { valid }
+}
+```</p>
+
+<h4>scanning archive files</h4>
+
+<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
+
+<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
+
+<h3>capturing validation logs</h3>
+
+<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
+
+<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
+
+<h3>showing results</h3>
+
+<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
+
+<p><img src="/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
+
+<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
+
+<p><img src="/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
+
+<h2>other tools</h2>
+
+<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
+
+<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
+
+<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
+
+<h2>conclusion</h2>
+
+<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
+
+<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a "better" PMC member.</p>
+
+<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I've also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
+
+<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[OpenWhisk Web Action Errors With Sequences]]></title>
     <link href="http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/"/>
     <updated>2019-02-27T10:00:00+00:00</updated>
     <id>http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences</id>
     <content type="html"><![CDATA[<p>This week, I came across an interesting problem when building HTTP APIs on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</p>
 
-<p>{% blockquote  %}
-How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?
-{% endblockquote %}</p>
+<p><blockquote><p>How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?</p></blockquote></p>
 
 <p>This came from wanting to add custom <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication">HTTP authentication</a> to existing Web Actions. I had decided to enhance existing Web Actions with authentication using action sequences. This would combine a new action for authentication validation with the existing API route handlers.</p>
 
-<p>{% img /images/sequences-and-web-actions/outline.png  %}</p>
+<p><img src="/images/sequences-and-web-actions/outline.png" title="" ></p>
 
 <p>When the HTTP authentication is valid, the authentication action becomes a "<a href="https://en.wikipedia.org/wiki/NOP_(code)">no-op</a>", which passes along the HTTP request to the route handler action to process as normal.</p>
 
@@ -34,7 +293,7 @@ How can Apache OpenWhisk Web Actions, implemented using action sequences, handle
 
 <p>The authentication action needs to stop request processing and return a <a href="https://httpstatuses.com/401">HTTP 401</a> response immediately.</p>
 
-<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
+<p><img src="/images/sequences-and-web-actions/options.png" title="" ></p>
 
 <p><em>Does Apache OpenWhisk even support this?</em></p>
 
@@ -138,7 +397,7 @@ const check_auth = (params) => {
 
 <p>The  <code>check_auth</code> action needs to return a HTTP 401 response immediately, rather than proceeding to the  <code>route_handler</code> action.</p>
 
-<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
+<p><img src="/images/sequences-and-web-actions/options.png" title="" ></p>
 
 <h3>handling errors - synchronous results</h3>
 
@@ -298,15 +557,15 @@ wsk trigger create periodic \
 
 <p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed provider</a> uses a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">public action</a> to handle the lifecycle events from the <code>wsk</code> CLI.</p>
 
-<p>{% img /images/pluggable-providers/feeds-overview.png  %}</p>
+<p><img src="/images/pluggable-providers/feeds-overview.png" title="" ></p>
 
 <p>This <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">action</a> just proxies the incoming requests to a separate <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changesWebAction.js">web actio</a>n. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">web action</a> implements the logic to handle the trigger lifecycle event. The web action uses a CouchDB database used to store registered triggers. Based upon the lifecycle event details, the web action updates the database document for that trigger.</p>
 
-<p>{% img /images/pluggable-providers/feeds-provider.png  %}</p>
+<p><img src="/images/pluggable-providers/feeds-provider.png" title="" ></p>
 
 <p>The feed provider also runs a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/tree/master/provider">seperate Docker container</a>, which handles listening to CouchDB change feeds from user-provided credentials. It uses the changes feed from the trigger management database, modified from the web action, to listen for triggers being added, removed, disabled or re-enabled.</p>
 
-<p>{% img /images/pluggable-providers/feeds-fire-trigger.png  %}</p>
+<p><img src="/images/pluggable-providers/feeds-fire-trigger.png" title="" ></p>
 
 <p>When database change events <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L78">occur</a>, the container <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L66-L76">fires triggers</a> on the platform with the event details.</p>
 
@@ -320,7 +579,7 @@ wsk trigger create periodic \
 
 <p>This generic event provider would handle all the trigger management logic, which isn't specific to individual event sources. The event source plugin would manage connecting to external event sources and then firing triggers as event occurred. Event source plugins would implement a standard interface and be registered dynamically during startup.</p>
 
-<p>{% img /images/pluggable-providers/generic-provider.png  %}</p>
+<p><img src="/images/pluggable-providers/generic-provider.png" title="" ></p>
 
 <h3>advantages</h3>
 
@@ -732,225 +991,6 @@ wsk action invoke capitialize -b -r -p message "this is a sentence"
 <p>If application source files and external libraries result in JAR files larger than this limit, Apache OpenWhisk's support for custom Docker runtimes provide a solution for running large Java applications on the platform.</p>
 
 <p>By building a custom Java runtime, extra libraries can be pre-installed in the runtime. These dependencies do not need to be included in the application JAR file, which reduces the file size to under the action size limit. 👍</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Loosely-coupled Serverless Functions With Apache Openwhisk]]></title>
-    <link href="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/"/>
-    <updated>2019-01-18T15:10:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk</id>
-    <content type="html"><![CDATA[<p>Just like software engineering, <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">best practices for serverless applications</a> advise keeping functions small and focused on a single task, aka "<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">do one thing and do it well</a>". Small single-purpose functions are easier to develop, test and debug. 👍</p>
-
-<p><strong>But what happens when you need execute multiple asynchronous tasks (implemented as separate functions) from an incoming event, like an API request?</strong> 🤔</p>
-
-<h2>Functions Calling Functions?</h2>
-
-<p>Functions can invoke other functions directly, using asynchronous calls through the client SDK. This works at the cost of introducing <a href="https://en.wikipedia.org/wiki/Coupling_%28computer_programming%29">tighter coupling</a> between functions, which is generally avoided in software engineering! Disadvantages of this approach include...</p>
-
-<ul>
-<li><em>Functions which call other functions can be more difficult to test. Test cases needs to mock out the client SDK to remove side-effects during unit or integration tests.</em></li>
-<li><em>It can lead to repetitive code if you want to fire multiple tasks with the same event. Each invocation needs to manually handle error conditions and re-tries on network or other issues, which complicates the business logic.</em></li>
-<li><em>Modifying the functions being invoked cannot be changed dynamically. The function doing the invoking has to be re-deployed with updated code.</em></li>
-</ul>
-
-
-<p><a href="https://twitter.com/PaulDJohnston">Some people</a> have even labelled "<em>functions calling functions</em>" an <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">anti-pattern</a> in serverless development! 😱</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Most common Serverless mistake?<br><br>Functions calling other functions<br><br>Why do people make this mistake?<br><br>Because people assume they should build functions like microservices and then use them in a similar way.<br><br>Causes no end of problems</p>&mdash; Serverless / Green Data Advocate (@PaulDJohnston) <a href="https://twitter.com/PaulDJohnston/status/1085106548270088193?ref_src=twsrc%5Etfw">January 15, 2019</a></blockquote>
-
-
-<p><strong>Hmmm... so what should we do?</strong></p>
-
-<p>Apache OpenWhisk has an awesome feature to help with this problem, triggers and rules! 👏</p>
-
-<h2>OpenWhisk Triggers &amp; Rules</h2>
-
-<p>Triggers and Rules in OpenWhisk are similar to the <a href="https://en.wikipedia.org/wiki/Observer_pattern">Observer pattern</a> from software engineering.</p>
-
-<p>Users can fire "events" in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to "subscribe" actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple "listeners" to the same trigger events. Event senders are decoupled from event receivers.</p>
-
-<p>{% img /images/loose-coupling-openwhisk/t-r-a.png %}</p>
-
-<p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
-
-<p><strong>But triggers can be fired manually from actions to provide custom event streams!</strong> 🙌</p>
-
-<p>```javascript
-const openwhisk = require('openwhisk')
-const params = {msg: 'event parameters'}</p>
-
-<p>// replace code like this...
-const result = await ow.actions.invoke({name: "some-action", params})</p>
-
-<p>// ...with this
-const result = await ow.triggers.invoke({name: "some-trigger", params})
-```</p>
-
-<p>This allows applications to move towards an <a href="https://en.wikipedia.org/wiki/Event-driven_architecture">event-driven architecture</a> and promotes loose-coupling between functions with all the associated benefits for testing, deployment and scalability. 👌</p>
-
-<h3>creating triggers</h3>
-
-<p>Triggers are managed through the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. They can be created, deleted, retrieved and fired using  HTTP requests. Users normally interact with triggers through the <a href="https://github.com/apache/incubator-openwhisk-cli">CLI</a> or <a href="https://github.com/apache/incubator-openwhisk-client-js/">platform SDKs</a>.</p>
-
-<p>Triggers can be created using the following CLI command.</p>
-
-<p><code>
-wsk trigger create &lt;TRIGGER_NAME&gt;
-</code></p>
-
-<h3>default parameters</h3>
-
-<p>Triggers support <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/parameters.md#setting-default-parameters-on-an-action">default parameters</a> like actions. Default parameters are stored in the platform and included in all trigger events. If the event object includes parameters with the same key, default parameter values are ignored.</p>
-
-<p><code>
-wsk trigger create &lt;TRIGGER_NAME&gt; -p &lt;PARAM&gt; &lt;PARAM_VALUE&gt; -p &lt;PARAM_2&gt; &lt;PARAM_VALUE&gt; ...
-</code></p>
-
-<h3>binding triggers to actions with rules</h3>
-
-<p>Rules bind triggers to actions. When triggers are fired, all actions connected via rules are invoked with the trigger event. Multiple rules can refer to the same trigger supporting multiple listeners to the same event.</p>
-
-<p>Rules can also be created using the following CLI command.</p>
-
-<p><code>
-wsk rule create RULE_NAME TRIGGER_NAME ACTION_NAME
-</code></p>
-
-<p>Tools like <a href="https://github.com/serverless/serverless-openwhisk">The Serverless Framework</a> and <a href="https://github.com/apache/incubator-openwhisk-wskdeploy">wskdeploy</a> allow users to configure triggers and rules declaratively through YAML configuration files.</p>
-
-<h3>firing triggers</h3>
-
-<p>The JS SDK can be used to <a href="https://github.com/apache/incubator-openwhisk-client-js#fire-trigger">fire triggers programatically</a> from applications.</p>
-
-<p><code>javascript
-const openwhisk = require('openwhisk')
-const name = 'sample-trigger'
-const params = {msg: 'event parameters'}
-const result = ow.triggers.invoke({name, params})
-</code></p>
-
-<p>CLI commands (<code>wsk trigger fire</code>) can fire triggers manually with event parameters for testing.</p>
-
-<p><code>
-wsk trigger fire sample-trigger -p msg "event parameters"
-</code></p>
-
-<h3>activation records for triggers</h3>
-
-<p>Activation records are created for trigger events. These activation records contain event parameters, rules fired, activations ids and invocation status for each action invoked. This is useful for debugging trigger events when issues are occurring.</p>
-
-<p><code>
-$ wsk trigger fire sample-trigger -p hello world
-ok: triggered /_/sample-trigger with id &lt;ACTIVATION_ID&gt;
-$ wsk activation get &lt;ACTIVATION_ID&gt;
-ok: got activation &lt;ACTIVATION_ID&gt;
-{
- ...
-}
-</code></p>
-
-<p>The <code>response.result</code> property in the activation record contains the fired trigger event (combining default and event parameter values).</p>
-
-<p>Rules fired by the trigger are recorded in activation records as the JSON values under the <code>logs</code> parameter.</p>
-
-<p><code>json
-{
-  "statusCode": 0,
-  "success": true,
-  "activationId": "&lt;ACTION_ACTIVATION_ID&gt;",
-  "rule": "&lt;RULE_NAME&gt;",
-  "action": "&lt;ACTION_NAME&gt;"
-}
-</code></p>
-
-<p><em>Activation records are only generated when triggers have enabled rules with valid actions attached</em></p>
-
-<h2>Example - WC Goal Bot</h2>
-
-<p>This is great in theory but what about in practice?</p>
-
-<p><a href="https://github.com/jthomas/goalbot">Goal Bot</a> was a small serverless application I built in 2018 for the World Cup. It was a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> which tweeted out all goals scored in real-time. The application used the  "actions connected via triggers events" architecture pattern. This made development and testing easier and faster.</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
-
-
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p>This function has two functions <code>goals</code> and <code>twitter</code>.</p>
-
-<p><code>goals</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L11-L16">responsible</a> for detecting new goals scored using an external API. When invoked, it would retrieve all goals currently scored in the World Cup. Comparing the API response to a previous cached version calculated new goals scored. This function was connected to the alarm event source to run once a minute.</p>
-
-<p><code>twitter</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L17-L22">responsible</a> for sending tweets from the @WC_Goals account. Twitter's API was used to create  goal tweets constructed from the event parameters.</p>
-
-<p><strong>Goal events detected in the <code>goals</code> function need to be used to invoke the <code>twitter</code> function.</strong></p>
-
-<p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
-
-<p>{% img /images/loose-coupling-openwhisk/goalbot.png %}</p>
-
-<p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits...</p>
-
-<ul>
-<li><p>The <code>goals</code> function could be invoked in testing without tweets being sent. By disabling the rule binding the <code>twitter</code> function to the trigger, the goals function can fire events without causing side-effects.</p></li>
-<li><p>Compared to having a "mono-function" combining both tasks, splitting tasks into functions means the <code>twitter</code> function can be tested with manual events, rather than having to manipulate the database and stub API responses to generate the correct test data.</p></li>
-<li><p>It would also be easy to extend this architecture with additional notification services, like slack bots. New notification services could be attached to the same trigger source with an additional rule. This would not require any changes to the <code>goals</code> or <code>twitter</code> functions.</p></li>
-</ul>
-
-
-<h2>Triggers versus Queues</h2>
-
-<p>Another common solution to de-coupling functions in serverless architectures is using <a href="https://theburningmonk.com/2018/04/what-is-the-best-event-source-for-doing-pub-sub-with-aws-lambda/">message queues</a>.</p>
-
-<p>Functions push events in external queues, rather than invoking triggers directly. Event sources are responsible for firing the registered functions with new messages. Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk-package-kafka">supports Kafka</a> as an event source which could be used with this approach.</p>
-
-<p><em>How does firing triggers directly compare to pushing events into an external queue (or other event source)?</em></p>
-
-<p>Both queues and triggers can be used to achieve the same goal ("<em>connect functions via events</em>") but have different semantics. It is important to understand the benefits of both to choose the most appropriate architecture for your application.</p>
-
-<h3>benefits of using triggers against queues</h3>
-
-<p>Triggers are built into the Apache OpenWhisk platform. There is no configuration needed to use them. External event sources like queues need to be provisioned and managed as additional cloud services.</p>
-
-<p>Trigger invocations are free in IBM Cloud Functions. IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">charges only</a> for execution time and memory used in functions. Queues will incur additional usage costs based on the service's pricing plan.</p>
-
-<h3>disadvantages of using triggers against queues</h3>
-
-<p>Triggers are not queues. Triggers are not queues. Triggers are not queues. 💯</p>
-
-<p>If a trigger is fired and no actions are connected, the event is lost. Trigger events are not persisted until listeners are attached. <strong>If you need event persistence, message priorities, disaster recovery and other advanced features provided by message queues, use a message queue!</strong></p>
-
-<p>Triggers are subject to <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_reference.html#openwhisk_syslimits">rate limiting</a> in Apache OpenWhisk. In IBM Cloud Functions, this defaults to 1000 concurrent invocations and 5000 total invocations per namespace per minute. These limits can be raised through a support ticket but there are practical limits to the maximum rates allowed. Queues have support for much higher throughput rates.</p>
-
-<p>External event providers are also responsible for handling the retries when triggers have been rate-limited due to excess events. Invoking triggers manually relies on the invoking function to handle this. Emulating retry behaviour from an event provider is impractical due to costs and limits on function duration.</p>
-
-<h2>Other hints and tips</h2>
-
-<p><strong><em>Want to invoke an action which fires triggers without setting off listeners?</em></strong></p>
-
-<p>Rules can be dynamically disabled without having to remove them. This can be used during integration testing or debugging issues in production.</p>
-
-<p><code>
-wsk rule disable RULE_NAME
-wsk rule enable RULE_NAME
-</code></p>
-
-<p><strong><em>Want to verify triggers are fired with correct events without mocking client libraries?</em></strong></p>
-
-<p>Trigger events are not logged unless there is at least one enabled rule. Create a new rule which binds the <code>/whisk.system/utils/echo</code> action to the trigger. This built-in function just returns input parameters as the function response. This means the activation records with trigger events will now be available.</p>
-
-<h2>conclusion</h2>
-
-<p>Building event-driven serverless applications from loosely-coupled functions has numerous benefits including development speed, improved testability, deployment velocity, lower costs and more.</p>
-
-<p>Decomposing "monolithic" apps into independent serverless functions often needs event handling functions to trigger off multiple backend operations, implemented in separate serverless functions. Developers unfamiliar with serverless often resort to direct function invocations.</p>
-
-<p>Whilst this works, it introduces tight coupling between those functions, which is normally avoided in software engineering. This approach has even been highlighted as a "serverless" anti-pattern.</p>
-
-<p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
-
-<p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
 ]]></content>
   </entry>
   

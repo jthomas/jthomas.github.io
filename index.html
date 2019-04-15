@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="This week, I came across an interesting problem when building HTTP APIs on IBM Cloud Functions. How can Apache OpenWhisk Web Actions, implemented &hellip;">
+  <meta name="description" content="This blog post explains how I used serverless functions to automate release candidate verification for the Apache OpenWhisk project. Automating this &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,346 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-04-10T15:00:00+01:00" pubdate data-updated="true">Apr 10<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p><em>Automating this process has the following benefits&#8230;</em></p>
+
+<ul>
+<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
+<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
+<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
+</ul>
+
+
+<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
+
+<h2>background</h2>
+
+<h3>apache software foundation</h3>
+
+<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>&#8230;</p>
+
+<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF&#8217;s official release infrastructure.</p>
+
+<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
+
+<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
+
+<ul>
+<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
+<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
+<li><em>All source files have license headers.</em></li>
+<li><em>No compiled archives bundled in source archives.</em></li>
+</ul>
+
+
+<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
+
+<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
+
+<h3>apache openwhisk releases</h3>
+
+<p>As a committer and PMC member on the Apache OpenWhisk project, I&#8217;m eligible to vote on new releases.</p>
+
+<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
+
+<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
+
+<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
+
+<h1>apache openwhisk release verifier</h1>
+
+<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
+
+<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
+
+<p><img src="/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
+
+<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
+
+<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
+
+<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
+
+<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
+
+<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
+
+<h3>available release candidates</h3>
+
+<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
+
+<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http get https://apache-api.jamesthom.as/api/versions
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>...
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;versions&quot;</span>: <span class="o">[</span>
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-0.11.0-incubating-rc1&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-0.11.0-incubating-rc2&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-1.13.0-incubating-rc1&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-1.13.0-incubating-rc2&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-2.0.0-incubating-rc2&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-3.19.0-incubating-rc1&quot;</span>
+</span><span class='line'>    <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>release candidate version info</h3>
+
+<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
+
+<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>...
+</span><span class='line'>
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;files&quot;</span>: <span class="o">[</span>
+</span><span class='line'>        <span class="s2">&quot;openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz&quot;</span>
+</span><span class='line'>    <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>release verification</h3>
+
+<p>Having selected a release candidate version, clicking the &#8221;<em>Validate</em>&#8221; button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
+
+<p><em>This serverless function will carry out the following verification steps&#8230;</em></p>
+
+<h4>checking download links</h4>
+
+<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
+
+<h4>checking SHA512 hash values</h4>
+
+<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
+</span><span class='line'>3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
+</span><span class='line'> B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
+
+<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">hash</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file_stream</span><span class="p">,</span> <span class="nx">hash_file</span><span class="p">,</span> <span class="nx">name</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">sha512</span> <span class="o">=</span> <span class="nx">parse_hash_from_file</span><span class="p">(</span><span class="nx">hash_file</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">hmac</span> <span class="o">=</span> <span class="nx">crypto</span><span class="p">.</span><span class="nx">createHash</span><span class="p">(</span><span class="s1">&#39;sha512&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">file_stream</span><span class="p">.</span><span class="nx">pipe</span><span class="p">(</span><span class="nx">hmac</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">hmac</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;readable&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>      <span class="kr">const</span> <span class="nx">stream_hash</span> <span class="o">=</span> <span class="nx">hmac</span><span class="p">.</span><span class="nx">read</span><span class="p">().</span><span class="nx">toString</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>      <span class="kr">const</span> <span class="nx">valid</span> <span class="o">=</span> <span class="nx">stream_hash</span> <span class="o">===</span> <span class="nx">sha512</span><span class="p">.</span><span class="nx">signature</span>
+</span><span class='line'>      <span class="nx">logger</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">file</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">name</span><span class="p">})</span> <span class="nx">calculated</span> <span class="nx">hash</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">stream_hash</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>      <span class="nx">logger</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">file</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">name</span><span class="p">})</span> <span class="nx">hash</span> <span class="nx">from</span> <span class="nx">file</span><span class="o">:</span>  <span class="nx">$</span><span class="p">{</span><span class="nx">sha512</span><span class="p">.</span><span class="nx">signature</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>      <span class="nx">resolve</span><span class="p">({</span><span class="nx">valid</span><span class="p">})</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">hmac</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="nx">err</span> <span class="o">=&gt;</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">))</span>
+</span><span class='line'>  <span class="p">})</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>validating PGP signatures</h4>
+
+<p><strong>Node.js&#8217; crypto library does not support validating PGP signatures.</strong></p>
+
+<p>I&#8217;ve used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
+
+<ul>
+<li><em>Message contents to check.</em></li>
+<li><em>PGP signature for the message.</em></li>
+<li><em>Public key for the private key used to sign the release.</em></li>
+</ul>
+
+
+<p>The &#8220;message&#8221; to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="o">-----</span><span class="nx">BEGIN</span> <span class="nx">PGP</span> <span class="nx">SIGNATURE</span><span class="o">-----</span>
+</span><span class='line'><span class="nx">Version</span><span class="o">:</span> <span class="nx">GnuPG</span> <span class="nx">v1</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP</span><span class="o">+</span><span class="nx">wbtJ1ONZJQKjyDVx8uASMDQ</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="o">-----</span><span class="nx">END</span> <span class="nx">PGP</span> <span class="nx">SIGNATURE</span><span class="o">-----</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
+
+<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">signature</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file_stream</span><span class="p">,</span> <span class="nx">signature</span><span class="p">,</span> <span class="nx">public_keys</span><span class="p">,</span> <span class="nx">name</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">message</span><span class="o">:</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">message</span><span class="p">.</span><span class="nx">fromBinary</span><span class="p">(</span><span class="nx">file_stream</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">signature</span><span class="o">:</span> <span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">signature</span><span class="p">.</span><span class="nx">readArmored</span><span class="p">(</span><span class="nx">signature</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">publicKeys</span><span class="o">:</span> <span class="p">(</span><span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nx">readArmored</span><span class="p">(</span><span class="nx">public_keys</span><span class="p">)).</span><span class="nx">keys</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">verified</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">verify</span><span class="p">(</span><span class="nx">options</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">stream</span><span class="p">.</span><span class="nx">readToEnd</span><span class="p">(</span><span class="nx">verified</span><span class="p">.</span><span class="nx">data</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">valid</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">verified</span><span class="p">.</span><span class="nx">signatures</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">verified</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">valid</span> <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>scanning archive files</h4>
+
+<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
+
+<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
+
+<h3>capturing validation logs</h3>
+
+<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
+
+<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
+
+<h3>showing results</h3>
+
+<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
+
+<p><img src="/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
+
+<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
+
+<p><img src="/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
+
+<h2>other tools</h2>
+
+<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
+
+<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
+
+<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
+
+<h2>conclusion</h2>
+
+<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
+
+<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a &#8220;better&#8221; PMC member.</p>
+
+<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I&#8217;ve also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
+
+<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3021,333 +3361,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">Serverless Machine Learning With TensorFlow.js</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2018-08-13T12:16:00+01:00" pubdate data-updated="true">Aug 13<span>th</span>, 2018</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to use <a href="https://js.tensorflow.org/">TensorFlow.js</a> on Node.js to run <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d#file-script-js">visual recognition on images from the local filesystem</a>. TensorFlow.js is a JavaScript version of the open-source machine learning library from Google.</p>
-
-<p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
-
-<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
-
-<p>Sounds easy, right? It&#8217;s just a JavaScript library? So, zip it up and away we go&#8230; <strong><em>ahem</em></strong> 👊</p>
-
-<p><em>Converting the image classification script to run in a serverless environment had the following challenges&#8230;</em></p>
-
-<ul>
-<li><strong>TensorFlow.js libraries need to be available in the runtime.</strong></li>
-<li><strong>Native bindings for the library must be compiled against the platform architecture.</strong></li>
-<li><strong>Models files need to be loaded from the filesystem.</strong></li>
-</ul>
-
-
-<p>Some of these issues were more challenging than others to fix! Let&#8217;s start by looking at the details of each issue, before explaining how <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">Docker support</a> in Apache OpenWhisk can be used to resolve them all.</p>
-
-<h2>Challenges</h2>
-
-<h3>TensorFlow.js Libraries</h3>
-
-<p>TensorFlow.js libraries are not included in the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js runtimes</a> provided by the Apache OpenWhisk.</p>
-
-<p>External libraries <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">can be imported</a> into the runtime by deploying applications from a zip file. Custom <code>node_modules</code> folders included in the zip file will be extracted in the runtime. Zip files are limited to a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">maximum size of 48MB</a>.</p>
-
-<h4>Library Size</h4>
-
-<p>Running <code>npm install</code> for the TensorFlow.js libraries used revealed the first problem&#8230; the resulting <code>node_modules</code> directory was 175MB. 😱</p>
-
-<p>Looking at the contents of this folder, the <code>tfjs-node</code> module compiles a <a href="https://github.com/tensorflow/tfjs-node/tree/master/src">native shared library</a> (<code>libtensorflow.so</code>) that is 135M. This means no amount of JavaScript minification is going to get those external dependencies under the magic 48 MB limit. 👎</p>
-
-<h4>Native Dependencies</h4>
-
-<p>The <code>libtensorflow.so</code> native shared library must be compiled using the platform runtime. Running <code>npm install</code>  locally automatically compiles native dependencies against the host platform. Local environments may use different CPU architectures (Mac vs Linux) or link against shared libraries not available in the serverless runtime.</p>
-
-<h3>MobileNet Model Files</h3>
-
-<p>TensorFlow models files <a href="https://js.tensorflow.org/tutorials/model-save-load.html">need loading from the filesystem</a> in Node.js. Serverless runtimes do provide a temporary filesystem inside the runtime environment. Files from deployment zip files are automatically extracted into this environment before invocations. There is no external access to this filesystem outside the lifecycle of the serverless function.</p>
-
-<p>Models files for the MobileNet model were 16MB. If these files are included in the deployment package, it leaves 32MB for the rest of the application source code. Although the model files are small enough to include in the zip file, what about the TensorFlow.js libraries? Is this the end of the blog post? Not so fast&#8230;.</p>
-
-<p><strong>Apache OpenWhisk&#8217;s support for custom runtimes provides a simple solution to all these issues!</strong></p>
-
-<h2>Custom Runtimes</h2>
-
-<p>Apache OpenWhisk uses Docker containers as the runtime environments for serverless functions (actions). All platform runtime images are <a href="https://hub.docker.com/r/openwhisk/">published on Docker Hub</a>, allowing developers to start these environments locally.</p>
-
-<p>Developers can also <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">specify custom runtime images</a> when creating actions. These images must be publicly available on Docker Hub. Custom runtimes have to expose the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">same HTTP API</a> used by the platform for invoking actions.</p>
-
-<p>Using platform runtime images as <a href="https://docs.docker.com/glossary/?term=parent%20image">parent images</a> makes it simple to build custom runtimes. Users can run commands during the Docker build to install additional libraries and other dependencies. The parent image already contains source files with the HTTP API service handling platform requests.</p>
-
-<h3>TensorFlow.js Runtime</h3>
-
-<p>Here is the Docker build file for the Node.js action runtime with additional TensorFlow.js dependencies.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>FROM openwhisk/action-nodejs-v8:latest
-</span><span class='line'>
-</span><span class='line'>RUN npm install @tensorflow/tfjs @tensorflow-models/mobilenet @tensorflow/tfjs-node jpeg-js
-</span><span class='line'>
-</span><span class='line'>COPY mobilenet mobilenet</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>openwhisk/action-nodejs-v8:latest</code> is the Node.js action runtime image <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">published by OpenWhisk</a>.</p>
-
-<p>TensorFlow libraries and other dependencies are installed using <code>npm install</code> in the build process. Native dependencies for the <code>@tensorflow/tfjs-node</code> library are automatically compiled for the correct platform by installing during the build process.</p>
-
-<p>Since I&#8217;m building a new runtime, I&#8217;ve also added the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model files</a> to the image. Whilst not strictly necessary, removing them from the action zip file reduces deployment times.</p>
-
-<p><strong><em>Want to skip the next step? Use this image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/"><code>jamesthomas/action-nodejs-v8:tfjs</code></a> rather than building your own.</em></strong></p>
-
-<h3>Building The Runtime</h3>
-
-<p><em>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to download model files from the public storage bucket.</em></p>
-
-<ul>
-<li>Download a version of the MobileNet model and place all files in the <code>mobilenet</code> directory.</li>
-<li>Copy the Docker build file from above to a local file named <code>Dockerfile</code>.</li>
-<li>Run the Docker <a href="https://docs.docker.com/engine/reference/commandline/build/">build command</a> to generate a local image.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker build -t tfjs .
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag the local image</a> with a remote username and repository.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker tag tfjs &lt;USERNAME&gt;/action-nodejs-v8:tfjs
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Replace <code>&lt;USERNAME&gt;</code> with your Docker Hub username.</em></p>
-
-<ul>
-<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push the local image</a> to Docker Hub</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'> docker push &lt;USERNAME&gt;/action-nodejs-v8:tfjs
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once the image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/">is available</a> on Docker Hub, actions can be created using that runtime image. 😎</p>
-
-<h2>Example Code</h2>
-
-<p>This source code implements image classification as an OpenWhisk action. Image files are provided as a Base64 encoded string using the <code>image</code> property on the event parameters. Classification results are returned as the <code>results</code> property in the response.</p>
-
-<script src="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5.js"></script>
-
-
-<h3>Caching Loaded Models</h3>
-
-<p>Serverless platforms initialise runtime environments on-demand to handle invocations. Once a runtime environment has been created, it will be <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">re-used for further invocations</a> with some limits. This improves performance by removing the initialisation delay (&#8220;cold start&#8221;) from request processing.</p>
-
-<p>Applications can exploit this behaviour by using global variables to maintain state across requests. This is often use to <a href="https://blog.rowanudell.com/database-connections-in-lambda/">cache opened database connections</a> or store initialisation data loaded from external systems.</p>
-
-<p>I have used this pattern to <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L80-L82">cache the MobileNet model</a> used for classification. During cold invocations, the model is loaded from the filesystem and stored in a global variable. Warm invocations then use the existence of that global variable to skip the model loading process with further requests.</p>
-
-<p>Caching the model reduces the time (and therefore cost) for classifications on warm invocations.</p>
-
-<h3>Memory Leak</h3>
-
-<p>Running the Node.js script from blog post on IBM Cloud Functions was possible with minimal modifications. Unfortunately, performance testing revealed a memory leak in the handler function. 😢</p>
-
-<p><em>Reading more about <a href="https://js.tensorflow.org/tutorials/core-concepts.html">how TensorFlow.js works</a> on Node.js uncovered the issue&#8230;</em></p>
-
-<p>TensorFlow.js&#8217;s Node.js extensions use a native C++ library to execute the Tensors on a CPU or GPU engine. Memory allocated for Tensor objects in the native library is retained until the application explicitly releases it or the process exits. TensorFlow.js provides a <code>dispose</code> method on the individual objects to free allocated memory. There is also a <code>tf.tidy</code> method to automatically clean up all allocated objects within a frame.</p>
-
-<p>Reviewing the code, tensors were being created as <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L51-L59">model input from images</a> on each request. These objects were not disposed before returning from the request handler. This meant native memory grew unbounded. Adding an explicit <code>dispose</code> call to free these objects before returning <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L91">fixed the issue</a>.</p>
-
-<h3>Profiling &amp; Performance</h3>
-
-<p>Action code records memory usage and elapsed time at different stages in classification process.</p>
-
-<p>Recording <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L12-L20">memory usage</a> allows me to modify the maximum memory allocated to the function for optimal performance and cost. Node.js provides a <a href="https://nodejs.org/docs/v0.4.11/api/all.html#process.memoryUsage">standard library API</a> to retrieve memory usage for the current process. Logging these values allows me to inspect memory usage at different stages.</p>
-
-<p>Timing <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L71">different tasks</a> in the classification process, i.e. model loading, image classification, gives me an insight into how efficient classification is compared to other methods. Node.js has a <a href="https://nodejs.org/api/console.html#console_console_time_label">standard library API</a> for timers to record and print elapsed time to the console.</p>
-
-<h2>Demo</h2>
-
-<h3>Deploy Action</h3>
-
-<ul>
-<li>Run the following command with the <a href="https://console.bluemix.net/openwhisk/learn/cli">IBM Cloud CLI</a> to create the action.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Replace <code>&lt;IMAGE_NAME&gt;</code> with the public Docker Hub image identifier for the custom runtime. Use <code>jamesthomas/action-nodejs-v8:tfjs</code> if you haven&#8217;t built this manually.</em></p>
-
-<h3>Testing It Out</h3>
-
-<ul>
-<li>Download <a href="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG">this image</a> of a Panda from Wikipedia.</li>
-</ul>
-
-
-<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>wget http://bit.ly/2JYSal9 -O panda.jpg
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Invoke the action with the Base64 encoded image as an input parameter.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'> ibmcloud fn action invoke classify -r -p image <span class="k">$(</span>base64 panda.jpg<span class="k">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Returned JSON message contains classification probabilities. 🐼🐼🐼</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;results&quot;</span><span class="p">:</span>  <span class="p">[{</span>
-</span><span class='line'>    <span class="err">className:</span> <span class="err">&#39;giant</span> <span class="err">panda,</span> <span class="err">panda,</span> <span class="err">panda</span> <span class="err">bear,</span> <span class="err">coon</span> <span class="err">bear&#39;,</span>
-</span><span class='line'>    <span class="err">probability:</span> <span class="err">0.9993536472320557</span>
-</span><span class='line'>  <span class="p">}]</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Activation Details</h3>
-
-<ul>
-<li>Retrieve logging output for the last activation to show performance data.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>ibmcloud fn activation logs --last
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong><em>Profiling and memory usage details are logged to stdout</em></strong></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'>prediction <span class="k">function </span>called.
-</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>150.46 MB, <span class="nv">heapTotal</span><span class="o">=</span>32.83 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.29 MB, <span class="nv">external</span><span class="o">=</span>67.6 MB
-</span><span class='line'>loading image and model...
-</span><span class='line'>decodeImage: 74.233ms
-</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.05 MB, <span class="nv">external</span><span class="o">=</span>40.63 MB
-</span><span class='line'>imageByteArray: 5.676ms
-</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.05 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
-</span><span class='line'>imageToInput: 5.952ms
-</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>141.8 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>19.06 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
-</span><span class='line'>mn_model.classify: 274.805ms
-</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>149.83 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.57 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
-</span><span class='line'>classification results: <span class="o">[</span>...<span class="o">]</span>
-</span><span class='line'>main: 356.639ms
-</span><span class='line'>memory used: <span class="nv">rss</span><span class="o">=</span>144.37 MB, <span class="nv">heapTotal</span><span class="o">=</span>24.33 MB, <span class="nv">heapUsed</span><span class="o">=</span>20.58 MB, <span class="nv">external</span><span class="o">=</span>45.51 MB
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>main</code> is the total elapsed time for the action handler. <code>mn_model.classify</code> is the elapsed time for the image classification. Cold start requests print an extra log message with model loading time, <code>loadModel: 394.547ms</code>.</p>
-
-<h2>Performance Results</h2>
-
-<p>Invoking the <code>classify</code> action 1000 times for both cold and warm activations (using 256MB memory) generated the following performance results.</p>
-
-<h3>warm invocations</h3>
-
-<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
-
-<p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
-
-<h3>cold invocations</h3>
-
-<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
-
-<p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
-
-<p><em>One disadvantage of using custom runtime images in Apache OpenWhisk is the lack of <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">pre-warmed containers</a>. Pre-warming is used to reduce cold start times by starting runtime containers before they are needed. This is not supported for non-standard runtime images.</em></p>
-
-<h3>classification cost</h3>
-
-<p>IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">provides a free tier</a> of 400,000 GB/s per month. Each further second of execution is charged at $0.000017 per GB of memory allocated. Execution time is rounded up to the nearest 100ms.</p>
-
-<p>If all activations were warm, a user could execute <strong>more than 4,000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 600,000 further invocations would cost just over $1.</p>
-
-<p>If all activations were cold, a user could execute <strong>more than 1,2000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 180,000 further invocations would cost just over $1.</p>
-
-<h2>Conclusion</h2>
-
-<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
-
-<p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
-
-<p>Fortunately, Apache OpenWhisk&#8217;s custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -3363,6 +3376,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/">OpenWhisk Web Action Errors With Sequences</a>
       </li>
     
@@ -3376,10 +3393,6 @@
     
       <li class="post">
         <a href="/blog/2019/02/05/large-java-applications-on-openwhisk/">Large (Java) Applications on Apache OpenWhisk</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/01/25/provisioning-ibm-cloud-services-with-terraform/">Provisioning IBM Cloud Services With Terraform</a>
       </li>
     
   </ul>

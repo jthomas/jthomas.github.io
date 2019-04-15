@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-02-28T11:21:15+00:00</updated>
+  <updated>2019-04-15T11:53:59+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,319 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/"/>
+    <updated>2019-04-10T15:00:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless</id>
+    <content type="html"><![CDATA[<p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p><em>Automating this process has the following benefits&#8230;</em></p>
+
+<ul>
+<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
+<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
+<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
+</ul>
+
+
+<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
+
+<h2>background</h2>
+
+<h3>apache software foundation</h3>
+
+<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>&#8230;</p>
+
+<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF&#8217;s official release infrastructure.</p>
+
+<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
+
+<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
+
+<ul>
+<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
+<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
+<li><em>All source files have license headers.</em></li>
+<li><em>No compiled archives bundled in source archives.</em></li>
+</ul>
+
+
+<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
+
+<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
+
+<h3>apache openwhisk releases</h3>
+
+<p>As a committer and PMC member on the Apache OpenWhisk project, I&#8217;m eligible to vote on new releases.</p>
+
+<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
+
+<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
+
+<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
+
+<h1>apache openwhisk release verifier</h1>
+
+<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
+
+<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
+
+<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
+
+<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
+
+<h2>architecture</h2>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
+
+<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
+
+<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
+
+<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
+
+<h3>available release candidates</h3>
+
+<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
+
+<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http get https://apache-api.jamesthom.as/api/versions
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>...
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;versions&quot;</span>: <span class="o">[</span>
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-0.11.0-incubating-rc1&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-0.11.0-incubating-rc2&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-1.13.0-incubating-rc1&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-1.13.0-incubating-rc2&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-2.0.0-incubating-rc2&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;apache-openwhisk-3.19.0-incubating-rc1&quot;</span>
+</span><span class='line'>    <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>release candidate version info</h3>
+
+<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
+
+<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
+</span><span class='line'>HTTP/1.1 200 OK
+</span><span class='line'>...
+</span><span class='line'>
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;files&quot;</span>: <span class="o">[</span>
+</span><span class='line'>        <span class="s2">&quot;openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz&quot;</span>,
+</span><span class='line'>        <span class="s2">&quot;openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz&quot;</span>
+</span><span class='line'>    <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>release verification</h3>
+
+<p>Having selected a release candidate version, clicking the &#8221;<em>Validate</em>&#8221; button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
+
+<p><em>This serverless function will carry out the following verification steps&#8230;</em></p>
+
+<h4>checking download links</h4>
+
+<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
+
+<h4>checking SHA512 hash values</h4>
+
+<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
+</span><span class='line'>3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
+</span><span class='line'> B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
+
+<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">hash</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file_stream</span><span class="p">,</span> <span class="nx">hash_file</span><span class="p">,</span> <span class="nx">name</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">reject</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">sha512</span> <span class="o">=</span> <span class="nx">parse_hash_from_file</span><span class="p">(</span><span class="nx">hash_file</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">hmac</span> <span class="o">=</span> <span class="nx">crypto</span><span class="p">.</span><span class="nx">createHash</span><span class="p">(</span><span class="s1">&#39;sha512&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">file_stream</span><span class="p">.</span><span class="nx">pipe</span><span class="p">(</span><span class="nx">hmac</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">hmac</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;readable&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>      <span class="kr">const</span> <span class="nx">stream_hash</span> <span class="o">=</span> <span class="nx">hmac</span><span class="p">.</span><span class="nx">read</span><span class="p">().</span><span class="nx">toString</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>      <span class="kr">const</span> <span class="nx">valid</span> <span class="o">=</span> <span class="nx">stream_hash</span> <span class="o">===</span> <span class="nx">sha512</span><span class="p">.</span><span class="nx">signature</span>
+</span><span class='line'>      <span class="nx">logger</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">file</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">name</span><span class="p">})</span> <span class="nx">calculated</span> <span class="nx">hash</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">stream_hash</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>      <span class="nx">logger</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">file</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">name</span><span class="p">})</span> <span class="nx">hash</span> <span class="nx">from</span> <span class="nx">file</span><span class="o">:</span>  <span class="nx">$</span><span class="p">{</span><span class="nx">sha512</span><span class="p">.</span><span class="nx">signature</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>      <span class="nx">resolve</span><span class="p">({</span><span class="nx">valid</span><span class="p">})</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">hmac</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="nx">err</span> <span class="o">=&gt;</span> <span class="nx">reject</span><span class="p">(</span><span class="nx">err</span><span class="p">))</span>
+</span><span class='line'>  <span class="p">})</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>validating PGP signatures</h4>
+
+<p><strong>Node.js&#8217; crypto library does not support validating PGP signatures.</strong></p>
+
+<p>I&#8217;ve used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
+
+<ul>
+<li><em>Message contents to check.</em></li>
+<li><em>PGP signature for the message.</em></li>
+<li><em>Public key for the private key used to sign the release.</em></li>
+</ul>
+
+
+<p>The &#8220;message&#8221; to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="o">-----</span><span class="nx">BEGIN</span> <span class="nx">PGP</span> <span class="nx">SIGNATURE</span><span class="o">-----</span>
+</span><span class='line'><span class="nx">Version</span><span class="o">:</span> <span class="nx">GnuPG</span> <span class="nx">v1</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP</span><span class="o">+</span><span class="nx">wbtJ1ONZJQKjyDVx8uASMDQ</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="o">-----</span><span class="nx">END</span> <span class="nx">PGP</span> <span class="nx">SIGNATURE</span><span class="o">-----</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
+
+<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">signature</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file_stream</span><span class="p">,</span> <span class="nx">signature</span><span class="p">,</span> <span class="nx">public_keys</span><span class="p">,</span> <span class="nx">name</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">message</span><span class="o">:</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">message</span><span class="p">.</span><span class="nx">fromBinary</span><span class="p">(</span><span class="nx">file_stream</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">signature</span><span class="o">:</span> <span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">signature</span><span class="p">.</span><span class="nx">readArmored</span><span class="p">(</span><span class="nx">signature</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">publicKeys</span><span class="o">:</span> <span class="p">(</span><span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">key</span><span class="p">.</span><span class="nx">readArmored</span><span class="p">(</span><span class="nx">public_keys</span><span class="p">)).</span><span class="nx">keys</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">verified</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">verify</span><span class="p">(</span><span class="nx">options</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">await</span> <span class="nx">openpgp</span><span class="p">.</span><span class="nx">stream</span><span class="p">.</span><span class="nx">readToEnd</span><span class="p">(</span><span class="nx">verified</span><span class="p">.</span><span class="nx">data</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">valid</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">verified</span><span class="p">.</span><span class="nx">signatures</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">verified</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">valid</span> <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>scanning archive files</h4>
+
+<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
+
+<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
+
+<h3>capturing validation logs</h3>
+
+<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
+
+<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
+
+<h3>showing results</h3>
+
+<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
+
+<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
+
+<h2>other tools</h2>
+
+<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
+
+<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
+
+<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
+
+<h2>conclusion</h2>
+
+<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
+
+<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a &#8220;better&#8221; PMC member.</p>
+
+<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I&#8217;ve also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
+
+<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[OpenWhisk Web Action Errors With Sequences]]></title>
@@ -6508,746 +6821,6 @@
 <p>Using an open-source serverless platform means you can actually run the entire platform locally. Using a local instance during development improves deployment times, provides access to runtime environments and allows you to work offline.</p>
 
 <p>Apache OpenWhisk has numerous options for deploying the platform, including virtual machines, kubernetes or native containers. Whilst the platform is not the simplest to set-up manually, the devtools project bootstraps a pre-configured version by spinning up a local instance using Docker Compose. This is the easiest approach for most developers to have a local instance of the platform.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Visualising Serverless Metrics With Grafana Dashboards]]></title>
-    <link href="http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/"/>
-    <updated>2018-01-05T15:40:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards</id>
-    <content type="html"><![CDATA[<p><img src="http://jamesthom.as/images/grafana_dashboards/action-dashboard.gif"></p>
-
-<p><em>This blog post is part three of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
-
-<p>Having <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
-applications, monitoring incoming metric values will alert us to problems.</p>
-
-<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
-
-<blockquote><p>Grafana is an open source metric analytics & visualization<br/>suite. It is most commonly used for visualizing time series data for<br/>infrastructure and application analytics.</p></blockquote>
-
-
-<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
-
-<p>Let&#8217;s review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
-before we start setting up the serverless monitoring dashboards…</p>
-
-<h2>Grafana Basics</h2>
-
-<h3>Metric Data Values</h3>
-
-<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
-
-<ul>
-<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
-<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
-<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
-<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration</code></em></li>
-</ul>
-
-
-<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
-
-<h3>Templates</h3>
-
-<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
-
-<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/templating.png"></p>
-
-<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
-
-<h3>Common Tasks</h3>
-
-<h4>How to create a new dashboard?</h4>
-
-<ul>
-<li>Open the dashboard menu by clicking the drop-down menu.</li>
-<li>Click the &#8220;Create New&#8221; button.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/new_dashboard.png"></p>
-
-<h4>How to set the dashboard name?</h4>
-
-<ul>
-<li>Select the &#8220;Manage Dashboard&#8221; menu option.</li>
-<li>Click &#8220;Settings&#8221; to open the dashboard options panel.</li>
-<li>Change the &#8220;General -> Details -> Name&#8221; configuration value.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/dashboard_name.png"></p>
-
-<h4>How to set dashboard template variables?</h4>
-
-<ul>
-<li>Select the &#8220;Manage Dashboard&#8221; menu option.</li>
-<li>Click &#8220;Templating&#8221; to open the templating variables configuration panel.</li>
-<li>Click &#8220;New&#8221; button to define template variables.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/dashboard_template_menu.png"></p>
-
-<ul>
-<li>Fill in the name field with the template identifier.</li>
-<li>Select &#8220;IBM Cloud Monitoring&#8221; as the data source.</li>
-<li>Fill in the query field with chosen metric query.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/dashboard_template_details.png"></p>
-
-<h4>How to add new row to dashboard?</h4>
-
-<ul>
-<li>Click the &#8220;Add Row&#8221; button beneath the last row.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/add_row.png"></p>
-
-<h4>How to add new chart to row?</h4>
-
-<ul>
-<li>Hover over the options menu on the right-hand side of the row.</li>
-<li>Select the &#8220;Add Panel&#8221; menu item.</li>
-<li>Choose a chart type from the panel menu.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/add_row_panel.png"></p>
-
-<h4>How to set and display row name?</h4>
-
-<ul>
-<li>Hover over the options menu on the right-hand side of the row.</li>
-<li>Select the &#8220;Row Options&#8221; menu item.</li>
-<li>Fill in the &#8220;Title&#8221; field. Click the &#8220;Show&#8221; checkbox.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/add_row_panel.png"></p>
-
-<h4>How to edit chart parameters?</h4>
-
-<ul>
-<li>Click the panel title to open the panel options dialog.</li>
-<li>Select the &#8220;Edit&#8221; button.</li>
-<li>Graph options dialog opens below the chart panel.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/panel_details_more.png"></p>
-
-<h4>How to choose time range for metric values?</h4>
-
-<ul>
-<li>Click the clock icon on the right-hand side of the menu bar.</li>
-<li>Define time ranges manually or by selecting options from the &#8220;Quick Ranges&#8221; examples.</li>
-<li>Auto-update can be enabled using the &#8220;Refresh&#8221; drop-down menu.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/time_range_menu.png"></p>
-
-<h2>Dashboards</h2>
-
-<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
-
-<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
-
-<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
-for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
-
-<h3>Overview Dashboard</h3>
-
-<p>This is an example of the first dashboard we want to create.</p>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/overview-dashboard.gif"></p>
-
-<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
-
-<h4>setup</h4>
-
-<ol>
-<li>Create a new dashboard named &#8220;Overview&#8221;.</li>
-<li>Set the following template variables.
-
-<ul>
-<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
-<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
-</ul>
-</li>
-</ol>
-
-
-<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
-
-<h4>invocations graph</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/overview-invocations.png"></p>
-
-<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
-
-<p><em>How can we calculate total invocations from the metric values?</em></p>
-
-<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
-
-<p><em>Let&#8217;s implement this now…</em></p>
-
-<ul>
-<li>Set and display default row name as <em>&#8220;Invocations&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error
-</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options to true.
-
-<ul>
-<li><em>Legend->Options->Show</em></li>
-<li><em>Display->Draw Modes->Bars</em></li>
-<li><em>Display->Stacking &amp; Null value->Stack</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation types</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/overview-invocation-types.png"></p>
-
-<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
-
-<p>Calculating the sum for all invocations recorded will use the same &#8220;scale &amp; offset&#8221; trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
-
-<p><strong><u>all count</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display default row name as <em>&#8220;Invocation Types&#8221;</em>.</li>
-<li>Add a new <em>&#8220;Single Stat&#8221;</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = All</em></li>
-<li><em>Options -> Value -> Stat = total</em></li>
-<li><em>Options -> Coloring -> Background = true</em></li>
-<li><em>Options -> Coloring -> Thresholds = 0,100000</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>success count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;All&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Success</em></li>
-<li><em>Options -> Coloring -> Colors = Make green the last threshold colour.</em></li>
-<li><em>Options -> Coloring -> Thresholds = 0,0</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>errors count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Success&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Errors</em></li>
-<li><em>Options-> Coloring -> Colors = Make red the last threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>cold start count</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Errors&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Cold Start</em></li>
-<li><em>Options-> Coloring -> Colors = Make blue the last threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation durations</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/overview-invocation-durations.png"></p>
-
-<p>This row will contain counts for the total, mean and range of all invocations.</p>
-
-<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
-
-<p><strong><u>total duration</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display default row name as <em>&#8220;Invocation Durations&#8221;</em>.</li>
-<li>Add a new <em>&#8220;Single Stat&#8221;</em> chart to row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Total</em></li>
-<li><em>Options -> Value -> Stat = total</em></li>
-<li><em>Options -> Value -> Unit = milliseconds</em></li>
-<li><em>Options -> Coloring -> Background = true</em></li>
-<li><em>Options -> Coloring -> Thresholds = 100000000,100000000</em></li>
-<li><em>Options -> Coloring -> Colors = Make grey the first threshold colour.</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>average duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Total&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Average</em></li>
-<li><em>Options -> Value -> Stat = avg</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>range duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Average&#8221;</em> chart in the row.</li>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Range</em></li>
-<li><em>Options -> Value -> Stat = range</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation details table</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/overview-tables.png"></p>
-
-<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
-
-<p><strong><u>all invocations table</u></strong></p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>&#8220;Invocations Per Action&#8221;</em>.</li>
-<li>Add a <em>&#8220;Table&#8221;</em> panel to the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error
-</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (All)</em></li>
-<li><em>Options -> Data -> Table Transform = Time series aggregations</em></li>
-<li><em>Options -> Data -> Columns = Total</em></li>
-<li><em>Options -> Column Styles -> Decimals = 0</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>error invocations table</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Invocations (All)&#8221;</em> chart in the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (Errors)</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>duration statistics table</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Invocations (Errors)&#8221;</em> chart in the row.</li>
-<li>Configure metric query for chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Invocations (Duration)</em></li>
-<li><em>Options -> Data -> Columns = Avg, Min, Max</em></li>
-<li><em>Options -> Column Styles -> Decimals = Milliseconds</em></li>
-<li><em>Options -> Column Styles -> Decimals = 2</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
-
-<p><em>Let&#8217;s move onto the second dashboard, which will give us more in-depth statistics for individual actions&#8230;</em></p>
-
-<h3>Action Dashboard</h3>
-
-<p>This is an example of the second dashboard we want to create.</p>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/action-dashboard.gif"></p>
-
-<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
-
-<h4>setup</h4>
-
-<ul>
-<li>Create a new dashboard named <em>&#8220;Action Details&#8221;</em>.</li>
-<li>Set the following template variables.
-
-<ul>
-<li><strong>$region</strong> => <code>ibm.public.cloud-functions.*</code></li>
-<li><strong>$namespace</strong> => <code>ibm.public.cloud-functions.$region.*</code></li>
-<li><strong>$actions</strong> => <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
-</ul>
-</li>
-</ul>
-
-
-<p><em>Replace &lt;action> with the name of an action you are monitoring.</em></p>
-
-<h4>invocations</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/action-invocations.png"></p>
-
-<p>Action invocations are shown this first dashboard row. Bar charts display
-successful versus failed invocations and cold versus warm starts.</p>
-
-<p>Failed invocations and cold starts are recorded as metric values. Using the
-<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
-and warm starts from these properties.</p>
-
-<ul>
-<li>Set and display default row name as <em>&#8220;Invocations&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> chart to row.</li>
-<li>Configure two metric queries for the chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.error
-</span><span class='line'>.scale(0).offset(1).groupByNode(5, sum).alias(success)</span></code></pre></td></tr></table></div></figure>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.error
-</span><span class='line'>.groupByNode(5, sum).alias(failure)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options to true.
-
-<ul>
-<li><em>Legend->Options->Show</em></li>
-<li><em>Display->Draw Modes->Bars</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>invocation types</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/action-invocation-types.png"></p>
-
-<p>This row replicates the <em>&#8220;Invocation Types&#8221;</em> row from the <em>&#8220;Overview&#8221;</em> dashboard.</p>
-
-<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
-
-<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
-
-<h4>invocation durations</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/action-invocation-durations.png"></p>
-
-<p>This row uses an extended version of the durations row from the <em>&#8220;Overview&#8221;</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
-
-<p><strong>Repeat the instructions from above to add the <em>&#8220;Total&#8221;</em> and <em>&#8220;Average&#8221;</em> panels.</strong></p>
-
-<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
-
-<p><strong><u>minimum duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Total&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Min</em></li>
-<li><em>Options -> Value -> Stat = min</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>maximum duration</u></strong></p>
-
-<ul>
-<li>Duplicate the <em>&#8220;Minimum&#8221;</em> chart in the row.</li>
-<li>Change the metric query for this chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Min</em></li>
-<li><em>Options -> Value -> Stat = max</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong><u>percentiles graph</u></strong></p>
-
-<ul>
-<li>Add a <em>&#8220;Table&#8221;</em> panel to the row.</li>
-<li>Configure this metric query for the chart:</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
-</span><span class='line'>.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
-<li>Set the following options.
-
-<ul>
-<li><em>General -> Info -> Title = Durations (Percentiles)</em></li>
-<li><em>Axes -> Left Y -> Unit = Milliseconds</em></li>
-<li><em>Legend -> Options -> Show = True</em></li>
-<li><em>Legend -> Values -> Avg = True</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>cpu usage</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/action-cpu-usage.png"></p>
-
-<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>&#8220;CPU Usage&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> panel to row.</li>
-<li>Configure two metric queries for the chart.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
-</span><span class='line'>.groupByNode(5, avg).alias(user-time)</span></code></pre></td></tr></table></div></figure>
-
-
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
-</span><span class='line'>.groupByNode(5, avg).alias(system-time)</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>Axes -> Left Y -> Unit = Microseconds</em></li>
-<li><em>Legend -> Values -> Avg = true</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<h4>memory usage</h4>
-
-<p><img src="http://jamesthom.as/images/grafana_dashboards/action-memory-usage.png"></p>
-
-<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
-
-<ul>
-<li>Add a new row.</li>
-<li>Set and display row name as <em>&#8220;Memory Usage&#8221;</em>.</li>
-<li>Add new <em>&#8220;Graph&#8221;</em> panel to row.</li>
-<li>Configure four metric queries for the chart using this template.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
-</span><span class='line'>.groupByNode(5, avg).alias(&lt;label&gt;)</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Replace &lt;label> with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
-
-<ul>
-<li>Set the following options.
-
-<ul>
-<li><em>Axes -> Left Y -> Unit = bytes</em></li>
-<li><em>Legend -> Values -> Avg = true</em></li>
-<li><em>Display -> Draw Modes = Lines &amp; Points</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Stack = true</em></li>
-<li><em>Display -> Stacking &amp; Null value -> Null Value = connected</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><strong>Having finished all the charts for the action details example, you should now
-have dashboards which look like the examples above!</strong> 📈📊📉</p>
-
-<h2>conclusion</h2>
-
-<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
-
-<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
-are a perfect solution for this problem. Building custom dashboards allows us
-to monitor incoming data values live.</p>
-
-<p>In the next blog post, we&#8217;re going to finish off <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values&#8230;</p>
 ]]></content>
   </entry>
   
