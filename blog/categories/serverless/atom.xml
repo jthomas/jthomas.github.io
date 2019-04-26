@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-04-15T11:53:59+01:00</updated>
+  <updated>2019-04-26T16:34:37+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,297 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/"/>
+    <updated>2019-04-23T15:08:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p>How do you set up a <a href="https://dzone.com/articles/what-is-cicd">CI/CD pipeline</a> for serverless applications?</p>
+
+<p>This blog post will explain how to use <a href="https://travis-ci.org/">Travis CI</a>, <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/avajs/ava">AVA testing framework</a> to set up a fully-automated build, deploy and test pipeline for a serverless application. It will use a real example of a production <a href="https://github.com/jthomas/openwhisk-release-verification">serverless application</a>, built using <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> and running on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. The CI/CD pipeline will execute the following tasks...</p>
+
+<ul>
+<li><strong>Run project unit tests.</strong></li>
+<li><strong>Deploy application to test environment.</strong></li>
+<li><strong>Run acceptance tests against test environment.</strong></li>
+<li><strong>Deploy application to production environment.</strong></li>
+<li><strong>Run smoke tests against production environment.</strong></li>
+</ul>
+
+
+<p>Before diving into the details of the CI/CD pipeline setup, let's start by showing the example serverless application being used for this project...</p>
+
+<h2>Serverless Project - <a href="http://apache.jamesthom.as/">http://apache.jamesthom.as/</a></h2>
+
+<p>The "<a href="https://github.com/jthomas/openwhisk-release-verification">Apache OpenWhisk Release Verification</a>" project is a serverless web application to help committers verify release candidates for the open-source project. It automates running the verification steps from the <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">ASF release checklist</a> using serverless functions. Automating release candidate validation makes it easier for  committers to participate in release voting.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p>The project consists of a static web assets (HTML, JS, CSS files) and HTTP APIs. Static web assets are hosted by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>. HTTP APIs are implemented as Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> and exposed using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway</a> service. <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> is used to host the Apache OpenWhisk application.</p>
+
+<p>No other cloud services, like databases, are needed by the backend. Release candidate information is retrieved in real-time by parsing the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">HTML page</a> from the ASF website.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Serverless Architecture" /></p>
+
+<h3>Configuration</h3>
+
+<p><a href="https://github.com/serverless/serverless">The Serverless Framework</a> (with the <a href="https://github.com/serverless/serverless-openwhisk">Apache OpenWhisk provider plugin</a>) is used to define the serverless functions used in the application. HTTP endpoints are also defined in the YAML configuration file.</p>
+
+<p>```yaml
+service: release-verfication</p>
+
+<p>provider:
+  name: openwhisk
+  runtime: nodejs:10</p>
+
+<p>functions:
+  versions:</p>
+
+<pre><code>handler: index.versions
+events:
+  - http: GET /api/versions
+</code></pre>
+
+<p>  version_files:</p>
+
+<pre><code>handler: index.version_files
+events:
+  - http:
+      method: GET
+      path: /api/versions/{version}
+      resp: http
+</code></pre>
+
+<p>...</p>
+
+<p>plugins:
+  - serverless-openwhisk
+```</p>
+
+<p>The framework handles all deployment and configuration tasks for the application. Setting up the application in a new environment is as simple as running the <code>serverless deploy</code> <a href="https://github.com/serverless/serverless">command</a>.</p>
+
+<h3>Environments</h3>
+
+<p>Apache OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#fully-qualified-names">namespaces</a> to group individual packages, actions, triggers and rules. Different namespaces can be used to provide isolated environments for applications.</p>
+
+<p>IBM Cloud Functions automatically creates <a href="https://cloud.ibm.com/docs/openwhisk?topic=cloud-functions-cloudfunctions_cli#region_info">user-based namespaces</a> in platform instances. These auto-generated namespaces mirror the IBM Cloud organisation and space used to access the instance. Creating <a href="https://cloud.ibm.com/docs/account?topic=account-orgsspacesusers#cf-org-concepts">new spaces within an organisation</a> will provision extra namespaces.</p>
+
+<p>I'm using a custom organisation for the application with three different spaces: <strong>dev</strong>, <strong>test</strong> and <strong>prod</strong>.</p>
+
+<p><strong>dev</strong> is used as a test environment to deploy functions during development. <strong>test</strong> is used by the CI/CD pipeline to deploy a temporary instance of the application during acceptance tests. <strong>prod</strong> is the production environment hosting the external application actions.</p>
+
+<h3>Credentials</h3>
+
+<p>The <a href="https://cloud.ibm.com/docs/cli?topic=cloud-cli-install-ibmcloud-cli">IBM Cloud CLI</a> is used to handle IBM Cloud Functions credentials. <a href="https://cloud.ibm.com/docs/iam?topic=iam-manapikey">Platform API keys</a> will be used to log in the CLI from the CI/CD system.</p>
+
+<p>When Cloud Functions CLI commands are issued (after targeting a new region, organisation or space), API keys for that Cloud Functions instance are automatically retrieved and stored locally. The Serverless Framework knows how to use these local credentials when interacting with the platform.</p>
+
+<h3>High Availability?</h3>
+
+<p>The Apache OpenWhisk Release Verifier is not a critical cloud application which needs "<a href="https://en.wikipedia.org/wiki/Five_nines">five nines</a>" of availability. The application is idle most of the time. It does not need a <a href="https://en.wikipedia.org/wiki/High_availability">highly available</a> serverless architecture. This means the build pipeline does not have to...</p>
+
+<ul>
+<li><a href="https://cloud.ibm.com/docs/tutorials?topic=solution-tutorials-multi-region-serverless#multi-region-serverless">Deploy application instances in multiple cloud regions.</a></li>
+<li><a href="https://www.ibm.com/blogs/bluemix/2019/04/load-balancing-api-calls-across-regions-with-ibm-cloud-internet-services-and-cloud-api-gateway/">Set up a global load balancer between regional instances.</a></li>
+<li>Support "<a href="https://www.martinfowler.com/bliki/BlueGreenDeployment.html">zero downtime deploys</a>" to minimise downtime during deployments.</li>
+<li>Automatic roll-back to previous versions on production issues.</li>
+</ul>
+
+
+<p>New deployments will simply overwrite resources in the production namespace in a single region. If the production site is broken after a deployment, the smoke tests should catch this and email me to fix it!</p>
+
+<h2>Testing</h2>
+
+<p>Given this tool will be used to check release candidates for the open-source project, I wanted to ensure it worked properly! Incorrect validation results could lead to invalid source archives being published.</p>
+
+<p>I've chosen to rely heavily on unit tests to check the core business logic. These tests ensure all validation tasks work correctly, including PGP signature verification, cryptographic hash matching, LICENSE file contents and other ASF requirements for project releases.</p>
+
+<p>Additionally, I've used end-to-end acceptance tests to validate the HTTP APIs work as expected. HTTP requests are sent to the API GW endpoints, with responses compared against expected values. All available release candidates are run through the validation process to check no errors are returned.</p>
+
+<h3>Unit Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Unit_testing">Unit tests</a> are implemented with the <a href="https://github.com/avajs/ava">AVA testing framework</a>. Unit tests live in the <code>unit/test/</code> <a href="https://github.com/jthomas/openwhisk-release-verification/tree/master/test/unit">folder</a>.</p>
+
+<p>The <code>npm test</code> command alias runs the <code>ava test/unit/</code> command to execute all unit tests. This command can be executed locally, during development, or from the CI/CD pipeline.</p>
+
+<p>```bash
+$ npm test</p>
+
+<blockquote><p>release-verification@1.0.0 test ~/code/release-verification
+ava test/unit/</p></blockquote>
+
+<p> 27 tests passed
+```</p>
+
+<h3>Acceptance Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Acceptance_testing">Acceptance tests</a> check API endpoints return the expected responses for valid (and invalid) requests. Acceptance tests are executed against the API Gateway endpoints for an application instance.</p>
+
+<p>The hostname used for HTTP requests is controlled using an environment variable (<code>HOST</code>). Since the same test suite test is used for acceptance and smoke tests, setting this environment variable is the only configuration needed to run tests against different environments.</p>
+
+<p>API endpoints in the test and production environments are exposed using different custom sub-domains (<code>apache-api.jamesthom.as</code> and <code>apache-api-test.jamesthom.as</code>). NPM <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L8-L9">scripts are used</a> to provide commands (<code>acceptance-test</code> &amp; <code>acceptance-prod</code>) which set the environment hostname before running the test suite.</p>
+
+<p>```javascript
+"scripts": {</p>
+
+<pre><code>"acceptance-test": "HOST=apache-api-test.jamesthom.as ava -v --fail-fast test/acceptance/",
+"acceptance-prod": "HOST=apache-api.jamesthom.as ava -v --fail-fast test/acceptance/"
+</code></pre>
+
+<p>  },
+```</p>
+
+<p>```
+$ npm run acceptance-prod</p>
+
+<blockquote><p>release-verification@1.0.0 acceptance-prod ~/code/release-verification
+HOST=apache-api.jamesthom.as ava -v --fail-fast  test/acceptance/</p></blockquote>
+
+<p>  ✔ should return list of release candidates (3.7s)</p>
+
+<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions
+</code></pre>
+
+<p>  ✔ should return 404 for file list when release candidate is invalid (2.1s)</p>
+
+<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions/unknown
+</code></pre>
+
+<p>  ...</p>
+
+<p>  6 tests passed
+```</p>
+
+<p>Acceptance tests are also implemented with the AVA testing framework. All acceptance tests live in a single <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/test/acceptance/api.js">test file</a> (<code>unit/acceptance/api.js</code>).</p>
+
+<h2>CI/CD Pipeline</h2>
+
+<p>When new commits are pushed to the <code>master</code> branch on the project repository, the following steps needed to be kicked off by the build pipeline…</p>
+
+<ul>
+<li><em>Run project unit tests.</em></li>
+<li><em>Deploy application to test environment.</em></li>
+<li><em>Run acceptance tests against test environment.</em></li>
+<li><em>Deploy application to production environment.</em></li>
+<li><em>Run smoke tests against production environment.</em></li>
+</ul>
+
+
+<p>If any of the steps fail, the build pipeline should stop and send me a notification email.</p>
+
+<h3>Travis</h3>
+
+<p><a href="https://travis-ci.org/">Travis CI</a> is used to implement the CI/CD build pipeline. Travis CI uses a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml">custom file</a> (<code>.travis.yml</code>) in the project repository to configure the build pipeline. This YAML file defines commands to execute during each phase of build pipeline. If any of the commands fail, the build will stop at that phase without proceeding.</p>
+
+<p><em>Here is the completed <code>.travis.yml</code> file for this project: https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml</em></p>
+
+<p>I'm using the following Travis CI <a href="https://docs.travis-ci.com/user/job-lifecycle#the-job-lifecycle">build phases</a> to implement the pipeline: <strong>install</strong>, <strong>before_script</strong>, <strong>script</strong>, <strong>before_deploy</strong> and <strong>deploy</strong>. Commands will run in the Node.js 10 build environment, which pre-installs the language runtime and package manager.</p>
+
+<p><code>yaml
+language: node_js
+node_js:
+  - "10"
+</code></p>
+
+<h4>install</h4>
+
+<p>In the <code>install</code> <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L5-L9">phase</a>, I need to set up the build environment to deploy the application and run tests.</p>
+
+<p>This means installing the IBM Cloud CLI, <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions CLI plugin</a>, The Serverless Framework (with Apache OpenWhisk plugin), application test framework (AvaJS) and other project dependencies.</p>
+
+<p>The IBM Cloud CLI is installed using a shell script. Running a CLI sub-command installs the <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions plugin</a>.</p>
+
+<p>The Serverless Framework is installed as global NPM package (using <code>npm -g install</code>). The Apache OpenWhisk provider plugin is handled as <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L13-L23">normal project dependency</a>, along with the test framework. Both those dependencies are installed using NPM.</p>
+
+<p><code>yaml
+install:
+  - curl -fsSL https://clis.cloud.ibm.com/install/linux | sh
+  - ibmcloud plugin install cloud-functions
+  - npm install serverless -g
+  - npm install
+</code></p>
+
+<h4>before_script</h4>
+
+<p>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L11-L16">phase</a> is used to run unit tests, catching errors in core business logic, before setting up credentials (used in the <code>script</code> phase) for the acceptance test environment. Unit test failures will halt the build immediately, skipping test and production deployments.</p>
+
+<p>Custom variables provide the API key, platform endpoint, organisation and space identifiers which are used for the test environment. The CLI is authenticated using these values, before running the <code>ibmcloud fn api list</code> command. This ensures Cloud Functions credentials are available locally, as used by The Serverless Framework.</p>
+
+<p><code>yaml
+before_script:
+  - npm test
+  - ibmcloud login --apikey $IBMCLOUD_API_KEY -a $IBMCLOUD_API_ENDPOINT
+  - ibmcloud target -o $IBMCLOUD_ORG -s $IBMCLOUD_TEST_SPACE
+  - ibmcloud fn api list &gt; /dev/null
+  - ibmcloud target
+</code></p>
+
+<h4>script</h4>
+
+<p>With the build system configured, the application can be deployed to test environment, followed by running acceptance tests. If either deployment or acceptance tests fail, the build will stop, skipping the production deployment.</p>
+
+<p>Acceptance tests use an environment variable to configure the hostname test cases are executed against. The <code>npm run acceptance-test</code> alias command sets this value to the test environment hostname (<code>apache-api-test.jamesthom.as</code>) before running the test suite.</p>
+
+<p><code>yaml
+script:
+  - sls deploy
+  - npm run acceptance-test
+</code></p>
+
+<h4>before_deploy</h4>
+
+<p>Before deploying to production, Cloud Functions credentials need to be updated. The IBM Cloud CLI is used to target the production environment, before running a Cloud Functions CLI command. This updates local credentials with the production environment credentials.</p>
+
+<p><code>yaml
+before_deploy:
+  - ibmcloud target -s $IBMCLOUD_PROD_SPACE
+  - ibmcloud fn api list &gt; /dev/null
+  - ibmcloud target
+</code></p>
+
+<h4>deploy</h4>
+
+<p>If all the proceeding stages have successfully finished, the application can be deployed to the production. Following this final deployment, smoke tests are used to check production APIs still work as expected.</p>
+
+<p>Smoke tests are just the same acceptance tests executed against the production environment. The <code>npm run acceptance-prod</code> alias command sets the hostname configuration value to the production environment  (<code>apache-api.jamesthom.as</code>) before running the test suite.</p>
+
+<p><code>yaml
+deploy:
+  provider: script
+  script: sls deploy &amp;&amp; npm run acceptance-prod
+  skip_cleanup: true
+</code></p>
+
+<p><em>Using the <code>skip_cleanup</code> parameter leaves installed artifacts from previous phases in the build environment. This means we don't have to re-install the IBM Cloud CLI, The Serverless Framework or NPM dependencies needed to run the production deployment and smoke tests.</em></p>
+
+<h3>success?</h3>
+
+<p>If all of the <a href="https://travis-ci.org/jthomas/openwhisk-release-verification">build phases</a> are successful, the latest project code should have been deployed to the production environment. 💯💯💯</p>
+
+<p><img src="/images/build-screenshot.png" alt="Build Screenshoot" /></p>
+
+<p>If the build failed due to unit test failures, the test suite can be ran locally to fix any errors. Deployment failures can be investigated using the console output logs from Travis CI. Acceptance test issues, against test or production environments, can be debugged by logging into those environments locally and running the test suite from my development machine.</p>
+
+<h2>Conclusion</h2>
+
+<p>Using Travis CI with The Serverless Framework and a JavaScript testing framework, I was able to set up a fully-automated CI/CD deployment pipeline for the Apache OpenWhisk release candidate verification tool.</p>
+
+<p>Using a CI/CD pipeline, rather than a manual approach, for deployments has the following advantages...</p>
+
+<ul>
+<li>No more manual and error-prone deploys relying on a human 👨‍💻 :)</li>
+<li>Automatic unit &amp; acceptance test execution catch errors before deployments.</li>
+<li>Production environment only accessed by CI/CD system, reducing accidental breakages.</li>
+<li>All cloud resources must be configured in code. No "<a href="https://martinfowler.com/bliki/SnowflakeServer.html">snowflake</a>" environments allowed.</li>
+</ul>
+
+
+<p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I'll be notified by email.</p>
+
+<p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
@@ -829,225 +1120,6 @@ wsk trigger create verify_emails --feed /_/myCloudant/changes \
 <p>As well as saving unnecessary invocations (and therefore money), this can simplify data models. A single database can be used to store all documents, rather than having to split different types into multiple databases, whilst still supporting changes feeds per document type.</p>
 
 <p>This is an awesome feature of CouchDB!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Loosely-coupled Serverless Functions With Apache Openwhisk]]></title>
-    <link href="http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/"/>
-    <updated>2019-01-18T15:10:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk</id>
-    <content type="html"><![CDATA[<p>Just like software engineering, <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">best practices for serverless applications</a> advise keeping functions small and focused on a single task, aka "<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">do one thing and do it well</a>". Small single-purpose functions are easier to develop, test and debug. 👍</p>
-
-<p><strong>But what happens when you need execute multiple asynchronous tasks (implemented as separate functions) from an incoming event, like an API request?</strong> 🤔</p>
-
-<h2>Functions Calling Functions?</h2>
-
-<p>Functions can invoke other functions directly, using asynchronous calls through the client SDK. This works at the cost of introducing <a href="https://en.wikipedia.org/wiki/Coupling_%28computer_programming%29">tighter coupling</a> between functions, which is generally avoided in software engineering! Disadvantages of this approach include...</p>
-
-<ul>
-<li><em>Functions which call other functions can be more difficult to test. Test cases needs to mock out the client SDK to remove side-effects during unit or integration tests.</em></li>
-<li><em>It can lead to repetitive code if you want to fire multiple tasks with the same event. Each invocation needs to manually handle error conditions and re-tries on network or other issues, which complicates the business logic.</em></li>
-<li><em>Modifying the functions being invoked cannot be changed dynamically. The function doing the invoking has to be re-deployed with updated code.</em></li>
-</ul>
-
-
-<p><a href="https://twitter.com/PaulDJohnston">Some people</a> have even labelled "<em>functions calling functions</em>" an <a href="https://medium.com/@PaulDJohnston/serverless-best-practices-b3c97d551535">anti-pattern</a> in serverless development! 😱</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Most common Serverless mistake?<br><br>Functions calling other functions<br><br>Why do people make this mistake?<br><br>Because people assume they should build functions like microservices and then use them in a similar way.<br><br>Causes no end of problems</p>&mdash; Serverless / Green Data Advocate (@PaulDJohnston) <a href="https://twitter.com/PaulDJohnston/status/1085106548270088193?ref_src=twsrc%5Etfw">January 15, 2019</a></blockquote>
-
-
-<p><strong>Hmmm... so what should we do?</strong></p>
-
-<p>Apache OpenWhisk has an awesome feature to help with this problem, triggers and rules! 👏</p>
-
-<h2>OpenWhisk Triggers &amp; Rules</h2>
-
-<p>Triggers and Rules in OpenWhisk are similar to the <a href="https://en.wikipedia.org/wiki/Observer_pattern">Observer pattern</a> from software engineering.</p>
-
-<p>Users can fire "events" in OpenWhisk by invoking a named <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#creating-triggers">trigger</a> with parameters. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md#using-rules">Rules</a> are used to "subscribe" actions to all events for a given trigger name. Actions are invoked with event parameters when a trigger is fired. Multiple rules can be configured to support multiple "listeners" to the same trigger events. Event senders are decoupled from event receivers.</p>
-
-<p><img src="/images/loose-coupling-openwhisk/t-r-a.png"></p>
-
-<p>Developers using OpenWhisk are most familiar with triggers when used with <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/catalog.md">feed providers</a>. This is used to subscribe actions to external event sources. The feed provider is responsible for listening to the event source and automatically firing trigger events with event details.</p>
-
-<p><strong>But triggers can be fired manually from actions to provide custom event streams!</strong> 🙌</p>
-
-<p>```javascript
-const openwhisk = require('openwhisk')
-const params = {msg: 'event parameters'}</p>
-
-<p>// replace code like this...
-const result = await ow.actions.invoke({name: "some-action", params})</p>
-
-<p>// ...with this
-const result = await ow.triggers.invoke({name: "some-trigger", params})
-```</p>
-
-<p>This allows applications to move towards an <a href="https://en.wikipedia.org/wiki/Event-driven_architecture">event-driven architecture</a> and promotes loose-coupling between functions with all the associated benefits for testing, deployment and scalability. 👌</p>
-
-<h3>creating triggers</h3>
-
-<p>Triggers are managed through the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. They can be created, deleted, retrieved and fired using  HTTP requests. Users normally interact with triggers through the <a href="https://github.com/apache/incubator-openwhisk-cli">CLI</a> or <a href="https://github.com/apache/incubator-openwhisk-client-js/">platform SDKs</a>.</p>
-
-<p>Triggers can be created using the following CLI command.</p>
-
-<p><code>
-wsk trigger create &lt;TRIGGER_NAME&gt;
-</code></p>
-
-<h3>default parameters</h3>
-
-<p>Triggers support <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/parameters.md#setting-default-parameters-on-an-action">default parameters</a> like actions. Default parameters are stored in the platform and included in all trigger events. If the event object includes parameters with the same key, default parameter values are ignored.</p>
-
-<p><code>
-wsk trigger create &lt;TRIGGER_NAME&gt; -p &lt;PARAM&gt; &lt;PARAM_VALUE&gt; -p &lt;PARAM_2&gt; &lt;PARAM_VALUE&gt; ...
-</code></p>
-
-<h3>binding triggers to actions with rules</h3>
-
-<p>Rules bind triggers to actions. When triggers are fired, all actions connected via rules are invoked with the trigger event. Multiple rules can refer to the same trigger supporting multiple listeners to the same event.</p>
-
-<p>Rules can also be created using the following CLI command.</p>
-
-<p><code>
-wsk rule create RULE_NAME TRIGGER_NAME ACTION_NAME
-</code></p>
-
-<p>Tools like <a href="https://github.com/serverless/serverless-openwhisk">The Serverless Framework</a> and <a href="https://github.com/apache/incubator-openwhisk-wskdeploy">wskdeploy</a> allow users to configure triggers and rules declaratively through YAML configuration files.</p>
-
-<h3>firing triggers</h3>
-
-<p>The JS SDK can be used to <a href="https://github.com/apache/incubator-openwhisk-client-js#fire-trigger">fire triggers programatically</a> from applications.</p>
-
-<p><code>javascript
-const openwhisk = require('openwhisk')
-const name = 'sample-trigger'
-const params = {msg: 'event parameters'}
-const result = ow.triggers.invoke({name, params})
-</code></p>
-
-<p>CLI commands (<code>wsk trigger fire</code>) can fire triggers manually with event parameters for testing.</p>
-
-<p><code>
-wsk trigger fire sample-trigger -p msg "event parameters"
-</code></p>
-
-<h3>activation records for triggers</h3>
-
-<p>Activation records are created for trigger events. These activation records contain event parameters, rules fired, activations ids and invocation status for each action invoked. This is useful for debugging trigger events when issues are occurring.</p>
-
-<p><code>
-$ wsk trigger fire sample-trigger -p hello world
-ok: triggered /_/sample-trigger with id &lt;ACTIVATION_ID&gt;
-$ wsk activation get &lt;ACTIVATION_ID&gt;
-ok: got activation &lt;ACTIVATION_ID&gt;
-{
- ...
-}
-</code></p>
-
-<p>The <code>response.result</code> property in the activation record contains the fired trigger event (combining default and event parameter values).</p>
-
-<p>Rules fired by the trigger are recorded in activation records as the JSON values under the <code>logs</code> parameter.</p>
-
-<p><code>json
-{
-  "statusCode": 0,
-  "success": true,
-  "activationId": "&lt;ACTION_ACTIVATION_ID&gt;",
-  "rule": "&lt;RULE_NAME&gt;",
-  "action": "&lt;ACTION_NAME&gt;"
-}
-</code></p>
-
-<p><em>Activation records are only generated when triggers have enabled rules with valid actions attached</em></p>
-
-<h2>Example - WC Goal Bot</h2>
-
-<p>This is great in theory but what about in practice?</p>
-
-<p><a href="https://github.com/jthomas/goalbot">Goal Bot</a> was a small serverless application I built in 2018 for the World Cup. It was a <a href="https://twitter.com/WC2018_Goals">Twitter bot</a> which tweeted out all goals scored in real-time. The application used the  "actions connected via triggers events" architecture pattern. This made development and testing easier and faster.</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">⚽️ GOAL ⚽️<br>👨 Harry MAGUIRE (󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 ) @ 30&#39;. 👨<br>🏟 Sweden 🇸🇪 (0) v England 󠁿🏴󠁧󠁢󠁥󠁮󠁧󠁿 (1) 🏟<a href="https://twitter.com/hashtag/WorldCup?src=hash&amp;ref_src=twsrc%5Etfw">#WorldCup</a></p>&mdash; WC 2018 Goal Bot (@WC2018_Goals) <a href="https://twitter.com/WC2018_Goals/status/1015604110006120448?ref_src=twsrc%5Etfw">July 7, 2018</a></blockquote>
-
-
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p>This function has two functions <code>goals</code> and <code>twitter</code>.</p>
-
-<p><code>goals</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L11-L16">responsible</a> for detecting new goals scored using an external API. When invoked, it would retrieve all goals currently scored in the World Cup. Comparing the API response to a previous cached version calculated new goals scored. This function was connected to the alarm event source to run once a minute.</p>
-
-<p><code>twitter</code> was <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L17-L22">responsible</a> for sending tweets from the @WC_Goals account. Twitter's API was used to create  goal tweets constructed from the event parameters.</p>
-
-<p><strong>Goal events detected in the <code>goals</code> function need to be used to invoke the <code>twitter</code> function.</strong></p>
-
-<p>Rather than the <code>goals</code> function invoke the <code>twitter</code> function directly, a trigger event (<code>goal</code>) was <a href="https://github.com/jthomas/goalbot/blob/master/lib/goal_tracker.js#L39-L41">fired</a>. The <code>twitter</code> function was bound to the <code>goal</code> trigger using a <a href="https://github.com/jthomas/goalbot/blob/master/serverless.yml#L21-L22">custom rule</a>.</p>
-
-<p><img src="/images/loose-coupling-openwhisk/goalbot.png"></p>
-
-<p>De-coupling the two tasks in my application (checking for new goals and creating tweets) using triggers and rules had the following benefits...</p>
-
-<ul>
-<li><p>The <code>goals</code> function could be invoked in testing without tweets being sent. By disabling the rule binding the <code>twitter</code> function to the trigger, the goals function can fire events without causing side-effects.</p></li>
-<li><p>Compared to having a "mono-function" combining both tasks, splitting tasks into functions means the <code>twitter</code> function can be tested with manual events, rather than having to manipulate the database and stub API responses to generate the correct test data.</p></li>
-<li><p>It would also be easy to extend this architecture with additional notification services, like slack bots. New notification services could be attached to the same trigger source with an additional rule. This would not require any changes to the <code>goals</code> or <code>twitter</code> functions.</p></li>
-</ul>
-
-
-<h2>Triggers versus Queues</h2>
-
-<p>Another common solution to de-coupling functions in serverless architectures is using <a href="https://theburningmonk.com/2018/04/what-is-the-best-event-source-for-doing-pub-sub-with-aws-lambda/">message queues</a>.</p>
-
-<p>Functions push events in external queues, rather than invoking triggers directly. Event sources are responsible for firing the registered functions with new messages. Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk-package-kafka">supports Kafka</a> as an event source which could be used with this approach.</p>
-
-<p><em>How does firing triggers directly compare to pushing events into an external queue (or other event source)?</em></p>
-
-<p>Both queues and triggers can be used to achieve the same goal ("<em>connect functions via events</em>") but have different semantics. It is important to understand the benefits of both to choose the most appropriate architecture for your application.</p>
-
-<h3>benefits of using triggers against queues</h3>
-
-<p>Triggers are built into the Apache OpenWhisk platform. There is no configuration needed to use them. External event sources like queues need to be provisioned and managed as additional cloud services.</p>
-
-<p>Trigger invocations are free in IBM Cloud Functions. IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">charges only</a> for execution time and memory used in functions. Queues will incur additional usage costs based on the service's pricing plan.</p>
-
-<h3>disadvantages of using triggers against queues</h3>
-
-<p>Triggers are not queues. Triggers are not queues. Triggers are not queues. 💯</p>
-
-<p>If a trigger is fired and no actions are connected, the event is lost. Trigger events are not persisted until listeners are attached. <strong>If you need event persistence, message priorities, disaster recovery and other advanced features provided by message queues, use a message queue!</strong></p>
-
-<p>Triggers are subject to <a href="https://console.bluemix.net/docs/openwhisk/openwhisk_reference.html#openwhisk_syslimits">rate limiting</a> in Apache OpenWhisk. In IBM Cloud Functions, this defaults to 1000 concurrent invocations and 5000 total invocations per namespace per minute. These limits can be raised through a support ticket but there are practical limits to the maximum rates allowed. Queues have support for much higher throughput rates.</p>
-
-<p>External event providers are also responsible for handling the retries when triggers have been rate-limited due to excess events. Invoking triggers manually relies on the invoking function to handle this. Emulating retry behaviour from an event provider is impractical due to costs and limits on function duration.</p>
-
-<h2>Other hints and tips</h2>
-
-<p><strong><em>Want to invoke an action which fires triggers without setting off listeners?</em></strong></p>
-
-<p>Rules can be dynamically disabled without having to remove them. This can be used during integration testing or debugging issues in production.</p>
-
-<p><code>
-wsk rule disable RULE_NAME
-wsk rule enable RULE_NAME
-</code></p>
-
-<p><strong><em>Want to verify triggers are fired with correct events without mocking client libraries?</em></strong></p>
-
-<p>Trigger events are not logged unless there is at least one enabled rule. Create a new rule which binds the <code>/whisk.system/utils/echo</code> action to the trigger. This built-in function just returns input parameters as the function response. This means the activation records with trigger events will now be available.</p>
-
-<h2>conclusion</h2>
-
-<p>Building event-driven serverless applications from loosely-coupled functions has numerous benefits including development speed, improved testability, deployment velocity, lower costs and more.</p>
-
-<p>Decomposing "monolithic" apps into independent serverless functions often needs event handling functions to trigger off multiple backend operations, implemented in separate serverless functions. Developers unfamiliar with serverless often resort to direct function invocations.</p>
-
-<p>Whilst this works, it introduces tight coupling between those functions, which is normally avoided in software engineering. This approach has even been highlighted as a "serverless" anti-pattern.</p>
-
-<p>Apache OpenWhisk has an awesome feature to help with this problems, triggers and rules!</p>
-
-<p>Triggers provide a lightweight event firing mechanism in the platform. Rules bind actions to triggers to automate invoking actions when events are fired. Applications can fire trigger events to invoke other operations, rather than using direct invocations. This keeps the event sender and receivers de-coupled from each other. 👏</p>
 ]]></content>
   </entry>
   

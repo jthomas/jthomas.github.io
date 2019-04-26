@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="This blog post explains how I used serverless functions to automate release candidate verification for the Apache OpenWhisk project. Automating this &hellip;">
+  <meta name="description" content="How do you set up a CI/CD pipeline for serverless applications? This blog post will explain how to use Travis CI, The Serverless Framework and the &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,380 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD With Travis CI, Serverless Framework and IBM Cloud Functions</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-04-23T15:08:00+01:00" pubdate data-updated="true">Apr 23<span>rd</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>How do you set up a <a href="https://dzone.com/articles/what-is-cicd">CI/CD pipeline</a> for serverless applications?</p>
+
+<p>This blog post will explain how to use <a href="https://travis-ci.org/">Travis CI</a>, <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/avajs/ava">AVA testing framework</a> to set up a fully-automated build, deploy and test pipeline for a serverless application. It will use a real example of a production <a href="https://github.com/jthomas/openwhisk-release-verification">serverless application</a>, built using <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> and running on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. The CI/CD pipeline will execute the following tasks&#8230;</p>
+
+<ul>
+<li><strong>Run project unit tests.</strong></li>
+<li><strong>Deploy application to test environment.</strong></li>
+<li><strong>Run acceptance tests against test environment.</strong></li>
+<li><strong>Deploy application to production environment.</strong></li>
+<li><strong>Run smoke tests against production environment.</strong></li>
+</ul>
+
+
+<p>Before diving into the details of the CI/CD pipeline setup, let&#8217;s start by showing the example serverless application being used for this project&#8230;</p>
+
+<h2>Serverless Project - <a href="http://apache.jamesthom.as/">http://apache.jamesthom.as/</a></h2>
+
+<p>The &#8221;<a href="https://github.com/jthomas/openwhisk-release-verification">Apache OpenWhisk Release Verification</a>&#8221; project is a serverless web application to help committers verify release candidates for the open-source project. It automates running the verification steps from the <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">ASF release checklist</a> using serverless functions. Automating release candidate validation makes it easier for  committers to participate in release voting.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p>The project consists of a static web assets (HTML, JS, CSS files) and HTTP APIs. Static web assets are hosted by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>. HTTP APIs are implemented as Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> and exposed using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway</a> service. <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> is used to host the Apache OpenWhisk application.</p>
+
+<p>No other cloud services, like databases, are needed by the backend. Release candidate information is retrieved in real-time by parsing the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">HTML page</a> from the ASF website.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Serverless Architecture" /></p>
+
+<h3>Configuration</h3>
+
+<p><a href="https://github.com/serverless/serverless">The Serverless Framework</a> (with the <a href="https://github.com/serverless/serverless-openwhisk">Apache OpenWhisk provider plugin</a>) is used to define the serverless functions used in the application. HTTP endpoints are also defined in the YAML configuration file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">release-verfication</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">runtime</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">nodejs:10</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">versions</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">index.versions</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">events</span><span class="p-Indicator">:</span>
+</span><span class='line'>      <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">http</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">GET /api/versions</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">version_files</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">index.version_files</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">events</span><span class="p-Indicator">:</span>
+</span><span class='line'>      <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">http</span><span class="p-Indicator">:</span>
+</span><span class='line'>          <span class="l-Scalar-Plain">method</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">GET</span>
+</span><span class='line'>          <span class="l-Scalar-Plain">path</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">/api/versions/{version}</span>
+</span><span class='line'>          <span class="l-Scalar-Plain">resp</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">http</span>
+</span><span class='line'><span class="nn">...</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">plugins</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-openwhisk</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The framework handles all deployment and configuration tasks for the application. Setting up the application in a new environment is as simple as running the <code>serverless deploy</code> <a href="https://github.com/serverless/serverless">command</a>.</p>
+
+<h3>Environments</h3>
+
+<p>Apache OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#fully-qualified-names">namespaces</a> to group individual packages, actions, triggers and rules. Different namespaces can be used to provide isolated environments for applications.</p>
+
+<p>IBM Cloud Functions automatically creates <a href="https://cloud.ibm.com/docs/openwhisk?topic=cloud-functions-cloudfunctions_cli#region_info">user-based namespaces</a> in platform instances. These auto-generated namespaces mirror the IBM Cloud organisation and space used to access the instance. Creating <a href="https://cloud.ibm.com/docs/account?topic=account-orgsspacesusers#cf-org-concepts">new spaces within an organisation</a> will provision extra namespaces.</p>
+
+<p>I&#8217;m using a custom organisation for the application with three different spaces: <strong>dev</strong>, <strong>test</strong> and <strong>prod</strong>.</p>
+
+<p><strong>dev</strong> is used as a test environment to deploy functions during development. <strong>test</strong> is used by the CI/CD pipeline to deploy a temporary instance of the application during acceptance tests. <strong>prod</strong> is the production environment hosting the external application actions.</p>
+
+<h3>Credentials</h3>
+
+<p>The <a href="https://cloud.ibm.com/docs/cli?topic=cloud-cli-install-ibmcloud-cli">IBM Cloud CLI</a> is used to handle IBM Cloud Functions credentials. <a href="https://cloud.ibm.com/docs/iam?topic=iam-manapikey">Platform API keys</a> will be used to log in the CLI from the CI/CD system.</p>
+
+<p>When Cloud Functions CLI commands are issued (after targeting a new region, organisation or space), API keys for that Cloud Functions instance are automatically retrieved and stored locally. The Serverless Framework knows how to use these local credentials when interacting with the platform.</p>
+
+<h3>High Availability?</h3>
+
+<p>The Apache OpenWhisk Release Verifier is not a critical cloud application which needs &#8221;<a href="https://en.wikipedia.org/wiki/Five_nines">five nines</a>&#8221; of availability. The application is idle most of the time. It does not need a <a href="https://en.wikipedia.org/wiki/High_availability">highly available</a> serverless architecture. This means the build pipeline does not have to&#8230;</p>
+
+<ul>
+<li><a href="https://cloud.ibm.com/docs/tutorials?topic=solution-tutorials-multi-region-serverless#multi-region-serverless">Deploy application instances in multiple cloud regions.</a></li>
+<li><a href="https://www.ibm.com/blogs/bluemix/2019/04/load-balancing-api-calls-across-regions-with-ibm-cloud-internet-services-and-cloud-api-gateway/">Set up a global load balancer between regional instances.</a></li>
+<li>Support &#8221;<a href="https://www.martinfowler.com/bliki/BlueGreenDeployment.html">zero downtime deploys</a>&#8221; to minimise downtime during deployments.</li>
+<li>Automatic roll-back to previous versions on production issues.</li>
+</ul>
+
+
+<p>New deployments will simply overwrite resources in the production namespace in a single region. If the production site is broken after a deployment, the smoke tests should catch this and email me to fix it!</p>
+
+<h2>Testing</h2>
+
+<p>Given this tool will be used to check release candidates for the open-source project, I wanted to ensure it worked properly! Incorrect validation results could lead to invalid source archives being published.</p>
+
+<p>I&#8217;ve chosen to rely heavily on unit tests to check the core business logic. These tests ensure all validation tasks work correctly, including PGP signature verification, cryptographic hash matching, LICENSE file contents and other ASF requirements for project releases.</p>
+
+<p>Additionally, I&#8217;ve used end-to-end acceptance tests to validate the HTTP APIs work as expected. HTTP requests are sent to the API GW endpoints, with responses compared against expected values. All available release candidates are run through the validation process to check no errors are returned.</p>
+
+<h3>Unit Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Unit_testing">Unit tests</a> are implemented with the <a href="https://github.com/avajs/ava">AVA testing framework</a>. Unit tests live in the <code>unit/test/</code> <a href="https://github.com/jthomas/openwhisk-release-verification/tree/master/test/unit">folder</a>.</p>
+
+<p>The <code>npm test</code> command alias runs the <code>ava test/unit/</code> command to execute all unit tests. This command can be executed locally, during development, or from the CI/CD pipeline.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nv">$ </span>npm <span class="nb">test</span>
+</span><span class='line'>
+</span><span class='line'>&gt; release-verification@1.0.0 <span class="nb">test</span> ~/code/release-verification
+</span><span class='line'>&gt; ava <span class="nb">test</span>/unit/
+</span><span class='line'>
+</span><span class='line'> 27 tests passed
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Acceptance Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Acceptance_testing">Acceptance tests</a> check API endpoints return the expected responses for valid (and invalid) requests. Acceptance tests are executed against the API Gateway endpoints for an application instance.</p>
+
+<p>The hostname used for HTTP requests is controlled using an environment variable (<code>HOST</code>). Since the same test suite test is used for acceptance and smoke tests, setting this environment variable is the only configuration needed to run tests against different environments.</p>
+
+<p>API endpoints in the test and production environments are exposed using different custom sub-domains (<code>apache-api.jamesthom.as</code> and <code>apache-api-test.jamesthom.as</code>). NPM <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L8-L9">scripts are used</a> to provide commands (<code>acceptance-test</code> &amp; <code>acceptance-prod</code>) which set the environment hostname before running the test suite.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="s2">&quot;scripts&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;acceptance-test&quot;</span><span class="o">:</span> <span class="s2">&quot;HOST=apache-api-test.jamesthom.as ava -v --fail-fast test/acceptance/&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;acceptance-prod&quot;</span><span class="o">:</span> <span class="s2">&quot;HOST=apache-api.jamesthom.as ava -v --fail-fast test/acceptance/&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">npm</span> <span class="nx">run</span> <span class="nx">acceptance</span><span class="o">-</span><span class="nx">prod</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;</span> <span class="nx">release</span><span class="o">-</span><span class="nx">verification</span><span class="err">@</span><span class="mf">1.0</span><span class="p">.</span><span class="mi">0</span> <span class="nx">acceptance</span><span class="o">-</span><span class="nx">prod</span> <span class="o">~</span><span class="err">/code/release-verification</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="nx">HOST</span><span class="o">=</span><span class="nx">apache</span><span class="o">-</span><span class="nx">api</span><span class="p">.</span><span class="nx">jamesthom</span><span class="p">.</span><span class="nx">as</span> <span class="nx">ava</span> <span class="o">-</span><span class="nx">v</span> <span class="o">--</span><span class="nx">fail</span><span class="o">-</span><span class="nx">fast</span>  <span class="nx">test</span><span class="o">/</span><span class="nx">acceptance</span><span class="o">/</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="err">✔</span> <span class="nx">should</span> <span class="k">return</span> <span class="nx">list</span> <span class="nx">of</span> <span class="nx">release</span> <span class="nx">candidates</span> <span class="p">(</span><span class="mf">3.7</span><span class="nx">s</span><span class="p">)</span>
+</span><span class='line'>    <span class="err">ℹ</span> <span class="nx">running</span> <span class="nx">api</span> <span class="nx">testing</span> <span class="nx">against</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//apache-api.jamesthom.as/api/versions</span>
+</span><span class='line'>  <span class="err">✔</span> <span class="nx">should</span> <span class="k">return</span> <span class="mi">404</span> <span class="k">for</span> <span class="nx">file</span> <span class="nx">list</span> <span class="nx">when</span> <span class="nx">release</span> <span class="nx">candidate</span> <span class="nx">is</span> <span class="nx">invalid</span> <span class="p">(</span><span class="mf">2.1</span><span class="nx">s</span><span class="p">)</span>
+</span><span class='line'>    <span class="err">ℹ</span> <span class="nx">running</span> <span class="nx">api</span> <span class="nx">testing</span> <span class="nx">against</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//apache-api.jamesthom.as/api/versions/unknown</span>
+</span><span class='line'>  <span class="p">...</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="mi">6</span> <span class="nx">tests</span> <span class="nx">passed</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Acceptance tests are also implemented with the AVA testing framework. All acceptance tests live in a single <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/test/acceptance/api.js">test file</a> (<code>unit/acceptance/api.js</code>).</p>
+
+<h2>CI/CD Pipeline</h2>
+
+<p>When new commits are pushed to the <code>master</code> branch on the project repository, the following steps needed to be kicked off by the build pipeline…</p>
+
+<ul>
+<li><em>Run project unit tests.</em></li>
+<li><em>Deploy application to test environment.</em></li>
+<li><em>Run acceptance tests against test environment.</em></li>
+<li><em>Deploy application to production environment.</em></li>
+<li><em>Run smoke tests against production environment.</em></li>
+</ul>
+
+
+<p>If any of the steps fail, the build pipeline should stop and send me a notification email.</p>
+
+<h3>Travis</h3>
+
+<p><a href="https://travis-ci.org/">Travis CI</a> is used to implement the CI/CD build pipeline. Travis CI uses a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml">custom file</a> (<code>.travis.yml</code>) in the project repository to configure the build pipeline. This YAML file defines commands to execute during each phase of build pipeline. If any of the commands fail, the build will stop at that phase without proceeding.</p>
+
+<p><em>Here is the completed <code>.travis.yml</code> file for this project: https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml</em></p>
+
+<p>I&#8217;m using the following Travis CI <a href="https://docs.travis-ci.com/user/job-lifecycle#the-job-lifecycle">build phases</a> to implement the pipeline: <strong>install</strong>, <strong>before_script</strong>, <strong>script</strong>, <strong>before_deploy</strong> and <strong>deploy</strong>. Commands will run in the Node.js 10 build environment, which pre-installs the language runtime and package manager.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">language</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">node_js</span>
+</span><span class='line'><span class="l-Scalar-Plain">node_js</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="s">&quot;10&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>install</h4>
+
+<p>In the <code>install</code> <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L5-L9">phase</a>, I need to set up the build environment to deploy the application and run tests.</p>
+
+<p>This means installing the IBM Cloud CLI, <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions CLI plugin</a>, The Serverless Framework (with Apache OpenWhisk plugin), application test framework (AvaJS) and other project dependencies.</p>
+
+<p>The IBM Cloud CLI is installed using a shell script. Running a CLI sub-command installs the <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions plugin</a>.</p>
+
+<p>The Serverless Framework is installed as global NPM package (using <code>npm -g install</code>). The Apache OpenWhisk provider plugin is handled as <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L13-L23">normal project dependency</a>, along with the test framework. Both those dependencies are installed using NPM.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">install</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">curl -fsSL https://clis.cloud.ibm.com/install/linux | sh</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud plugin install cloud-functions</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm install serverless -g</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm install</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>before_script</h4>
+
+<p>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L11-L16">phase</a> is used to run unit tests, catching errors in core business logic, before setting up credentials (used in the <code>script</code> phase) for the acceptance test environment. Unit test failures will halt the build immediately, skipping test and production deployments.</p>
+
+<p>Custom variables provide the API key, platform endpoint, organisation and space identifiers which are used for the test environment. The CLI is authenticated using these values, before running the <code>ibmcloud fn api list</code> command. This ensures Cloud Functions credentials are available locally, as used by The Serverless Framework.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">before_script</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm test</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud login --apikey $IBMCLOUD_API_KEY -a $IBMCLOUD_API_ENDPOINT</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target -o $IBMCLOUD_ORG -s $IBMCLOUD_TEST_SPACE</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud fn api list &gt; /dev/null</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>script</h4>
+
+<p>With the build system configured, the application can be deployed to test environment, followed by running acceptance tests. If either deployment or acceptance tests fail, the build will stop, skipping the production deployment.</p>
+
+<p>Acceptance tests use an environment variable to configure the hostname test cases are executed against. The <code>npm run acceptance-test</code> alias command sets this value to the test environment hostname (<code>apache-api-test.jamesthom.as</code>) before running the test suite.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">sls deploy</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm run acceptance-test</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>before_deploy</h4>
+
+<p>Before deploying to production, Cloud Functions credentials need to be updated. The IBM Cloud CLI is used to target the production environment, before running a Cloud Functions CLI command. This updates local credentials with the production environment credentials.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">before_deploy</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target -s $IBMCLOUD_PROD_SPACE</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud fn api list &gt; /dev/null</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>deploy</h4>
+
+<p>If all the proceeding stages have successfully finished, the application can be deployed to the production. Following this final deployment, smoke tests are used to check production APIs still work as expected.</p>
+
+<p>Smoke tests are just the same acceptance tests executed against the production environment. The <code>npm run acceptance-prod</code> alias command sets the hostname configuration value to the production environment  (<code>apache-api.jamesthom.as</code>) before running the test suite.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">deploy</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">script</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">sls deploy &amp;&amp; npm run acceptance-prod</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">skip_cleanup</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">true</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Using the <code>skip_cleanup</code> parameter leaves installed artifacts from previous phases in the build environment. This means we don&#8217;t have to re-install the IBM Cloud CLI, The Serverless Framework or NPM dependencies needed to run the production deployment and smoke tests.</em></p>
+
+<h3>success?</h3>
+
+<p>If all of the <a href="https://travis-ci.org/jthomas/openwhisk-release-verification">build phases</a> are successful, the latest project code should have been deployed to the production environment. 💯💯💯</p>
+
+<p><img src="/images/build-screenshot.png" alt="Build Screenshoot" /></p>
+
+<p>If the build failed due to unit test failures, the test suite can be ran locally to fix any errors. Deployment failures can be investigated using the console output logs from Travis CI. Acceptance test issues, against test or production environments, can be debugged by logging into those environments locally and running the test suite from my development machine.</p>
+
+<h2>Conclusion</h2>
+
+<p>Using Travis CI with The Serverless Framework and a JavaScript testing framework, I was able to set up a fully-automated CI/CD deployment pipeline for the Apache OpenWhisk release candidate verification tool.</p>
+
+<p>Using a CI/CD pipeline, rather than a manual approach, for deployments has the following advantages&#8230;</p>
+
+<ul>
+<li>No more manual and error-prone deploys relying on a human 👨‍💻 :)</li>
+<li>Automatic unit &amp; acceptance test execution catch errors before deployments.</li>
+<li>Production environment only accessed by CI/CD system, reducing accidental breakages.</li>
+<li>All cloud resources must be configured in code. No &#8221;<a href="https://martinfowler.com/bliki/SnowflakeServer.html">snowflake</a>&#8221; environments allowed.</li>
+</ul>
+
+
+<p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I&#8217;ll be notified by email.</p>
+
+<p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2738,629 +3112,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/">Finding Photos on Twitter Using Face Recognition With TensorFlow.js</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2018-10-30T09:34:00+00:00" pubdate data-updated="true">Oct 30<span>th</span>, 2018</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>As a developer advocate, I spend a lot of time at developer conferences (talking about serverless 😎). Upon returning from each trip, I need to compile a &#8220;trip report&#8221; on the event for my bosses. This helps demonstrate the value in attending events and that I&#8217;m not just accruing air miles and hotel points for fun&#8230; 🛫🏨</p>
-
-<p>I always include any social media content people post about my talks in the trip report. This is usually tweets with photos of me on stage. If people are tweeting about your session, I assume they enjoyed it and wanted to share with their followers.</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">&quot;Servers kill your productivity&quot; <a href="https://twitter.com/thomasj?ref_src=twsrc%5Etfw">@thomasj</a> at <a href="https://twitter.com/hashtag/CodeMobileUK?src=hash&amp;ref_src=twsrc%5Etfw">#CodeMobileUK</a> <a href="https://t.co/Y4NsiBBSxT">pic.twitter.com/Y4NsiBBSxT</a></p>&mdash; Mihai Cîrlănaru (@MCirlanaru) <a href="https://twitter.com/MCirlanaru/status/981170555834441729?ref_src=twsrc%5Etfw">April 3, 2018</a></blockquote>
-
-
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p><strong>Finding tweets with photos about your talk from attendees is surprisingly challenging.</strong></p>
-
-<p>Attendees often forget to include your twitter username in their tweets. This means the only way to find those photos is to manually scroll through all the results from the conference hashtag. This is problematic at conferences with thousands of attendees all tweeting during the event. <em>#devrelproblems</em>.</p>
-
-<p>Having become bored of manually trawling through all the tweets for each conference, I had a thought&#8230;</p>
-
-<blockquote><p><em>&#8220;Can&#8217;t I write some code to do this for me?&#8221;</em></p></blockquote>
-
-<p>This didn&#8217;t seem like too ridiculous an idea. Twitter has <a href="https://developer.twitter.com/en/docs/tweets/search/overview">an API</a>, which would allow me to retrieve all tweets for a conference hashtag. Once I had all the tweet photos, couldn&#8217;t I run some magic AI algorithm over the images to tell me if I was in them? 🤔</p>
-
-<p>After a couple of weeks of hacking around (and overcoming numerous challenges) I had (to my own amazement) managed to <a href="https://github.com/jthomas/findme">build a serverless application</a> which can find unlabelled photos of a person on twitter using machine learning with <a href="https://github.com/tensorflow/tfjs">TensorFlow.js</a>.</p>
-
-<p><img src="/images/face-recog/find-me-demo.gif" alt="FindMe Example" /></p>
-
-<p><em>If you just want to try this application yourself, follow the instructions in the Github repo: <a href="https://github.com/jthomas/findme">https://github.com/jthomas/findme</a></em></p>
-
-<h2>architecture</h2>
-
-<p><img src="/images/face-recog/architecture.png" alt="FindMe Architecture Diagram" /></p>
-
-<p>This application has four <a href="https://github.com/jthomas/findme/blob/master/serverless.yml">serverless functions</a> (two API handlers and two backend services) and a client-side application from a static web page. Users log into the <a href="https://github.com/jthomas/findme/tree/master/public">client-side application</a> using Auth0 with their Twitter account. This provides the backend application with the user&#8217;s profile image and Twitter API credentials.</p>
-
-<p>When the user invokes a search query, the client-side application invokes the API endpoint for the <code>register_search</code> <a href="https://github.com/jthomas/findme/blob/master/schedule_search.js">function</a> with the query terms and twitter credentials. This function registers a new search job in Redis and fires a new <code>search_request</code> trigger event with the query and job id. This job identifier is returned to the client to poll for real-time status updates.</p>
-
-<p>The <code>twitter_search</code> <a href="https://github.com/jthomas/findme/blob/master/twitter_search.js">function</a> is connected to the <code>search_request</code> trigger and invoked for each event. It uses the Twitter Search API to retrieve all tweets for the search terms. If tweets retrieved from the API contain photos, those tweet ids (with photo urls) are fired as new <code>tweet_image</code> trigger events.</p>
-
-<p>The <code>compare_images</code> <a href="https://github.com/jthomas/findme/blob/master/compare_images.js">function</a> is connected to the <code>tweet_image</code> trigger. When invoked, it downloads the user&#8217;s twitter profile image along with the tweet image and runs face detection against both images, using the <code>face-api.js</code> <a href="https://github.com/justadudewhohacks/face-api.js">library</a>. If any faces in the tweet photo match the face in the user&#8217;s profile image, tweet ids are written to Redis before exiting.</p>
-
-<p>The client-side web page polls for real-time search results by polling the API endpoint for the <code>search_status</code>  <a href="https://github.com/jthomas/findme/blob/master/search_status.js">function</a> with the search job id. Tweets with matching faces are displayed on the web page using the <a href="https://developer.twitter.com/en/docs/twitter-for-websites/embedded-tweets/overview">Twitter JS library</a>.</p>
-
-<h2>challenges</h2>
-
-<p>Since I had found an <a href="https://github.com/justadudewhohacks/face-api.js">NPM library to handle face detection</a>, I could just use this on a serverless platform by including the library within the zip file used to create my serverless application? Sounds easy, right?!</p>
-
-<p><strong>ahem - not so faas-t&#8230;. ✋</strong></p>
-
-<p>As discussed in <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">previous blog posts</a>, there are numerous challenges in using TF.js-based libraries on serverless platforms. Starting with making the packages available in the runtime and loading model files to converting images for classification, these libraries are not like using normal NPM modules.</p>
-
-<p><em>Here are the main challenges I had to overcome to make this serverless application work&#8230;</em></p>
-
-<h3>using tf.js libraries on a serverless platform</h3>
-
-<p>The <a href="https://github.com/tensorflow/tfjs-node">Node.js backend drivers</a> for TensorFlow.js use a native shared C++ library  (<code>libtensorflow.so</code>) to execute models on the CPU or GPU. This native dependency is compiled for the platform during the <code>npm install</code> process. The shared library file is around 142MB, which is too large to include in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">deployment package</a> for most serverless platforms.</p>
-
-<p>Normal workarounds for this issue store large dependencies in an object store. These files are dynamically retrieved during cold starts and stored in the runtime filesystem, as shown in this pseudo-code. This workaround does add an additional delay to cold start invocations.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">let</span> <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">false</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">library</span> <span class="o">=</span> <span class="s1">&#39;libtensorflow.so&#39;</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">cold_start</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">from_object_store</span><span class="p">(</span><span class="nx">library</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">write_to_fs</span><span class="p">(</span><span class="nx">library</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">true</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// rest of function code…</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Fortunately, I had a better solution using Apache OpenWhisk&#8217;s support for custom Docker runtimes!</strong></p>
-
-<p>This feature allows serverless applications to use <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md#creating-native-actions">custom Docker images</a> as the runtime environment. Creating custom images with <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">large libraries pre-installed</a> means they can be excluded from deployment packages. 💯</p>
-
-<p>Apache OpenWhisk publishes all existing <a href="https://hub.docker.com/r/openwhisk/">runtime images</a> on Docker Hub. Using existing runtime images as base images means Dockerfiles for custom runtimes are minimal. Here&#8217;s the Dockerfile needed to build a custom runtime with the TensorFlow.js Node.js backend drivers pre-installed.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once this image has been built and published on Dockerhub, you can use it when creating new functions.</p>
-
-<p><em>I used this approach to build a <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/tags/">custom TensorFlow.js runtime</a> which is available on Docker Hub: <code>jamesthomas/action-nodejs-v8:tfjs-faceapi</code></em></p>
-
-<p>OpenWhisk actions created using the <code>wsk</code> command-line use a configuration flag (<code>--docker</code>) to specify custom runtime images.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">classify</span> <span class="nx">source</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">faceapi</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The OpenWhisk provider plugin for The Serverless Framework also supports <a href="https://github.com/serverless/serverless-openwhisk#custom-runtime-images">custom runtime images</a> through a configuration parameter (<code>image</code>) under the function configuration.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">machine-learning</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
-</span><span class='line'>
-</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
-</span><span class='line'>  <span class="l-Scalar-Plain">classify</span><span class="p-Indicator">:</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">source.main</span>
-</span><span class='line'>    <span class="l-Scalar-Plain">image</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">jamesthomas/action-nodejs-v8:tfjs-faceapi</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Having fixed the issue of library loading on serverless platforms, I could move onto the next problem, loading the pre-trained models&#8230; 💽</p>
-
-<h3>loading pre-trained models</h3>
-
-<p>Running the <a href="https://github.com/justadudewhohacks/face-api.js#usage-loading-models">example code</a> to load the pre-trained models for face recognition gave me this error:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">ReferenceError</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">fetch is not defined</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I discovered how to manually load TensorFlow.js models from the filesystem using the <code>file://</code> URI prefix. Unfortunately, the <code>face-api.js</code> library doesn&#8217;t support this feature. Models are <a href="https://github.com/justadudewhohacks/tfjs-image-recognition-base/blob/4a7d981dbb37e0d3dabc962e1cbfb6122e535263/src/dom/loadWeightMap.ts#L12">automatically loaded</a> using the <code>fetch</code> HTTP client. This HTTP client is available into modern browsers but not in the Node.js runtime.</p>
-
-<p>Overcoming this issue relies on providing an instance of a compatible HTTP client in the runtime. The <code>node-fetch</code> library is a <a href="https://www.npmjs.com/package/node-fetch">implementation of the fetch client</a> API for the Node.js runtime. By manually installing this module and exporting as a global variable, the library can then use the HTTP client as expected.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// Make HTTP client available in runtime</span>
-</span><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;node-fetch&#39;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Model configuration and weight files can then be loaded from the library&#8217;s Github repository using this URL:</p>
-
-<p>https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="s1">&#39;&lt;GITHUB_URL&gt;&#39;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>face detection in images</h3>
-
-<p>The <code>face-api.js</code> library has a <a href="https://github.com/justadudewhohacks/face-api.js#detecting-faces">utility function</a> (<code>models.allFaces</code>) to automatically detect and calculate descriptors for all faces found in an image. Descriptors are a feature vector (of 128 32-bit float values) which uniquely describes the characteristics of a persons face.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">results</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">allFaces</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="nx">minConfidence</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>The input to this function is the input tensor with the RGB values from an image. In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I explained how to convert an image from the filesystem in Node.js to the input tensor needed by the model.</em></p>
-
-<p>Finding a user by comparing their twitter profile against photos from tweets starts by running face detection against both images. By comparing computed descriptor values, a measure of similarity can be established between faces from the images.</p>
-
-<h3>face comparison</h3>
-
-<p>Once the face descriptors have been calculated the library provides a utility function to compute the euclidian distance between two descriptors vectors. If the difference between two face descriptors is less than a threshold value, this is used to identify the same person in both images.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">distance</span> <span class="o">=</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">euclideanDistance</span><span class="p">(</span><span class="nx">descriptor1</span><span class="p">,</span> <span class="nx">descriptor2</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">distance</span> <span class="o">&lt;</span> <span class="mf">0.6</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;match&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="k">else</span>
-</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;no match&#39;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>I&#8217;ve no idea why 0.6 is chosen as the threshold value but this seemed to work for me! Even small changes to this value dramatically reduced the precision and recall rates for my test data. I&#8217;m calling it the Goldilocks value, just use it&#8230;</p>
-
-<h2>performance</h2>
-
-<p>Once I had the end to end application working, I wanted to make it was fast as possible. By optimising the performance, I could improve the application responsiveness and reduce compute costs for my backend. Time is literally money with serverless platforms.</p>
-
-<h3>baseline performance</h3>
-
-<p>Before attempting to optimise my application, I needed to understand the baseline performance. Setting up experiments to record invocation durations gave me the following average test results.</p>
-
-<ul>
-<li><em>Warm invocations</em>: ~5 seconds</li>
-<li><em>Cold invocations</em>: ~8 seconds</li>
-</ul>
-
-
-<p>Instrumenting the code with <code>console.time</code> statements revealed execution time was comprised of five main sections.</p>
-
-<table>
-<thead>
-<tr>
-<th></th>
-<th> Cold Starts </th>
-<th> Warm Starts </th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Initialisation    </td>
-<td>       1200 ms       </td>
-<td>        0 ms</td>
-</tr>
-<tr>
-<td>Model Loading     </td>
-<td>       3200 ms       </td>
-<td>       2000 ms       </td>
-</tr>
-<tr>
-<td>Image Loading     </td>
-<td>     500 ms x 2      </td>
-<td>     500 ms x 2      </td>
-</tr>
-<tr>
-<td>Face Detection    </td>
-<td> 700 ms - 900 ms x 2 </td>
-<td> 700 ms - 900 ms x 2</td>
-</tr>
-<tr>
-<td>Everything Else   </td>
-<td>       1000 ms       </td>
-<td>       500 ms        </td>
-</tr>
-<tr>
-<td><strong>Total Duration</strong></td>
-<td>   <strong>~ 8 seconds</strong>   </td>
-<td>   <strong>~ 5 seconds</strong>  </td>
-</tr>
-</tbody>
-</table>
-
-
-<p><em>Initialisation</em> was the delay during cold starts to create the runtime environment and load all the library files and application code. <em>Model Loading</em> recorded the time spent instantiating the TF.js models from the source files. <em>Image Loading</em> was the time spent converting the RGB values from images into input tensors, this happened twice, once for the twitter profile picture and again for the tweet photo. <em>Face Detection</em> is the elapsed time to execute the <code>models.allFaces</code> method and <code>faceapi.euclideanDistance</code> methods for all the detected faces. <em>Everything else</em> is well&#8230; everything else.</p>
-
-<p>Since model loading was the largest section, this seemed like an obvious place to start optimising. 📈📉</p>
-
-<h3>loading model files from disk</h3>
-
-<p>Overcoming the initial model loading issue relied on manually exposing the expected HTTP client in the Node.js runtime. This allowed models to be dynamically loaded (over HTTP) from the external Github repository. Models files were about 36MB.</p>
-
-<p>My first idea was to load these model files from the filesystem, which should be much faster than downloading from Github. Since I was already building a custom Docker runtime, it was a one-line change to include the model files within the runtime filesystem.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">COPY</span> <span class="nx">weights</span> <span class="nx">weights</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Having re-built the image and pushed to Docker Hub, the classification function&#8217;s runtime environment now included models files in the filesystem.</p>
-
-<p><strong>But how do we make the <code>face-api.js</code> library load models files from the filesystem when it is using a HTTP client?</strong></p>
-
-<p>My solution was to write a <code>fetch</code> client that proxied calls to retrieve files from a HTTP endpoint to the local filesystem. 😱 I&#8217;d let you decide whether this is a brilliant or terrible idea!</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">json</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">,</span> <span class="s1">&#39;utf8&#39;</span><span class="p">)),</span>
-</span><span class='line'>    <span class="nx">arrayBuffer</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">load</span><span class="p">(</span><span class="s1">&#39;/weights&#39;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>face-api.js</code> library only used two methods (<code>json()</code> &amp; <code>arrayBuffer()</code>) from the HTTP client. Stubbing out these methods to proxy <code>fs.readFileSync</code> meant files paths were loaded from the filesystem. Amazingly, this seemed to just work, hurrah!</p>
-
-<p><strong>Implementing this feature and re-running performance tests revealed this optimisation saved about 500 ms from the Model Loading section.</strong></p>
-
-<table>
-<thead>
-<tr>
-<th></th>
-<th> Cold Starts </th>
-<th> Warm Starts </th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Initialisation    </td>
-<td>       1200 ms       </td>
-<td>        0 ms</td>
-</tr>
-<tr>
-<td>Model Loading     </td>
-<td>       2700 ms       </td>
-<td>       1500 ms       </td>
-</tr>
-<tr>
-<td>Image Loading     </td>
-<td>     500 ms x 2      </td>
-<td>     500 ms x 2      </td>
-</tr>
-<tr>
-<td>Face Detection    </td>
-<td> 700 ms - 900 ms x 2 </td>
-<td> 700 ms - 900 ms x 2</td>
-</tr>
-<tr>
-<td>Everything Else   </td>
-<td>       1000 ms       </td>
-<td>       500 ms        </td>
-</tr>
-<tr>
-<td><strong>Total Duration</strong></td>
-<td>   <strong>~ 7.5 seconds</strong>   </td>
-<td>   <strong>~ 4.5 seconds</strong>  </td>
-</tr>
-</tbody>
-</table>
-
-
-<p>This was less of an improvement than I&#8217;d expected. Parsing all the model files and instantiating the internal objects was more computationally intensive than I realised. This performance improvement did improve both cold and warm invocations, which was a bonus.</p>
-
-<p><em>Despite this optimisation, model loading was still the largest section in the classification function&#8230;</em></p>
-
-<h3>caching loaded models</h3>
-
-<p>There&#8217;s a good strategy to use when optimising serverless functions&#8230;</p>
-
-<p><img src="/images/face-recog/cache-all-the-things.jpg" alt="CACHE ALL THE THINGS" /></p>
-
-<p>Serverless runtimes re-use runtime containers for consecutive requests, known as warm environments. Using local state, like global variables or the runtime filesystem, to cache data between requests can be used to improve performance during those invocations.</p>
-
-<p>Since model loading was such an expensive process, I wanted to cache initialised models. Using a global variable, I could control whether to trigger model loading or return the pre-loaded models. Warm environments would re-use pre-loaded models and remove model loading delay.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">faceapi</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;face-api.js&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">let</span> <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">false</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">load</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">location</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">LOADED</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
-</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceRecognitionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
-</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceLandmarkModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">true</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">faceapi</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>This performance improvement had a significant impact of the performance for warm invocations. Model loading became &#8220;free&#8221;.</strong> 👍</p>
-
-<table>
-<thead>
-<tr>
-<th></th>
-<th> Cold Starts </th>
-<th> Warm Starts </th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Initialisation    </td>
-<td>       1200 ms       </td>
-<td>        0 ms</td>
-</tr>
-<tr>
-<td>Model Loading     </td>
-<td>       2700 ms       </td>
-<td>       0 ms       </td>
-</tr>
-<tr>
-<td>Image Loading     </td>
-<td>     500 ms x 2      </td>
-<td>     500 ms x 2      </td>
-</tr>
-<tr>
-<td>Face Detection    </td>
-<td> 700 ms - 900 ms x 2 </td>
-<td> 700 ms - 900 ms x 2</td>
-</tr>
-<tr>
-<td>Everything Else   </td>
-<td>       1000 ms       </td>
-<td>       500 ms        </td>
-</tr>
-<tr>
-<td><strong>Total Duration</strong></td>
-<td>   <strong>~ 7.5 seconds</strong>   </td>
-<td>   <strong>~ 3 seconds</strong>  </td>
-</tr>
-</tbody>
-</table>
-
-
-<h3>caching face descriptors</h3>
-
-<p>In the initial implementation, the face comparison function was executing face detection against both the user&#8217;s twitter profile image and tweet photo for comparison. Since the twitter profile image was the same in each search request, running face detection against this image would always return the same results.</p>
-
-<p>Rather than having this work being redundantly computed in each function, caching the results of the computed face descriptor for the profile image meant it could re-used across invocations. This would reduce by 50% the work necessary in the Image &amp; Model Loading sections.</p>
-
-<p>The <code>face-api.js</code> library returns the face descriptor as a typed array with 128 32-bit float values. Encoding this values as a hex string allows them to be stored and retrieved from Redis. This code was used to convert float values to hex strings, whilst maintaining the exact precision of those float values.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">encode</span> <span class="o">=</span> <span class="nx">typearr</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">encoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">typearr</span><span class="p">.</span><span class="nx">buffer</span><span class="p">).</span><span class="nx">toString</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">encoded</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">decode</span> <span class="o">=</span> <span class="nx">encoded</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">decoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">encoded</span><span class="p">,</span> <span class="s1">&#39;hex&#39;</span><span class="p">)</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">uints</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Uint8Array</span><span class="p">(</span><span class="nx">decoded</span><span class="p">)</span>
-</span><span class='line'>  <span class="kr">const</span> <span class="nx">floats</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Float32Array</span><span class="p">(</span><span class="nx">uints</span><span class="p">.</span><span class="nx">buffer</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">return</span> <span class="nx">floats</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This optimisation improves the performance of most cold invocations and all warm invocations, removing over 1200 ms of computation time to compute the results.</p>
-
-<table>
-<thead>
-<tr>
-<th></th>
-<th>                    </th>
-<th align="center"> Cold Starts (Cached) </th>
-<th align="center">    Warm Starts    </th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td></td>
-<td> Initialisation     </td>
-<td align="center">       1200 ms        </td>
-<td align="center">       0 ms        |</td>
-</tr>
-<tr>
-<td></td>
-<td> Model Loading      </td>
-<td align="center">       2700 ms        </td>
-<td align="center">      1500 ms      |</td>
-</tr>
-<tr>
-<td></td>
-<td> Image Loading      </td>
-<td align="center">        500 ms        </td>
-<td align="center">      500 ms       |</td>
-</tr>
-<tr>
-<td></td>
-<td> Face Detection     </td>
-<td align="center">   700 ms - 900 ms    </td>
-<td align="center">  700 ms - 900 ms  |</td>
-</tr>
-<tr>
-<td></td>
-<td> Everything Else    </td>
-<td align="center">       1000 ms        </td>
-<td align="center">      500 ms       |</td>
-</tr>
-<tr>
-<td></td>
-<td> <strong>Total Duration</strong> </td>
-<td align="center">   <strong>~ 6 seconds</strong>    </td>
-<td align="center"> <strong>~ 2.5 seconds</strong> |</td>
-</tr>
-</tbody>
-</table>
-
-
-<table>
-<thead>
-<tr>
-<th></th>
-<th> Cold Starts </th>
-<th> Warm Starts </th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Initialisation    </td>
-<td>       1200 ms       </td>
-<td>        0 ms</td>
-</tr>
-<tr>
-<td>Model Loading     </td>
-<td>       2700 ms       </td>
-<td>       0 ms       </td>
-</tr>
-<tr>
-<td>Image Loading     </td>
-<td>     500 ms      </td>
-<td>     500 ms       </td>
-</tr>
-<tr>
-<td>Face Detection    </td>
-<td> 700 ms - 900 ms  </td>
-<td> 700 ms - 900 ms </td>
-</tr>
-<tr>
-<td>Everything Else   </td>
-<td>       1000 ms       </td>
-<td>       500 ms        </td>
-</tr>
-<tr>
-<td><strong>Total Duration</strong></td>
-<td>   <strong>~ 7.5 seconds</strong>   </td>
-<td>   <strong>~ 3 seconds</strong>  </td>
-</tr>
-</tbody>
-</table>
-
-
-<h3>final results + cost</h3>
-
-<p>Application performance was massively improved with all these optimisations. As demonstrated in the video above, the application could process tweets in real-time, returning almost instant results. Average invocation durations were now.</p>
-
-<ul>
-<li><em>Warm invocations</em>: ~2.5 seconds</li>
-<li><em>Cold invocations (Cached)</em>: ~6 seconds</li>
-</ul>
-
-
-<p>Serverless platforms charge for compute time by the millisecond, so these improvements led to cost savings of 25% for cold invocations (apart the first classification for a user) and 50% for warm invocations.</p>
-
-<p>Classification functions used 512MB of RAM which meant IBM Cloud Functions would provide 320,000 &#8220;warm&#8221; classifications or 133,333 &#8220;cold&#8221; classifications within the free tier each month. Ignoring the free tier, 100,000 &#8220;warm&#8221; classifications would cost $5.10 and 100,000 &#8220;cold&#8221; classifications $2.13.</p>
-
-<h2>conclusion</h2>
-
-<p>Using TensorFlow.js with serverless cloud platforms makes it easy to build scalable machine learning applications in the cloud. Using the horizontal scaling capabilities of serverless platforms, thousands of model classifications can be ran in parallel. This can be more performant than having dedicated hardware with a GPU, especially with compute costs for serverless applications being so cheap.</p>
-
-<p>TensorFlow.js is ideally suited to serverless application due to the JS interface, (relatively) small library size and availability of pre-trained models. Despite having no prior experience in Machine Learning, I was able to use the library to build a face recognition pipeline, processing 100s of images in parallel, for real-time results. This amazing library opens up machine learning to a whole new audience!</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -3376,6 +3127,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
       </li>
     
@@ -3389,10 +3144,6 @@
     
       <li class="post">
         <a href="/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/">CouchDB Filters with OpenWhisk Triggers</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/02/05/large-java-applications-on-openwhisk/">Large (Java) Applications on Apache OpenWhisk</a>
       </li>
     
   </ul>

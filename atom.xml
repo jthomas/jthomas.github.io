@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-04-15T11:53:59+01:00</updated>
+  <updated>2019-04-26T16:34:37+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,353 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/"/>
+    <updated>2019-04-23T15:08:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p>How do you set up a <a href="https://dzone.com/articles/what-is-cicd">CI/CD pipeline</a> for serverless applications?</p>
+
+<p>This blog post will explain how to use <a href="https://travis-ci.org/">Travis CI</a>, <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/avajs/ava">AVA testing framework</a> to set up a fully-automated build, deploy and test pipeline for a serverless application. It will use a real example of a production <a href="https://github.com/jthomas/openwhisk-release-verification">serverless application</a>, built using <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> and running on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. The CI/CD pipeline will execute the following tasks&#8230;</p>
+
+<ul>
+<li><strong>Run project unit tests.</strong></li>
+<li><strong>Deploy application to test environment.</strong></li>
+<li><strong>Run acceptance tests against test environment.</strong></li>
+<li><strong>Deploy application to production environment.</strong></li>
+<li><strong>Run smoke tests against production environment.</strong></li>
+</ul>
+
+
+<p>Before diving into the details of the CI/CD pipeline setup, let&#8217;s start by showing the example serverless application being used for this project&#8230;</p>
+
+<h2>Serverless Project - <a href="http://apache.jamesthom.as/">http://apache.jamesthom.as/</a></h2>
+
+<p>The &#8221;<a href="https://github.com/jthomas/openwhisk-release-verification">Apache OpenWhisk Release Verification</a>&#8221; project is a serverless web application to help committers verify release candidates for the open-source project. It automates running the verification steps from the <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">ASF release checklist</a> using serverless functions. Automating release candidate validation makes it easier for  committers to participate in release voting.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p>The project consists of a static web assets (HTML, JS, CSS files) and HTTP APIs. Static web assets are hosted by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>. HTTP APIs are implemented as Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> and exposed using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway</a> service. <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> is used to host the Apache OpenWhisk application.</p>
+
+<p>No other cloud services, like databases, are needed by the backend. Release candidate information is retrieved in real-time by parsing the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">HTML page</a> from the ASF website.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Serverless Architecture" /></p>
+
+<h3>Configuration</h3>
+
+<p><a href="https://github.com/serverless/serverless">The Serverless Framework</a> (with the <a href="https://github.com/serverless/serverless-openwhisk">Apache OpenWhisk provider plugin</a>) is used to define the serverless functions used in the application. HTTP endpoints are also defined in the YAML configuration file.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">release-verfication</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">runtime</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">nodejs:10</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">versions</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">index.versions</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">events</span><span class="p-Indicator">:</span>
+</span><span class='line'>      <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">http</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">GET /api/versions</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">version_files</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">index.version_files</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">events</span><span class="p-Indicator">:</span>
+</span><span class='line'>      <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">http</span><span class="p-Indicator">:</span>
+</span><span class='line'>          <span class="l-Scalar-Plain">method</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">GET</span>
+</span><span class='line'>          <span class="l-Scalar-Plain">path</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">/api/versions/{version}</span>
+</span><span class='line'>          <span class="l-Scalar-Plain">resp</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">http</span>
+</span><span class='line'><span class="nn">...</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">plugins</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">serverless-openwhisk</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The framework handles all deployment and configuration tasks for the application. Setting up the application in a new environment is as simple as running the <code>serverless deploy</code> <a href="https://github.com/serverless/serverless">command</a>.</p>
+
+<h3>Environments</h3>
+
+<p>Apache OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#fully-qualified-names">namespaces</a> to group individual packages, actions, triggers and rules. Different namespaces can be used to provide isolated environments for applications.</p>
+
+<p>IBM Cloud Functions automatically creates <a href="https://cloud.ibm.com/docs/openwhisk?topic=cloud-functions-cloudfunctions_cli#region_info">user-based namespaces</a> in platform instances. These auto-generated namespaces mirror the IBM Cloud organisation and space used to access the instance. Creating <a href="https://cloud.ibm.com/docs/account?topic=account-orgsspacesusers#cf-org-concepts">new spaces within an organisation</a> will provision extra namespaces.</p>
+
+<p>I&#8217;m using a custom organisation for the application with three different spaces: <strong>dev</strong>, <strong>test</strong> and <strong>prod</strong>.</p>
+
+<p><strong>dev</strong> is used as a test environment to deploy functions during development. <strong>test</strong> is used by the CI/CD pipeline to deploy a temporary instance of the application during acceptance tests. <strong>prod</strong> is the production environment hosting the external application actions.</p>
+
+<h3>Credentials</h3>
+
+<p>The <a href="https://cloud.ibm.com/docs/cli?topic=cloud-cli-install-ibmcloud-cli">IBM Cloud CLI</a> is used to handle IBM Cloud Functions credentials. <a href="https://cloud.ibm.com/docs/iam?topic=iam-manapikey">Platform API keys</a> will be used to log in the CLI from the CI/CD system.</p>
+
+<p>When Cloud Functions CLI commands are issued (after targeting a new region, organisation or space), API keys for that Cloud Functions instance are automatically retrieved and stored locally. The Serverless Framework knows how to use these local credentials when interacting with the platform.</p>
+
+<h3>High Availability?</h3>
+
+<p>The Apache OpenWhisk Release Verifier is not a critical cloud application which needs &#8221;<a href="https://en.wikipedia.org/wiki/Five_nines">five nines</a>&#8221; of availability. The application is idle most of the time. It does not need a <a href="https://en.wikipedia.org/wiki/High_availability">highly available</a> serverless architecture. This means the build pipeline does not have to&#8230;</p>
+
+<ul>
+<li><a href="https://cloud.ibm.com/docs/tutorials?topic=solution-tutorials-multi-region-serverless#multi-region-serverless">Deploy application instances in multiple cloud regions.</a></li>
+<li><a href="https://www.ibm.com/blogs/bluemix/2019/04/load-balancing-api-calls-across-regions-with-ibm-cloud-internet-services-and-cloud-api-gateway/">Set up a global load balancer between regional instances.</a></li>
+<li>Support &#8221;<a href="https://www.martinfowler.com/bliki/BlueGreenDeployment.html">zero downtime deploys</a>&#8221; to minimise downtime during deployments.</li>
+<li>Automatic roll-back to previous versions on production issues.</li>
+</ul>
+
+
+<p>New deployments will simply overwrite resources in the production namespace in a single region. If the production site is broken after a deployment, the smoke tests should catch this and email me to fix it!</p>
+
+<h2>Testing</h2>
+
+<p>Given this tool will be used to check release candidates for the open-source project, I wanted to ensure it worked properly! Incorrect validation results could lead to invalid source archives being published.</p>
+
+<p>I&#8217;ve chosen to rely heavily on unit tests to check the core business logic. These tests ensure all validation tasks work correctly, including PGP signature verification, cryptographic hash matching, LICENSE file contents and other ASF requirements for project releases.</p>
+
+<p>Additionally, I&#8217;ve used end-to-end acceptance tests to validate the HTTP APIs work as expected. HTTP requests are sent to the API GW endpoints, with responses compared against expected values. All available release candidates are run through the validation process to check no errors are returned.</p>
+
+<h3>Unit Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Unit_testing">Unit tests</a> are implemented with the <a href="https://github.com/avajs/ava">AVA testing framework</a>. Unit tests live in the <code>unit/test/</code> <a href="https://github.com/jthomas/openwhisk-release-verification/tree/master/test/unit">folder</a>.</p>
+
+<p>The <code>npm test</code> command alias runs the <code>ava test/unit/</code> command to execute all unit tests. This command can be executed locally, during development, or from the CI/CD pipeline.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="nv">$ </span>npm <span class="nb">test</span>
+</span><span class='line'>
+</span><span class='line'>&gt; release-verification@1.0.0 <span class="nb">test</span> ~/code/release-verification
+</span><span class='line'>&gt; ava <span class="nb">test</span>/unit/
+</span><span class='line'>
+</span><span class='line'> 27 tests passed
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Acceptance Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Acceptance_testing">Acceptance tests</a> check API endpoints return the expected responses for valid (and invalid) requests. Acceptance tests are executed against the API Gateway endpoints for an application instance.</p>
+
+<p>The hostname used for HTTP requests is controlled using an environment variable (<code>HOST</code>). Since the same test suite test is used for acceptance and smoke tests, setting this environment variable is the only configuration needed to run tests against different environments.</p>
+
+<p>API endpoints in the test and production environments are exposed using different custom sub-domains (<code>apache-api.jamesthom.as</code> and <code>apache-api-test.jamesthom.as</code>). NPM <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L8-L9">scripts are used</a> to provide commands (<code>acceptance-test</code> &amp; <code>acceptance-prod</code>) which set the environment hostname before running the test suite.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="s2">&quot;scripts&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;acceptance-test&quot;</span><span class="o">:</span> <span class="s2">&quot;HOST=apache-api-test.jamesthom.as ava -v --fail-fast test/acceptance/&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;acceptance-prod&quot;</span><span class="o">:</span> <span class="s2">&quot;HOST=apache-api.jamesthom.as ava -v --fail-fast test/acceptance/&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">npm</span> <span class="nx">run</span> <span class="nx">acceptance</span><span class="o">-</span><span class="nx">prod</span>
+</span><span class='line'>
+</span><span class='line'><span class="o">&gt;</span> <span class="nx">release</span><span class="o">-</span><span class="nx">verification</span><span class="err">@</span><span class="mf">1.0</span><span class="p">.</span><span class="mi">0</span> <span class="nx">acceptance</span><span class="o">-</span><span class="nx">prod</span> <span class="o">~</span><span class="err">/code/release-verification</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="nx">HOST</span><span class="o">=</span><span class="nx">apache</span><span class="o">-</span><span class="nx">api</span><span class="p">.</span><span class="nx">jamesthom</span><span class="p">.</span><span class="nx">as</span> <span class="nx">ava</span> <span class="o">-</span><span class="nx">v</span> <span class="o">--</span><span class="nx">fail</span><span class="o">-</span><span class="nx">fast</span>  <span class="nx">test</span><span class="o">/</span><span class="nx">acceptance</span><span class="o">/</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="err">✔</span> <span class="nx">should</span> <span class="k">return</span> <span class="nx">list</span> <span class="nx">of</span> <span class="nx">release</span> <span class="nx">candidates</span> <span class="p">(</span><span class="mf">3.7</span><span class="nx">s</span><span class="p">)</span>
+</span><span class='line'>    <span class="err">ℹ</span> <span class="nx">running</span> <span class="nx">api</span> <span class="nx">testing</span> <span class="nx">against</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//apache-api.jamesthom.as/api/versions</span>
+</span><span class='line'>  <span class="err">✔</span> <span class="nx">should</span> <span class="k">return</span> <span class="mi">404</span> <span class="k">for</span> <span class="nx">file</span> <span class="nx">list</span> <span class="nx">when</span> <span class="nx">release</span> <span class="nx">candidate</span> <span class="nx">is</span> <span class="nx">invalid</span> <span class="p">(</span><span class="mf">2.1</span><span class="nx">s</span><span class="p">)</span>
+</span><span class='line'>    <span class="err">ℹ</span> <span class="nx">running</span> <span class="nx">api</span> <span class="nx">testing</span> <span class="nx">against</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//apache-api.jamesthom.as/api/versions/unknown</span>
+</span><span class='line'>  <span class="p">...</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="mi">6</span> <span class="nx">tests</span> <span class="nx">passed</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Acceptance tests are also implemented with the AVA testing framework. All acceptance tests live in a single <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/test/acceptance/api.js">test file</a> (<code>unit/acceptance/api.js</code>).</p>
+
+<h2>CI/CD Pipeline</h2>
+
+<p>When new commits are pushed to the <code>master</code> branch on the project repository, the following steps needed to be kicked off by the build pipeline…</p>
+
+<ul>
+<li><em>Run project unit tests.</em></li>
+<li><em>Deploy application to test environment.</em></li>
+<li><em>Run acceptance tests against test environment.</em></li>
+<li><em>Deploy application to production environment.</em></li>
+<li><em>Run smoke tests against production environment.</em></li>
+</ul>
+
+
+<p>If any of the steps fail, the build pipeline should stop and send me a notification email.</p>
+
+<h3>Travis</h3>
+
+<p><a href="https://travis-ci.org/">Travis CI</a> is used to implement the CI/CD build pipeline. Travis CI uses a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml">custom file</a> (<code>.travis.yml</code>) in the project repository to configure the build pipeline. This YAML file defines commands to execute during each phase of build pipeline. If any of the commands fail, the build will stop at that phase without proceeding.</p>
+
+<p><em>Here is the completed <code>.travis.yml</code> file for this project: https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml</em></p>
+
+<p>I&#8217;m using the following Travis CI <a href="https://docs.travis-ci.com/user/job-lifecycle#the-job-lifecycle">build phases</a> to implement the pipeline: <strong>install</strong>, <strong>before_script</strong>, <strong>script</strong>, <strong>before_deploy</strong> and <strong>deploy</strong>. Commands will run in the Node.js 10 build environment, which pre-installs the language runtime and package manager.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">language</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">node_js</span>
+</span><span class='line'><span class="l-Scalar-Plain">node_js</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="s">&quot;10&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>install</h4>
+
+<p>In the <code>install</code> <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L5-L9">phase</a>, I need to set up the build environment to deploy the application and run tests.</p>
+
+<p>This means installing the IBM Cloud CLI, <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions CLI plugin</a>, The Serverless Framework (with Apache OpenWhisk plugin), application test framework (AvaJS) and other project dependencies.</p>
+
+<p>The IBM Cloud CLI is installed using a shell script. Running a CLI sub-command installs the <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions plugin</a>.</p>
+
+<p>The Serverless Framework is installed as global NPM package (using <code>npm -g install</code>). The Apache OpenWhisk provider plugin is handled as <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L13-L23">normal project dependency</a>, along with the test framework. Both those dependencies are installed using NPM.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">install</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">curl -fsSL https://clis.cloud.ibm.com/install/linux | sh</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud plugin install cloud-functions</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm install serverless -g</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm install</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>before_script</h4>
+
+<p>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L11-L16">phase</a> is used to run unit tests, catching errors in core business logic, before setting up credentials (used in the <code>script</code> phase) for the acceptance test environment. Unit test failures will halt the build immediately, skipping test and production deployments.</p>
+
+<p>Custom variables provide the API key, platform endpoint, organisation and space identifiers which are used for the test environment. The CLI is authenticated using these values, before running the <code>ibmcloud fn api list</code> command. This ensures Cloud Functions credentials are available locally, as used by The Serverless Framework.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">before_script</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm test</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud login --apikey $IBMCLOUD_API_KEY -a $IBMCLOUD_API_ENDPOINT</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target -o $IBMCLOUD_ORG -s $IBMCLOUD_TEST_SPACE</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud fn api list &gt; /dev/null</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>script</h4>
+
+<p>With the build system configured, the application can be deployed to test environment, followed by running acceptance tests. If either deployment or acceptance tests fail, the build will stop, skipping the production deployment.</p>
+
+<p>Acceptance tests use an environment variable to configure the hostname test cases are executed against. The <code>npm run acceptance-test</code> alias command sets this value to the test environment hostname (<code>apache-api-test.jamesthom.as</code>) before running the test suite.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">sls deploy</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">npm run acceptance-test</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>before_deploy</h4>
+
+<p>Before deploying to production, Cloud Functions credentials need to be updated. The IBM Cloud CLI is used to target the production environment, before running a Cloud Functions CLI command. This updates local credentials with the production environment credentials.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">before_deploy</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target -s $IBMCLOUD_PROD_SPACE</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud fn api list &gt; /dev/null</span>
+</span><span class='line'>  <span class="p-Indicator">-</span> <span class="l-Scalar-Plain">ibmcloud target</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>deploy</h4>
+
+<p>If all the proceeding stages have successfully finished, the application can be deployed to the production. Following this final deployment, smoke tests are used to check production APIs still work as expected.</p>
+
+<p>Smoke tests are just the same acceptance tests executed against the production environment. The <code>npm run acceptance-prod</code> alias command sets the hostname configuration value to the production environment  (<code>apache-api.jamesthom.as</code>) before running the test suite.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">deploy</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">script</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">script</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">sls deploy &amp;&amp; npm run acceptance-prod</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">skip_cleanup</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">true</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Using the <code>skip_cleanup</code> parameter leaves installed artifacts from previous phases in the build environment. This means we don&#8217;t have to re-install the IBM Cloud CLI, The Serverless Framework or NPM dependencies needed to run the production deployment and smoke tests.</em></p>
+
+<h3>success?</h3>
+
+<p>If all of the <a href="https://travis-ci.org/jthomas/openwhisk-release-verification">build phases</a> are successful, the latest project code should have been deployed to the production environment. 💯💯💯</p>
+
+<p><img src="http://jamesthom.as/images/build-screenshot.png" alt="Build Screenshoot" /></p>
+
+<p>If the build failed due to unit test failures, the test suite can be ran locally to fix any errors. Deployment failures can be investigated using the console output logs from Travis CI. Acceptance test issues, against test or production environments, can be debugged by logging into those environments locally and running the test suite from my development machine.</p>
+
+<h2>Conclusion</h2>
+
+<p>Using Travis CI with The Serverless Framework and a JavaScript testing framework, I was able to set up a fully-automated CI/CD deployment pipeline for the Apache OpenWhisk release candidate verification tool.</p>
+
+<p>Using a CI/CD pipeline, rather than a manual approach, for deployments has the following advantages&#8230;</p>
+
+<ul>
+<li>No more manual and error-prone deploys relying on a human 👨‍💻 :)</li>
+<li>Automatic unit &amp; acceptance test execution catch errors before deployments.</li>
+<li>Production environment only accessed by CI/CD system, reducing accidental breakages.</li>
+<li>All cloud resources must be configured in code. No &#8221;<a href="https://martinfowler.com/bliki/SnowflakeServer.html">snowflake</a>&#8221; environments allowed.</li>
+</ul>
+
+
+<p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I&#8217;ll be notified by email.</p>
+
+<p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
@@ -6509,318 +6856,6 @@
 <p>Moved earlier to use a more formal governance model. Officially documented the governance structure and decision making process. Explained to all volunteers how decisions need to be made within the group and the rationale for this approach.</p>
 
 <p><img src="http://jamesthom.as/images/refugees/camp.jpg" title="Refugee camp in Greece" ></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Starting OpenWhisk In Sixty Seconds]]></title>
-    <link href="http://jamesthom.as/blog/2018/01/19/starting-openwhisk-in-sixty-seconds/"/>
-    <updated>2018-01-19T11:02:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2018/01/19/starting-openwhisk-in-sixty-seconds</id>
-    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is an open-source serverless platform. Developers can use <a href="https://console.bluemix.net/openwhisk/">hosted instances</a> from IBM, <a href="https://github.com/apache/incubator-openwhisk/tree/master/ansible">deploy to any</a> infrastructure provider and <a href="https://github.com/apache/incubator-openwhisk#quick-start">even run it locally</a>.</p>
-
-<p>Developers often use a local instance of the platform during development. Deploying to a local instance is faster than the cloud. It also provides access runtime environments to debug issues and allows development without an Internet connection. Production applications are still run on IBM Cloud Functions.</p>
-
-<p>But OpenWhisk provides numerous options for starting the platform, including running the platform services directly, using container management tools like <a href="https://github.com/apache/incubator-openwhisk-deploy-kube">Kubernetes</a> and <a href="https://events.static.linuxfound.org/sites/events/files/slides/OpenwhiskMesoscon2017_16-9.pdf">Mesos</a> or starting a <a href="https://github.com/apache/incubator-openwhisk/blob/master/tools/vagrant/README.md">pre-configured virtual machine</a> with Vagrant.</p>
-
-<p><em>So, what&#8217;s easiest?</em></p>
-
-<p><strong><a href="https://github.com/apache/incubator-openwhisk-devtools">OpenWhisk Devtools</a>.</strong></p>
-
-<p>Using this project, the platform can be started on any machine with <a href="https://docs.docker.com/compose/">Docker Compose</a> in around sixty seconds. Before we explain how this works, let&#8217;s show the steps needed to spin up the platform using the project.</p>
-
-<h2>openwhisk in around sixty seconds…</h2>
-
-<p><em>Do you have Docker with Compose support installed? If not, follow the instructions <a href="https://docs.docker.com/compose/install/">here.</a></em></p>
-
-<p>Start the platform with the following commands.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone git@github.com:apache/incubator-openwhisk-devtools.git
-</span><span class='line'>$ cd incubator-openwhisk-devtools/docker-compose
-</span><span class='line'>$ make quick-start</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Having cloned the repository, creating the local instance only takes around sixty seconds! 💯</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ time make quick-start &&gt;/dev/null
-</span><span class='line'>
-</span><span class='line'>real    1m10.128s
-</span><span class='line'>user    0m1.709s
-</span><span class='line'>sys     0m1.258s</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Platform services will be running as containers on the host after initialisation.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker ps --format "&#123;&#123;.ID&#125;&#125;: &#123;&#123;.Names&#125;&#125; &#123;&#123;.Image&#125;&#125;" 
-</span><span class='line'>17c5d31e2c20: wsk0_60_prewarm_nodejs6         (openwhisk/nodejs6action:latest)
-</span><span class='line'>0eace484289c: wsk0_59_prewarm_nodejs6         (openwhisk/nodejs6action:latest)
-</span><span class='line'>1be725d8767c: openwhisk_apigateway_1          (adobeapiplatform/apigateway:1.1.0)
-</span><span class='line'>641cbabeb790: openwhisk_kafka-topics-ui_1     (landoop/kafka-topics-ui:0.9.3)
-</span><span class='line'>f52c25dbadd9: openwhisk_controller_1          (openwhisk/controller)
-</span><span class='line'>8f0c6aa14ccc: openwhisk_invoker_1             (openwhisk/invoker)
-</span><span class='line'>d5274194f842: openwhisk_kafka-rest_1          (confluentinc/cp-kafka-rest:3.3.1)
-</span><span class='line'>40a1585f64bb: openwhisk_kafka_1               (wurstmeister/kafka:0.11.0.1)
-</span><span class='line'>b0b0f75c6fdb: openwhisk_db_1                  (couchdb:1.6)
-</span><span class='line'>a7449c2edc4d: openwhisk_zookeeper_1           (zookeeper:3.4)
-</span><span class='line'>178abe09b793: openwhisk_redis_1               (redis:2.8)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>…and that&#8217;s it!</p>
-
-<h2>testing it out</h2>
-
-<h3>setting up CLI tool</h3>
-
-<p>OpenWhisk provides a <a href="https://github.com/apache/incubator-openwhisk-cli">CLI tool</a> for interacting with the platform. The <code>quick-start</code> command automatically writes account credentials for the local instance into the CLI configuration file. Using the CLI tool to print current configuration values shows the platform endpoint set as the local machine ip or hostname.</p>
-
-<p><em>If you don&#8217;t have the CLI tool already installed, the project downloads the binary to the following location: <code>devtools/docker-compose/openwhisk-master/bin/wsk</code></em></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk property get | grep host
-</span><span class='line'>whisk API host        localhost</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The local instance is configured with a single user account (<code>guest</code>) with <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.guest">these credentials</a>. Administrative credentials are stored in <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.whisk.system">this configuration file</a>.</p>
-
-<h3>creating sample actions</h3>
-
-<p>With the CLI configured correctly, you can create and invoke an action on the local platform instance.</p>
-
-<ul>
-<li>Create a new file called <code>hello.js</code> with the following contents.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">name</span> <span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">name</span> <span class="o">||</span> <span class="s1">&#39;World&#39;</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">payload</span><span class="o">:</span> <span class="s1">&#39;Hello, &#39;</span> <span class="o">+</span> <span class="nx">name</span> <span class="o">+</span> <span class="s1">&#39;!&#39;</span> <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a new action called <code>hello</code> from the local <code>hello.js</code> file.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">hello</span> <span class="nx">hello</span><span class="p">.</span><span class="nx">js</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">hello</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>List the actions registered on the platform.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">list</span>
-</span><span class='line'><span class="nx">actions</span>
-</span><span class='line'><span class="o">/</span><span class="nx">guest</span><span class="o">/</span><span class="nx">hello</span>                                                           <span class="kr">private</span> <span class="nx">nodejs</span><span class="o">:</span><span class="mi">6</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Invoke the action, blocking until it has finished.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="o">-</span><span class="nx">r</span> <span class="nx">hello</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">name</span> <span class="nx">James</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="s2">&quot;payload&quot;</span><span class="o">:</span> <span class="s2">&quot;Hello, James!&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Retrieve the activation record.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">list</span>
-</span><span class='line'><span class="nx">activations</span>
-</span><span class='line'><span class="mi">1</span><span class="nx">d16d13fdbba4fdc96d13fdbba7fdc76</span> <span class="nx">hello</span>
-</span><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">get</span> <span class="mi">1</span><span class="nx">d16d13fdbba4fdc96d13fdbba7fdc76</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">got</span> <span class="nx">activation</span> <span class="mi">1</span><span class="nx">d16d13fdbba4fdc96d13fdbba7fdc76</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="s2">&quot;namespace&quot;</span><span class="o">:</span> <span class="s2">&quot;guest&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;name&quot;</span><span class="o">:</span> <span class="s2">&quot;hello&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;version&quot;</span><span class="o">:</span> <span class="s2">&quot;0.0.1&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;subject&quot;</span><span class="o">:</span> <span class="s2">&quot;guest&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;activationId&quot;</span><span class="o">:</span> <span class="s2">&quot;1d16d13fdbba4fdc96d13fdbba7fdc76&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;start&quot;</span><span class="o">:</span> <span class="mi">1516364811767</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;end&quot;</span><span class="o">:</span> <span class="mi">1516364811769</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;duration&quot;</span><span class="o">:</span> <span class="mi">2</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;response&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s2">&quot;status&quot;</span><span class="o">:</span> <span class="s2">&quot;success&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;statusCode&quot;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;success&quot;</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;result&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>      <span class="s2">&quot;payload&quot;</span><span class="o">:</span> <span class="s2">&quot;Hello, James!&quot;</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="p">...</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>how does it work?</h2>
-
-<p>Apache OpenWhisk is an open-source serverless platform, composed of microservices written in Scala. Custom runtime code is bundled and managed as platform services using Docker. The platform also uses numerous external open-source projects, including CouchDB, Kafka, Zookeeper and Redis. Existing public images are used to pull those dependencies into the project.</p>
-
-<p>Apache OpenWhisk automatically <a href="https://hub.docker.com/r/openwhisk/">builds and publishes images</a> for custom runtime services on Docker Hub. This means containers can be started from public images, rather than having to build them manually. Using the existing images dramatically reduces the start-up time for getting the project running locally.</p>
-
-<p>&#8220;Devtools&#8221; uses Docker Compose to <a href="https://github.com/apache/incubator-openwhisk-devtools/tree/master/docker-compose">start a local instance</a> of the platform. Docker Compose coordinates starting containers in the correct order, injects runtime configuration properties and link services using local networking interfaces.</p>
-
-<h2>tips &amp; tricks</h2>
-
-<p><em>Once you have a local instance of the platform running, there are a few things you can do to make it easier to use during development…</em></p>
-
-<h3>switching CLI between platform instances</h3>
-
-<p>Using a local instance of the platform for testing and development, you will still want to deploy production applications to IBM Cloud Functions. Switching between these platform instances relies on <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/cli.md#setting-up-the-openwhisk-cli">updating the CLI configuration file</a> with the correct authorisation credentials each time.</p>
-
-<p>Rather than manually updating the default configuration file each time, an environment variable (<code>WSK_CONFIG_FILE</code>) can be used to choose a different configuration file. Keep credentials for different instances in separate files. Use the environment parameter to quickly switch platform instances.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">WSK_CONFIG_FILE</span><span class="o">=~</span><span class="err">/.wskprops-local wsk</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using a shell alias to expose a new command to do this automatically makes this even easier.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">alias</span> <span class="nx">wsk</span><span class="o">-</span><span class="nx">local</span><span class="o">=</span><span class="s1">&#39;WSK_CONFIG_FILE=~/.wskprops-local wsk -i&#39;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>The <code>-i</code> flag is used because the local platform instance uses a self-signed SSL certificate.</em></p>
-
-<h3>view platform details in database</h3>
-
-<p><a href="https://couchdb.apache.org/">CouchDB</a> is the platform data store. This stores all installed actions, save activation records and other runtime properties. Accessing this database can be helpful to diagnose issues directly.</p>
-
-<p>CouchDB comes with a administration web application called &#8221;<a href="http://docs.couchdb.org/en/1.6.1/intro/futon.html">Futon</a>&#8221;. This can read and modify database documents, run view queries and check configuration parameters.</p>
-
-<p>Open this URL to access Futon for the local platform instance: <a href="http://localhost:5984/_utils/">http://localhost:5984/_utils/</a></p>
-
-<p><em>Docker is configured to forward networking traffic from local port 5984 to the same port on the container.</em></p>
-
-<h3>read platform logs</h3>
-
-<p>System logs, generated from platform containers, are stored in the  <code>~/tmp/openwhisk</code> directory.</p>
-
-<p>Logs from the invoker are stored in the <code>invoker/logs/invoker-local_logs.log</code> file. Logs from the controller are stored in the <code>controller/logs/controller-local_logs.log</code> file. All other container logs are stored in the same <code>docker-compose.log</code> file.</p>
-
-<p>Searching these files with the activation id will allow you to find all platform logs for that action invocation.</p>
-
-<h3>find the runtime container for an activation</h3>
-
-<p>Running the platform locally means you can access runtime environments used to execute actions. This can help diagnosing and debugging application errors.</p>
-
-<p>Finding the runtime container used for an invocation relies on having the activation identifier. Using this value, search the controller logs for the following log message.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">[</span><span class="nx">InvokerReactive</span><span class="p">]</span> <span class="o">&lt;</span><span class="nx">namespace</span><span class="o">/</span><span class="nx">action_id</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">user</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">activation_id</span><span class="o">&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This is then followed by a log message with the container identifier used for that invocation.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">[</span><span class="nx">DockerContainer</span><span class="p">]</span> <span class="nx">sending</span> <span class="nx">initialization</span> <span class="nx">to</span> <span class="nx">ContainerId</span><span class="p">(</span><span class="o">&lt;</span><span class="nx">CONTAINER_ID</span><span class="o">&gt;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using <code>docker exec</code> you can then access the runtime environment to poke around!</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">docker</span> <span class="nx">exec</span> <span class="o">-</span><span class="nx">it</span> <span class="o">&lt;</span><span class="nx">CONTAINER_ID</span><span class="o">&gt;</span> <span class="err">/bin/bash</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>install shared packages</h3>
-
-<p>On IBM Cloud Functions, the <code>/whisk.system/</code> namespace contains shared packages for common utilities and external feed providers. These packages are not installed by default on the platform created by devtools.</p>
-
-<p>These packages are available in the following repositories.</p>
-
-<ul>
-<li><a href="https://github.com/apache/incubator-openwhisk-catalog">incubator-openwhisk-catalog</a> - Shared utilities and simple feed providers.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-alarms">incubator-openwhisk-package-alarms</a> - Alarms feed provider.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-cloudant">incubator-openwhisk-package-cloudant</a> - Cloudant feed provider.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-kafka">incubator-openwhsk-package-kafka</a> - Kafka feed provider.</li>
-</ul>
-
-
-<p>Follow the instructions in the repositories to make these available on your local version of the platform.</p>
-
-<p><em>Pull requests have been opened to automate installing <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/82">these</a> <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/83">packages</a> in the devtools project.</em></p>
-
-<h2>conclusion</h2>
-
-<p>Serverless platforms often get criticised as having a poor &#8220;developer experience&#8221; for people used to traditional application servers. Having no access to the environments running your code can make development and testing challenging. Debugging issues through console logs feels like a step backwards.</p>
-
-<p>Using an open-source serverless platform means you can actually run the entire platform locally. Using a local instance during development improves deployment times, provides access to runtime environments and allows you to work offline.</p>
-
-<p>Apache OpenWhisk has numerous options for deploying the platform, including virtual machines, kubernetes or native containers. Whilst the platform is not the simplest to set-up manually, the devtools project bootstraps a pre-configured version by spinning up a local instance using Docker Compose. This is the easiest approach for most developers to have a local instance of the platform.</p>
 ]]></content>
   </entry>
   

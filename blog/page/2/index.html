@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="In a previous blog post, I showed how to use TensorFlow.js on Node.js to run visual recognition on images from the local filesystem. TensorFlow.js is &hellip;">
+  <meta name="description" content="As a developer advocate, I spend a lot of time at developer conferences (talking about serverless 😎). Upon returning from each trip, I need to &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,629 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/">Finding Photos on Twitter Using Face Recognition With TensorFlow.js</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-10-30T09:34:00+00:00" pubdate data-updated="true">Oct 30<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>As a developer advocate, I spend a lot of time at developer conferences (talking about serverless 😎). Upon returning from each trip, I need to compile a &#8220;trip report&#8221; on the event for my bosses. This helps demonstrate the value in attending events and that I&#8217;m not just accruing air miles and hotel points for fun&#8230; 🛫🏨</p>
+
+<p>I always include any social media content people post about my talks in the trip report. This is usually tweets with photos of me on stage. If people are tweeting about your session, I assume they enjoyed it and wanted to share with their followers.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">&quot;Servers kill your productivity&quot; <a href="https://twitter.com/thomasj?ref_src=twsrc%5Etfw">@thomasj</a> at <a href="https://twitter.com/hashtag/CodeMobileUK?src=hash&amp;ref_src=twsrc%5Etfw">#CodeMobileUK</a> <a href="https://t.co/Y4NsiBBSxT">pic.twitter.com/Y4NsiBBSxT</a></p>&mdash; Mihai Cîrlănaru (@MCirlanaru) <a href="https://twitter.com/MCirlanaru/status/981170555834441729?ref_src=twsrc%5Etfw">April 3, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p><strong>Finding tweets with photos about your talk from attendees is surprisingly challenging.</strong></p>
+
+<p>Attendees often forget to include your twitter username in their tweets. This means the only way to find those photos is to manually scroll through all the results from the conference hashtag. This is problematic at conferences with thousands of attendees all tweeting during the event. <em>#devrelproblems</em>.</p>
+
+<p>Having become bored of manually trawling through all the tweets for each conference, I had a thought&#8230;</p>
+
+<blockquote><p><em>&#8220;Can&#8217;t I write some code to do this for me?&#8221;</em></p></blockquote>
+
+<p>This didn&#8217;t seem like too ridiculous an idea. Twitter has <a href="https://developer.twitter.com/en/docs/tweets/search/overview">an API</a>, which would allow me to retrieve all tweets for a conference hashtag. Once I had all the tweet photos, couldn&#8217;t I run some magic AI algorithm over the images to tell me if I was in them? 🤔</p>
+
+<p>After a couple of weeks of hacking around (and overcoming numerous challenges) I had (to my own amazement) managed to <a href="https://github.com/jthomas/findme">build a serverless application</a> which can find unlabelled photos of a person on twitter using machine learning with <a href="https://github.com/tensorflow/tfjs">TensorFlow.js</a>.</p>
+
+<p><img src="/images/face-recog/find-me-demo.gif" alt="FindMe Example" /></p>
+
+<p><em>If you just want to try this application yourself, follow the instructions in the Github repo: <a href="https://github.com/jthomas/findme">https://github.com/jthomas/findme</a></em></p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/face-recog/architecture.png" alt="FindMe Architecture Diagram" /></p>
+
+<p>This application has four <a href="https://github.com/jthomas/findme/blob/master/serverless.yml">serverless functions</a> (two API handlers and two backend services) and a client-side application from a static web page. Users log into the <a href="https://github.com/jthomas/findme/tree/master/public">client-side application</a> using Auth0 with their Twitter account. This provides the backend application with the user&#8217;s profile image and Twitter API credentials.</p>
+
+<p>When the user invokes a search query, the client-side application invokes the API endpoint for the <code>register_search</code> <a href="https://github.com/jthomas/findme/blob/master/schedule_search.js">function</a> with the query terms and twitter credentials. This function registers a new search job in Redis and fires a new <code>search_request</code> trigger event with the query and job id. This job identifier is returned to the client to poll for real-time status updates.</p>
+
+<p>The <code>twitter_search</code> <a href="https://github.com/jthomas/findme/blob/master/twitter_search.js">function</a> is connected to the <code>search_request</code> trigger and invoked for each event. It uses the Twitter Search API to retrieve all tweets for the search terms. If tweets retrieved from the API contain photos, those tweet ids (with photo urls) are fired as new <code>tweet_image</code> trigger events.</p>
+
+<p>The <code>compare_images</code> <a href="https://github.com/jthomas/findme/blob/master/compare_images.js">function</a> is connected to the <code>tweet_image</code> trigger. When invoked, it downloads the user&#8217;s twitter profile image along with the tweet image and runs face detection against both images, using the <code>face-api.js</code> <a href="https://github.com/justadudewhohacks/face-api.js">library</a>. If any faces in the tweet photo match the face in the user&#8217;s profile image, tweet ids are written to Redis before exiting.</p>
+
+<p>The client-side web page polls for real-time search results by polling the API endpoint for the <code>search_status</code>  <a href="https://github.com/jthomas/findme/blob/master/search_status.js">function</a> with the search job id. Tweets with matching faces are displayed on the web page using the <a href="https://developer.twitter.com/en/docs/twitter-for-websites/embedded-tweets/overview">Twitter JS library</a>.</p>
+
+<h2>challenges</h2>
+
+<p>Since I had found an <a href="https://github.com/justadudewhohacks/face-api.js">NPM library to handle face detection</a>, I could just use this on a serverless platform by including the library within the zip file used to create my serverless application? Sounds easy, right?!</p>
+
+<p><strong>ahem - not so faas-t&#8230;. ✋</strong></p>
+
+<p>As discussed in <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">previous blog posts</a>, there are numerous challenges in using TF.js-based libraries on serverless platforms. Starting with making the packages available in the runtime and loading model files to converting images for classification, these libraries are not like using normal NPM modules.</p>
+
+<p><em>Here are the main challenges I had to overcome to make this serverless application work&#8230;</em></p>
+
+<h3>using tf.js libraries on a serverless platform</h3>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-node">Node.js backend drivers</a> for TensorFlow.js use a native shared C++ library  (<code>libtensorflow.so</code>) to execute models on the CPU or GPU. This native dependency is compiled for the platform during the <code>npm install</code> process. The shared library file is around 142MB, which is too large to include in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">deployment package</a> for most serverless platforms.</p>
+
+<p>Normal workarounds for this issue store large dependencies in an object store. These files are dynamically retrieved during cold starts and stored in the runtime filesystem, as shown in this pseudo-code. This workaround does add an additional delay to cold start invocations.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">let</span> <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">library</span> <span class="o">=</span> <span class="s1">&#39;libtensorflow.so&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">cold_start</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">from_object_store</span><span class="p">(</span><span class="nx">library</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">write_to_fs</span><span class="p">(</span><span class="nx">library</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// rest of function code…</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Fortunately, I had a better solution using Apache OpenWhisk&#8217;s support for custom Docker runtimes!</strong></p>
+
+<p>This feature allows serverless applications to use <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md#creating-native-actions">custom Docker images</a> as the runtime environment. Creating custom images with <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">large libraries pre-installed</a> means they can be excluded from deployment packages. 💯</p>
+
+<p>Apache OpenWhisk publishes all existing <a href="https://hub.docker.com/r/openwhisk/">runtime images</a> on Docker Hub. Using existing runtime images as base images means Dockerfiles for custom runtimes are minimal. Here&#8217;s the Dockerfile needed to build a custom runtime with the TensorFlow.js Node.js backend drivers pre-installed.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once this image has been built and published on Dockerhub, you can use it when creating new functions.</p>
+
+<p><em>I used this approach to build a <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/tags/">custom TensorFlow.js runtime</a> which is available on Docker Hub: <code>jamesthomas/action-nodejs-v8:tfjs-faceapi</code></em></p>
+
+<p>OpenWhisk actions created using the <code>wsk</code> command-line use a configuration flag (<code>--docker</code>) to specify custom runtime images.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">classify</span> <span class="nx">source</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">faceapi</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The OpenWhisk provider plugin for The Serverless Framework also supports <a href="https://github.com/serverless/serverless-openwhisk#custom-runtime-images">custom runtime images</a> through a configuration parameter (<code>image</code>) under the function configuration.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">machine-learning</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">classify</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">source.main</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">image</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">jamesthomas/action-nodejs-v8:tfjs-faceapi</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having fixed the issue of library loading on serverless platforms, I could move onto the next problem, loading the pre-trained models&#8230; 💽</p>
+
+<h3>loading pre-trained models</h3>
+
+<p>Running the <a href="https://github.com/justadudewhohacks/face-api.js#usage-loading-models">example code</a> to load the pre-trained models for face recognition gave me this error:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">ReferenceError</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">fetch is not defined</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I discovered how to manually load TensorFlow.js models from the filesystem using the <code>file://</code> URI prefix. Unfortunately, the <code>face-api.js</code> library doesn&#8217;t support this feature. Models are <a href="https://github.com/justadudewhohacks/tfjs-image-recognition-base/blob/4a7d981dbb37e0d3dabc962e1cbfb6122e535263/src/dom/loadWeightMap.ts#L12">automatically loaded</a> using the <code>fetch</code> HTTP client. This HTTP client is available into modern browsers but not in the Node.js runtime.</p>
+
+<p>Overcoming this issue relies on providing an instance of a compatible HTTP client in the runtime. The <code>node-fetch</code> library is a <a href="https://www.npmjs.com/package/node-fetch">implementation of the fetch client</a> API for the Node.js runtime. By manually installing this module and exporting as a global variable, the library can then use the HTTP client as expected.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// Make HTTP client available in runtime</span>
+</span><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;node-fetch&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Model configuration and weight files can then be loaded from the library&#8217;s Github repository using this URL:</p>
+
+<p>https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="s1">&#39;&lt;GITHUB_URL&gt;&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>face detection in images</h3>
+
+<p>The <code>face-api.js</code> library has a <a href="https://github.com/justadudewhohacks/face-api.js#detecting-faces">utility function</a> (<code>models.allFaces</code>) to automatically detect and calculate descriptors for all faces found in an image. Descriptors are a feature vector (of 128 32-bit float values) which uniquely describes the characteristics of a persons face.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">results</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">allFaces</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="nx">minConfidence</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>The input to this function is the input tensor with the RGB values from an image. In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I explained how to convert an image from the filesystem in Node.js to the input tensor needed by the model.</em></p>
+
+<p>Finding a user by comparing their twitter profile against photos from tweets starts by running face detection against both images. By comparing computed descriptor values, a measure of similarity can be established between faces from the images.</p>
+
+<h3>face comparison</h3>
+
+<p>Once the face descriptors have been calculated the library provides a utility function to compute the euclidian distance between two descriptors vectors. If the difference between two face descriptors is less than a threshold value, this is used to identify the same person in both images.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">distance</span> <span class="o">=</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">euclideanDistance</span><span class="p">(</span><span class="nx">descriptor1</span><span class="p">,</span> <span class="nx">descriptor2</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">distance</span> <span class="o">&lt;</span> <span class="mf">0.6</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;match&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">else</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;no match&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I&#8217;ve no idea why 0.6 is chosen as the threshold value but this seemed to work for me! Even small changes to this value dramatically reduced the precision and recall rates for my test data. I&#8217;m calling it the Goldilocks value, just use it&#8230;</p>
+
+<h2>performance</h2>
+
+<p>Once I had the end to end application working, I wanted to make it was fast as possible. By optimising the performance, I could improve the application responsiveness and reduce compute costs for my backend. Time is literally money with serverless platforms.</p>
+
+<h3>baseline performance</h3>
+
+<p>Before attempting to optimise my application, I needed to understand the baseline performance. Setting up experiments to record invocation durations gave me the following average test results.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~5 seconds</li>
+<li><em>Cold invocations</em>: ~8 seconds</li>
+</ul>
+
+
+<p>Instrumenting the code with <code>console.time</code> statements revealed execution time was comprised of five main sections.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       3200 ms       </td>
+<td>       2000 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 8 seconds</strong>   </td>
+<td>   <strong>~ 5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p><em>Initialisation</em> was the delay during cold starts to create the runtime environment and load all the library files and application code. <em>Model Loading</em> recorded the time spent instantiating the TF.js models from the source files. <em>Image Loading</em> was the time spent converting the RGB values from images into input tensors, this happened twice, once for the twitter profile picture and again for the tweet photo. <em>Face Detection</em> is the elapsed time to execute the <code>models.allFaces</code> method and <code>faceapi.euclideanDistance</code> methods for all the detected faces. <em>Everything else</em> is well&#8230; everything else.</p>
+
+<p>Since model loading was the largest section, this seemed like an obvious place to start optimising. 📈📉</p>
+
+<h3>loading model files from disk</h3>
+
+<p>Overcoming the initial model loading issue relied on manually exposing the expected HTTP client in the Node.js runtime. This allowed models to be dynamically loaded (over HTTP) from the external Github repository. Models files were about 36MB.</p>
+
+<p>My first idea was to load these model files from the filesystem, which should be much faster than downloading from Github. Since I was already building a custom Docker runtime, it was a one-line change to include the model files within the runtime filesystem.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">COPY</span> <span class="nx">weights</span> <span class="nx">weights</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having re-built the image and pushed to Docker Hub, the classification function&#8217;s runtime environment now included models files in the filesystem.</p>
+
+<p><strong>But how do we make the <code>face-api.js</code> library load models files from the filesystem when it is using a HTTP client?</strong></p>
+
+<p>My solution was to write a <code>fetch</code> client that proxied calls to retrieve files from a HTTP endpoint to the local filesystem. 😱 I&#8217;d let you decide whether this is a brilliant or terrible idea!</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">json</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">,</span> <span class="s1">&#39;utf8&#39;</span><span class="p">)),</span>
+</span><span class='line'>    <span class="nx">arrayBuffer</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">load</span><span class="p">(</span><span class="s1">&#39;/weights&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>face-api.js</code> library only used two methods (<code>json()</code> &amp; <code>arrayBuffer()</code>) from the HTTP client. Stubbing out these methods to proxy <code>fs.readFileSync</code> meant files paths were loaded from the filesystem. Amazingly, this seemed to just work, hurrah!</p>
+
+<p><strong>Implementing this feature and re-running performance tests revealed this optimisation saved about 500 ms from the Model Loading section.</strong></p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       1500 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 4.5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>This was less of an improvement than I&#8217;d expected. Parsing all the model files and instantiating the internal objects was more computationally intensive than I realised. This performance improvement did improve both cold and warm invocations, which was a bonus.</p>
+
+<p><em>Despite this optimisation, model loading was still the largest section in the classification function&#8230;</em></p>
+
+<h3>caching loaded models</h3>
+
+<p>There&#8217;s a good strategy to use when optimising serverless functions&#8230;</p>
+
+<p><img src="/images/face-recog/cache-all-the-things.jpg" alt="CACHE ALL THE THINGS" /></p>
+
+<p>Serverless runtimes re-use runtime containers for consecutive requests, known as warm environments. Using local state, like global variables or the runtime filesystem, to cache data between requests can be used to improve performance during those invocations.</p>
+
+<p>Since model loading was such an expensive process, I wanted to cache initialised models. Using a global variable, I could control whether to trigger model loading or return the pre-loaded models. Warm environments would re-use pre-loaded models and remove model loading delay.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">faceapi</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;face-api.js&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">let</span> <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">load</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">location</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">LOADED</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceRecognitionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceLandmarkModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">faceapi</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>This performance improvement had a significant impact of the performance for warm invocations. Model loading became &#8220;free&#8221;.</strong> 👍</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>caching face descriptors</h3>
+
+<p>In the initial implementation, the face comparison function was executing face detection against both the user&#8217;s twitter profile image and tweet photo for comparison. Since the twitter profile image was the same in each search request, running face detection against this image would always return the same results.</p>
+
+<p>Rather than having this work being redundantly computed in each function, caching the results of the computed face descriptor for the profile image meant it could re-used across invocations. This would reduce by 50% the work necessary in the Image &amp; Model Loading sections.</p>
+
+<p>The <code>face-api.js</code> library returns the face descriptor as a typed array with 128 32-bit float values. Encoding this values as a hex string allows them to be stored and retrieved from Redis. This code was used to convert float values to hex strings, whilst maintaining the exact precision of those float values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">encode</span> <span class="o">=</span> <span class="nx">typearr</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">encoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">typearr</span><span class="p">.</span><span class="nx">buffer</span><span class="p">).</span><span class="nx">toString</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">encoded</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">decode</span> <span class="o">=</span> <span class="nx">encoded</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">decoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">encoded</span><span class="p">,</span> <span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">uints</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Uint8Array</span><span class="p">(</span><span class="nx">decoded</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">floats</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Float32Array</span><span class="p">(</span><span class="nx">uints</span><span class="p">.</span><span class="nx">buffer</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">floats</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This optimisation improves the performance of most cold invocations and all warm invocations, removing over 1200 ms of computation time to compute the results.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>                    </th>
+<th align="center"> Cold Starts (Cached) </th>
+<th align="center">    Warm Starts    </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td> Initialisation     </td>
+<td align="center">       1200 ms        </td>
+<td align="center">       0 ms        |</td>
+</tr>
+<tr>
+<td></td>
+<td> Model Loading      </td>
+<td align="center">       2700 ms        </td>
+<td align="center">      1500 ms      |</td>
+</tr>
+<tr>
+<td></td>
+<td> Image Loading      </td>
+<td align="center">        500 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> Face Detection     </td>
+<td align="center">   700 ms - 900 ms    </td>
+<td align="center">  700 ms - 900 ms  |</td>
+</tr>
+<tr>
+<td></td>
+<td> Everything Else    </td>
+<td align="center">       1000 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> <strong>Total Duration</strong> </td>
+<td align="center">   <strong>~ 6 seconds</strong>    </td>
+<td align="center"> <strong>~ 2.5 seconds</strong> |</td>
+</tr>
+</tbody>
+</table>
+
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms      </td>
+<td>     500 ms       </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms  </td>
+<td> 700 ms - 900 ms </td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>final results + cost</h3>
+
+<p>Application performance was massively improved with all these optimisations. As demonstrated in the video above, the application could process tweets in real-time, returning almost instant results. Average invocation durations were now.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~2.5 seconds</li>
+<li><em>Cold invocations (Cached)</em>: ~6 seconds</li>
+</ul>
+
+
+<p>Serverless platforms charge for compute time by the millisecond, so these improvements led to cost savings of 25% for cold invocations (apart the first classification for a user) and 50% for warm invocations.</p>
+
+<p>Classification functions used 512MB of RAM which meant IBM Cloud Functions would provide 320,000 &#8220;warm&#8221; classifications or 133,333 &#8220;cold&#8221; classifications within the free tier each month. Ignoring the free tier, 100,000 &#8220;warm&#8221; classifications would cost $5.10 and 100,000 &#8220;cold&#8221; classifications $2.13.</p>
+
+<h2>conclusion</h2>
+
+<p>Using TensorFlow.js with serverless cloud platforms makes it easy to build scalable machine learning applications in the cloud. Using the horizontal scaling capabilities of serverless platforms, thousands of model classifications can be ran in parallel. This can be more performant than having dedicated hardware with a GPU, especially with compute costs for serverless applications being so cheap.</p>
+
+<p>TensorFlow.js is ideally suited to serverless application due to the JS interface, (relatively) small library size and availability of pre-trained models. Despite having no prior experience in Machine Learning, I was able to use the library to build a face recognition pipeline, processing 100s of images in parallel, for real-time results. This amazing library opens up machine learning to a whole new audience!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3807,345 +4430,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2018/01/19/starting-openwhisk-in-sixty-seconds/">Starting OpenWhisk in Sixty Seconds</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2018-01-19T11:02:00+00:00" pubdate data-updated="true">Jan 19<span>th</span>, 2018</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is an open-source serverless platform. Developers can use <a href="https://console.bluemix.net/openwhisk/">hosted instances</a> from IBM, <a href="https://github.com/apache/incubator-openwhisk/tree/master/ansible">deploy to any</a> infrastructure provider and <a href="https://github.com/apache/incubator-openwhisk#quick-start">even run it locally</a>.</p>
-
-<p>Developers often use a local instance of the platform during development. Deploying to a local instance is faster than the cloud. It also provides access runtime environments to debug issues and allows development without an Internet connection. Production applications are still run on IBM Cloud Functions.</p>
-
-<p>But OpenWhisk provides numerous options for starting the platform, including running the platform services directly, using container management tools like <a href="https://github.com/apache/incubator-openwhisk-deploy-kube">Kubernetes</a> and <a href="https://events.static.linuxfound.org/sites/events/files/slides/OpenwhiskMesoscon2017_16-9.pdf">Mesos</a> or starting a <a href="https://github.com/apache/incubator-openwhisk/blob/master/tools/vagrant/README.md">pre-configured virtual machine</a> with Vagrant.</p>
-
-<p><em>So, what&#8217;s easiest?</em></p>
-
-<p><strong><a href="https://github.com/apache/incubator-openwhisk-devtools">OpenWhisk Devtools</a>.</strong></p>
-
-<p>Using this project, the platform can be started on any machine with <a href="https://docs.docker.com/compose/">Docker Compose</a> in around sixty seconds. Before we explain how this works, let&#8217;s show the steps needed to spin up the platform using the project.</p>
-
-<h2>openwhisk in around sixty seconds…</h2>
-
-<p><em>Do you have Docker with Compose support installed? If not, follow the instructions <a href="https://docs.docker.com/compose/install/">here.</a></em></p>
-
-<p>Start the platform with the following commands.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ git clone git@github.com:apache/incubator-openwhisk-devtools.git
-</span><span class='line'>$ cd incubator-openwhisk-devtools/docker-compose
-</span><span class='line'>$ make quick-start</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Having cloned the repository, creating the local instance only takes around sixty seconds! 💯</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ time make quick-start &&gt;/dev/null
-</span><span class='line'>
-</span><span class='line'>real    1m10.128s
-</span><span class='line'>user    0m1.709s
-</span><span class='line'>sys     0m1.258s</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Platform services will be running as containers on the host after initialisation.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker ps --format "&#123;&#123;.ID&#125;&#125;: &#123;&#123;.Names&#125;&#125; &#123;&#123;.Image&#125;&#125;" 
-</span><span class='line'>17c5d31e2c20: wsk0_60_prewarm_nodejs6         (openwhisk/nodejs6action:latest)
-</span><span class='line'>0eace484289c: wsk0_59_prewarm_nodejs6         (openwhisk/nodejs6action:latest)
-</span><span class='line'>1be725d8767c: openwhisk_apigateway_1          (adobeapiplatform/apigateway:1.1.0)
-</span><span class='line'>641cbabeb790: openwhisk_kafka-topics-ui_1     (landoop/kafka-topics-ui:0.9.3)
-</span><span class='line'>f52c25dbadd9: openwhisk_controller_1          (openwhisk/controller)
-</span><span class='line'>8f0c6aa14ccc: openwhisk_invoker_1             (openwhisk/invoker)
-</span><span class='line'>d5274194f842: openwhisk_kafka-rest_1          (confluentinc/cp-kafka-rest:3.3.1)
-</span><span class='line'>40a1585f64bb: openwhisk_kafka_1               (wurstmeister/kafka:0.11.0.1)
-</span><span class='line'>b0b0f75c6fdb: openwhisk_db_1                  (couchdb:1.6)
-</span><span class='line'>a7449c2edc4d: openwhisk_zookeeper_1           (zookeeper:3.4)
-</span><span class='line'>178abe09b793: openwhisk_redis_1               (redis:2.8)</span></code></pre></td></tr></table></div></figure>
-
-
-<p>…and that&#8217;s it!</p>
-
-<h2>testing it out</h2>
-
-<h3>setting up CLI tool</h3>
-
-<p>OpenWhisk provides a <a href="https://github.com/apache/incubator-openwhisk-cli">CLI tool</a> for interacting with the platform. The <code>quick-start</code> command automatically writes account credentials for the local instance into the CLI configuration file. Using the CLI tool to print current configuration values shows the platform endpoint set as the local machine ip or hostname.</p>
-
-<p><em>If you don&#8217;t have the CLI tool already installed, the project downloads the binary to the following location: <code>devtools/docker-compose/openwhisk-master/bin/wsk</code></em></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk property get | grep host
-</span><span class='line'>whisk API host        localhost</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The local instance is configured with a single user account (<code>guest</code>) with <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.guest">these credentials</a>. Administrative credentials are stored in <a href="https://github.com/apache/incubator-openwhisk/blob/master/ansible/files/auth.whisk.system">this configuration file</a>.</p>
-
-<h3>creating sample actions</h3>
-
-<p>With the CLI configured correctly, you can create and invoke an action on the local platform instance.</p>
-
-<ul>
-<li>Create a new file called <code>hello.js</code> with the following contents.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">name</span> <span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">name</span> <span class="o">||</span> <span class="s1">&#39;World&#39;</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">payload</span><span class="o">:</span> <span class="s1">&#39;Hello, &#39;</span> <span class="o">+</span> <span class="nx">name</span> <span class="o">+</span> <span class="s1">&#39;!&#39;</span> <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Create a new action called <code>hello</code> from the local <code>hello.js</code> file.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">hello</span> <span class="nx">hello</span><span class="p">.</span><span class="nx">js</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">hello</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>List the actions registered on the platform.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">list</span>
-</span><span class='line'><span class="nx">actions</span>
-</span><span class='line'><span class="o">/</span><span class="nx">guest</span><span class="o">/</span><span class="nx">hello</span>                                                           <span class="kr">private</span> <span class="nx">nodejs</span><span class="o">:</span><span class="mi">6</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Invoke the action, blocking until it has finished.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="o">-</span><span class="nx">r</span> <span class="nx">hello</span> <span class="o">-</span><span class="nx">p</span> <span class="nx">name</span> <span class="nx">James</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="s2">&quot;payload&quot;</span><span class="o">:</span> <span class="s2">&quot;Hello, James!&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Retrieve the activation record.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">list</span>
-</span><span class='line'><span class="nx">activations</span>
-</span><span class='line'><span class="mi">1</span><span class="nx">d16d13fdbba4fdc96d13fdbba7fdc76</span> <span class="nx">hello</span>
-</span><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">get</span> <span class="mi">1</span><span class="nx">d16d13fdbba4fdc96d13fdbba7fdc76</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">got</span> <span class="nx">activation</span> <span class="mi">1</span><span class="nx">d16d13fdbba4fdc96d13fdbba7fdc76</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="s2">&quot;namespace&quot;</span><span class="o">:</span> <span class="s2">&quot;guest&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;name&quot;</span><span class="o">:</span> <span class="s2">&quot;hello&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;version&quot;</span><span class="o">:</span> <span class="s2">&quot;0.0.1&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;subject&quot;</span><span class="o">:</span> <span class="s2">&quot;guest&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;activationId&quot;</span><span class="o">:</span> <span class="s2">&quot;1d16d13fdbba4fdc96d13fdbba7fdc76&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;start&quot;</span><span class="o">:</span> <span class="mi">1516364811767</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;end&quot;</span><span class="o">:</span> <span class="mi">1516364811769</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;duration&quot;</span><span class="o">:</span> <span class="mi">2</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;response&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s2">&quot;status&quot;</span><span class="o">:</span> <span class="s2">&quot;success&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;statusCode&quot;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;success&quot;</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;result&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>      <span class="s2">&quot;payload&quot;</span><span class="o">:</span> <span class="s2">&quot;Hello, James!&quot;</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="p">...</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>how does it work?</h2>
-
-<p>Apache OpenWhisk is an open-source serverless platform, composed of microservices written in Scala. Custom runtime code is bundled and managed as platform services using Docker. The platform also uses numerous external open-source projects, including CouchDB, Kafka, Zookeeper and Redis. Existing public images are used to pull those dependencies into the project.</p>
-
-<p>Apache OpenWhisk automatically <a href="https://hub.docker.com/r/openwhisk/">builds and publishes images</a> for custom runtime services on Docker Hub. This means containers can be started from public images, rather than having to build them manually. Using the existing images dramatically reduces the start-up time for getting the project running locally.</p>
-
-<p>&#8220;Devtools&#8221; uses Docker Compose to <a href="https://github.com/apache/incubator-openwhisk-devtools/tree/master/docker-compose">start a local instance</a> of the platform. Docker Compose coordinates starting containers in the correct order, injects runtime configuration properties and link services using local networking interfaces.</p>
-
-<h2>tips &amp; tricks</h2>
-
-<p><em>Once you have a local instance of the platform running, there are a few things you can do to make it easier to use during development…</em></p>
-
-<h3>switching CLI between platform instances</h3>
-
-<p>Using a local instance of the platform for testing and development, you will still want to deploy production applications to IBM Cloud Functions. Switching between these platform instances relies on <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/cli.md#setting-up-the-openwhisk-cli">updating the CLI configuration file</a> with the correct authorisation credentials each time.</p>
-
-<p>Rather than manually updating the default configuration file each time, an environment variable (<code>WSK_CONFIG_FILE</code>) can be used to choose a different configuration file. Keep credentials for different instances in separate files. Use the environment parameter to quickly switch platform instances.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">WSK_CONFIG_FILE</span><span class="o">=~</span><span class="err">/.wskprops-local wsk</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using a shell alias to expose a new command to do this automatically makes this even easier.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">alias</span> <span class="nx">wsk</span><span class="o">-</span><span class="nx">local</span><span class="o">=</span><span class="s1">&#39;WSK_CONFIG_FILE=~/.wskprops-local wsk -i&#39;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>The <code>-i</code> flag is used because the local platform instance uses a self-signed SSL certificate.</em></p>
-
-<h3>view platform details in database</h3>
-
-<p><a href="https://couchdb.apache.org/">CouchDB</a> is the platform data store. This stores all installed actions, save activation records and other runtime properties. Accessing this database can be helpful to diagnose issues directly.</p>
-
-<p>CouchDB comes with a administration web application called &#8221;<a href="http://docs.couchdb.org/en/1.6.1/intro/futon.html">Futon</a>&#8221;. This can read and modify database documents, run view queries and check configuration parameters.</p>
-
-<p>Open this URL to access Futon for the local platform instance: <a href="http://localhost:5984/_utils/">http://localhost:5984/_utils/</a></p>
-
-<p><em>Docker is configured to forward networking traffic from local port 5984 to the same port on the container.</em></p>
-
-<h3>read platform logs</h3>
-
-<p>System logs, generated from platform containers, are stored in the  <code>~/tmp/openwhisk</code> directory.</p>
-
-<p>Logs from the invoker are stored in the <code>invoker/logs/invoker-local_logs.log</code> file. Logs from the controller are stored in the <code>controller/logs/controller-local_logs.log</code> file. All other container logs are stored in the same <code>docker-compose.log</code> file.</p>
-
-<p>Searching these files with the activation id will allow you to find all platform logs for that action invocation.</p>
-
-<h3>find the runtime container for an activation</h3>
-
-<p>Running the platform locally means you can access runtime environments used to execute actions. This can help diagnosing and debugging application errors.</p>
-
-<p>Finding the runtime container used for an invocation relies on having the activation identifier. Using this value, search the controller logs for the following log message.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">[</span><span class="nx">InvokerReactive</span><span class="p">]</span> <span class="o">&lt;</span><span class="nx">namespace</span><span class="o">/</span><span class="nx">action_id</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">user</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nx">activation_id</span><span class="o">&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This is then followed by a log message with the container identifier used for that invocation.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">[</span><span class="nx">DockerContainer</span><span class="p">]</span> <span class="nx">sending</span> <span class="nx">initialization</span> <span class="nx">to</span> <span class="nx">ContainerId</span><span class="p">(</span><span class="o">&lt;</span><span class="nx">CONTAINER_ID</span><span class="o">&gt;</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using <code>docker exec</code> you can then access the runtime environment to poke around!</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">docker</span> <span class="nx">exec</span> <span class="o">-</span><span class="nx">it</span> <span class="o">&lt;</span><span class="nx">CONTAINER_ID</span><span class="o">&gt;</span> <span class="err">/bin/bash</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>install shared packages</h3>
-
-<p>On IBM Cloud Functions, the <code>/whisk.system/</code> namespace contains shared packages for common utilities and external feed providers. These packages are not installed by default on the platform created by devtools.</p>
-
-<p>These packages are available in the following repositories.</p>
-
-<ul>
-<li><a href="https://github.com/apache/incubator-openwhisk-catalog">incubator-openwhisk-catalog</a> - Shared utilities and simple feed providers.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-alarms">incubator-openwhisk-package-alarms</a> - Alarms feed provider.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-cloudant">incubator-openwhisk-package-cloudant</a> - Cloudant feed provider.</li>
-<li><a href="https://github.com/apache/incubator-openwhisk-package-kafka">incubator-openwhsk-package-kafka</a> - Kafka feed provider.</li>
-</ul>
-
-
-<p>Follow the instructions in the repositories to make these available on your local version of the platform.</p>
-
-<p><em>Pull requests have been opened to automate installing <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/82">these</a> <a href="https://github.com/apache/incubator-openwhisk-devtools/pull/83">packages</a> in the devtools project.</em></p>
-
-<h2>conclusion</h2>
-
-<p>Serverless platforms often get criticised as having a poor &#8220;developer experience&#8221; for people used to traditional application servers. Having no access to the environments running your code can make development and testing challenging. Debugging issues through console logs feels like a step backwards.</p>
-
-<p>Using an open-source serverless platform means you can actually run the entire platform locally. Using a local instance during development improves deployment times, provides access to runtime environments and allows you to work offline.</p>
-
-<p>Apache OpenWhisk has numerous options for deploying the platform, including virtual machines, kubernetes or native containers. Whilst the platform is not the simplest to set-up manually, the devtools project bootstraps a pre-configured version by spinning up a local instance using Docker Compose. This is the easiest approach for most developers to have a local instance of the platform.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/3/">&larr; Older</a>
@@ -4163,6 +4447,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
       </li>
     
@@ -4176,10 +4464,6 @@
     
       <li class="post">
         <a href="/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/">CouchDB Filters with OpenWhisk Triggers</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/02/05/large-java-applications-on-openwhisk/">Large (Java) Applications on Apache OpenWhisk</a>
       </li>
     
   </ul>

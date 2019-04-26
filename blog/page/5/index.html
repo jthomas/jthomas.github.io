@@ -9,7 +9,8 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="There&#8217;s now a better way to do this! See here: http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/ OpenWhisk, the open-source serverless &hellip;">
+  <meta name="description" content="This week, I&#8217;ve been helping create and publish official Docker images for the
+Node-RED project. Users can start Node-RED instances from these &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +78,237 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/07/27/node-red-docker-images/">Node-RED Docker Images</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-07-27T15:24:00+01:00" pubdate data-updated="true">Jul 27<span>th</span>, 2016</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This week, I&#8217;ve been helping create and publish official <a href="https://www.docker.com/">Docker</a> images for the
+<a href="http://nodered.org/">Node-RED</a> project. Users can start Node-RED instances from these images using the following command.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Node-RED is now publishing the <a href="https://hub.docker.com/r/nodered/node-red-docker/">following images to Docker Hub</a> for each new release.</p>
+
+<ul>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/latest">latest</a></strong> - uses <a href="https://hub.docker.com/_/node/">official Node.JS v4 base image</a>.</li>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/slim">slim</a></strong> - uses <a href="https://hub.docker.com/r/mhart/alpine-node/">Alpine Linux base image</a>.</li>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/rpi">rpi</a></strong> - uses <a href="https://hub.docker.com/r/hypriot/rpi-node/">RPi-compatible base image</a>.</li>
+</ul>
+
+
+<p>When a new version is <a href="https://www.npmjs.com/package/node-red">released on NPM</a>, an <a href="https://travis-ci.org/node-red/node-red-docker">automated CI service</a> will build, test and
+publish new images with the <a href="https://hub.docker.com/r/nodered/node-red-docker/tags/">updated version tags</a>.</p>
+
+<p>The source repository for the Docker images is available at <a href="https://github.com/node-red/node-red-docker">https://github.com/node-red/node-red-docker</a>.</p>
+
+<h2>Background</h2>
+
+<p>There was a <a href="https://github.com/node-red/node-red/issues/603">long-standing issue</a> open with the project
+to provide official Docker images for the tool. Many users had <a href="https://hub.docker.com/r/cpswan/node-red/">already</a> <a href="https://github.com/jamesbrink/docker-node-red">been</a>
+<a href="http://ivyco.blogspot.co.uk/2015/03/docker-awesomeness.html">experimenting</a> with Node-RED and Docker.</p>
+
+<p><em>Reviewing the community&#8217;s efforts, we wanted to create official images that
+made it simple for users to start Node-RED as Docker containers with minimal
+configuration whilst allowing for easy customisation, i.e. adding new nodes.</em></p>
+
+<p>Docker images are created using a configuration file (<a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a>) that lists the
+commands to build that image and can start by <a href="https://docs.docker.com/engine/reference/builder/#/from">using another image as the &#8216;base&#8217;</a>.</p>
+
+<p>Node-RED is a Node.js application, published as an <a href="https://www.npmjs.com/package/node-red">NPM module</a>.
+The Node.js project publishes <a href="https://hub.docker.com/_/node/">official Docker images</a> which we used as our base image.
+These images provide an environment with the correct versions of Node.js and
+NPM installed.</p>
+
+<p>Rather than manually copying the Node-RED source code into the container image,
+we used NPM to install the source code by defining a custom <a href="https://docs.npmjs.com/files/package.json">package.json</a>
+which includes Node-RED as dependency.</p>
+
+<figure class='code'><figcaption><span>package.json</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;node-red-docker&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;0.14.5&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Docker images for Node-RED&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;node_modules/node-red/red/red.js&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nt">&quot;scripts&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;start&quot;</span><span class="p">:</span> <span class="s2">&quot;node-red&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="err">...</span>
+</span><span class='line'>    <span class="nt">&quot;dependencies&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;node-red&quot;</span><span class="p">:</span> <span class="s2">&quot;0.14.5&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="nt">&quot;engines&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;node&quot;</span><span class="p">:</span> <span class="s2">&quot;4.*.*&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Adding this file into the container image and then running <a href="https://docs.npmjs.com/cli/install">NPM install</a>, using
+the <a href="https://docs.docker.com/engine/reference/builder/#/add">ADD</a> and <a href="https://docs.docker.com/engine/reference/builder/#/run">RUN</a> commands, will retrieve the correct Node-RED version and build
+that into the container image.</p>
+
+<p>Docker images define a <a href="https://docs.docker.com/engine/reference/builder/#/cmd">default start command</a> to run when the container is
+created. Using <em>npm start</em> for this image will parse the start script
+listed in the package.json file, which has been set to
+<em>node-red</em>.</p>
+
+<h2>Adding New Nodes</h2>
+
+<p>Node-RED has a <a href="http://flows.nodered.org/">huge community</a> which produces custom nodes for everything from
+accessing data from a <a href="http://flows.nodered.org/node/node-red-contrib-gpio">Raspberry Pi&#8217;s sensors</a> to a <a href="http://flows.nodered.org/node/node-red-contrib-teslams">Tesla car</a>.</p>
+
+<p>Additional nodes <a href="http://nodered.org/docs/getting-started/adding-nodes">can be installed</a> by putting the files into your user
+directory, which defaults to <em>$HOME/.node-red</em>.</p>
+
+<p>Allowing users to install additional nodes without building new images is
+possible using <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">Docker&#8217;s volume support</a>. Docker data volumes can be used to
+share files between the container and the host system, by <a href="https://docs.docker.com/engine/tutorials/dockervolumes/#/mount-a-host-directory-as-a-data-volume">mounting a directory on the host as a data volume within the container</a>.</p>
+
+<p>Exposing the Node-RED user directory within the container as a data volume
+means users can mount this on the host system. Nodes installed into this
+directory, using NPM on the host system, will automatically be registered when
+Node-RED starts.</p>
+
+<p>Within the Dockerfile for the Node-RED image, the /data directory is configured
+as the user directory and <a href="https://github.com/node-red/node-red-docker/blob/master/latest/Dockerfile#L23">exported as a data volume</a>.</p>
+
+<p>Users can mount their local user directory into the container with the
+following command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -v ~/.node-red:/data nodered/node-red-docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Environment Parameters</h2>
+
+<p>Docker <a href="http://stackoverflow.com/questions/30494050/how-to-pass-environment-variables-to-docker-containers">supports injecting environment parameter</a> values into running containers,
+using command-line options on the host system. This is often used to configure
+runtime options without users having to build new container images. Node-RED&#8217;s
+Docker images support the following environment parameters.</p>
+
+<h3>Flows Configuration</h3>
+
+<p>User flow configurations are <a href="http://nodered.org/docs/getting-started/running">stored in a JSON file under the user directory</a>. This defaults to
+<em>flows.json</em> but can be configured using an environment parameter
+(<strong>FLOWS</strong>) passed to the container, as shown below.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -e <span class="nv">FLOWS</span><span class="o">=</span>my_flows.json nodered/node-red-docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Node Options</h3>
+
+<p>Node.js runtime arguments can be passed to the container using an environment
+parameter (<strong>NODE_OPTIONS</strong>). For example, to <a href="https://github.com/nodejs/node/issues/2738">fix the heap size</a> used by the Node.js
+garbage collector you would use the following command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 -e <span class="nv">NODE_OPTIONS</span><span class="o">=</span><span class="s2">&quot;--max_old_space_size=128&quot;</span> nodered/node-red-docker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Alpine Linux Image</h2>
+
+<p>The official Node.js Docker image uses the <a href="https://hub.docker.com/_/debian/">Debian Jessie base image</a>. This image
+provides a full Linux install, which means dependent Docker images can be
+hundreds of megabytes in size. Node-RED&#8217;s Docker image, using this base image,
+is nearly 300 MB.</p>
+
+<p>Reducing Docker image sizes can <a href="http://jasonwilder.com/blog/2014/08/19/squashing-docker-images/">dramatically reduce build and deployment times</a>.</p>
+
+<p><a href="https://www.alpinelinux.org/">Alpine Linux</a> is a lightweight Linux distribution, focused on security and
+performance. A <a href="https://hub.docker.com/_/alpine/">minimal Docker image</a> based on Alpine Linux is only 5 MB in
+size!</p>
+
+<p>Using the <a href="https://hub.docker.com/r/mhart/alpine-node/">alpine-node</a> base
+image, which provides an Alpine Linux environment with Node.js &amp; NPM, in our
+Dockerfiles reduces the resulting image file to under 50 MB.</p>
+
+<p>Alpine Linux does make it <a href="http://stackoverflow.com/questions/36202095/node-serialport-failing-on-alpine-linux">more difficult to install NPM modules with native dependencies</a>, due to missing common libraries and tools needed to build them.</p>
+
+<p>Therefore, we&#8217;re publishing the Alpine Linux image as a seperate tag (<em>slim</em>), rather
+than using this base image throughout our Dockerfiles.</p>
+
+<p>This version should provide an extremely lightweight Node-RED image that works
+for most users.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:slim
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Raspberry Pi Image</h2>
+
+<p>Node-RED is an incredibly popular tool for hacking on the <a href="https://www.raspberrypi.org/">Raspberry Pi</a>. Using a
+<a href="http://blog.hypriot.com/getting-started-with-docker-on-your-arm-device/">custom Raspberry Pi image</a>, developers can also have a full Docker system
+running in the Linux environment on their device.</p>
+
+<p><strong>So, can we use Docker to start Node-RED on the Raspberry Pi?</strong></p>
+
+<p>Due to the platform architecture, ARM rather than x86/x64 by Intel or AMD,
+Docker images must be packaged specifically for that platform. The existing
+Docker images created for Node-RED will not work.</p>
+
+<p>Fortunately, there&#8217;s an <a href="https://hub.docker.com/r/hypriot/rpi-node/">existing RPi-compatible Docker image</a>
+with Node.js and NPM.</p>
+
+<p>Using this base image to build a new Raspberry Pi-specific Node-RED image,
+published with the <em>rpi</em> tag, means users can now start Node-RED on the Raspberry Pi using Docker.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker run -it -p 1880:1880 nodered/node-red-docker:rpi
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2254,222 +2486,6 @@ in a flow:</em></p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/">Node.js V4 in Cloud Foundry</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2015-09-18T17:33:00+01:00" pubdate data-updated="true">Sep 18<span>th</span>, 2015</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Last week, Node.js <a href="https://nodejs.org/en/blog/release/v4.0.0/">released the latest version</a>
-of their project, v4.0.0. This release, representing the convergence of io.js with the original Node.js
-project, came with lots of exciting features like <a href="http://apmblog.dynatrace.com/2015/09/05/all-you-need-to-know-about-node-js-4-0/">improved ES6 support</a>.</p>
-
-<p>Cloud Foundry already <a href="https://docs.cloudfoundry.org/buildpacks/node/node-tips.html">supports multiple versions</a> of the Node.js runtime.
-Developers select the desired runtime version using a parameter in their
-application&#8217;s <a href="http://browsenpm.org/package.json">package descriptor</a>.</p>
-
-<p><em>So, we just update package.json to include &#8220;4.0.0&#8221; and re-deploy our application?</em></p>
-
-<p>Not yet.</p>
-
-<p>There is an <a href="https://github.com/nodejs/node/issues/2783">unresolved technical issue</a>
-delaying the <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">release</a> of &#8220;official&#8221;
-Node.js v4 support for the platform. 😿</p>
-
-<p><em>Can we add support ourselves?</em></p>
-
-<p><strong>Yes!</strong></p>
-
-<p>To do this, we need to explore how Cloud Foundry configures the runtime
-environment for applications.</p>
-
-<h2>Buildpacks</h2>
-
-<p>Rather than hardcoding supported runtimes and frameworks into the platform,
-Cloud Foundry borrowed the <a href="https://docs.cloudfoundry.org/buildpacks/"><em>buildpack model</em></a> from Heroku. Buildpacks are a
-<a href="https://docs.cloudfoundry.org/buildpacks/custom.html#custom-buildpacks">set of scripts</a>, run by the platform during deployment, to configure the runtime
-environment.</p>
-
-<p>Users can set an explicit buildpack for an application, <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#buildpack">using the manifest</a>, or let
-the platform decide. Buildpacks for <a href="https://docs.cloudfoundry.org/buildpacks/">common runtimes</a> are pre-installed with the platform.
-Buildpacks set through the manifest can point to external URLs, allowing users to create
-new buildpacks supporting custom runtimes.</p>
-
-<p>Each buildpack must contain the following files as executable scripts.</p>
-
-<ul>
-<li><strong>bin/detect</strong> - <em>determine whether a buildpack is suitable for an application.</em></li>
-<li><strong>bin/compile</strong> - <em>install and configure the runtime environment on the DEA.</em></li>
-<li><strong>bin/release</strong> - <em>provide metadata with information on executing application.</em></li>
-</ul>
-
-
-<p>Full details on existing buildpacks for the platform are available <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">here</a>.</p>
-
-<p>Node.js is supported as an &#8220;official&#8221; buildpack by the platform. This will be
-the one we will modify to add support for the latest version of the runtime.</p>
-
-<h2>Node.js Buildpack </h2>
-
-<p><a href="https://github.com/cloudfoundry/nodejs-buildpack">This</a> is the Node.js
-buildpack for Cloud Foundry. Applications using this buildpack can select the
-version of Node.js to install using the engine parameter in the package
-descriptor.</p>
-
-<p>Looking at the <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile"><em>bin/compile</em></a>
-script will show us how the Node.js runtime is installed during deployment.</p>
-
-<p>This <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile#L66-L88">snippet</a> handles
-accessing the Node.js version configured, using the node.engine parameter from package.json, before calling
-<em>install_nodejs</em> to install the correct runtime package.</p>
-
-<pre>
-install_bins() {
-  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
-  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
-
-  echo "engines.node (package.json):  ${node_engine:-unspecified}"
-  echo "engines.npm (package.json):   ${npm_engine:-unspecified (use default)}"
-  echo ""
-
-  warn_node_engine "$node_engine"
-  install_nodejs "$node_engine" "$BUILD_DIR/.heroku/node"
-  install_npm "$npm_engine" "$BUILD_DIR/.heroku/node"
-  warn_old_npm
-}
-</pre>
-
-
-<p>Searching through the buildpack for this function, it&#8217;s in the
-<a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/lib/binaries.sh">lib/binaries.sh</a>
-file.  Looking at the <a href="https://github.com/heroku/heroku-buildpack-nodejs/blob/master/lib/binaries.sh#L10-L25">function code</a>, it translates the version number into a
-URL pointing to an archive with the pre-compiled Node.js binary. This archive
-file is downloaded, extracted and installed into the runtime environment.</p>
-
-<p>Translating Node.js version identifiers into archive URLs uses a special file
-in the buildpack, <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/manifest.yml">manifest.yml</a>. This file maps every supported version to a
-pre-built binary location.</p>
-
-<p>Looking at <a href="https://github.com/cloudfoundry/nodejs-buildpack/commit/8536a85cd69c867dc797c9586839a1373da4fd9d">previous commits</a> to the Node.js buildpack, adding support for additional
-versions of Node.js simply requires updating this file with the extra version
-identifier and archive URL.</p>
-
-<p>Until the Cloud Foundry team updates the buildpack to support Node.js v4, they won&#8217;t
-provide an external archive containing the pre-built runtime environment.</p>
-
-<p><em>Where can we find a suitable build of the Node.js binary?</em></p>
-
-<h2>Node.js Runtime Binaries </h2>
-
-<p>Cloud Foundry borrowed the <strong>buildpack</strong> concept from <a href="https://devcenter.heroku.com/articles/buildpacks">Heroku</a> and still
-maintains backwards compatibility with their platform. Heroku buildpacks will
-work with Cloud Foundry applications. The Node.js buildpack for Cloud Foundry
-is actually still a fork of <a href="https://github.com/heroku/heroku-buildpack-nodejs">Heroku&#8217;s</a>.</p>
-
-<p>Looking back through the original buildpack source, this URL template is used to translate
-Node.js versions to archive URLs being built by Heroku.</p>
-
-<p><em>http://s3pository.heroku.com/node/v$version/node-v$version-$os-$cpu.tar.gz</em></p>
-
-<p>Combining the correct version identifier and platform parameters with this
-template gave the following location for a potential build of the Node.js v4
-runtime.</p>
-
-<p><a href="">http://s3pository.heroku.com/node/v4.0.0/node-v4.0.0-linux-x64.tar.gz</a></p>
-
-<p>Running curl against the location successfully downloaded the Node.js v4 binary archive!</p>
-
-<h2>Custom v4 Buildpack</h2>
-
-<p>Forking the Cloud Foundry Node.js buildpack on Github, we can update the
-<a href="https://github.com/jthomas/nodejs-v4-buildpack/blob/master/manifest.yml#L57-L62">manifest.yml</a> with the Node.js v4 identifier pointing to the Heroku runtime
-archive. This <a href="https://github.com/jthomas/nodejs-v4-buildpack">external Git repository</a> will be used as the buildpack identifier
-in the application manfest.</p>
-
-<h2>Deploying with v4</h2>
-
-<p>Having updated our application manifest with the custom buildpack location and
-set the updated node version flag, re-deploying our application will start it
-running on Node.js v4.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>20:02:29 ~<span class="o">]</span><span class="nv">$ </span>cf app sample-demo-app
-</span><span class='line'>Showing health and status <span class="k">for </span>app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>requested state: started
-</span><span class='line'>instances: 1/1
-</span><span class='line'>usage: 256M x 1 instances
-</span><span class='line'>urls: sample-demo-app.mybluemix.net
-</span><span class='line'>last uploaded: Fri Sep 18 18:33:56 UTC 2015
-</span><span class='line'>stack: lucid64
-</span><span class='line'>buildpack: SDK <span class="k">for </span>Node.js<span class="o">(</span>TM<span class="o">)</span> <span class="o">(</span>node.js-4.0.0<span class="o">)</span>
-</span><span class='line'>
-</span><span class='line'>     state     since                    cpu    memory          disk        details
-</span><span class='line'><span class="c">#0   running   2015-09-18 07:35:01 PM   0.0%   65.3M of 256M   59M of 1G</span>
-</span><span class='line'><span class="o">[</span>20:03:13 ~<span class="o">]</span><span class="err">$</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Looking at the logs from the deployment we can see the latest Node.js
-runtime has been downloaded and installed within our runtime environment.</p>
-
-<h2>Conclusion</h2>
-
-<p>Buildpacks are a brilliant feature of Cloud Foundry.</p>
-
-<p>Understanding how buildpacks are structured and used by the platform means we
-can start customising existing buildpacks and even start creating our own.</p>
-
-<p><strong>If you want to run Node.js applications using v4 on Cloud Foundry today, you
-can use the <a href="https://github.com/jthomas/nodejs-v4-buildpack">following buildpack</a>
-created using the instructions above.</strong></p>
-
-<p>Cloud Foundry is currently adding support for the version to
-the official buildpack, follow their progress <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">here</a>.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/6/">&larr; Older</a>
@@ -2487,6 +2503,10 @@ the official buildpack, follow their progress <a href="https://www.pivotaltracke
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
       </li>
     
@@ -2500,10 +2520,6 @@ the official buildpack, follow their progress <a href="https://www.pivotaltracke
     
       <li class="post">
         <a href="/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/">CouchDB Filters with OpenWhisk Triggers</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/02/05/large-java-applications-on-openwhisk/">Large (Java) Applications on Apache OpenWhisk</a>
       </li>
     
   </ul>
