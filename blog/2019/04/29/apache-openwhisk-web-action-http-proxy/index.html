@@ -1,0 +1,474 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Apache OpenWhisk Web Action HTTP Proxy - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Running Web Applications on Serverless Platforms using a custom HTTP Proxy and Docker support in Apache OpenWhisk.">
+  <meta name="keywords" content="serverless openwhisk web applications http proxy frameworks docker">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Apache OpenWhisk Web Action HTTP Proxy</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-04-29T10:29:00+01:00" pubdate data-updated="true">Apr 29<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><em>What if you could take an existing web application and run it on a serverless platform with no changes?</em> 🤔</p>
+
+<p>Lots of existing (simple) stateless web applications are perfect candidates for serverless, but use web  frameworks that don&#8217;t know how to integrate with those platforms. People have started to develop a <a href="https://github.com/IBM/expressjs-openwhisk">number</a> <a href="https://github.com/claudiajs/claudia">of</a> <a href="https://github.com/logandk/serverless-wsgi">custom</a> <a href="https://github.com/Miserlou/Zappa">plugins</a> for those frameworks to try and bridge this gap.</p>
+
+<p>These plugins can provide an easier learning curve for developers new to serverless. They can still use familiar web application frameworks whilst learning about the platforms. It also provides a path to &#8220;lift and shift&#8221; existing (simple) web applications to serverless platforms.</p>
+
+<p>This approach relies on custom framework plugins being available, for every web app framework and serverless platform, which is not currently the case. <strong>Is there a better solution?</strong></p>
+
+<p>Recently, I&#8217;ve been experimenting with <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk&#8217;s</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">Docker support</a> to prototype a <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy">different approach</a>. This solution allows any web application to run on the platform, without needing bespoke framework plugins, with minimal changes. <em>Sounds interesting? Read about how I did this below…</em> 👍</p>
+
+<h2>Apache OpenWhisk Web Action HTTP Proxy</h2>
+
+<p><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy">This project</a> provides a static binary which proxies HTTP traffic from <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> to existing web applications. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#http-context">HTTP events</a> received by the Web Action Proxy are forwarded as HTTP requests to the web application. HTTP responses from the web application are returned as Web Action <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#handling-http-requests-with-actions">responses</a>.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-web-action-http-proxy/master/web-action-proxy.png" alt="Apache OpenWhisk Web Action HTTP Proxy" /></p>
+
+<p>Both the proxy and web application needed to be started inside the serverless runtime environment. The proxy uses port 8080 and the web application can use any other port. An environment variable or action parameter can be used to configure the local port to proxy.</p>
+
+<p>Running both HTTP processes on the platform is possible due to custom runtime support in Apache OpenWhisk. This allows using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker images</a> as the runtime environment. Custom runtimes images can be built which include the proxy binary and (optionally) the web application source files.</p>
+
+<p>Two different options are available for getting web application source files into the runtime environment.</p>
+
+<ul>
+<li><strong>Build source files directly into the container image alongside proxy binary.</strong></li>
+<li><strong>Dynamically inject source files into container runtime during initialisation.</strong></li>
+</ul>
+
+
+<p>Building source files into the container is simpler and incurs lower cold-starts delays, but means source code will be publicly available on Docker Hub. Injecting source files through action zips means the public container image can exclude all private source files and secrets. The extra initialisation time for dynamic injection does increase cold-start delays.</p>
+
+<p><em><strong>Please note: This is an alpha-stage experiment!</strong> Don&#8217;t expect everything to work. This project is designed to run small simple stateless web applications on Apache OpenWhisk. Please don&#8217;t attempt to &#8220;lift &#8216;n&#8217; shift&#8221; a huge stateful enterprise app server onto the platform!</em></p>
+
+<h3>Node.js + Express Example</h3>
+
+<p>This is an <a href="https://github.com/jthomas/express_example">example Node.js web application</a>, built using the <a href="https://expressjs.com/">Express web application framework</a>:</p>
+
+<p><img src="https://camo.githubusercontent.com/2aa43809d8d8a9f9ccb906c1028d81f1ba1913d9/687474703a2f2f7368617065736865642e636f6d2f696d616765732f61727469636c65732f657870726573735f6578616d706c652e6a7067" alt="https://camo.githubusercontent.com/2aa43809d8d8a9f9ccb906c1028d81f1ba1913d9/687474703a2f2f7368617065736865642e636f6d2f696d616765732f61727469636c65732f657870726573735f6578616d706c652e6a7067" /></p>
+
+<p>The web application renders static HTML content for three routes (<code>/</code>,  <code>/about</code> and <code>/contact</code>). CSS files and fonts are also served by the backend.</p>
+
+<p><strong>Use these steps to run this web application on Apache OpenWhisk using the Web Action Proxy&#8230;</strong></p>
+
+<ul>
+<li>Clone project repo.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/jthomas/express_example</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Install project dependencies in the <code>express_example</code> directory.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>npm install</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Bundle web application and libraries into zip file.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>zip -r action.zip *</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create the Web Action (using a custom runtime image) with the following command.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wsk action create --docker jamesthomas/generic_node_proxy --web true --main "npm start" -p "__ow_proxy_port" 3000 web_app action.zip</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Retrieve the Web Action URL for the new action.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wsk action get web_app --url</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Open the Web Action URL in a HTTP web browser. <em>(Note: Web Action URLs must end with a forward-slash to work correctly, e.g. <code>https://&lt;OW_HOST&gt;/api/v1/web/&lt;NAMESPACE&gt;/default/web_app/</code>).</em></li>
+</ul>
+
+
+<p><img src="/images/express-js-web-action-proxy.gif" alt="Web Action Proxy Express JS" /></p>
+
+<p>If this works, the web application should load as above. Clicking links in the menu will navigate to different pages in the application.</p>
+
+<h4>custom runtime image</h4>
+
+<p>This example Web Action uses my own pre-built custom runtime image for Node.js web applications (<code>jamesthomas/generic_node_proxy</code>). This was created from the following Dockerfile to support dynamic runtime injection of web application source files.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>FROM node:10
+</span><span class='line'>
+</span><span class='line'>ADD proxy /app/
+</span><span class='line'>WORKDIR /app
+</span><span class='line'>EXPOSE 8080
+</span><span class='line'>
+</span><span class='line'>CMD ./proxy</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>More Examples</h3>
+
+<p>See the <code>examples</code> directory in the project repository for sample applications with build instructions for the following runtimes.</p>
+
+<ul>
+<li><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/examples/nodejs+express">Node.js with Express.js</a></li>
+<li><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/examples/python+flask">Python with Flask</a></li>
+<li><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/examples/java+openliberty">Java with OpenLiberty</a></li>
+</ul>
+
+
+<h3>Usage &amp; Configuration</h3>
+
+<p>Web application source files can be either be <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy#usage-dynamic-runtime-injection">dynamically injected</a> (as in the example above) or <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy#usage-sources-files-in-image">built into</a> the custom runtime image.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#usage-dynamic-runtime-injection">Dynamic injection</a> uses a custom runtime image with just the proxy binary and runtime dependencies. Web application source files are provided in the action zip file and extracted into the runtime upon initialisation. The proxy will start the app server during cold-starts.</p>
+
+<p>Alternatively, source files for the web application <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#usage-sources-files-in-image">can be included directly</a> in the runtime image. The container start command will start both processes concurrently. No additional files are provided when creating the web action.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#configuration">Configuration</a> for values such as the proxy port, can be provided using <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#environment-variables">environment variables</a> or <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#action-parameters">default action parameters</a>.</p>
+
+<p><em>Please see the <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md">project documentation</a> for more details on both these approaches, how to use them and configuration parameters.</em></p>
+
+<h2>Challenges</h2>
+
+<p>This experiment is still in the alpha-stage and comes with many restrictions at the moment&#8230;</p>
+
+<ul>
+<li>HTTP request and responses sizes are limited to the maximum sizes allowed by Apache OpenWhisk for input parameters and activation results. This defaults to 1MB in the open-source project and 5MB on IBM Cloud Functions.</li>
+<li>Page links must use URLs with relative paths to the Web Action URL rather than the host root, e.g. <code>href="home"</code> rather than <code>href="/home"</code>. This is due to the Web Actions being served from a sub-path of the platform (<code>/api/v1/web/&lt;NAMESPACE&gt;/default/&lt;ACTION&gt;</code>) rather than the host root.</li>
+<li>Docker images will be pulled from the public registry on the first invocation. This will lead to long cold-start times for the first request after the action has been created. Large image sizes = longer delays. This only occurs on the first invocation.</li>
+<li>Web app startup times affect cold start times. The proxy blocks waiting for the web application to start before responding. This delay is included in each cold start. Concurrent HTTP requests from a web  browser for static page assets will (initially) result in multiple cold starts.</li>
+<li>Web Sockets and other complex HTTP features, e.g. server-side events, cannot be supported.</li>
+<li>Web applications will run in ephemeral container environments that  are paused between requests and destroyed without warning. This is not a traditional web application environment, e.g. running background tasks will not work.</li>
+</ul>
+
+
+<p>Lots of things haven&#8217;t been tested. Don&#8217;t expect complex stateful web applications to work.</p>
+
+<h2>Conclusion</h2>
+
+<p>Being able to run existing web applications on serverless platforms opens up a huge opportunity for moving simple (and stateless) web application over to those platforms. These applications can then benefit from the scaling, cost and operational benefits serverless platforms provide.</p>
+
+<p>Previous attempts to support traditional web applications on serverless platforms relied on custom framework plugins. This approach was limited by the availability of custom plugins for each web application framework and serverless platform.</p>
+
+<p>Playing around with Apache OpenWhisk&#8217;s custom runtime support, I had an idea… <strong>could a generic HTTP proxy be used to support any framework without needing any plugins?</strong> This led to the <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#usage-sources-files-in-image">Apache OpenWhisk Web Action HTTP Proxy</a> project.</p>
+
+<p>By building a custom runtime, the HTTP proxy and web application can both be started within the same serverless environment. HTTP events received by the Web Action Proxy are forwarded as HTTP requests to the web application. HTTP responses from the web application are returned as Web Action responses.</p>
+
+<p>Web application sources files can be injected into the runtime environment during initialisation or built straight into the custom runtime image. No significant changes are required in the web application and it does not need custom framework plugins.</p>
+
+<p>Apache OpenWhisk&#8217;s support for custom Docker runtimes opens up a huge range of opportunities for running more varied workloads on serverless platforms - and this is a great example of that!</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-04-29T10:29:00+01:00" pubdate data-updated="true">Apr 29<span>th</span>, 2019</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/apache/'>apache</a>, <a class='category' href='/blog/categories/docker/'>docker</a>, <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>, <a class='category' href='/blog/categories/web-applications/'>web applications</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/" title="Previous Post: Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions">&laquo; Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/">OpenWhisk Web Action Errors With Sequences</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/">Pluggable Event Providers for Apache OpenWhisk</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/';
+        var disqus_url = 'http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
