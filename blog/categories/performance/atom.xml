@@ -4,7 +4,7 @@
   <title><![CDATA[Category: performance | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/performance/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-05-10T15:37:26+01:00</updated>
+  <updated>2019-05-10T16:19:44+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -87,10 +87,37 @@ $ ibmcloud wsk action invoke nodejs-v12 --result
 
 <h3>non-workers version</h3>
 
-<p>Here is the sample code for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+<p>Here is the <a href="https://gist.github.com/jthomas/71c76d62ddfd146c4bf763f5b2f0eec1">sample code</a> for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
 
-<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes.js"></script>
+<p>```javascript
+'use strict';</p>
 
+<p>const min = 2</p>
+
+<p>function main(params) {
+  const { start, end } = params
+  console.log(params)
+  const primes = []
+  let isPrime = true;
+  for (let i = start; i &lt; end; i++) {</p>
+
+<pre><code>for (let j = min; j &lt; Math.sqrt(end); j++) {
+  if (i !== j &amp;&amp; i%j === 0) {
+    isPrime = false;
+    break;
+  }
+}
+if (isPrime) {
+  primes.push(i);
+}
+isPrime = true;
+</code></pre>
+
+<p>  }</p>
+
+<p>  return { primes }
+}
+```</p>
 
 <h3>porting the code to use worker threads</h3>
 
@@ -143,15 +170,92 @@ const threadCount = os.cpus().length
 
 <p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
 
-<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes-with-workers.js "></script>
+<p>```javascript
+'use strict';</p>
 
+<p>const { Worker } = require('worker_threads');
+const os = require('os')
+const threadCount = os.cpus().length</p>
+
+<p>const compute_primes = async (start, range) => {
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>let primes = []
+console.log(`adding worker (${start} =&gt; ${start + range})`)
+const worker = new Worker('./worker.js', { workerData: { start, range }})
+
+worker.on('error', reject)
+worker.on('exit', () =&gt; resolve(primes))
+worker.on('message', msg =&gt; {
+  primes = primes.concat(msg)
+})
+</code></pre>
+
+<p>  })
+}</p>
+
+<p>async function main(params) {
+  const { min, max } = params
+  const range = Math.ceil((max - min) / threadCount)
+  let start = min &lt; 2 ? 2 : min
+  const workers = []</p>
+
+<p>  console.log(<code>Calculating primes with ${threadCount} threads...</code>);</p>
+
+<p>  for (let i = 0; i &lt; threadCount - 1; i++) {</p>
+
+<pre><code>const myStart = start
+workers.push(compute_primes(myStart, range))
+start += range
+</code></pre>
+
+<p>  }</p>
+
+<p>  workers.push(compute_primes(start, max - start))</p>
+
+<p>  const primes = await Promise.all(workers)
+  return { primes: primes.flat() }
+}</p>
+
+<p>exports.main = main
+```</p>
 
 <h4>workers.js</h4>
 
 <p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
 
-<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=workers.js "></script>
+<p>```javascript
+'use strict';
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');</p>
 
+<p>const min = 2</p>
+
+<p>function generatePrimes(start, range) {
+  const primes = []
+  let isPrime = true;
+  let end = start + range;
+  for (let i = start; i &lt; end; i++) {</p>
+
+<pre><code>for (let j = min; j &lt; Math.sqrt(end); j++) {
+  if (i !== j &amp;&amp; i%j === 0) {
+    isPrime = false;
+    break;
+  }
+}
+if (isPrime) {
+  primes.push(i);
+}
+isPrime = true;
+</code></pre>
+
+<p>  }</p>
+
+<p>  return primes
+}</p>
+
+<p>const primes = generatePrimes(workerData.start, workerData.range);
+parentPort.postMessage(primes)
+```</p>
 
 <h4>package.json</h4>
 
