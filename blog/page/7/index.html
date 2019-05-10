@@ -9,7 +9,8 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="I&#8217;ve updated the IBM Watson Nodes for Node-RED to include seven extra services. Previously, the package only provided support for the &hellip;">
+  <meta name="description" content="Last month, a colleague was explaining he was not looking forward to an afternoon of long-distance conference
+calls. Having recently started using &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +78,412 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/29/phonebot/">Phonebot</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-05-29T09:37:00+01:00" pubdate data-updated="true">May 29<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/Phonebot.png"></p>
+
+<p>Last month, a colleague was explaining he was not looking forward to an afternoon of long-distance conference
+calls. Having recently started using Slack for collaboration with their remote team, they lamented&#8230;</p>
+
+<blockquote><p>I wish I could do my conference calls using Slack!</p></blockquote>
+
+
+<p></p>
+
+<p>&#8230;which got us thinking.</p>
+
+<p><a href="jamesthom.as/blog/2015/02/27/doctor-watson/">Recent experiments</a> with IBM Watson Speech To Text and Twilio on IBM Bluemix had shown how easy it was
+to create telephony applications. Slack publishes multiple APIs to help developers build custom &#8220;bots&#8221; that respond to channel content.</p>
+
+<p><strong>Could we create a new Slackbot that let users make phone calls using channel messages?</strong></p>
+
+<p>One month later, <a href="https://github.com/IBM-Bluemix/phonebot">Phonebot</a> was born!</p>
+
+<blockquote><p>Slackbot that lets users make phone calls within a Slack channel. <br/>Users can dial a phone number, with the phone call audio converted to text and sent to the channel. <br/>Channel message replies are converted to speech and sent over the phone call.</p><footer><strong>Phonebot</strong> <cite><a href='https://github.com/IBM-Bluemix/phonebot'>github.com/IBM-Bluemix/phonebot/&hellip;</a></cite></footer></blockquote>
+
+
+<p></p>
+
+<p><strong>tl;dr</strong> Full source code for the project is available <a href="https://github.com/IBM-Bluemix/phonebot">here</a>.
+Follow the <a href="https://github.com/IBM-Bluemix/phonebot#deployment-instructions">deployment instructions</a> to run your own version.</p>
+
+<p>Read on to find out how we put IBM Watson, Twilio and IBM Bluemix to develop our custom Slackbot&#8230;</p>
+
+<h2>Custom Slackbots</h2>
+
+<p>Slack publishes <a href="https://api.slack.com/">numerous APIs</a> for integrating custom services. These APIs provide everything from
+<a href="https://api.slack.com/slackbot">sending simple messages as Slackbot</a> to creating a <a href="https://api.slack.com/rtm">real-time messaging service</a>.</p>
+
+<p>Phonebot will listen to messages starting with <em>@phonebot</em> and which contain user commands e.g. dial, hangup. It will create new
+channel messages with the translated speech results along with status messages. Users can issue the following commands to control
+Phonebot.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>@phonebot call PHONE_NUMBER &lt;-- Dials the phone number
+</span><span class='line'>@phonebot say TEXT &lt;-- Sends text as speech to the call 
+</span><span class='line'>@phonebot hangup &lt;-- Ends the active call
+</span><span class='line'>@phonebot verbose {on|off}&lt;-- Toggle verbose mode
+</span><span class='line'>@phonebot duration NUMBER &lt;-- Set recording duration
+</span><span class='line'>@phonebot help &lt;-- Show all commands usage information </span></code></pre></td></tr></table></div></figure>
+
+
+<p>We use the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhooks API</a> to
+post new channel messages and the <a href="https://api.slack.com/outgoing-webhooks">Outgoing Webhook API</a>
+to notify the application about custom channel commands.</p>
+
+<h3>Listening for custom commands</h3>
+
+<p>Creating a new <a href="https://my.slack.com/services/new/outgoing-webhook">Outgoing Webhook</a>,
+messages from the registered channels which begin with the &#8220;@phonebot&#8221; prefix
+will be posted to HTTP URL for the IBM Bluemix application handling the incoming messages.</p>
+
+<p>We can create Outgoing Webhooks for every channel we want to register Phonebot in.</p>
+
+<p>For each registered channel, we need to allow Phonebot to post new messages.</p>
+
+<p><img src="/images/outgoing_wh.png"></p>
+
+<h3>Sending new channel messages</h3>
+
+<p><a href="https://my.slack.com/services/new/incoming-webhook">Incoming Webhooks</a> provide an obfuscated HTTP URL that allows unauthenticated HTTP requests to create new channel messages.
+Creating a new Incoming obfuscated for each channel we are listening to will allow Phonebot to post responses.</p>
+
+<p>Each Incoming Webhook URL will be passed to Phonebot application using configuration via environment variables.</p>
+
+<p><img src="/images/incoming_wh.png"></p>
+
+<h2>Making Phone Calls</h2>
+
+<p><a href="https://www.twilio.com/">Twilio</a> provides &#8220;telephony-as-a-service&#8221;, allowing applications to make telephone calls using a REST API.</p>
+
+<p>Twilio has been made available on the IBM Bluemix platform. Binding this service to your application will provide the authentication credentials to use with the Twilio <a href="http://twilio.github.io/twilio-node/">client library</a>.</p>
+
+<p>When users issue the &#8220;call&#8221; command with a phone number, the channel bot listening to user commands emits a custom event.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">bot</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;call&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">number</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">phone</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">phone</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">phone</span><span class="p">.</span><span class="nx">call_active</span><span class="p">())</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;The line is busy, you have to hang up first...!&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">phone</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">number</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">base_url</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="nx">channel</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Within the &#8220;phone&#8221; object, the &#8220;call&#8221; method triggers the following code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="k">this</span><span class="p">.</span><span class="nx">client</span><span class="p">.</span><span class="nx">makeCall</span><span class="p">({</span>
+</span><span class='line'>  <span class="nx">to</span><span class="o">:</span> <span class="nx">number</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">from</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">from</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">url</span><span class="o">:</span> <span class="nx">route</span>
+</span><span class='line'><span class="p">},</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">responseData</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">that</span><span class="p">.</span><span class="nx">request_fail</span><span class="p">(</span><span class="s1">&#39;Failed To Start Call: &#39;</span> <span class="o">+</span> <span class="nx">number</span> <span class="o">+</span> <span class="s1">&#39;(&#39;</span> <span class="o">+</span> <span class="nx">route</span> <span class="o">+</span> <span class="s1">&#39;) &#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">that</span><span class="p">.</span><span class="nx">request_success</span><span class="p">(</span><span class="s1">&#39;New Call Started: &#39;</span> <span class="o">+</span> <span class="nx">number</span> <span class="o">+</span> <span class="s1">&#39; (&#39;</span> <span class="o">+</span> <span class="nx">route</span> <span class="o">+</span> <span class="s1">&#39;): &#39;</span> <span class="o">+</span> <span class="nx">responseData</span><span class="p">.</span><span class="nx">sid</span><span class="p">,</span> <span class="nx">responseData</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The URL parameter provides a HTTP URL which Twilio will use to POST updated <a href="https://www.twilio.com/docs/api/twiml/twilio_request">call status information</a>.
+HTTP responses from this location will tell Twilio how to handle the ongoing call, e.g. play an audio message, press the following digits, record phone line audio.</p>
+
+<p>If the phone call connects successfully, we need the phone line audio stream to translate the speech into text.
+<em>Unfortunately, Twilio does not support directly accessing the real-time audio stream. However, can record a batch
+of audio, i.e five seconds, and download the resulting file.</em></p>
+
+<p>Therefore, we will tell Twilio to record a short section of audio and post the results back to our application. When this message is received,
+our response will contain the request to record another five seconds. This approach will provide a semi-realtime stream of phone call audio for processing.</p>
+
+<p>Here is the code snippet to construct the TwiML response to record the audio snippet. Any channel messages that are queued for
+sending as speech will be added to the outgoing response.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Do we have text to send down the active call?</span>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">user_speech</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>    <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="nx">user_speech</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">twiml</span><span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">playBeep</span><span class="o">:</span> <span class="kc">false</span><span class="p">,</span> <span class="nx">trim</span><span class="o">:</span> <span class="s1">&#39;do-not-trim&#39;</span><span class="p">,</span> <span class="nx">maxLength</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">duration</span><span class="p">,</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When we have the audio files containing the phone call audio, we can schedule these for translation with the IBM Watson Speech To Text service.</p>
+
+<h2>Translating Speech To Text</h2>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/speech-to-text.html">IBM Watson Speech To Text</a>
+service, we can simply transcribe phone calls by posting the audio file to the REST API. Using the <a href="">client library</a>
+handles making the actual API requests behind a simple JavaScript interface.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">audio</span><span class="o">:</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">createReadStream</span><span class="p">(</span><span class="nx">file_name</span><span class="p">),</span>
+</span><span class='line'>  <span class="nx">content_type</span><span class="o">:</span> <span class="s1">&#39;audio/l16; rate=16000&#39;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">this</span><span class="p">.</span><span class="nx">speech_to_text</span><span class="p">.</span><span class="nx">recognize</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">results</span><span class="p">[</span><span class="nx">res</span><span class="p">.</span><span class="nx">result_index</span><span class="p">]</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">transcript</span> <span class="o">=</span> <span class="nx">result</span><span class="p">.</span><span class="nx">alternatives</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">transcript</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;available&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;Missing speech recognition result.&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having <a href="http://jamesthom.as/blog/2015/02/27/doctor-watson/">previously</a> handling converting the audio
+file from the format created by Twilio to that needed by the Watson API, we were able to reuse
+the <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/lib/translate.js">translate.js</a> class
+between projects.</p>
+
+<p>This module relies on the SOX library being installed in the native runtime. We used a
+<a href="http://jamesthom.as/blog/2015/03/04/cloud-foundry-custom-buildpacks/">custom buildpack</a> to support this.</p>
+
+<h3>Managing Translation Tasks</h3>
+
+<p>When a new Twilio message with audio recording details is received, we schedule a translation request. As this background task returns, the results are
+posted into the corresponding Slack channel.</p>
+
+<p>If a translation request takes longer than expected, additional requests may be scheduled before the first has finished. We still want to maintain the order
+when posting new channel messages, even if later requests finishing translating first.</p>
+
+<p>Using the <a href="https://github.com/caolan/async">async</a> library, a single-worker <a href="https://github.com/caolan/async#queue">queue</a>
+is created to schedule the translation tasks.</p>
+
+<p>Each time the phone object for a channel emits a &#8216;recording&#8217; event, we start the translation
+request and post the worker to the channel queue.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">phone</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;recording&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">location</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">phone</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">verbose</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;:speech_balloon: _waiting for translation_&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">req</span> <span class="o">=</span> <span class="nx">translate</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">watson</span><span class="p">,</span> <span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">req</span><span class="p">.</span><span class="nx">start</span><span class="p">()</span>
+</span><span class='line'>  <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">queue</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When a task reaches the front of the queue, the worker function is called to process the result.</p>
+
+<p>If translation task has finished, we signal to the queue this task
+has completed. Otherwise, we wait for completion events being emitted.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">queue</span> <span class="o">=</span> <span class="nx">async</span><span class="p">.</span><span class="nx">queue</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">task</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">done</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;:speech_balloon: &#39;</span> <span class="o">+</span> <span class="nx">message</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">callback</span><span class="p">()</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">true</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">process</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">done</span><span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">transcript</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">failed</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">done</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">phone</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">verbose</span> <span class="o">?</span> <span class="s1">&#39;_unable to recognise speech_&#39;</span> <span class="o">:</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">transcript</span> <span class="o">&amp;&amp;</span> <span class="nx">process</span><span class="p">())</span> <span class="k">return</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">failed</span> <span class="o">&amp;&amp;</span> <span class="nx">failed</span><span class="p">())</span> <span class="k">return</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">task</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;available&#39;</span><span class="p">,</span> <span class="nx">process</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">task</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="nx">failed</span><span class="p">)</span>
+</span><span class='line'><span class="p">},</span> <span class="mi">1</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Deploying Phonebot</h2>
+
+<p>Now we&#8217;ve finished the code, we can configure the application to deploy on the IBM Bluemix cloud platform.</p>
+
+<h3>Configuring Webhooks</h3>
+
+<p>Phonebot must be passed the configured incoming webhooks URLs, allowing it to send
+channel messages. Following the <a href="http://12factor.net/config">standard Platform-as-a-Service convention</a> for passing configuration, we store the channel webhooks as environment variables.</p>
+
+<p>Using the CF CLI, we run the following command to set up the local environment parameters.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf cups slack_webhooks -p <span class="s1">&#39;{&quot;channel_name&quot;:&quot;incoming_webhook_url&quot;,...}&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Application Manifest</h3>
+
+<p>Application manifests configure deployment parameters for Cloud Foundry applications.
+Phonebot will need to be bound to Twilio, IBM watson and custom services, along with configuring the runtime environment.</p>
+
+<pre>
+---
+applications:
+- name: phonebot 
+  memory: 256M 
+  command: node app.js
+  buildpack: https://github.com/jthomas/nodejs-buildpack.git
+  services:
+  - twilio
+  - speech_to_text
+  - slack_webhooks
+declared-services:
+  twilio:
+    label: Twilio
+    plan: 'user-provided'
+  twilio:
+    label: slack_webhooks
+    plan: 'user-provided'
+  speech_to_text:
+    label: speech_to_text
+    plan: free
+</pre>
+
+
+<p><em>&#8230;with this manifest, we can just use the <em>cf push</em> command to deploy our application!</em></p>
+
+<h2>Using Phonebot</h2>
+
+<p>Phonebot will post the following message to each channel successfully registered on startup.</p>
+
+<p><img src="/images/phonebot_is_here.png"></p>
+
+<p>Users can issue <strong>@phonebot COMMAND</strong> messages to control phone calls directly from the slack channel.</p>
+
+<p>For further information about the project, follow the <a href="https://github.com/IBM-Bluemix/phonebot">project on Github</a>.
+Upcoming features are listed in the <a href="https://github.com/IBM-Bluemix/phonebot/issues">issues page</a>.
+<strong>Please feel free to ask for new features, report bugs and leave feedback on Github.</strong></p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2627,342 +3034,6 @@ and use your authentication credentials to allow us to access the Twitter fireho
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2012/08/03/finding-nano/">Finding Nano - Getting Dojo Under 4KB</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2012-08-03T10:33:00+01:00" pubdate data-updated="true">Aug 3<span>rd</span>, 2012</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>There was a bold claim in the release notes for the 1.7 version of The Dojo Toolkit&#8230;</p>
-
-<blockquote><p>Dojo Nano: Less than 4KB gzipped!</p></blockquote>
-
-
-<p>With the move to the AMD module format, the new fully-compliant asynchronous module loader could be reduced to
-less than four thousands bytes!</p>
-
-<p>Loading unnecessary code was a common complaint against previous versions of The Dojo Toolkit but now we
-could have complete control over loaded modules using this tiny AMD loader.</p>
-
-<p><em>Was this true?</em></p>
-
-<p><em>Running a standard build to generate a single dojo layer results in a minfied
-and gzipped file over 45,000 bytes.</em></p>
-
-<p><strong>How can we generate this nano
-loader in less than 10% of that size?</strong></p>
-
-<p>Until now, the instructions were spread over mailing
-<a href="http://comments.gmane.org/gmane.comp.web.dojo.devel/15941">list</a> <a href="http://mail.dojotoolkit.org/pipermail/dojo-interest/2011-December/060665.html">posts</a>,
-the <a href="http://livedocs.dojotoolkit.org/build/buildSystem">reference guide</a> and <a href="http://bugs.dojotoolkit.org/ticket/14381">bug tickets</a>,
-making it possible but not very easy!</p>
-
-<p>There already was an <a href="http://bugs.dojotoolkit.org/ticket/14392">open ticket</a> for the project to ship a complete nano-profile within the sample profiles.
-Taking up the challenge, I started investigating how to produce a profile that would generate a fully-functional AMD loader in under 4,000 bytes.</p>
-
-<h2>Nano-Build Profile</h2>
-
-<p>After much experimenting, tweaking and reviewing the toolkit&#8217;s source (along
-with help and advice from other contributors), the smallest usable AMD loader
-can be produced by running the following build profile.</p>
-
-<div><script src='https://gist.github.com/3163114.js'></script>
-<noscript><pre><code>var profile = (function(){
-    return {
-        layerOptimize: &quot;closure&quot;,
-        releaseDir: &quot;../../../release&quot;,
-
-        packages:[{
-            name:&quot;dojo&quot;,
-            location:&quot;../../../dojo&quot;
-        }],
-
-        defaultConfig:{
-            hasCache:{
-                &#39;dojo-built&#39;: 1,
-                &#39;dojo-loader&#39;: 1,
-                &#39;dom&#39;: 1,
-                &#39;host-browser&#39;: 1,
-                &quot;config-selectorEngine&quot;: &quot;lite&quot;
-            },
-            async:1
-        },
-
-        dojoBootText:&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;,
-
-        staticHasFeatures:{
-            &#39;config-dojo-loader-catches&#39;: 0,
-            &#39;config-tlmSiblingOfDojo&#39;: 0,
-            &#39;dojo-log-api&#39;: 0,
-            &#39;dojo-sync-loader&#39;: 0,
-            &#39;dojo-timeout-api&#39;: 0,
-            &#39;dojo-sniff&#39;: 0,
-            &#39;dojo-cdn&#39;: 0,
-            &#39;dojo-loader-eval-hint-url&#39;: 1,
-            &#39;config-stripStrict&#39;: 0,
-            &#39;ie-event-behavior&#39;: 0,
-            &#39;dojo-config-api&#39;: 0
-        },
-
-        layers: {
-            &quot;dojo/dojo&quot;: {
-                include: [],
-                customBase: 1
-            }
-        }
-    };
-})();</code></pre></noscript></div>
-
-
-<p>Once minified and gzipped, the entire loader is only <strong>3652</strong> bytes! Compared
-to the full loader with base modules, which came in a 45705 bytes, this
-represents <strong>more than a 92% reduction in file size</strong>.</p>
-
-<p>So, how does the build profile above squeeze so much space out? Let&#8217;s take a
-closer look at the parameters and explain how they contribute to the reduced
-size&#8230;</p>
-
-<h3>Custom Base Layer</h3>
-
-<p>Unless specified otherwise, the Dojo build system will always generate a <em>base</em> layer containing
-the dojo.js source file combined with all the base modules (those defined under the <em>dojo/_base</em> directory).</p>
-
-<p>Generating just the AMD loader, without all those additional modules, needs the profile to
-contain an explicit definition for the dojo base layer, allowing us to override configuration properties.</p>
-
-<p>Manually defining the base dojo layer is achieved by adding
-a new configuration object to the layers map, identified with the name <em>dojo/dojo</em>, as shown below.</p>
-
-<figure class='code'><figcaption><span>Base-less loader configuration</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">layers</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s2">&quot;dojo/dojo&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>        <span class="nx">include</span><span class="o">:</span> <span class="p">[],</span>
-</span><span class='line'>        <span class="nx">customBase</span><span class="o">:</span> <span class="mi">1</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Setting the <em>customBase</em> property to true will ensure the build system won&#8217;t automatically roll up all the base modules
-into the nano AMD loader. We&#8217;ve left the <em>include</em> property empty as we don&#8217;t want to add any extra modules.</p>
-
-<p>This first step in producing a nano loader <strong>reduces the minified and gzipped layer by almost 30KB</strong>!</p>
-
-<h3>Using the Closure Compiler</h3>
-
-<p>Dojo&#8217;s build system supports the use of different JavaScript minifiers, which
-perform tricks such as renaming variables and stripping whitespace in order to
-reduce the size of a JavaScript file.</p>
-
-<p>Shrinksafe is the default minifier, but in our profile we&#8217;ve chosen to use Google&#8217;s Closure compiler.</p>
-
-<figure class='code'><figcaption><span>Using closure compiler </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">layerOptimize</span><span class="o">:</span> <span class="s2">&quot;closure&quot;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Experimenting with the different minifiers, it was apparent that Closure was
-more effective at reducing the layer file sizes by the greatest amount.</p>
-
-<p>Closure
-produces a <strong>minified layer file in 35,770 bytes, nearly 10KB less</strong> than the
-original version using Shrinksafe.</p>
-
-<p>More importantly, <em>the Closure compiler supports dead code elimination</em>. Running static analysis
-over the source files, those code branches which are unreachable will be stripped from the output.
-This feature is crucial in allowing us to tune the produced loader&#8217;s features, squeezing even more space out.</p>
-
-<h3>Static Features Configuration</h3>
-
-<p>As the Dojo Toolkit moves towards the 2.0 release, one of the major
-improvements within the code base is the use of dynamic detection for
-determining which features an environment supports, rather than relying on
-brittle user-agent sniffing.</p>
-
-<p>Using feature tests, alternative code paths can be executed to provide shim-functionality for missing platform features, using native libraries otherwise.
-Tests are executed only once, the cached result is returned for each subsequent test.</p>
-
-<p>The build system allows a pre-specified list of feature test results to be provided in the build profile. These parameters will replace
-the feature test calls within the generated layer files with the static boolean result values.</p>
-
-<p>As this happens before minification, <em>any feature test paths that can&#8217;t be
-executed will be automatically stripped by the Closure compiler</em>. This provides a huge benefit in hand-tuning
-the loader size to be as compact as possible.</p>
-
-<p>The sample below shows the static feature test results we provide to produce the minimal AMD loader.</p>
-
-<figure class='code'><figcaption><span>Static feature test results</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">staticHasFeatures</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s1">&#39;config-dojo-loader-catches&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;config-tlmSiblingOfDojo&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-log-api&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-sync-loader&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-timeout-api&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-sniff&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-cdn&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-loader-eval-hint-url&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;config-stripStrict&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;ie-event-behavior&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
-</span><span class='line'>    <span class="s1">&#39;dojo-config-api&#39;</span><span class="o">:</span> <span class="mi">0</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Using static features configuration allows us to remove all non-essential
-code needing for loading AMD modules. This includes the synchronous module
-loader code used to load non-AMD modules (<em>dojo-sync-loader</em>), the debugging methods for module loading (<em>dojo-timeout-api</em> and <em>dojo-log-api</em>), backwards
-compatibility for non-standard DOM event behaviours (<em>ie-event-behaviour</em>) and others.</p>
-
-<p>Full details on each of the feature tests defined in the toolkit will be available in the 1.8 reference guide, see
-<a href="http://livedocs.dojotoolkit.org/dojo/has#feature-names">here</a> for
-a sneak preview.</p>
-
-<p><strong>Hand tuning the static feature test results allowed the build to remove an extra 2,000 bytes from the nano loader.</strong></p>
-
-<h3>Baking in Default Configuration</h3>
-
-<p>Making the smallest AMD loader possible relies on a series of assumptions about the environment we&#8217;ll be running in
-and supported features. Rather than have the user set these values manually, we can hard code
-this configuration into the loader, allowing us to remove the code for parsing configuration values from the
-environment.</p>
-
-<p>The following configuration is provided within the nano profile.</p>
-
-<figure class='code'><figcaption><span>Default loader configuration</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">defaultConfig</span><span class="o">:</span><span class="p">{</span>
-</span><span class='line'>    <span class="nx">hasCache</span><span class="o">:</span><span class="p">{</span>
-</span><span class='line'>        <span class="s1">&#39;dojo-built&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>        <span class="s1">&#39;dojo-loader&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>        <span class="s1">&#39;dom&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>        <span class="s1">&#39;host-browser&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>        <span class="s1">&#39;config-selectorEngine&#39;</span><span class="o">:</span> <span class="s1">&#39;lite&#39;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="nx">async</span><span class="o">:</span><span class="mi">1</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Along with configuration for the environment (modern-ish browser engine), we&#8217;ve set the <em>async</em> property to true, ensuring the
-loader is running in AMD-mode as we&#8217;ve removed all code for handling the legacy Dojo module format.</p>
-
-<h3>Squeezing Out Those Final Bytes</h3>
-
-<p><em>So, what&#8217;s left?</em></p>
-
-<p><em>How can we squeeze a few more bytes out?</em></p>
-
-<p>Reviewing the source code for the build system, when the dojo layer is generated, the following boot sequence is appended to the source.</p>
-
-<figure class='code'><figcaption><span>Dojo boot text</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// must use this.require to make this work in node.js</span>
-</span><span class='line'><span class="kd">var</span> <span class="nx">require</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">require</span><span class="p">;</span>
-</span><span class='line'><span class="c1">// consume the cached dojo layer</span>
-</span><span class='line'><span class="nx">require</span><span class="p">({</span><span class="nx">cache</span><span class="o">:</span><span class="p">{}});</span>
-</span><span class='line'><span class="o">!</span><span class="nx">require</span><span class="p">.</span><span class="nx">async</span> <span class="o">&amp;&amp;</span> <span class="nx">require</span><span class="p">([</span><span class="s2">&quot;dojo&quot;</span><span class="p">]);</span>
-</span><span class='line'><span class="nx">require</span><span class="p">.</span><span class="nx">boot</span> <span class="o">&amp;&amp;</span> <span class="nx">require</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">require</span><span class="p">.</span><span class="nx">boot</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This code ensures the loader will work on the NodeJS platform and ensures that all base modules are always
-requested when running in legacy mode.</p>
-
-<p>Our minimal loader doesn&#8217;t need to run outside the browser and we definitely won&#8217;t be running in legacy mode! Therefore,
-we can overwrite the layer boot text with custom code to trim the last few bytes from the nano loader, shown below.</p>
-
-<figure class='code'><figcaption><span>Custom boot text</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">dojoBootText</span><span class="o">:</span><span class="s2">&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;</span><span class="p">,</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>&#8230;and that&#8217;s it! Combining all of the options above results in a fully-functioning AMD loader in less than 4 kilobytes.</strong></p>
-
-<p>For further details on the exact size reductions achieved by each of the profile parameters,
-see this <a href="https://docs.google.com/spreadsheet/ccc?key=0An1xGHsgw2ledE94RW9KcGtISHQ5SnNGV3hYaDRPM2c#gid=0">link</a> for the data.</p>
-
-<h2>Differences between nano-profile and profile included with toolkit</h2>
-
-<p>The profile defined above will produce the smallest functional AMD loader
-possible, sacrificing support for certain common features to reduce the file size even
-further. When producing the <em>nano</em> profile that will be shipped with the toolkit, there&#8217;s a
-slightly less aggressive approach when balancing feature completeness against file size.</p>
-
-<p>Reviewing the feature tests, we decided that <strong>two optional features should be
-included, backwards compatibility for older Internet Explorer browsers (<em>ie-event-behaviour</em>) and the
-ability for manual loader configuration (<em>dojo-config-api</em>)</strong>. These changes only produce an additional
-900 bytes and will make the minimal loader much more consumable.</p>
-
-<p>The <em>nano</em> build profile shipped with the toolkit also contains all configurable feature values, rather
-than just the minimal set needed to produce the smallest build, to demonstrate the full set of parameters
-that can be modified.</p>
-
-<p>More information about the investigations into producing this profile can be found in the contributors mailing list
-thread <a href="http://grokbase.com/t/dojo/dojo-contributors/127q9sm80w/nano-build-profile-ticket-14392">here</a>.</p>
-
-<h2>Finally&#8230;</h2>
-
-<p>This investigation was founded upon previous work by other dojo contributors.
-Thanks to <a href="https://twitter.com/blowery">Ben Lowery</a>, <a href="https://twitter.com/kitsonk">Kitson Kelly</a> and <a href="https://github.com/rcgill/">Rawld Gill</a> for their
-initial efforts and helping me out with questions.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/8/">&larr; Older</a>
@@ -2980,6 +3051,10 @@ initial efforts and helping me out with questions.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
       </li>
     
@@ -2993,10 +3068,6 @@ initial efforts and helping me out with questions.</p>
     
       <li class="post">
         <a href="/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/">OpenWhisk Web Action Errors With Sequences</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/">Pluggable Event Providers for Apache OpenWhisk</a>
       </li>
     
   </ul>

@@ -1,0 +1,557 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Saving Money and Time With Node.js Worker Threads in Serverless Functions - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Using Worker Threads in Node.js v12 to improve performance in serverless platforms. This leads to reduced execution time and costs in serverless &hellip;">
+  <meta name="keywords" content="worker_thread node.js serverless functions openwhisk v12 workers threads">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Saving Money and Time With Node.js Worker Threads in Serverless Functions</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-05-08T12:17:00+01:00" pubdate data-updated="true">May 8<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Node.js v12 was <a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">released last month</a>. This new version includes support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that are enabled by default. Node.js <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a> make it simple to execute JavaScript code in parallel using threads. 👏👏👏</p>
+
+<p>This is useful for Node.js applications with CPU-intensive workloads. Using Worker Threads, JavaScript code can be executed code concurrently using multiple CPU cores. This reduces execution time compared to a non-Worker Threads version.</p>
+
+<p>If serverless platforms provide Node.js v12 on multi-core environments, functions can use this feature to reduce execution time and, therefore, lower costs. Depending on the workload, functions can utilise all available CPU cores to parallelise work, rather than executing more functions concurrently. 💰💰💰</p>
+
+<p><strong>In this blog post, I&#8217;ll explain how to use Worker Threads from a serverless function. I&#8217;ll be using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) as the example platform but this approach is applicable for any serverless platform with Node.js v12 support and a multi-core CPU runtime environment.</strong></p>
+
+<h2>Node.js v12 in IBM Cloud Functions (Apache OpenWhisk)</h2>
+
+<p><em>This section of the blog post is specifically about using the new <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js v12 runtime</a> on IBM Cloud Functions (powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>). If you are using a different serverless platform, feel free to skip ahead to the next section…</em></p>
+
+<p>I&#8217;ve recently <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">been working</a> on adding the Node.js v12 runtime to Apache OpenWhisk.</p>
+
+<p>Apache OpenWhisk uses <a href="https://hub.docker.com/u/openwhisk">Docker containers</a> as runtime environments for serverless functions. All runtime images are maintained in separate repositories for each supported language, e.g. <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-java">Java</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-python">Python</a>, etc. Runtime images are automatically built and pushed to <a href="https://hub.docker.com/r/openwhisk/">Docker Hub</a> when the repository is updated.</p>
+
+<h3>node.js v12 runtime image</h3>
+
+<p>Here is <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">the PR</a> used to add the new Node.js v12 runtime image to Apache OpenWhisk. This led to the following <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">runtime image</a> being exported to Docker Hub: <code>openwhisk/action-nodejs-v12</code>.</p>
+
+<p>Having this image available as a native runtime in Apache OpenWhisk requires <a href="https://github.com/apache/incubator-openwhisk/pull/4472">upstream changes</a> to the project&#8217;s runtime manifest. After this happens, developers will be able to use the <code>--kind</code> CLI flag to select this runtime version.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create action_name action.js --kind nodejs:12</span></code></pre></td></tr></table></div></figure>
+
+
+<p><a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. It will eventually pick up the upstream project changes to include this new runtime version. Until that happens, Docker support allows usage of this new runtime before it is built-in the platform.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create action_name action.js --docker openwhisk/action-nodejs-v12</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>example</h3>
+
+<p>This Apache OpenWhisk action returns the version of Node.js used in the runtime environment.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">version</span><span class="o">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">version</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running this code on IBM Cloud Functions, using the Node.js v12 runtime image, allows us to confirm the new Node.js version is available.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">ibmcloud</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span> <span class="nx">action</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">ibmcloud</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span> <span class="o">--</span><span class="nx">result</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;version&quot;</span><span class="o">:</span> <span class="s2">&quot;v12.1.0&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Worker Threads in Serverless Functions</h2>
+
+<p><a href="https://medium.com/@Trott/using-worker-threads-in-node-js-80494136dbb6">This is a great introdution blog post</a> to Workers Threads. It uses an example of generating prime numbers as the CPU intensive task to benchmark. Comparing the performance of the single-threaded version to multiple-threads - the performance is improved as a factor of the threads used (up to the number of CPU cores available).</p>
+
+<p>This code can be ported to run in a serverless function. Running with different input values and thread counts will allow benchmarking of the performance improvement.</p>
+
+<h3>non-workers version</h3>
+
+<p>Here is the sample code for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes.js"></script>
+
+
+<h3>porting the code to use worker threads</h3>
+
+<p>Here is the prime number calculation code which uses Worker Threads. Dividing the total input range by the number of Worker Threads generates individual thread input values. Worker Threads are spawned and passed chunked input ranges. Threads calculate primes and then send the result back to the parent thread.</p>
+
+<script src="https://gist.github.com/Trott/7bb7ee55c247047d030b4c427434ef51.js"></script>
+
+
+<p>Reviewing the code to start converting it to a serverless function, I realised there were two issues running this code in serverless environment: <strong>worker thread initialisation</strong> and <strong>optimal worker thread counts</strong>.</p>
+
+<h4>How to initialise Worker Threads?</h4>
+
+<p>This is how the existing source code <a href="https://nodejs.org/dist/latest-v12.x/docs/api/worker_threads.html#worker_threads_new_worker_filename_options">initialises the Worker Threads</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'> <span class="nx">threads</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">new</span> <span class="nx">Worker</span><span class="p">(</span><span class="nx">__filename</span><span class="p">,</span> <span class="p">{</span> <span class="nx">workerData</span><span class="o">:</span> <span class="p">{</span> <span class="nx">start</span><span class="o">:</span> <span class="nx">myStart</span><span class="p">,</span> <span class="nx">range</span> <span class="p">}}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> <em><code>__filename</code> is a special global variable in Node.js which contains the currently executing script file path.</em></p>
+
+<p>This means the Worker Thread will be initialised with a copy of the currently executing script. Node.js provides a special variable to indicate whether the script is executing in the parent or child thread. This can be used to branch script logic.</p>
+
+<p><strong>So, what&#8217;s the issue with this?</strong></p>
+
+<p>In the Apache OpenWhisk Node.js runtime, action source files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61-L79">dynamically imported</a> into the runtime environment. The script used to start the Node.js runtime process is for the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js">platform handler</a>, not the action source files. This means the <code>__filename</code> variable does not point to the action source file.</p>
+
+<p>This issue is fixed by separating the serverless function handler and worker thread code into separate files. Worker Threads can be started with a reference to the worker thread script source file, rather than the currently executing script name.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'> <span class="nx">threads</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">new</span> <span class="nx">Worker</span><span class="p">(</span><span class="s2">&quot;./worker.js&quot;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">workerData</span><span class="o">:</span> <span class="p">{</span> <span class="nx">start</span><span class="o">:</span> <span class="nx">myStart</span><span class="p">,</span> <span class="nx">range</span> <span class="p">}}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>How Many Worker Threads?</h4>
+
+<p>The next issue to resolve is how many Worker Threads to use. In order to maximise parallel processing capacity, there should be a Worker Thread for each CPU core. This is the maximum number of threads that can run concurrently.</p>
+
+<p>Node.js provides CPU information for the runtime environment using the <code>os.cpus()</code> <a href="https://nodejs.org/api/os.html#os_os_cpus">function</a>. The result is an array of objects (one per logical CPU core), with model information, processing speed and elapsed processing times. The length of this array will determine number of Worker Threads used. This ensures the number of Worker Threads will always match the CPU cores available.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">threadCount</span> <span class="o">=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">cpus</span><span class="p">().</span><span class="nx">length</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>workers threads version</h3>
+
+<p>Here is the serverless version of the prime number generation algorithm which uses Worker Threads.</p>
+
+<p>The code is split over two files - <code>primes-with-workers.js</code> and <code>worker.js</code>.</p>
+
+<h4>primes-with-workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes-with-workers.js "></script>
+
+
+<h4>workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=workers.js "></script>
+
+
+<h4>package.json</h4>
+
+<p>Source files deployed from a zip file also need to include a <code>package.json</code> file in the archive. The <code>main</code> property is used to determine the script to import as the exported package module.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;worker_threads&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;primes-with-workers.js&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Performance Comparison</h2>
+
+<p>Running both functions with the same input parameters allows execution time comparison. The Worker Threads version should improve performance by a factor proportional to available CPU cores. Reducing execution time also means reduced costs in a serverless platform.</p>
+
+<h3>non-workers performance</h3>
+
+<p>Creating a new serverless function (<code>primes</code>) from the non-worker threads source code, using the Node.js v12 runtime, I can test with small values to check correctness.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud wsk action create primes primes.js --docker openwhisk/action-nodejs-v12
+</span><span class='line'>ok: created action primes
+</span><span class='line'><span class="nv">$ </span>ibmcloud wsk action invoke primes --result -p start 2 -p end 10
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;primes&quot;</span>: <span class="o">[</span> 2, 3, 5, 7 <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Playing with sample input values, 10,000,000 seems like a useful benchmark value. This takes long enough with the single-threaded version to benefit from parallelism.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">time </span>ibmcloud wsk action invoke primes --result -p start 2 -p end 10000000 &gt; /dev/null
+</span><span class='line'>
+</span><span class='line'>real  0m35.151s
+</span><span class='line'>user  0m0.840s
+</span><span class='line'>sys   0m0.315s
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Using the simple single-threaded algorithm it takes the serverless function around ~35 seconds to calculate primes up to ten million.</strong></p>
+
+<h3>workers threads performance</h3>
+
+<p>Creating a new serverless function, from the worker threads-based source code using the Node.js v12 runtime, allows me to verify it works as expected for small input values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud wsk action create primes-workers action.zip --docker openwhisk/action-nodejs-v12
+</span><span class='line'>ok: created action primes-workers
+</span><span class='line'><span class="nv">$ </span>ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;primes&quot;</span>: <span class="o">[</span> 2, 3, 5, 7 <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Hurrah, it works.</p>
+
+<p>Invoking the function with an <code>max</code> parameter of 10,000,000 allows us to benchmark against the non-workers version of the code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">time </span>ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10000000 --result &gt; /dev/null
+</span><span class='line'>
+</span><span class='line'>real  0m8.863s
+</span><span class='line'>user  0m0.804s
+</span><span class='line'>sys   0m0.302s
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>The workers versions only takes ~25% of the time of the single-threaded version!</strong></p>
+
+<p>This is because IBM Cloud Functions&#8217; runtime environments provide access to four CPU cores. Unlike other platforms, CPU cores are not tied to memory allocations. Utilising all available CPU cores concurrently allows the algorithm to run 4x times as fast. Since serverless platforms charge based on execution time, reducing execution time also means reducing costs.</p>
+
+<p><strong>The worker threads version also costs 75% less than the single-threaded version!</strong></p>
+
+<h2>Conclusion</h2>
+
+<p><a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">Node.js v12</a> was released in April 2019. This version included support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that were enabled by default (rather than needing an optional runtime flag). Using multiple CPU cores in Node.js applications has never been easier!</p>
+
+<p>Node.js applications with CPU-intensive workloads can utilise this feature to reduce execution time. Since serverless platforms charge based upon execution time, this is especially useful for Node.js serverless functions. Utilising multiple CPU cores leads, not only to improved performance, but also lower bills.</p>
+
+<p>PRs have been <a href="https://github.com/apache/incubator-openwhisk/pull/4472">opened</a> to enable Node.js v12 as a built-in runtime to the Apache OpenWhisk project. This Docker <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">image</a> for the new runtime version is already available on Docker Hub. This means it can be used with any Apache OpenWhisk instance straight away!</p>
+
+<p>Playing with Worker Threads on IBM Cloud Functions allowed me to demonstrate how to speed up performance for CPU-intensive workloads by utilising multiple cores concurrently. Using <a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">an example of prime number generation</a>, calculating all primes up to ten million took ~35 seconds with a single thread and ~8 seconds with four threads. This represents a reduction in execution time and cost of 75%!</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-05-08T12:17:00+01:00" pubdate data-updated="true">May 8<span>th</span>, 2019</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/apache/'>apache</a>, <a class='category' href='/blog/categories/node-js/'>node.js</a>, <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/performance/'>performance</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/" title="Previous Post: Apache OpenWhisk Web Action HTTP Proxy">&laquo; Apache OpenWhisk Web Action HTTP Proxy</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/">OpenWhisk Web Action Errors With Sequences</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/';
+        var disqus_url = 'http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

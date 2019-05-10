@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-04-30T10:04:09+01:00</updated>
+  <updated>2019-05-10T15:20:09+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,236 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Saving Money and Time With Node.js Worker Threads in Serverless Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/"/>
+    <updated>2019-05-08T12:17:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions</id>
+    <content type="html"><![CDATA[<p>Node.js v12 was <a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">released last month</a>. This new version includes support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that are enabled by default. Node.js <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a> make it simple to execute JavaScript code in parallel using threads. 👏👏👏</p>
+
+<p>This is useful for Node.js applications with CPU-intensive workloads. Using Worker Threads, JavaScript code can be executed code concurrently using multiple CPU cores. This reduces execution time compared to a non-Worker Threads version.</p>
+
+<p>If serverless platforms provide Node.js v12 on multi-core environments, functions can use this feature to reduce execution time and, therefore, lower costs. Depending on the workload, functions can utilise all available CPU cores to parallelise work, rather than executing more functions concurrently. 💰💰💰</p>
+
+<p><strong>In this blog post, I'll explain how to use Worker Threads from a serverless function. I'll be using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) as the example platform but this approach is applicable for any serverless platform with Node.js v12 support and a multi-core CPU runtime environment.</strong></p>
+
+<h2>Node.js v12 in IBM Cloud Functions (Apache OpenWhisk)</h2>
+
+<p><em>This section of the blog post is specifically about using the new <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js v12 runtime</a> on IBM Cloud Functions (powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>). If you are using a different serverless platform, feel free to skip ahead to the next section…</em></p>
+
+<p>I've recently <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">been working</a> on adding the Node.js v12 runtime to Apache OpenWhisk.</p>
+
+<p>Apache OpenWhisk uses <a href="https://hub.docker.com/u/openwhisk">Docker containers</a> as runtime environments for serverless functions. All runtime images are maintained in separate repositories for each supported language, e.g. <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-java">Java</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-python">Python</a>, etc. Runtime images are automatically built and pushed to <a href="https://hub.docker.com/r/openwhisk/">Docker Hub</a> when the repository is updated.</p>
+
+<h3>node.js v12 runtime image</h3>
+
+<p>Here is <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">the PR</a> used to add the new Node.js v12 runtime image to Apache OpenWhisk. This led to the following <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">runtime image</a> being exported to Docker Hub: <code>openwhisk/action-nodejs-v12</code>.</p>
+
+<p>Having this image available as a native runtime in Apache OpenWhisk requires <a href="https://github.com/apache/incubator-openwhisk/pull/4472">upstream changes</a> to the project's runtime manifest. After this happens, developers will be able to use the <code>--kind</code> CLI flag to select this runtime version.</p>
+
+<p><code>
+ibmcloud wsk action create action_name action.js --kind nodejs:12
+</code></p>
+
+<p><a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. It will eventually pick up the upstream project changes to include this new runtime version. Until that happens, Docker support allows usage of this new runtime before it is built-in the platform.</p>
+
+<p><code>
+ibmcloud wsk action create action_name action.js --docker openwhisk/action-nodejs-v12
+</code></p>
+
+<h3>example</h3>
+
+<p>This Apache OpenWhisk action returns the version of Node.js used in the runtime environment.</p>
+
+<p>```javascript
+function main () {
+  return {</p>
+
+<pre><code>version: process.version
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p>Running this code on IBM Cloud Functions, using the Node.js v12 runtime image, allows us to confirm the new Node.js version is available.</p>
+
+<p>```
+$ ibmcloud wsk action create nodejs-v12 action.js --docker openwhisk/action-nodejs-v12
+ok: created action nodejs-v12
+$ ibmcloud wsk action invoke nodejs-v12 --result
+{</p>
+
+<pre><code>"version": "v12.1.0"
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Worker Threads in Serverless Functions</h2>
+
+<p><a href="https://medium.com/@Trott/using-worker-threads-in-node-js-80494136dbb6">This is a great introdution blog post</a> to Workers Threads. It uses an example of generating prime numbers as the CPU intensive task to benchmark. Comparing the performance of the single-threaded version to multiple-threads - the performance is improved as a factor of the threads used (up to the number of CPU cores available).</p>
+
+<p>This code can be ported to run in a serverless function. Running with different input values and thread counts will allow benchmarking of the performance improvement.</p>
+
+<h3>non-workers version</h3>
+
+<p>Here is the sample code for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes.js"></script>
+
+
+<h3>porting the code to use worker threads</h3>
+
+<p>Here is the prime number calculation code which uses Worker Threads. Dividing the total input range by the number of Worker Threads generates individual thread input values. Worker Threads are spawned and passed chunked input ranges. Threads calculate primes and then send the result back to the parent thread.</p>
+
+<script src="https://gist.github.com/Trott/7bb7ee55c247047d030b4c427434ef51.js"></script>
+
+
+<p>Reviewing the code to start converting it to a serverless function, I realised there were two issues running this code in serverless environment: <strong>worker thread initialisation</strong> and <strong>optimal worker thread counts</strong>.</p>
+
+<h4>How to initialise Worker Threads?</h4>
+
+<p>This is how the existing source code <a href="https://nodejs.org/dist/latest-v12.x/docs/api/worker_threads.html#worker_threads_new_worker_filename_options">initialises the Worker Threads</a>.</p>
+
+<p><code>javascript
+ threads.add(new Worker(__filename, { workerData: { start: myStart, range }}));
+</code></p>
+
+<p> <em><code>__filename</code> is a special global variable in Node.js which contains the currently executing script file path.</em></p>
+
+<p>This means the Worker Thread will be initialised with a copy of the currently executing script. Node.js provides a special variable to indicate whether the script is executing in the parent or child thread. This can be used to branch script logic.</p>
+
+<p><strong>So, what's the issue with this?</strong></p>
+
+<p>In the Apache OpenWhisk Node.js runtime, action source files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61-L79">dynamically imported</a> into the runtime environment. The script used to start the Node.js runtime process is for the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js">platform handler</a>, not the action source files. This means the <code>__filename</code> variable does not point to the action source file.</p>
+
+<p>This issue is fixed by separating the serverless function handler and worker thread code into separate files. Worker Threads can be started with a reference to the worker thread script source file, rather than the currently executing script name.</p>
+
+<p><code>javascript
+ threads.add(new Worker("./worker.js", { workerData: { start: myStart, range }}));
+</code></p>
+
+<h4>How Many Worker Threads?</h4>
+
+<p>The next issue to resolve is how many Worker Threads to use. In order to maximise parallel processing capacity, there should be a Worker Thread for each CPU core. This is the maximum number of threads that can run concurrently.</p>
+
+<p>Node.js provides CPU information for the runtime environment using the <code>os.cpus()</code> <a href="https://nodejs.org/api/os.html#os_os_cpus">function</a>. The result is an array of objects (one per logical CPU core), with model information, processing speed and elapsed processing times. The length of this array will determine number of Worker Threads used. This ensures the number of Worker Threads will always match the CPU cores available.</p>
+
+<p><code>javascript
+const threadCount = os.cpus().length
+</code></p>
+
+<h3>workers threads version</h3>
+
+<p>Here is the serverless version of the prime number generation algorithm which uses Worker Threads.</p>
+
+<p>The code is split over two files - <code>primes-with-workers.js</code> and <code>worker.js</code>.</p>
+
+<h4>primes-with-workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes-with-workers.js "></script>
+
+
+<h4>workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=workers.js "></script>
+
+
+<h4>package.json</h4>
+
+<p>Source files deployed from a zip file also need to include a <code>package.json</code> file in the archive. The <code>main</code> property is used to determine the script to import as the exported package module.</p>
+
+<p><code>json
+{
+  "name": "worker_threads",
+  "version": "1.0.0",
+  "main": "primes-with-workers.js",
+}
+</code></p>
+
+<h2>Performance Comparison</h2>
+
+<p>Running both functions with the same input parameters allows execution time comparison. The Worker Threads version should improve performance by a factor proportional to available CPU cores. Reducing execution time also means reduced costs in a serverless platform.</p>
+
+<h3>non-workers performance</h3>
+
+<p>Creating a new serverless function (<code>primes</code>) from the non-worker threads source code, using the Node.js v12 runtime, I can test with small values to check correctness.</p>
+
+<p>```sh
+$ ibmcloud wsk action create primes primes.js --docker openwhisk/action-nodejs-v12
+ok: created action primes
+$ ibmcloud wsk action invoke primes --result -p start 2 -p end 10
+{</p>
+
+<pre><code>"primes": [ 2, 3, 5, 7 ]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Playing with sample input values, 10,000,000 seems like a useful benchmark value. This takes long enough with the single-threaded version to benefit from parallelism.</p>
+
+<p>```sh
+$ time ibmcloud wsk action invoke primes --result -p start 2 -p end 10000000 > /dev/null</p>
+
+<p>real    0m35.151s
+user    0m0.840s
+sys 0m0.315s
+```</p>
+
+<p><strong>Using the simple single-threaded algorithm it takes the serverless function around ~35 seconds to calculate primes up to ten million.</strong></p>
+
+<h3>workers threads performance</h3>
+
+<p>Creating a new serverless function, from the worker threads-based source code using the Node.js v12 runtime, allows me to verify it works as expected for small input values.</p>
+
+<p>```
+$ ibmcloud wsk action create primes-workers action.zip --docker openwhisk/action-nodejs-v12
+ok: created action primes-workers
+$ ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10
+{</p>
+
+<pre><code>"primes": [ 2, 3, 5, 7 ]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Hurrah, it works.</p>
+
+<p>Invoking the function with an <code>max</code> parameter of 10,000,000 allows us to benchmark against the non-workers version of the code.</p>
+
+<p>```sh
+$ time ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10000000 --result > /dev/null</p>
+
+<p>real    0m8.863s
+user    0m0.804s
+sys 0m0.302s
+```</p>
+
+<p><strong>The workers versions only takes ~25% of the time of the single-threaded version!</strong></p>
+
+<p>This is because IBM Cloud Functions' runtime environments provide access to four CPU cores. Unlike other platforms, CPU cores are not tied to memory allocations. Utilising all available CPU cores concurrently allows the algorithm to run 4x times as fast. Since serverless platforms charge based on execution time, reducing execution time also means reducing costs.</p>
+
+<p><strong>The worker threads version also costs 75% less than the single-threaded version!</strong></p>
+
+<h2>Conclusion</h2>
+
+<p><a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">Node.js v12</a> was released in April 2019. This version included support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that were enabled by default (rather than needing an optional runtime flag). Using multiple CPU cores in Node.js applications has never been easier!</p>
+
+<p>Node.js applications with CPU-intensive workloads can utilise this feature to reduce execution time. Since serverless platforms charge based upon execution time, this is especially useful for Node.js serverless functions. Utilising multiple CPU cores leads, not only to improved performance, but also lower bills.</p>
+
+<p>PRs have been <a href="https://github.com/apache/incubator-openwhisk/pull/4472">opened</a> to enable Node.js v12 as a built-in runtime to the Apache OpenWhisk project. This Docker <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">image</a> for the new runtime version is already available on Docker Hub. This means it can be used with any Apache OpenWhisk instance straight away!</p>
+
+<p>Playing with Worker Threads on IBM Cloud Functions allowed me to demonstrate how to speed up performance for CPU-intensive workloads by utilising multiple cores concurrently. Using <a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">an example of prime number generation</a>, calculating all primes up to ten million took ~35 seconds with a single thread and ~8 seconds with four threads. This represents a reduction in execution time and cost of 75%!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Apache OpenWhisk Web Action HTTP Proxy]]></title>
@@ -742,11 +972,13 @@ publicKeys: (await openpgp.key.readArmored(public_keys)).keys
     <id>http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences</id>
     <content type="html"><![CDATA[<p>This week, I came across an interesting problem when building HTTP APIs on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</p>
 
-<p><blockquote><p>How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?</p></blockquote></p>
+<p>{% blockquote  %}
+How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?
+{% endblockquote %}</p>
 
 <p>This came from wanting to add custom <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication">HTTP authentication</a> to existing Web Actions. I had decided to enhance existing Web Actions with authentication using action sequences. This would combine a new action for authentication validation with the existing API route handlers.</p>
 
-<p><img src="/images/sequences-and-web-actions/outline.png" title="" ></p>
+<p>{% img /images/sequences-and-web-actions/outline.png  %}</p>
 
 <p>When the HTTP authentication is valid, the authentication action becomes a "<a href="https://en.wikipedia.org/wiki/NOP_(code)">no-op</a>", which passes along the HTTP request to the route handler action to process as normal.</p>
 
@@ -754,7 +986,7 @@ publicKeys: (await openpgp.key.readArmored(public_keys)).keys
 
 <p>The authentication action needs to stop request processing and return a <a href="https://httpstatuses.com/401">HTTP 401</a> response immediately.</p>
 
-<p><img src="/images/sequences-and-web-actions/options.png" title="" ></p>
+<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
 
 <p><em>Does Apache OpenWhisk even support this?</em></p>
 
@@ -858,7 +1090,7 @@ const check_auth = (params) => {
 
 <p>The  <code>check_auth</code> action needs to return a HTTP 401 response immediately, rather than proceeding to the  <code>route_handler</code> action.</p>
 
-<p><img src="/images/sequences-and-web-actions/options.png" title="" ></p>
+<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
 
 <h3>handling errors - synchronous results</h3>
 
@@ -931,219 +1163,6 @@ return Promise.reject(response)
 <p>When the HTTP request contains the correct credentials, the request is passed along unmodified. When the credentials are invalid, the action needs to stop sequence processing and return a HTTP 401 response.</p>
 
 <p>Working out how to do this wasn't immediately obvious from the documentation. HTTP response parameters need to included under the <code>error</code> property for synchronous results. I have now opened a PR to improve the project documentation about this.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Pluggable Event Providers for Apache OpenWhisk]]></title>
-    <link href="http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/"/>
-    <updated>2019-02-20T11:53:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk</id>
-    <content type="html"><![CDATA[<p>Recently I presented my work building "<em><a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">pluggable event providers</a></em>" for <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> to the open-source community on the <a href="https://www.youtube.com/openwhisk">bi-weekly video meeting</a>.</p>
-
-<p>This was based on my experience building a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">new event provider</a> for Apache OpenWhisk, which led me to prototype an <strong>easier way to add event sources to platform</strong> whilst <strong>cutting down on the boilerplate code</strong> required.</p>
-
-<p>Slides from the talk are <a href="https://speakerdeck.com/jthomas/apache-openwhisk-pluggable-event-providers">here</a> and there's also a video recording <a href="https://www.youtube.com/watch?v=krm7X5YpGy0">available</a>.</p>
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/krm7X5YpGy0?start=89" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-
-
-<p>This blog post is overview of what I talked about on the call, explaining the background for the project and what was built. Based on positive feedback from the community, I have now open-sourced <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">both</a> <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">components</a> of the experiment and will be merging it back upstream into Apache OpenWhisk in future.</p>
-
-<h2>pluggable event providers - why?</h2>
-
-<p>At the end of last year, I was asked to prototype an <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">S3-compatible</a> Object Store event source for Apache OpenWhisk. Reviewing the <a href="https://github.com/search?q=incubator-openwhisk-package">existing event providers</a> helped me understand how they work and what was needed to build a new event source.</p>
-
-<p>This led me to an interesting question...</p>
-
-<blockquote><p>Why do we have relatively few community contributions for event sources?</p></blockquote>
-
-<p>Most of the existing event sources in the project were contributed by IBM. There hasn't been a new event source from an external community member. This is in stark contrast to <a href="https://github.com/search?q=incubator-openwhisk-runtime">additional platform runtimes</a>. Support for PHP, Ruby, DotNet, Go and many more languages all came from community contributions.</p>
-
-<p><em>Digging into the source code for the existing feed providers, I came to the following conclusions....</em></p>
-
-<ul>
-<li><strong>Trigger feed providers are not simple to implement.</strong></li>
-<li><strong>Documentation how existing providers work is lacking.</strong></li>
-</ul>
-
-
-<p>Feed providers can feel a bit like magic to users. You call the <code>wsk</code> CLI with a <code>feed</code> parameter and that's it, the platform handles everything else. But what actually happens to bind triggers to external event sources?</p>
-
-<p><em>Let's start by explaining how trigger feeds are implemented in Apache OpenWhisk, before moving onto my idea to make contributing new feed providers easier.</em></p>
-
-<h2>how trigger feeds work</h2>
-
-<p>Users normally interact with trigger feeds using the <code>wsk</code> CLI. Whilst creating a trigger, the <code>feed</code> parameter can be included to connect that trigger to an external event source. Feed provider options as provided as further CLI parameters.</p>
-
-<p><code>
-wsk trigger create periodic \
-  --feed /whisk.system/alarms/alarm \
-  --param cron "*/2 * * * *" \
-  --param trigger_payload “{…}” \
-  --param startDate "2019-01-01T00:00:00.000Z" \
-  --param stopDate "2019-01-31T23:59:00.000Z"
-</code></p>
-
-<p><em>But what are those trigger feed identifiers used with the <code>feed</code> parameter?</em></p>
-
-<p><strong>It turns out they are just normal actions which have been shared in a public package!</strong></p>
-
-<p>The CLI creates the trigger (using the platform API) and then invokes the referenced feed action. Invocation parameters include the following values used to manage the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">trigger feed lifecycle</a>.</p>
-
-<ul>
-<li><code>lifecycleEvent</code> - Feed operation (<code>CREATE</code>, <code>READ</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>PAUSE</code>, or <code>UNPAUSE</code>).</li>
-<li><code>triggerName</code> - Trigger identifier.</li>
-<li><code>authKey</code> - API key provided to invoke trigger.</li>
-</ul>
-
-
-<p>Custom feed parameters from the user are also included in the event parameters.</p>
-
-<p><strong>This is the entire interaction of the platform with the feed provider.</strong></p>
-
-<p>Providers are responsible for the full management lifecycle of trigger feed event sources. They have to maintain the list of registered triggers and auth keys, manage connections to user-provided event sources, fire triggers upon external events, handle retries and back-offs in cases of rate-limiting and much more.</p>
-
-<p>Feed providers used with a trigger are stored as custom annotations. This allows the CLI to call the same feed action to stop the event binding when the trigger is deleted.</p>
-
-<h3>trigger management</h3>
-
-<p>Reading the source code for the <a href="https://github.com/search?q=incubator-openwhisk-package">existing feed providers</a>, nearly all of the code is responsible for handling the lifecycle of trigger management events, rather than integrating with the external event source.</p>
-
-<p>Despite this, all of the existing providers are in separate repositories and don't share code explicitly, although the same source files have been replicated in different repos.</p>
-
-<p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB feed provider</a> is a good example of how feed providers can be implemented.</p>
-
-<h3>couchdb feed provider</h3>
-
-<p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed provider</a> uses a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">public action</a> to handle the lifecycle events from the <code>wsk</code> CLI.</p>
-
-<p><img src="/images/pluggable-providers/feeds-overview.png" title="" ></p>
-
-<p>This <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">action</a> just proxies the incoming requests to a separate <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changesWebAction.js">web actio</a>n. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">web action</a> implements the logic to handle the trigger lifecycle event. The web action uses a CouchDB database used to store registered triggers. Based upon the lifecycle event details, the web action updates the database document for that trigger.</p>
-
-<p><img src="/images/pluggable-providers/feeds-provider.png" title="" ></p>
-
-<p>The feed provider also runs a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/tree/master/provider">seperate Docker container</a>, which handles listening to CouchDB change feeds from user-provided credentials. It uses the changes feed from the trigger management database, modified from the web action, to listen for triggers being added, removed, disabled or re-enabled.</p>
-
-<p><img src="/images/pluggable-providers/feeds-fire-trigger.png" title="" ></p>
-
-<p>When database change events <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L78">occur</a>, the container <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L66-L76">fires triggers</a> on the platform with the event details.</p>
-
-<h2>building a new event provider?</h2>
-
-<p>Having understood how feed providers work (and how the existing providers were designed), I started to think about the new event source for an S3-compatible object store.</p>
-
-<p>Realising ~90% of the code between providers was the same, I wondered if there was a different approach to creating new event providers, rather than cloning an existing provider and changing the small amount of code used to interact with the event sources.</p>
-
-<p><strong>What about building a generic event provider which a pluggable event source?</strong></p>
-
-<p>This generic event provider would handle all the trigger management logic, which isn't specific to individual event sources. The event source plugin would manage connecting to external event sources and then firing triggers as event occurred. Event source plugins would implement a standard interface and be registered dynamically during startup.</p>
-
-<p><img src="/images/pluggable-providers/generic-provider.png" title="" ></p>
-
-<h3>advantages</h3>
-
-<p>Using this approach would make it much easier to contribute and maintain new event sources.</p>
-
-<ul>
-<li><p>Users would be able to create new event sources with a few lines of custom integration code, rather than replicating all the generic trigger lifecycle management code.</p></li>
-<li><p>Maintaining a single repo for the generic event provider is easier than having the same code copied and pasted in multiple independent repositories.</p></li>
-</ul>
-
-
-<p>I started hacking away at the existing CouchDB event provider to replace the event source integration with a generic plugin interface. Having completed this, I then wrote a new S3-compatible event source using the plugin model. After a couple of weeks I had something working....</p>
-
-<h2>generic event provider</h2>
-
-<p>The <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">generic event provider</a> is based on the exiting CouchDB feed provider source code. The project contains the stateful container code and feed package actions (public &amp; web). It uses the same platform services (CouchDB and Redis) as the existing provider to maintain trigger details.</p>
-
-<p>The event provider plugin is integrated through the <code>EVENT_PROVIDER</code> environment variable. The name should refer to a Node.js module from NPM with the following <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider#plugin-interface">interface</a>.</p>
-
-<p>```javascript
-// initialise plugin instance (must be a JS constructor)
-module.exports = function (trigger_manager, logger) {</p>
-
-<pre><code>// register new trigger feed
-const add = async (trigger_id, trigger_params) =&gt; {}
-// remove existing trigger feed
-const remove = async trigger_id =&gt; {}
-</code></pre>
-
-<p>   return { add, remove }
-}</p>
-
-<p>// valiate feed parameters
-module.exports.validate = async trigger_params => {}
-```</p>
-
-<p>When a new trigger is added to the trigger feeds' database, the details will be passed to the <code>add</code> method. Trigger parameters will be used to set up listening to the external event source. When external events occur, the <code>trigger_manager</code> can be use to automatically fire triggers.</p>
-
-<p>When users delete triggers with feeds, the trigger will be removed from the database. This will lead to the <code>remove</code> method being called. Plugins should stop listening to messages for this event source.</p>
-
-<h3>firing trigger events</h3>
-
-<p>As event arrive from the external source, the plugin can use the <code>trigger_manager</code> instance, passed in through the constructor, to fire triggers with the identifier.</p>
-
-<p>The <code>trigger_manager</code> parameter exposes two async functions:</p>
-
-<ul>
-<li><code>fireTrigger(id, params)</code> - fire trigger given by id passed into <code>add</code> method with event parameters.</li>
-<li><code>disableTrigger(id, status_code, message)</code> - disable trigger feed due to external event source issues.</li>
-</ul>
-
-
-<p>Both functions handle the retry logic and error handling for those operations. These should be used by the event provider plugin to fire  triggers when events arrive from external sources and then disable triggers due to external event source issues.</p>
-
-<h3>validating event source parameters</h3>
-
-<p>This static function on the plugin constructor is used to validate incoming trigger feed parameters for correctness, e.g. checking  authentication credentials for an event source. It is passed the trigger  parameters from the user.</p>
-
-<h2>S3 event feed provider</h2>
-
-<p>Using this new generic event provider, I was able to create an event source for an <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">S3-compatible object store</a>. Most importantly, this new event source was implemented using just <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed/tree/master/lib">~300 lines</a> of JavaScript! This is much smaller than the 7500 lines of code in the generic event provider.</p>
-
-<p>The feed provider polls buckets on an interval using the <code>ListObjects</code> <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/v2-RESTBucketGET.html">API call</a>. Results are cached in Redis to allow comparison between intervals. Comparing the differences in bucket file name and etags, allows file change events to be detected.</p>
-
-<p>Users can call the feed provider with a bucket name, endpoint, API key and polling interval.</p>
-
-<p><code>
-wsk trigger create test-s3-trigger --feed /&lt;PROVIDER_NS&gt;/s3-trigger-feed/changes --param bucket &lt;BUCKET_NAME&gt; --param interval &lt;MINS&gt; --param s3_endpoint &lt;S3_ENDPOINT&gt; --param s3_apikey &lt;COS_KEY&gt;
-</code></p>
-
-<p>File events are fired as the bucket files change with the following trigger events.</p>
-
-<p>```
-{
-  "file": {</p>
-
-<pre><code>"ETag": "\"fb47672a6f7c34339ca9f3ed55c6e3a9\"",
-"Key": "file-86.txt",
-"LastModified": "2018-12-19T08:33:27.388Z",
-"Owner": {
-  "DisplayName": "80a2054e-8d16-4a47-a46d-4edf5b516ef6",
-  "ID": "80a2054e-8d16-4a47-a46d-4edf5b516ef6"
-},
-"Size": 25,
-"StorageClass": "STANDARD"
-</code></pre>
-
-<p>  },
-  "status": "deleted"
-}
-```</p>
-
-<p><em>Pssst - if you are using <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> - I actually have this deployed and running so you can try it out. Use the <code>/james.thomas@uk.ibm.com_dev/s3-trigger-feed/changes</code> feed action name. This package is only available in the London region.</em></p>
-
-<h2>next steps</h2>
-
-<p>Feedback on the call was overwhelming positive on my experiment. Based upon this, I've now open-sourced both the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">generic event provider</a> and <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">s3 event source plugin</a> to allow the community to evaluate the project further.</p>
-
-<p>I'd like to build a few more example event providers to validate the approach further before moving towards contributing this code back upstream.</p>
-
-<p>If you want to try this generic event provider out with your own install of OpenWhisk, please see the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider/blob/master/README.md#running-the-provider--plugin">documentation</a> in the README for how to get started.</p>
-
-<p>If you want to build new event sources, please see the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider/blob/master/README.md#plugin-interface">instructions</a> in the generic feed provider repository and take a look at the S3 plugin for an example to follow.</p>
 ]]></content>
   </entry>
   

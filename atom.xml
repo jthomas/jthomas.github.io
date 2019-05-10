@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-04-30T10:04:09+01:00</updated>
+  <updated>2019-05-10T15:19:55+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,265 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Saving Money and Time With Node.js Worker Threads in Serverless Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/"/>
+    <updated>2019-05-08T12:17:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions</id>
+    <content type="html"><![CDATA[<p>Node.js v12 was <a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">released last month</a>. This new version includes support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that are enabled by default. Node.js <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a> make it simple to execute JavaScript code in parallel using threads. 👏👏👏</p>
+
+<p>This is useful for Node.js applications with CPU-intensive workloads. Using Worker Threads, JavaScript code can be executed code concurrently using multiple CPU cores. This reduces execution time compared to a non-Worker Threads version.</p>
+
+<p>If serverless platforms provide Node.js v12 on multi-core environments, functions can use this feature to reduce execution time and, therefore, lower costs. Depending on the workload, functions can utilise all available CPU cores to parallelise work, rather than executing more functions concurrently. 💰💰💰</p>
+
+<p><strong>In this blog post, I&#8217;ll explain how to use Worker Threads from a serverless function. I&#8217;ll be using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) as the example platform but this approach is applicable for any serverless platform with Node.js v12 support and a multi-core CPU runtime environment.</strong></p>
+
+<h2>Node.js v12 in IBM Cloud Functions (Apache OpenWhisk)</h2>
+
+<p><em>This section of the blog post is specifically about using the new <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js v12 runtime</a> on IBM Cloud Functions (powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>). If you are using a different serverless platform, feel free to skip ahead to the next section…</em></p>
+
+<p>I&#8217;ve recently <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">been working</a> on adding the Node.js v12 runtime to Apache OpenWhisk.</p>
+
+<p>Apache OpenWhisk uses <a href="https://hub.docker.com/u/openwhisk">Docker containers</a> as runtime environments for serverless functions. All runtime images are maintained in separate repositories for each supported language, e.g. <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-java">Java</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-python">Python</a>, etc. Runtime images are automatically built and pushed to <a href="https://hub.docker.com/r/openwhisk/">Docker Hub</a> when the repository is updated.</p>
+
+<h3>node.js v12 runtime image</h3>
+
+<p>Here is <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">the PR</a> used to add the new Node.js v12 runtime image to Apache OpenWhisk. This led to the following <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">runtime image</a> being exported to Docker Hub: <code>openwhisk/action-nodejs-v12</code>.</p>
+
+<p>Having this image available as a native runtime in Apache OpenWhisk requires <a href="https://github.com/apache/incubator-openwhisk/pull/4472">upstream changes</a> to the project&#8217;s runtime manifest. After this happens, developers will be able to use the <code>--kind</code> CLI flag to select this runtime version.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create action_name action.js --kind nodejs:12</span></code></pre></td></tr></table></div></figure>
+
+
+<p><a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. It will eventually pick up the upstream project changes to include this new runtime version. Until that happens, Docker support allows usage of this new runtime before it is built-in the platform.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create action_name action.js --docker openwhisk/action-nodejs-v12</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>example</h3>
+
+<p>This Apache OpenWhisk action returns the version of Node.js used in the runtime environment.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">version</span><span class="o">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">version</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running this code on IBM Cloud Functions, using the Node.js v12 runtime image, allows us to confirm the new Node.js version is available.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">ibmcloud</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span> <span class="nx">action</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">ibmcloud</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span> <span class="o">--</span><span class="nx">result</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;version&quot;</span><span class="o">:</span> <span class="s2">&quot;v12.1.0&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Worker Threads in Serverless Functions</h2>
+
+<p><a href="https://medium.com/@Trott/using-worker-threads-in-node-js-80494136dbb6">This is a great introdution blog post</a> to Workers Threads. It uses an example of generating prime numbers as the CPU intensive task to benchmark. Comparing the performance of the single-threaded version to multiple-threads - the performance is improved as a factor of the threads used (up to the number of CPU cores available).</p>
+
+<p>This code can be ported to run in a serverless function. Running with different input values and thread counts will allow benchmarking of the performance improvement.</p>
+
+<h3>non-workers version</h3>
+
+<p>Here is the sample code for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes.js"></script>
+
+
+<h3>porting the code to use worker threads</h3>
+
+<p>Here is the prime number calculation code which uses Worker Threads. Dividing the total input range by the number of Worker Threads generates individual thread input values. Worker Threads are spawned and passed chunked input ranges. Threads calculate primes and then send the result back to the parent thread.</p>
+
+<script src="https://gist.github.com/Trott/7bb7ee55c247047d030b4c427434ef51.js"></script>
+
+
+<p>Reviewing the code to start converting it to a serverless function, I realised there were two issues running this code in serverless environment: <strong>worker thread initialisation</strong> and <strong>optimal worker thread counts</strong>.</p>
+
+<h4>How to initialise Worker Threads?</h4>
+
+<p>This is how the existing source code <a href="https://nodejs.org/dist/latest-v12.x/docs/api/worker_threads.html#worker_threads_new_worker_filename_options">initialises the Worker Threads</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'> <span class="nx">threads</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">new</span> <span class="nx">Worker</span><span class="p">(</span><span class="nx">__filename</span><span class="p">,</span> <span class="p">{</span> <span class="nx">workerData</span><span class="o">:</span> <span class="p">{</span> <span class="nx">start</span><span class="o">:</span> <span class="nx">myStart</span><span class="p">,</span> <span class="nx">range</span> <span class="p">}}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> <em><code>__filename</code> is a special global variable in Node.js which contains the currently executing script file path.</em></p>
+
+<p>This means the Worker Thread will be initialised with a copy of the currently executing script. Node.js provides a special variable to indicate whether the script is executing in the parent or child thread. This can be used to branch script logic.</p>
+
+<p><strong>So, what&#8217;s the issue with this?</strong></p>
+
+<p>In the Apache OpenWhisk Node.js runtime, action source files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61-L79">dynamically imported</a> into the runtime environment. The script used to start the Node.js runtime process is for the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js">platform handler</a>, not the action source files. This means the <code>__filename</code> variable does not point to the action source file.</p>
+
+<p>This issue is fixed by separating the serverless function handler and worker thread code into separate files. Worker Threads can be started with a reference to the worker thread script source file, rather than the currently executing script name.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'> <span class="nx">threads</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">new</span> <span class="nx">Worker</span><span class="p">(</span><span class="s2">&quot;./worker.js&quot;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">workerData</span><span class="o">:</span> <span class="p">{</span> <span class="nx">start</span><span class="o">:</span> <span class="nx">myStart</span><span class="p">,</span> <span class="nx">range</span> <span class="p">}}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>How Many Worker Threads?</h4>
+
+<p>The next issue to resolve is how many Worker Threads to use. In order to maximise parallel processing capacity, there should be a Worker Thread for each CPU core. This is the maximum number of threads that can run concurrently.</p>
+
+<p>Node.js provides CPU information for the runtime environment using the <code>os.cpus()</code> <a href="https://nodejs.org/api/os.html#os_os_cpus">function</a>. The result is an array of objects (one per logical CPU core), with model information, processing speed and elapsed processing times. The length of this array will determine number of Worker Threads used. This ensures the number of Worker Threads will always match the CPU cores available.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">threadCount</span> <span class="o">=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">cpus</span><span class="p">().</span><span class="nx">length</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>workers threads version</h3>
+
+<p>Here is the serverless version of the prime number generation algorithm which uses Worker Threads.</p>
+
+<p>The code is split over two files - <code>primes-with-workers.js</code> and <code>worker.js</code>.</p>
+
+<h4>primes-with-workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes-with-workers.js "></script>
+
+
+<h4>workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=workers.js "></script>
+
+
+<h4>package.json</h4>
+
+<p>Source files deployed from a zip file also need to include a <code>package.json</code> file in the archive. The <code>main</code> property is used to determine the script to import as the exported package module.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;worker_threads&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;primes-with-workers.js&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Performance Comparison</h2>
+
+<p>Running both functions with the same input parameters allows execution time comparison. The Worker Threads version should improve performance by a factor proportional to available CPU cores. Reducing execution time also means reduced costs in a serverless platform.</p>
+
+<h3>non-workers performance</h3>
+
+<p>Creating a new serverless function (<code>primes</code>) from the non-worker threads source code, using the Node.js v12 runtime, I can test with small values to check correctness.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud wsk action create primes primes.js --docker openwhisk/action-nodejs-v12
+</span><span class='line'>ok: created action primes
+</span><span class='line'><span class="nv">$ </span>ibmcloud wsk action invoke primes --result -p start 2 -p end 10
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;primes&quot;</span>: <span class="o">[</span> 2, 3, 5, 7 <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Playing with sample input values, 10,000,000 seems like a useful benchmark value. This takes long enough with the single-threaded version to benefit from parallelism.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">time </span>ibmcloud wsk action invoke primes --result -p start 2 -p end 10000000 &gt; /dev/null
+</span><span class='line'>
+</span><span class='line'>real  0m35.151s
+</span><span class='line'>user  0m0.840s
+</span><span class='line'>sys   0m0.315s
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Using the simple single-threaded algorithm it takes the serverless function around ~35 seconds to calculate primes up to ten million.</strong></p>
+
+<h3>workers threads performance</h3>
+
+<p>Creating a new serverless function, from the worker threads-based source code using the Node.js v12 runtime, allows me to verify it works as expected for small input values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud wsk action create primes-workers action.zip --docker openwhisk/action-nodejs-v12
+</span><span class='line'>ok: created action primes-workers
+</span><span class='line'><span class="nv">$ </span>ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;primes&quot;</span>: <span class="o">[</span> 2, 3, 5, 7 <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Hurrah, it works.</p>
+
+<p>Invoking the function with an <code>max</code> parameter of 10,000,000 allows us to benchmark against the non-workers version of the code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">time </span>ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10000000 --result &gt; /dev/null
+</span><span class='line'>
+</span><span class='line'>real  0m8.863s
+</span><span class='line'>user  0m0.804s
+</span><span class='line'>sys   0m0.302s
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>The workers versions only takes ~25% of the time of the single-threaded version!</strong></p>
+
+<p>This is because IBM Cloud Functions&#8217; runtime environments provide access to four CPU cores. Unlike other platforms, CPU cores are not tied to memory allocations. Utilising all available CPU cores concurrently allows the algorithm to run 4x times as fast. Since serverless platforms charge based on execution time, reducing execution time also means reducing costs.</p>
+
+<p><strong>The worker threads version also costs 75% less than the single-threaded version!</strong></p>
+
+<h2>Conclusion</h2>
+
+<p><a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">Node.js v12</a> was released in April 2019. This version included support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that were enabled by default (rather than needing an optional runtime flag). Using multiple CPU cores in Node.js applications has never been easier!</p>
+
+<p>Node.js applications with CPU-intensive workloads can utilise this feature to reduce execution time. Since serverless platforms charge based upon execution time, this is especially useful for Node.js serverless functions. Utilising multiple CPU cores leads, not only to improved performance, but also lower bills.</p>
+
+<p>PRs have been <a href="https://github.com/apache/incubator-openwhisk/pull/4472">opened</a> to enable Node.js v12 as a built-in runtime to the Apache OpenWhisk project. This Docker <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">image</a> for the new runtime version is already available on Docker Hub. This means it can be used with any Apache OpenWhisk instance straight away!</p>
+
+<p>Playing with Worker Threads on IBM Cloud Functions allowed me to demonstrate how to speed up performance for CPU-intensive workloads by utilising multiple cores concurrently. Using <a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">an example of prime number generation</a>, calculating all primes up to ten million took ~35 seconds with a single thread and ~8 seconds with four threads. This represents a reduction in execution time and cost of 75%!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Apache OpenWhisk Web Action HTTP Proxy]]></title>
@@ -6301,542 +6560,6 @@
 <p>Object stores provide a scalable and cost-effective service for managing files without using storage infrastructure directly. Storing files in an object store provides simple access from serverless runtimes and even allows the files to be made directly accessible to end users.</p>
 
 <p>In the next blog posts, I&#8217;m going to show you how to set up IBM Cloud Object Storage and access files from serverless applications on IBM Cloud Functions. I&#8217;ll be demonstrating this approach for both the Node.js and Swift runtimes.</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Configuring Alert Notifications Using Serverless Metrics]]></title>
-    <link href="http://jamesthom.as/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/"/>
-    <updated>2018-01-25T11:16:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics</id>
-    <content type="html"><![CDATA[<p><em>This blog post is the final part of a series on &#8220;Monitoring Serverless Applications Metrics&#8221;. See the <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
-
-<p>In previous blog posts, we showed how to <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">capture serverless metrics</a> from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">send those values</a> into the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a> and <a href="http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">build visualisation dashboards</a> using Grafana.</p>
-
-<p><strong>Dashboards are a great way to monitor metrics but rely on someone watching them! We need a way to be alerted to issues without having to manually review dashboards.</strong></p>
-
-<p>Fortunately, IBM Cloud Monitoring service comes with an <a href="https://console.bluemix.net/docs/services/cloud-monitoring/config_alerts_ov.html#config_alerts_ov">automatic alerting mechanism</a>. Users configure rules that define metrics to monitor and expected values. When values fall outside normal ranges, alerts are sent using installed notification methods.</p>
-
-<p><em>Let&#8217;s finish off this series on monitoring serverless applications by setting up a sample alert notification monitoring errors from our serverless applications…</em></p>
-
-<h2>Alerting in IBM Cloud Monitoring</h2>
-
-<p>IBM Cloud Monitoring service supports defining custom monitoring alerts. Users define rules to identify metric values to monitor and expected values. Alerts are triggered when metric values fall outside thresholds. Notification methods including email, webhooks and PagerDuty are supported.</p>
-
-<p><strong>Let&#8217;s set up a sample monitoring alert for IBM Cloud Functions applications.</strong></p>
-
-<p>We want to be notified when actions start to return error codes, rather than successful responses. The <a href="https://github.com/jthomas/openwhisk-metrics">monitoring library</a> already records boolean values for error responses from each invocation.</p>
-
-<p>Creating monitoring alerts needs us to use the IBM Cloud <a href="https://console.bluemix.net/apidocs/940-ibm-cloud-monitoring-alerts-api?&amp;language=node#introduction">Monitoring API</a>.</p>
-
-<p><em>Using the IBM Cloud Monitoring API needs authentication credentials and a space domain identifier. In a <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/#monitoring%20service">previous blog post</a>, we showed how to retrieve these values.</em></p>
-
-<h3>Monitoring Rules API</h3>
-
-<p>Monitoring rules can be registered by sending a HTTP POST request to the <code>/alert/rule</code> <a href="https://console.bluemix.net/apidocs/940-ibm-cloud-monitoring-alerts-api?&amp;language=node#introduction">endpoint.</a></p>
-
-<p>Configuration parameters are included in the JSON body. This includes the metric query, threshold values and monitoring time window. Rules are connected to notification methods using notification identifiers.</p>
-
-<p><em>This is an example rule configuration for monitoring errors from IBM Cloud Function applications.</em></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;ibm_cloud_functions&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Monitor errors from all actions&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;expression&quot;</span><span class="p">:</span> <span class="s2">&quot;sumSeries(ibm.public.cloud-functions.&lt;region&gt;.&lt;namespace&gt;.*.*.error)&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;enabled&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;from&quot;</span><span class="p">:</span> <span class="s2">&quot;-5min&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;until&quot;</span><span class="p">:</span> <span class="s2">&quot;now&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;comparison&quot;</span><span class="p">:</span> <span class="s2">&quot;above&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;comparison_scope&quot;</span><span class="p">:</span> <span class="s2">&quot;last&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;error_level&quot;</span> <span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;warning_level&quot;</span> <span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;frequency&quot;</span><span class="p">:</span> <span class="s2">&quot;1min&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;dashboard_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://metrics.ng.bluemix.net&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;notifications&quot;</span><span class="p">:</span> <span class="p">[</span>
-</span><span class='line'>    <span class="s2">&quot;email_alert&quot;</span>
-</span><span class='line'>  <span class="p">]</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>expression</code> parameter defines the query used to monitor values.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">sumSeries(ibm.public.cloud-functions.&lt;region&gt;.&lt;namespace&gt;.*.*.error)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Error metric values use <code>0</code> for normal responses and <code>1</code> for errors. <code>sumSeries</code> adds up all error values recorded within the monitoring window.</em></p>
-
-<p>Using a wildcard for the sixth field means all actions are monitored. Replacing this field value with an action name will restrict monitoring to just that action. Region and namespace templates need substituting with actual values for your application.</p>
-
-<p>Threshold values for triggering alerts are defined using the <code>warning_level</code> and  <code>error_level</code> parameters.  Warning messages are triggered after a single action failure and error messages after ten failures.</p>
-
-<p>Notification identifiers, registered using the API, are provided in the <code>notifications</code> field. Rules may include more than one notification identifiers.</p>
-
-<h3>Notifications API</h3>
-
-<p>Notifications can be registered by sending a HTTP POST request to the <code>/alert/notification</code> <a href="https://console.bluemix.net/apidocs/940-ibm-cloud-monitoring-alerts-api?&amp;language=node#introduction">endpoint</a>. Configuration parameters are included in the JSON body.</p>
-
-<p><em>This is an example configuration for email notifications.</em></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;email_alert&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Email&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;description&quot;</span> <span class="p">:</span> <span class="s2">&quot;Email alerting notifications&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;detail&quot;</span><span class="p">:</span> <span class="s2">&quot;email@address.com&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Notifications are configured using the <code>type</code> parameter in the body. Valid values for this field include <code>Email</code>, <code>Webhook</code> or <code>PagerDuty</code>. The <code>detail</code> field is used to include the email address, webhook endpoint or PagerDuty API key. The <code>name</code> field is used to reference this notification method when setting up rules.</p>
-
-<h2>Setting up alerts for serverless errors</h2>
-
-<h3>Creating an email notification</h3>
-
-<ul>
-<li>Create the <code>notify.json</code> file from the template above.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">cat</span> <span class="err">notify.json</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;email_alert&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Email&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;description&quot;</span> <span class="p">:</span> <span class="s2">&quot;Email alerting notifications&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;detail&quot;</span><span class="p">:</span> <span class="s2">&quot;your_email@address.com&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Send the following HTTP request using <code>curl</code>. Include scope and auth token values in the headers.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">curl</span> <span class="err">--request</span> <span class="err">POST</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--url</span> <span class="err">https://metrics.ng.bluemix.net/v</span><span class="mi">1</span><span class="err">/alert/notification</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-scope-id:</span> <span class="err">s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-user-token:</span> <span class="err">apikey</span> <span class="err">&lt;YOUR_API_KEY&gt;&#39;</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--data</span> <span class="err">@notify.json</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Created notification &#39;email_alert&#39;&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Testing email notification</h3>
-
-<ul>
-<li>Sending the following HTTP request using <code>curl</code> to generate a test email.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">curl</span> <span class="err">--request</span> <span class="err">POST</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--url</span> <span class="err">https://metrics.ng.bluemix.net/v</span><span class="mi">1</span><span class="err">/alert/notification/test/email_alert</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-scope-id:</span> <span class="err">s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-user-token:</span> <span class="err">apikey</span> <span class="err">&lt;YOUR_API_KEY&gt;&#39;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>This returns the test notification message which will be emailed to the address.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Triggered test for notification &#39;email_alert&#39;&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;content&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nt">&quot;rule_name&quot;</span><span class="p">:</span> <span class="s2">&quot;test_rule_name&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;test_rule_description&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;notification_name&quot;</span><span class="p">:</span> <span class="s2">&quot;email_alert&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;scope_id&quot;</span><span class="p">:</span> <span class="s2">&quot;s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;expression&quot;</span><span class="p">:</span> <span class="s2">&quot;test_rule_expression&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;warning_level&quot;</span><span class="p">:</span> <span class="s2">&quot;80&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;error_level&quot;</span><span class="p">:</span> <span class="s2">&quot;90.9&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;dashboard_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://metrics.ng.bluemix.net&quot;</span><span class="p">,</span>
-</span><span class='line'>      <span class="nt">&quot;alert_messages&quot;</span><span class="p">:</span> <span class="p">[</span>
-</span><span class='line'>        <span class="p">{</span>
-</span><span class='line'>          <span class="nt">&quot;target&quot;</span><span class="p">:</span> <span class="s2">&quot;test_alert_target&quot;</span><span class="p">,</span>
-</span><span class='line'>          <span class="nt">&quot;from_type&quot;</span><span class="p">:</span> <span class="s2">&quot;OK&quot;</span><span class="p">,</span>
-</span><span class='line'>          <span class="nt">&quot;to_type&quot;</span><span class="p">:</span> <span class="s2">&quot;ERROR&quot;</span><span class="p">,</span>
-</span><span class='line'>          <span class="nt">&quot;current_value&quot;</span><span class="p">:</span> <span class="s2">&quot;95.0&quot;</span><span class="p">,</span>
-</span><span class='line'>          <span class="nt">&quot;comparison&quot;</span><span class="p">:</span> <span class="s2">&quot;above&quot;</span><span class="p">,</span>
-</span><span class='line'>          <span class="nt">&quot;timestamp&quot;</span><span class="p">:</span> <span class="s2">&quot;2018-01-25T12:36:05Z&quot;</span>
-</span><span class='line'>        <span class="p">}</span>
-</span><span class='line'>      <span class="p">]</span>
-</span><span class='line'>    <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Check the email inbox to verify the message has arrived.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/metrics_alerts/test_email.png"></p>
-
-<h3>Create monitoring rule for errors</h3>
-
-<ul>
-<li><p>Create the <code>rule.json</code> file from the template above, replacing <code>region</code> and <code>namespace</code> values.</p></li>
-<li><p>Send the following HTTP request using <code>curl</code>. Include scope and auth token values in the headers.</p></li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">curl</span> <span class="err">--request</span> <span class="err">POST</span> <span class="err">--url</span> <span class="err">https://metrics.ng.bluemix.net/v</span><span class="mi">1</span><span class="err">/alert/rule</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-scope-id:</span> <span class="err">s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--header</span> <span class="err">&#39;x-auth-user-token:</span> <span class="err">apikey</span> <span class="err">&lt;YOUR_API_KEY&gt;&#39;</span> <span class="err">\</span>
-</span><span class='line'>    <span class="err">--data</span> <span class="err">@rule.json</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Created rule &#39;ibm_cloud_functions&#39;&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Testing alerts for serverless errors</h2>
-
-<p>Let&#8217;s generate some errors in a sample action to check the monitoring rule works.</p>
-
-<h3>Create failing action</h3>
-
-<ul>
-<li>Create a new Node.js library called &#8220;fails&#8221;.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">mkdir</span> <span class="err">fails</span> <span class="err">&amp;&amp;</span> <span class="err">cd</span> <span class="err">fails</span> <span class="err">&amp;&amp;</span> <span class="err">npm</span> <span class="err">init</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Install the <code>openwhisk-metrics</code> <a href="https://github.com/jthomas/openwhisk-metrics">library</a>.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">$</span> <span class="err">npm</span> <span class="err">install</span> <span class="err">openwhisk-metrics</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Edit the <code>index.js</code> file to have the following source code.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">metrics</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk-metrics&#39;</span><span class="p">)</span>
-</span><span class='line'>
-</span><span class='line'><span class="kr">const</span> <span class="nx">main</span> <span class="o">=</span> <span class="nx">params</span> <span class="o">=&gt;</span> <span class="p">{</span>
-</span><span class='line'>  <span class="k">return</span> <span class="p">{</span> <span class="nx">error</span><span class="o">:</span> <span class="s1">&#39;Oh dear, this action failed...&#39;</span> <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">main</span> <span class="o">=</span> <span class="nx">metrics</span><span class="p">(</span><span class="nx">main</span><span class="p">)</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Deploy the code as an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">OpenWhisk action</a>.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">zip</span> <span class="o">-</span><span class="nx">r</span> <span class="nx">action</span><span class="p">.</span><span class="nx">zip</span> <span class="o">*</span>
-</span><span class='line'>  <span class="nx">adding</span><span class="o">:</span> <span class="nx">index</span><span class="p">.</span><span class="nx">js</span> <span class="p">(</span><span class="nx">deflated</span> <span class="mi">22</span><span class="o">%</span><span class="p">)</span>
-</span><span class='line'>  <span class="p">...</span>
-</span><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">fails</span> <span class="nx">action</span><span class="p">.</span><span class="nx">zip</span> <span class="o">--</span><span class="nx">kind</span> <span class="nx">nodejs</span><span class="o">:</span><span class="mi">8</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">fails</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Invoke the action. Check the activation response is an error.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">fails</span> <span class="o">-</span><span class="nx">b</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">fails</span> <span class="kd">with</span> <span class="nx">id</span> <span class="nx">cbee42f77c6543c6ae42f77c6583c6a7</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="s2">&quot;activationId&quot;</span><span class="o">:</span> <span class="s2">&quot;cbee42f77c6543c6ae42f77c6583c6a7&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="s2">&quot;response&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s2">&quot;result&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>      <span class="s2">&quot;error&quot;</span><span class="o">:</span> <span class="s2">&quot;Oh dear, this action failed...&quot;</span>
-</span><span class='line'>    <span class="p">},</span>
-</span><span class='line'>    <span class="s2">&quot;status&quot;</span><span class="o">:</span> <span class="s2">&quot;application error&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;success&quot;</span><span class="o">:</span> <span class="kc">false</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="p">...</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em><code>response.result.success</code> should be false.</em></p>
-
-<ul>
-<li>Update <code>actions</code> parameter for the <code>metric-forwarder</code> action to include the <code>fails</code> action name.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">cat</span> <span class="nx">params</span><span class="p">.</span><span class="nx">json</span>
-</span><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="s2">&quot;actions&quot;</span><span class="o">:</span> <span class="p">[</span><span class="s2">&quot;fails&quot;</span><span class="p">],</span>
-</span><span class='line'>  <span class="s2">&quot;service&quot;</span><span class="o">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="s2">&quot;api_key&quot;</span><span class="o">:</span> <span class="s2">&quot;&lt;API_KEY&gt;&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;host&quot;</span><span class="o">:</span> <span class="s2">&quot;metrics.ng.bluemix.net&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;scope&quot;</span><span class="o">:</span> <span class="s2">&quot;s-&lt;SPACE_ID&gt;&quot;</span>
-</span><span class='line'>  <span class="p">},</span>
-</span><span class='line'>  <span class="s2">&quot;since&quot;</span><span class="o">:</span> <span class="mi">1516894777975</span>
-</span><span class='line'><span class="p">}</span>
-</span><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">update</span> <span class="nx">metric</span><span class="o">-</span><span class="nx">forwarder</span> <span class="o">-</span><span class="nx">P</span> <span class="nx">params</span><span class="p">.</span><span class="nx">json</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Generate serverless errors</h3>
-
-<p>Invoking the <code>fails</code> action should now trigger an email notification. Let&#8217;s test this out and trace metrics values through the platform.</p>
-
-<ul>
-<li>Fire an action invocation using the CLI.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">fails</span> <span class="o">-</span><span class="nx">b</span>
-</span><span class='line'><span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">fails</span> <span class="o">-</span><span class="nx">b</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">fails</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">524</span><span class="nx">b27044fd84b6a8b27044fd84b6ad8</span>
-</span><span class='line'><span class="p">...</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Review the activation logs to show the error metric was recorded.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">logs</span> <span class="mi">524</span><span class="nx">b27044fd84b6a8b27044fd84b6ad8</span>
-</span><span class='line'><span class="p">...</span>
-</span><span class='line'><span class="nx">stdout</span><span class="o">:</span> <span class="nx">METRIC</span> <span class="o">&lt;</span><span class="nx">namespace</span><span class="o">&gt;</span><span class="p">.</span><span class="nx">fails</span><span class="p">.</span><span class="mi">524</span><span class="nx">b27044fd84b6a8b27044fd84b6ad8</span><span class="p">.</span><span class="nx">error</span> <span class="mi">1</span> <span class="mi">1516895270</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Invoke the <code>metric-forwarder</code> action to push metric values into the IBM Cloud Monitoring service.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">metric</span><span class="o">-</span><span class="nx">forwarder</span> <span class="o">-</span><span class="nx">b</span>
-</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">invoked</span> <span class="o">/</span><span class="nx">_</span><span class="o">/</span><span class="nx">metric</span><span class="o">-</span><span class="nx">forwarder</span> <span class="kd">with</span> <span class="nx">id</span> <span class="mi">295</span><span class="nx">c47f05ea042849c47f05ea08284f0</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Review activation logs to verify metric values were retrieved.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">bx</span> <span class="nx">wsk</span> <span class="nx">activation</span> <span class="nx">logs</span> <span class="mi">295</span><span class="nx">c47f05ea042849c47f05ea08284f0</span>
-</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.160135346</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">actions</span> <span class="nx">being</span> <span class="nx">monitored</span><span class="o">:</span> <span class="p">[</span> <span class="s1">&#39;fails&#39;</span> <span class="p">]</span>
-</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.160177305</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">retrieving</span> <span class="nx">logs</span> <span class="nx">since</span><span class="o">:</span> <span class="mi">1516894777975</span>
-</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.290529179</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">found</span> <span class="mi">11</span> <span class="nx">metric</span> <span class="nx">values</span> <span class="nx">from</span> <span class="mi">1</span> <span class="nx">activations</span>
-</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">47.291234046</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">saving</span> <span class="nx">to</span> <span class="nx">metrics</span> <span class="nx">service</span> <span class="o">-&gt;</span> <span class="nx">metrics</span><span class="p">.</span><span class="nx">ng</span><span class="p">.</span><span class="nx">bluemix</span><span class="p">.</span><span class="nx">net</span>
-</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">48.232790321</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">saving</span> <span class="nx">metrics</span> <span class="nx">to</span> <span class="nx">service</span> <span class="nx">took</span><span class="o">:</span> <span class="mf">941.169</span><span class="nx">ms</span>
-</span><span class='line'><span class="mi">2018</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">25</span><span class="nx">T15</span><span class="o">:</span><span class="mi">51</span><span class="o">:</span><span class="mf">48.233334982</span><span class="nx">Z</span> <span class="nx">stdout</span><span class="o">:</span> <span class="nx">updating</span> <span class="nx">since</span> <span class="nx">parameter</span><span class="o">:</span> <span class="mi">1516895270458</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Use the IBM Cloud Monitoring dashboard to show the error has been recorded.</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/metrics_alerts/single_error.jpg"></p>
-
-<ul>
-<li>Check your email inbox for the message showing the error notification!</li>
-</ul>
-
-
-<p><img src="http://jamesthom.as/images/metrics_alerts/email.png"></p>
-
-<ul>
-<li>Using the Cloud Monitoring API, we can retrieve the notification history to show this message was sent.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">curl</span> <span class="o">--</span><span class="nx">request</span> <span class="nx">POST</span> <span class="o">--</span><span class="nx">url</span> <span class="nx">https</span><span class="o">:</span><span class="c1">//metrics.ng.bluemix.net/v1/alert/history \</span>
-</span><span class='line'>    <span class="o">--</span><span class="nx">header</span> <span class="s1">&#39;x-auth-scope-id: s-&lt;YOUR_DOMAIN_SPACE_ID&gt;&#39;</span> <span class="o">\</span>
-</span><span class='line'>    <span class="o">--</span><span class="nx">header</span> <span class="s1">&#39;x-auth-user-token: apikey &lt;YOUR_API_KEY&gt;&#39;</span>
-</span><span class='line'><span class="p">[</span>
-</span><span class='line'>  <span class="p">{</span>
-</span><span class='line'>    <span class="s2">&quot;from_level&quot;</span><span class="o">:</span> <span class="s2">&quot;OK&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;metric_name&quot;</span><span class="o">:</span> <span class="s2">&quot;sumSeries(ibm.public.cloud-functions.&lt;region&gt;.&lt;namespace&gt;.*.*.error)&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;notification_names&quot;</span><span class="o">:</span> <span class="p">[</span>
-</span><span class='line'>      <span class="s2">&quot;email_alert&quot;</span>
-</span><span class='line'>    <span class="p">],</span>
-</span><span class='line'>    <span class="s2">&quot;rule_name&quot;</span><span class="o">:</span> <span class="s2">&quot;ibm_cloud_functions&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;timestamp&quot;</span><span class="o">:</span> <span class="s2">&quot;2018-01-23T15:29:48Z&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;to_level&quot;</span><span class="o">:</span> <span class="s2">&quot;WARN&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="s2">&quot;value&quot;</span><span class="o">:</span> <span class="mi">1</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">]</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Invoking the <code>fails</code> action more than ten times will trigger a second alert when the rule moves from <code>warning</code> to <code>error</code> thresholds.</p>
-
-<h2>Conclusion</h2>
-
-<p>IBM Cloud Monitoring service supports sending notification alerts based upon application metric values. Configuring notifications rules, based upon our serverless metrics, ensures we will be alerted immediately when issues occur with our serverless applications. Notifications can be sent over email, webhooks or using PagerDuty.</p>
-
-<p>In this series on <a href="http://jamesthom.as/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">&#8220;Monitoring Serverless Application Metrics&#8221;</a>, we have shown you how to monitor serverless applications using IBM Cloud. Starting with <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">capturing runtime metrics</a> from IBM Cloud Functions, we then showed how to <a href="http://jamesthom.as/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">forward metrics</a> into the IBM Cloud Monitoring service. Once metric values were being recorded, <a href="http://jamesthom.as/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">visualisation dashboards</a> were built to help diagnose and resolve application issues. Finally, we configured automatic alerting rules to notify us over email as soon as issues developed.</p>
-
-<p>Serverless applications are <a href="https://medium.com/@PaulDJohnston/what-is-serverless-architecture-43b9ea4babca">not “No Ops”, but &#8220;Different Ops&#8221;</a>. Monitoring runtime metrics is still crucial. IBM Cloud provides a comprehensive set of tools for monitoring cloud applications. Utilising these services, you can create a robust monitoring solution for IBM Cloud Functions applications.</p>
 ]]></content>
   </entry>
   

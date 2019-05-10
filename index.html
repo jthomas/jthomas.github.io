@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="What if you could take an existing web application and run it on a serverless platform with no changes? 🤔 Lots of existing (simple) stateless web &hellip;">
+  <meta name="description" content="Node.js v12 was released last month. This new version includes support for Worker Threads, that are enabled by default. Node.js Worker Threads make &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,292 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-05-08T12:17:00+01:00" pubdate data-updated="true">May 8<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Node.js v12 was <a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">released last month</a>. This new version includes support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that are enabled by default. Node.js <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a> make it simple to execute JavaScript code in parallel using threads. 👏👏👏</p>
+
+<p>This is useful for Node.js applications with CPU-intensive workloads. Using Worker Threads, JavaScript code can be executed code concurrently using multiple CPU cores. This reduces execution time compared to a non-Worker Threads version.</p>
+
+<p>If serverless platforms provide Node.js v12 on multi-core environments, functions can use this feature to reduce execution time and, therefore, lower costs. Depending on the workload, functions can utilise all available CPU cores to parallelise work, rather than executing more functions concurrently. 💰💰💰</p>
+
+<p><strong>In this blog post, I&#8217;ll explain how to use Worker Threads from a serverless function. I&#8217;ll be using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) as the example platform but this approach is applicable for any serverless platform with Node.js v12 support and a multi-core CPU runtime environment.</strong></p>
+
+<h2>Node.js v12 in IBM Cloud Functions (Apache OpenWhisk)</h2>
+
+<p><em>This section of the blog post is specifically about using the new <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js v12 runtime</a> on IBM Cloud Functions (powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>). If you are using a different serverless platform, feel free to skip ahead to the next section…</em></p>
+
+<p>I&#8217;ve recently <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">been working</a> on adding the Node.js v12 runtime to Apache OpenWhisk.</p>
+
+<p>Apache OpenWhisk uses <a href="https://hub.docker.com/u/openwhisk">Docker containers</a> as runtime environments for serverless functions. All runtime images are maintained in separate repositories for each supported language, e.g. <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-java">Java</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-python">Python</a>, etc. Runtime images are automatically built and pushed to <a href="https://hub.docker.com/r/openwhisk/">Docker Hub</a> when the repository is updated.</p>
+
+<h3>node.js v12 runtime image</h3>
+
+<p>Here is <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">the PR</a> used to add the new Node.js v12 runtime image to Apache OpenWhisk. This led to the following <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">runtime image</a> being exported to Docker Hub: <code>openwhisk/action-nodejs-v12</code>.</p>
+
+<p>Having this image available as a native runtime in Apache OpenWhisk requires <a href="https://github.com/apache/incubator-openwhisk/pull/4472">upstream changes</a> to the project&#8217;s runtime manifest. After this happens, developers will be able to use the <code>--kind</code> CLI flag to select this runtime version.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create action_name action.js --kind nodejs:12</span></code></pre></td></tr></table></div></figure>
+
+
+<p><a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. It will eventually pick up the upstream project changes to include this new runtime version. Until that happens, Docker support allows usage of this new runtime before it is built-in the platform.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create action_name action.js --docker openwhisk/action-nodejs-v12</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>example</h3>
+
+<p>This Apache OpenWhisk action returns the version of Node.js used in the runtime environment.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span> <span class="nx">main</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">version</span><span class="o">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">version</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running this code on IBM Cloud Functions, using the Node.js v12 runtime image, allows us to confirm the new Node.js version is available.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">ibmcloud</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span> <span class="nx">action</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span>
+</span><span class='line'><span class="nx">ok</span><span class="o">:</span> <span class="nx">created</span> <span class="nx">action</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span>
+</span><span class='line'><span class="nx">$</span> <span class="nx">ibmcloud</span> <span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">invoke</span> <span class="nx">nodejs</span><span class="o">-</span><span class="nx">v12</span> <span class="o">--</span><span class="nx">result</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;version&quot;</span><span class="o">:</span> <span class="s2">&quot;v12.1.0&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Worker Threads in Serverless Functions</h2>
+
+<p><a href="https://medium.com/@Trott/using-worker-threads-in-node-js-80494136dbb6">This is a great introdution blog post</a> to Workers Threads. It uses an example of generating prime numbers as the CPU intensive task to benchmark. Comparing the performance of the single-threaded version to multiple-threads - the performance is improved as a factor of the threads used (up to the number of CPU cores available).</p>
+
+<p>This code can be ported to run in a serverless function. Running with different input values and thread counts will allow benchmarking of the performance improvement.</p>
+
+<h3>non-workers version</h3>
+
+<p>Here is the sample code for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes.js"></script>
+
+
+<h3>porting the code to use worker threads</h3>
+
+<p>Here is the prime number calculation code which uses Worker Threads. Dividing the total input range by the number of Worker Threads generates individual thread input values. Worker Threads are spawned and passed chunked input ranges. Threads calculate primes and then send the result back to the parent thread.</p>
+
+<script src="https://gist.github.com/Trott/7bb7ee55c247047d030b4c427434ef51.js"></script>
+
+
+<p>Reviewing the code to start converting it to a serverless function, I realised there were two issues running this code in serverless environment: <strong>worker thread initialisation</strong> and <strong>optimal worker thread counts</strong>.</p>
+
+<h4>How to initialise Worker Threads?</h4>
+
+<p>This is how the existing source code <a href="https://nodejs.org/dist/latest-v12.x/docs/api/worker_threads.html#worker_threads_new_worker_filename_options">initialises the Worker Threads</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'> <span class="nx">threads</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">new</span> <span class="nx">Worker</span><span class="p">(</span><span class="nx">__filename</span><span class="p">,</span> <span class="p">{</span> <span class="nx">workerData</span><span class="o">:</span> <span class="p">{</span> <span class="nx">start</span><span class="o">:</span> <span class="nx">myStart</span><span class="p">,</span> <span class="nx">range</span> <span class="p">}}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> <em><code>__filename</code> is a special global variable in Node.js which contains the currently executing script file path.</em></p>
+
+<p>This means the Worker Thread will be initialised with a copy of the currently executing script. Node.js provides a special variable to indicate whether the script is executing in the parent or child thread. This can be used to branch script logic.</p>
+
+<p><strong>So, what&#8217;s the issue with this?</strong></p>
+
+<p>In the Apache OpenWhisk Node.js runtime, action source files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61-L79">dynamically imported</a> into the runtime environment. The script used to start the Node.js runtime process is for the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js">platform handler</a>, not the action source files. This means the <code>__filename</code> variable does not point to the action source file.</p>
+
+<p>This issue is fixed by separating the serverless function handler and worker thread code into separate files. Worker Threads can be started with a reference to the worker thread script source file, rather than the currently executing script name.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'> <span class="nx">threads</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">new</span> <span class="nx">Worker</span><span class="p">(</span><span class="s2">&quot;./worker.js&quot;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">workerData</span><span class="o">:</span> <span class="p">{</span> <span class="nx">start</span><span class="o">:</span> <span class="nx">myStart</span><span class="p">,</span> <span class="nx">range</span> <span class="p">}}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>How Many Worker Threads?</h4>
+
+<p>The next issue to resolve is how many Worker Threads to use. In order to maximise parallel processing capacity, there should be a Worker Thread for each CPU core. This is the maximum number of threads that can run concurrently.</p>
+
+<p>Node.js provides CPU information for the runtime environment using the <code>os.cpus()</code> <a href="https://nodejs.org/api/os.html#os_os_cpus">function</a>. The result is an array of objects (one per logical CPU core), with model information, processing speed and elapsed processing times. The length of this array will determine number of Worker Threads used. This ensures the number of Worker Threads will always match the CPU cores available.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">threadCount</span> <span class="o">=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">cpus</span><span class="p">().</span><span class="nx">length</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>workers threads version</h3>
+
+<p>Here is the serverless version of the prime number generation algorithm which uses Worker Threads.</p>
+
+<p>The code is split over two files - <code>primes-with-workers.js</code> and <code>worker.js</code>.</p>
+
+<h4>primes-with-workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=primes-with-workers.js "></script>
+
+
+<h4>workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
+
+<script src="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43.js?file=workers.js "></script>
+
+
+<h4>package.json</h4>
+
+<p>Source files deployed from a zip file also need to include a <code>package.json</code> file in the archive. The <code>main</code> property is used to determine the script to import as the exported package module.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;worker_threads&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0.0&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;primes-with-workers.js&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Performance Comparison</h2>
+
+<p>Running both functions with the same input parameters allows execution time comparison. The Worker Threads version should improve performance by a factor proportional to available CPU cores. Reducing execution time also means reduced costs in a serverless platform.</p>
+
+<h3>non-workers performance</h3>
+
+<p>Creating a new serverless function (<code>primes</code>) from the non-worker threads source code, using the Node.js v12 runtime, I can test with small values to check correctness.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud wsk action create primes primes.js --docker openwhisk/action-nodejs-v12
+</span><span class='line'>ok: created action primes
+</span><span class='line'><span class="nv">$ </span>ibmcloud wsk action invoke primes --result -p start 2 -p end 10
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;primes&quot;</span>: <span class="o">[</span> 2, 3, 5, 7 <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Playing with sample input values, 10,000,000 seems like a useful benchmark value. This takes long enough with the single-threaded version to benefit from parallelism.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">time </span>ibmcloud wsk action invoke primes --result -p start 2 -p end 10000000 &gt; /dev/null
+</span><span class='line'>
+</span><span class='line'>real  0m35.151s
+</span><span class='line'>user  0m0.840s
+</span><span class='line'>sys   0m0.315s
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Using the simple single-threaded algorithm it takes the serverless function around ~35 seconds to calculate primes up to ten million.</strong></p>
+
+<h3>workers threads performance</h3>
+
+<p>Creating a new serverless function, from the worker threads-based source code using the Node.js v12 runtime, allows me to verify it works as expected for small input values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud wsk action create primes-workers action.zip --docker openwhisk/action-nodejs-v12
+</span><span class='line'>ok: created action primes-workers
+</span><span class='line'><span class="nv">$ </span>ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;primes&quot;</span>: <span class="o">[</span> 2, 3, 5, 7 <span class="o">]</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Hurrah, it works.</p>
+
+<p>Invoking the function with an <code>max</code> parameter of 10,000,000 allows us to benchmark against the non-workers version of the code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">time </span>ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10000000 --result &gt; /dev/null
+</span><span class='line'>
+</span><span class='line'>real  0m8.863s
+</span><span class='line'>user  0m0.804s
+</span><span class='line'>sys   0m0.302s
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>The workers versions only takes ~25% of the time of the single-threaded version!</strong></p>
+
+<p>This is because IBM Cloud Functions&#8217; runtime environments provide access to four CPU cores. Unlike other platforms, CPU cores are not tied to memory allocations. Utilising all available CPU cores concurrently allows the algorithm to run 4x times as fast. Since serverless platforms charge based on execution time, reducing execution time also means reducing costs.</p>
+
+<p><strong>The worker threads version also costs 75% less than the single-threaded version!</strong></p>
+
+<h2>Conclusion</h2>
+
+<p><a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">Node.js v12</a> was released in April 2019. This version included support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that were enabled by default (rather than needing an optional runtime flag). Using multiple CPU cores in Node.js applications has never been easier!</p>
+
+<p>Node.js applications with CPU-intensive workloads can utilise this feature to reduce execution time. Since serverless platforms charge based upon execution time, this is especially useful for Node.js serverless functions. Utilising multiple CPU cores leads, not only to improved performance, but also lower bills.</p>
+
+<p>PRs have been <a href="https://github.com/apache/incubator-openwhisk/pull/4472">opened</a> to enable Node.js v12 as a built-in runtime to the Apache OpenWhisk project. This Docker <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">image</a> for the new runtime version is already available on Docker Hub. This means it can be used with any Apache OpenWhisk instance straight away!</p>
+
+<p>Playing with Worker Threads on IBM Cloud Functions allowed me to demonstrate how to speed up performance for CPU-intensive workloads by utilising multiple cores concurrently. Using <a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">an example of prime number generation</a>, calculating all primes up to ten million took ~35 seconds with a single thread and ~8 seconds with four threads. This represents a reduction in execution time and cost of 75%!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2698,324 +2984,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/">Highly Available Serverless Apps With Cloudant&#8217;s Cross-Region Replication</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2019-01-10T11:23:00+00:00" pubdate data-updated="true">Jan 10<span>th</span>, 2019</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Building <a href="https://www.techrepublic.com/blog/the-enterprise-cloud/what-high-availability-for-cloud-services-means-in-the-real-world/">highly available</a> serverless applications relies on eliminating &#8221;<a href="https://en.wikipedia.org/wiki/Single_point_of_failure"><em>single points of failure</em></a>&#8221; from application architectures.</p>
-
-<p><a href="https://cloud.ibm.com/docs/tutorials/multi-region-serverless.html#deploy-serverless-apps-across-multiple-regions">Existing tutorials</a> showed how to deploy the same serverless application on IBM Cloud in different regions. Using the <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> from <a href="https://cloud.ibm.com/catalog/services/internet-svcs">IBM Cloud Internet Services</a>, traffic is distributed across multiple applications from the same hostname. The <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> automatically detects outages in the regional applications and redirects traffics as necessary.</p>
-
-<p><strong>But what if all instances rely on the same database service and that has issues?</strong> 😱🔥</p>
-
-<p>In addition to running multiple instances of the application, independent databases in different regions are also necessary for a highly available serverless application. Maintaining consistent application state across regions needs all database changes to be automatically synchronised between instances. 🤔</p>
-
-<p><strong>In this blog post, we&#8217;re going to look at using <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant&#8217;s</a> <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">replication service</a> to set up a &#8221;<a href="https://en.wikipedia.org/wiki/Multi-master_replication">multi-master</a>&#8221; replication between regional database instances.</strong></p>
-
-<p>Once this is enabled, database changes will automatically be synchronised in real-time between all database instances. Serverless applications can use their regional database instance and be confident application state will be consistent globally (for some definition of <a href="https://en.wikipedia.org/wiki/Eventual_consistency">consistent</a>&#8230;). 💯</p>
-
-<h2>example serverless application - todo backend</h2>
-
-<p>This <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">serverless application</a> implements a <a href="https://www.todobackend.com/">TODO backend</a> using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> and <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant</a>.</p>
-
-<p><img src="/images/ha-serverless-apps-todo/todo-frontpage.png"></p>
-
-<p>It provides an REST API for interacting with a TODO service. This can be used with the <a href="https://www.todobackend.com/client/index.html">front-end client</a> to add, complete and remove todos from a list.</p>
-
-<p><strong>Let&#8217;s make this <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">example serverless application</a> &#8220;highly available&#8221;. 👍</strong></p>
-
-<p>The application will be deployed to two different IBM Cloud regions (London and Dallas). Separate database instances will be provisioned in each region. Applications will use their regional database instance but share global state via replication.</p>
-
-<p><img src="/images/ha-serverless-apps-todo/architecture.png"></p>
-
-<h2>deploy serverless app to multiple regions</h2>
-
-<p>This Github <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">repo</a> has an <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis/blob/master/deploy.sh">automatic deployment script</a> to deploy the serverless application (using <code>wskdeploy</code>) and application services (using <code>terraform</code>).</p>
-
-<p><strong><em>Install the prerequisites listed <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis#code-and-tools">here</a> before proceeding with these instructions.</em></strong></p>
-
-<h3>download example application</h3>
-
-<ul>
-<li>Clone the Git repository to a local directory.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Enter the source code directory.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>cd ibm-cloud-functions-refarch-serverless-apis</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>create IAM key for serverless app</h3>
-
-<p><em>Have you already signed up for an <a href="https://cloud.ibm.com/registration">IBM Cloud account</a> and <a href="https://cloud.ibm.com/docs/cli/reference/ibmcloud/download_cli.html#install_use">installed the CLI</a>? If not, please do that before proceeding.</em></p>
-
-<ul>
-<li>Create an IAM key which will be used to deploy the serverless application.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud iam api-key-create serverless_api --file serverless_api.apikey</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>configure deployment variables</h3>
-
-<ul>
-<li>Create the <code>local.env</code> file in the current directory will the following contents.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>IBMCLOUD_API_KEY=&lt;IAM_API_KEY&gt;
-</span><span class='line'>IBMCLOUD_ORG=&lt;YOUR_ORG&gt;
-</span><span class='line'>IBMCLOUD_SPACE=&lt;REGION_SPACE&gt;
-</span><span class='line'>IBMCLOUD_REGION=
-</span><span class='line'>PROVISION_INFRASTRUCTURE=true
-</span><span class='line'>API_USE_APPID=false</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Replace the <code>&lt;IAM_API_KEY&gt;</code> value with the <code>apikey</code> value from the <code>serverless_api.apikey</code> file.</li>
-<li>Replace the <code>&lt;IBMCLOUD_ORG&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud organisation</a>.</li>
-<li>Replace the <code>&lt;IBMCLOUD_SPACE&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud space</a>.</li>
-</ul>
-
-
-<p>The <code>PROVISION_INFRASTRUCTURE</code> parameter makes the deployment script automatically provision all application resources using Terraform.</p>
-
-<p>Secured API endpoints are not required for this demonstration. Setting the <code>API_USE_APPID</code> parameter to <code>false</code> disables authentication on the endpoints and provisioning the AppID service.</p>
-
-<h3>deploy to london</h3>
-
-<ul>
-<li>Set the <code>IBMCLOUD_REGION</code> to <code>eu-gb</code> in the <code>local.env</code> file.</li>
-<li>Run the following command to deploy the application and provision all application resources.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>./deploy.sh --install</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If the deployment have succeed, the following message should be printed to the console.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>2019-01-08 10:51:51 All done.
-</span><span class='line'>ok: APIs
-</span><span class='line'>Action                                      Verb  API Name  URL
-</span><span class='line'>/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;UK_APIGW_URL&gt;/todo
-</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the London region.</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/testing-app.gif"></p>
-
-<h3>deploy to dallas</h3>
-
-<ul>
-<li><p><strong>Rename the <code>terraform.tfstate</code> file in the <code>infra</code> folder to <code>terraform.tfstate.london</code></strong></p></li>
-<li><p>Set the <code>IBMCLOUD_REGION</code> to <code>us-south</code> in the <code>local.env</code> file.</p></li>
-<li>Run the following command to deploy the application and provision all application resources.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>./deploy.sh --install</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If the deployment have succeed, the following message should be printed to the console.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>2019-01-08 10:51:51 All done.
-</span><span class='line'>ok: APIs
-</span><span class='line'>Action                                      Verb  API Name  URL
-</span><span class='line'>/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;US_APIGW_URL&gt;/todo
-</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the Dallas region.</li>
-</ul>
-
-
-<h2>configure cloudant cross-region replication</h2>
-
-<p>There are now multiple copies of the same serverless application in different regions. Each region has an independent instance of Cloudant provisioned.</p>
-
-<p><a href="https://console.bluemix.net/docs/services/Cloudant/api/replication.html">Cloudant replication</a> is a one-way synchronisation from a source to a destination database. To set up a <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">bi-directional data synchronisation</a>, two different replications will need to be configured.</p>
-
-<h3>create api keys for replication access</h3>
-
-<p>Before configuring replication between the regional databases, API keys need to be created to allow remote access on both hosts. API keys need to be created per regional instance.</p>
-
-<ul>
-<li>From the <a href="https://cloud.ibm.com/resources">IBM Cloud Resource List</a>, find the cloudant instances provisioned in London and Dallas.</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/resource-list.png"></p>
-
-<ul>
-<li>Open the Cloudant Dashboard for each service instance.</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif"></p>
-
-<p>Follow these instructions on both hosts to generate API keys for replication with the correct permissions.</p>
-
-<ul>
-<li>Click the &#8220;Databases&#8221; icon to show all the databases on this instance.</li>
-<li>Click the 🔒 icon in the &#8220;todos&#8221; database row in the table to open the permissions page.</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/databases-list.png"></p>
-
-<p><em>Can&#8217;t find the &#8220;todos&#8221; database in the Cloudant dashboard? Make sure you interact with the TODO backend from the <a href="https://www.todobackend.com/client/index.html">front-end application</a>. This will automatically create the database if it doesn&#8217;t exist.</em></p>
-
-<ul>
-<li>Click &#8220;Generate API Key&#8221; on the permissions page.</li>
-<li>Make a note of the key identifier and password.</li>
-<li>Set the <code>_reader_</code>, <code>_writer</code> and <code>_replicator</code> permissions for the newly created key.</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/db-api-key.png"></p>
-
-<h3>set up cross-region replication</h3>
-
-<p>Replication jobs need to be configured on both database hosts. These can be created from the Cloudant dashboard. <strong>Repeat these instructions on both hosts.</strong></p>
-
-<ul>
-<li>Open the Cloudant Dashboard for each service instance.</li>
-<li>Click the &#8220;Replication&#8221; icon from the panel menu.</li>
-<li>Click the &#8220;New Replication&#8221; button.</li>
-<li>Set the following &#8220;Source&#8221; values in the &#8220;Job configuration&#8221; panel.
-
-<ul>
-<li>Type: <em>&#8220;Local Database&#8221;</em></li>
-<li>Name: <em>&#8220;todos&#8221;</em></li>
-<li>Authentication: <em>&#8220;Cloudant username or API Key&#8221;</em></li>
-<li>Fill in the API key and password for this local database host in the input fields.</li>
-</ul>
-</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/task-source.png"></p>
-
-<ul>
-<li>Set the following &#8220;Target&#8221; values in the &#8220;Job configuration&#8221; panel.
-
-<ul>
-<li>Type: <em>&#8220;Existing Remote Database&#8221;</em></li>
-<li>Name: <em>&#8220;https://<REMOTE_CLOUDANT_HOST>/todos&#8221;</em></li>
-<li>Authentication: <em>&#8220;Cloudant username or API Key&#8221;</em></li>
-<li>Fill in the API key and password for the remote database host in the input fields.</li>
-</ul>
-</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/task-target.png"></p>
-
-<p><em>Wondering what the REMOTE_CLOUDANT_HOST is? Use hostname from the Cloudant dashboard, e.g. XXXX-bluemix.cloudant.com</em></p>
-
-<ul>
-<li>Set the following &#8220;Options&#8221; values in the &#8220;Job configuration&#8221; panel.
-
-<ul>
-<li>Replication type: <em>&#8220;Continuous&#8221;</em></li>
-</ul>
-</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/task-options.png"></p>
-
-<ul>
-<li>Click &#8220;Start Replication&#8221;</li>
-<li>Verify the replication table shows the new replication task state as &#8221;<em>Running</em>&#8221;. 👍</li>
-</ul>
-
-
-<p><img src="/images/ha-serverless-apps-todo/replication-jobs-table.png"></p>
-
-<h2>test it out!</h2>
-
-<p>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the APIGW URLs for each region simultaneously. Interactions with the todo list in one region should automatically propagate to the other region.</p>
-
-<p><img src="/images/ha-serverless-apps-todo/todo-app.gif"></p>
-
-<p>The &#8220;Active Tasks&#8221; panel on the Cloudant Dashboard shows the documents replicated between instances and pending changes. If there are errors synchronising changes to the replication target, the host uses exponential backoff to re-try the replication tasks.</p>
-
-<p><a href="https://console.bluemix.net/docs/services/Cloudant/guides/conflicts.html#finding-conflicts">Conflicts</a> between document changes are handled using CouchDB&#8217;s <a href="http://guide.couchdb.org/draft/conflicts.html">conflict mechanism</a>. Applications are responsible for detecting and resolving document conflicts in the front-end.</p>
-
-<h2>conclusion</h2>
-
-<p>Running the same serverless application in multiple regions, using the GLB to proxy traffic, allows applications to manage regional outages. But what if all the application instances rely on the same database service? The &#8220;single point of failure&#8221; has shifted from the application runtime to the database host. 👎</p>
-
-<p>Provisioning independent databases in each application regions is one solution. Applications use their regional database instance and are protected from issues in other regions. This strategy relies on database changes being synchronised between instances to keep the application state consistent. 👍</p>
-
-<p>IBM Cloudant has a built-in replication service to synchronised changes between source and host databases. Setting up bi-directional replication tasks between all instances enables a  &#8220;multi-master&#8221; replication strategy. This allows applications to access any database instance and have the same state available globally. 🕺🕺🕺</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -3031,6 +2999,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
       </li>
     
@@ -3044,10 +3016,6 @@
     
       <li class="post">
         <a href="/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/">OpenWhisk Web Action Errors With Sequences</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/">Pluggable Event Providers for Apache OpenWhisk</a>
       </li>
     
   </ul>
