@@ -4,7 +4,7 @@
   <title><![CDATA[James Thomas]]></title>
   <link href="http://jamesthom.as/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-05-10T16:19:28+01:00</updated>
+  <updated>2019-05-14T15:31:58+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,219 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Accessing Long-Running Apache OpenWhisk Actions Results]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/"/>
+    <updated>2019-05-14T11:35:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results</id>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> actions are invoked by sending HTTP POST requests to the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. Invocation requests have two <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md#actions">different modes</a>: <strong>blocking</strong> and <strong>non-blocking</strong>.</p>
+
+<p><strong>Blocking invocations</strong> mean the platform won&#8217;t send the HTTP response until the action finishes. This allows it to include the action result in the response.  Blocking invocations are used when you want to invoke an action and wait for the result.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk action invoke my_action --blocking
+</span><span class='line'>ok: invoked /_/my_action with id db70ef682fae4f8fb0ef682fae2f8fd5
+</span><span class='line'>{
+</span><span class='line'>    "activationId": "db70ef682fae4f8fb0ef682fae2f8fd5",
+</span><span class='line'>    ...
+</span><span class='line'>    "response": {
+</span><span class='line'>        "result": { ... },
+</span><span class='line'>        "status": "success",
+</span><span class='line'>        "success": true
+</span><span class='line'>    },
+</span><span class='line'>    ...
+</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Non-blocking invocations</strong> return as soon as the platform processes the invocation request. This is before the action has finished executing. HTTP responses from non-blocking invocations only include activation identifiers, as the action result is not available.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ wsk action invoke my_action
+</span><span class='line'>ok: invoked /_/my_action with id d2728aaa75394411b28aaa7539341195</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>HTTP responses from a blocking invocation will only wait for a limited amount of time before returning.</strong> This defaults to 65 seconds in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/resources/application.conf#L21">platform configuration file</a>. If an action invocation has not finished before this timeout limit, a HTTP 5xx status response is returned.</p>
+
+<p>Hmmm… 🤔</p>
+
+<p><strong><em>&#8220;So, how can you invoke an action and wait for the result when actions take longer than this limit?&#8221;</em></strong></p>
+
+<p>This question comes up regularly from developers building applications using the platform. I&#8217;ve decided to turn my answer into a blog post to help others struggling with this issue (after answering this question again this week 😎).</p>
+
+<h3>solution</h3>
+
+<ul>
+<li><em>Invoke the action using a <a href="https://github.com/apache/incubator-openwhisk-client-js#invoke-action">non-blocking invocation</a>.</em></li>
+<li><em>Use the returned activation identifier to poll the <a href="https://github.com/apache/incubator-openwhisk-client-js#retrieve-resource">activation result API</a>.</em></li>
+<li><em>The HTTP response for the activation result will return a HTTP 404 response until the action finishes.</em></li>
+</ul>
+
+
+<p>When polling for activation results from non-blocking invocations, you should enforce a limit on the maximum polling time allowed. This is because HTTP 404s can be returned due to other scenarios (e.g. invalid activation identifiers). Enforcing a time limit ensures that, in the event of issues in the application code or the platform, the polling loop with eventually stop!</p>
+
+<p><em>Setting the maximum polling time to the action timeout limit (plus a small offset) is a good approach.</em></p>
+
+<p>An action cannot run for longer than its timeout limit. If the activation record is not available after this duration has elapsed (plus a small offset to handle internal platform delays), something has gone wrong. Continuing to poll after this point runs the risk of turning the polling operation into an infinite loop&#8230;</p>
+
+<h3>example code</h3>
+
+<p>This example provides an implementation of this approach for Node.js using the <a href="https://github.com/apache/incubator-openwhisk-client-js">JavaScript Client SDK</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="s2">&quot;use strict&quot;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">apihost</span><span class="o">:</span> <span class="o">&lt;</span><span class="nx">API_HOST</span><span class="o">&gt;</span><span class="p">,</span> <span class="nx">api_key</span><span class="o">:</span> <span class="o">&lt;</span><span class="nx">API_KEY</span><span class="o">&gt;</span> <span class="p">}</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">ow</span> <span class="o">=</span> <span class="nx">openwhisk</span><span class="p">(</span><span class="nx">options</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// action duration limit (+ small offset)</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">timeout_ms</span> <span class="o">=</span> <span class="mi">85000</span>
+</span><span class='line'><span class="c1">// delay between polling requests</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">polling_delay</span> <span class="o">=</span> <span class="mi">1000</span>
+</span><span class='line'><span class="c1">// action to invoke</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">action</span> <span class="o">=</span> <span class="s1">&#39;delay&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">now</span> <span class="o">=</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">(</span><span class="k">new</span> <span class="nb">Date</span><span class="p">().</span><span class="nx">getTime</span><span class="p">())</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">max_polling_time</span> <span class="o">=</span> <span class="nx">now</span><span class="p">()</span> <span class="o">+</span> <span class="nx">timeout_ms</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">delay</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">ms</span> <span class="o">=&gt;</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="nx">resolve</span> <span class="o">=&gt;</span> <span class="nx">setTimeout</span><span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">ms</span><span class="p">))</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">activation</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">actions</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span><span class="nx">name</span><span class="o">:</span> <span class="nx">action</span><span class="p">})</span>
+</span><span class='line'><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="k">new</span> <span class="nx">activation</span> <span class="nx">id</span><span class="o">:</span> <span class="nx">$</span><span class="p">{</span><span class="nx">activation</span><span class="p">.</span><span class="nx">activationId</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">let</span> <span class="nx">result</span> <span class="o">=</span> <span class="kc">null</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">do</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">try</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">activations</span><span class="p">.</span><span class="nx">get</span><span class="p">({</span> <span class="nx">name</span><span class="o">:</span> <span class="nx">activation</span><span class="p">.</span><span class="nx">activationId</span> <span class="p">})</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">activation</span><span class="p">.</span><span class="nx">activationId</span><span class="p">})</span> <span class="nx">now</span> <span class="nx">available</span><span class="o">!</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">.</span><span class="nx">statusCode</span> <span class="o">!==</span> <span class="mi">404</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">throw</span> <span class="nx">err</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">activation</span><span class="p">.</span><span class="nx">activationId</span><span class="p">})</span> <span class="nx">not</span> <span class="nx">available</span> <span class="nx">yet</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">await</span> <span class="nx">delay</span><span class="p">(</span><span class="nx">polling_delay</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span> <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="nx">result</span> <span class="o">&amp;&amp;</span> <span class="nx">now</span><span class="p">()</span> <span class="o">&lt;</span> <span class="nx">max_polling_time</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="err">`</span><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">$</span><span class="p">{</span><span class="nx">activation</span><span class="p">.</span><span class="nx">activationId</span><span class="p">})</span><span class="err">`</span><span class="p">,</span> <span class="nx">result</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>testing it out</h3>
+
+<p>Here is the source code for an action which will not return until 70 seconds have passed. Blocking invocations firing this action will result in a HTTP timeout before the response is returned.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">delay</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">ms</span> <span class="o">=&gt;</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="nx">resolve</span> <span class="o">=&gt;</span> <span class="nx">setTimeout</span><span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="nx">ms</span><span class="p">))</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">function</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">delay</span><span class="p">(</span><span class="mi">70</span><span class="o">*</span><span class="mi">1000</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using the script above, the action result will be retrieved from a non-blocking invocation.</p>
+
+<ul>
+<li><em>Create an action from the source file in the example above.</em></li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">delay</span> <span class="nx">delay</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">timeout</span> <span class="mi">80000</span> <span class="o">--</span><span class="nx">kind</span> <span class="nx">nodejs</span><span class="o">:</span><span class="mi">10</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li><em>Run the Node.js script to invoke this action and poll for the activation result.</em></li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">node</span> <span class="nx">script</span><span class="p">.</span><span class="nx">js</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If the script runs correctly, log messages will display the polling status and then the activation result.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">$</span> <span class="nx">node</span> <span class="nx">script</span><span class="p">.</span><span class="nx">js</span>
+</span><span class='line'><span class="k">new</span> <span class="nx">activation</span> <span class="nx">id</span><span class="o">:</span> <span class="nx">d4efc4641b544320afc4641b54132066</span>
+</span><span class='line'><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">d4efc4641b544320afc4641b54132066</span><span class="p">)</span> <span class="nx">not</span> <span class="nx">available</span> <span class="nx">yet</span>
+</span><span class='line'><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">d4efc4641b544320afc4641b54132066</span><span class="p">)</span> <span class="nx">not</span> <span class="nx">available</span> <span class="nx">yet</span>
+</span><span class='line'><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">d4efc4641b544320afc4641b54132066</span><span class="p">)</span> <span class="nx">not</span> <span class="nx">available</span> <span class="nx">yet</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">d4efc4641b544320afc4641b54132066</span><span class="p">)</span> <span class="nx">now</span> <span class="nx">available</span><span class="o">!</span>
+</span><span class='line'><span class="nx">activation</span> <span class="nx">result</span> <span class="p">(</span><span class="nx">d4efc4641b544320afc4641b54132066</span><span class="p">)</span> <span class="p">{</span> <span class="p">...</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Saving Money and Time With Node.js Worker Threads in Serverless Functions]]></title>
@@ -6621,129 +6834,6 @@
 <p>We showed you how to provision new COS services, create and manage authentication credentials, access files using a client library and even allow external clients to interact directly with buckets. Sample serverless functions using the Node.js runtime were also provided.</p>
 
 <p><em>Do you have any questions, comments or issues about the content above? Please leave a comment below, find me on the <a href="http://openwhisk.incubator.apache.org/slack.html">openwhisk slack</a> or send me a <a href="https://twitter.com/thomasj">tweet</a>.</em></p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[File Storage For Serverless Applications]]></title>
-    <link href="http://jamesthom.as/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/"/>
-    <updated>2018-04-27T14:27:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage</id>
-    <content type="html"><![CDATA[<blockquote><p><strong><em>&#8220;Where do you store files without a server?&#8221;</em></strong></p></blockquote>
-
-<p>…is the most common question I get asked during Q&amp;A after one of my &#8221;<a href="http://bit.ly/james_thomas">Introduction to Serverless Platforms</a>&#8221; conference talks. Searching for this question online, <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">this is the answer</a> you will often find.</p>
-
-<blockquote><p> <strong><em>&#8220;Use an object store for file storage and access using the S3-compatible interface. Provide direct access to files by making buckets public and return pre-signed URLs for uploading content. Easy, right?&#8221;</em></strong></p></blockquote>
-
-<p>Responding to people with this information often leads to the following response:</p>
-
-<p>🤔🤔🤔</p>
-
-<p>Developers who are not familiar with cloud platforms, can often understand the benefits and concepts behind serverless, but don&#8217;t know the other cloud services needed to replicate application services from traditional (or server-full) architectures.</p>
-
-<p><strong>In this blog post, I want to explain why we do not use the file system for files in serverless applications and introduce the cloud services used to handle this.</strong></p>
-
-<h2>serverless runtime file systems</h2>
-
-<p>Serverless runtimes do provide access to a filesystem with a (small) amount of ephemeral storage.</p>
-
-<p>Serverless application <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">deployment packages</a> are extracted into this filesystem prior to execution. Uploading files into the environment relies on them being included within the application package. Serverless functions can read, modify and create files within this local file system.</p>
-
-<p>These temporary file systems come with the following restrictions…</p>
-
-<ul>
-<li><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb">Maximum application package size</a> limits additional files that can be uploaded.</li>
-<li>Serverless platforms usually limit total usable space to around 512MB.</li>
-<li>Modifications to the file system are lost once the environment is <a href="https://hackernoon.com/im-afraid-you-re-thinking-about-aws-lambda-cold-starts-all-wrong-7d907f278a4f">not used for further invocations</a>.</li>
-<li>Concurrent executions of the same function use independent runtime environments and do not share filesystem storage.</li>
-<li>There is no access to these temporary file systems outside the runtime environment.</li>
-</ul>
-
-
-<p><em>All these limitations make the file system provided by serverless platforms unsuitable as a scalable storage solution for serverless applications.</em></p>
-
-<p><strong><em>So, what is the alternative?</em></strong></p>
-
-<h2>object stores</h2>
-
-<blockquote><p>Object stores manage data as objects, as opposed to other storage architectures like <a href="https://en.wikipedia.org/wiki/File_systems">file systems</a> which manage data as a file hierarchy. Object-storage systems allow retention of massive amounts of <a href="https://en.wikipedia.org/wiki/Unstructured_data">unstructured data</a>, with simple retrieval and search capabilities.</p>
-
-<p><a href="https://en.wikipedia.org/wiki/Object_storage"><em>https://en.wikipedia.org/wiki/Object_storage</em></a></p></blockquote>
-
-<p>Object stores provide &#8220;storage-as-a-service&#8221; solutions for cloud applications.</p>
-
-<p><strong>These services are used for file storage within serverless applications.</strong></p>
-
-<p>Unlike traditional block storage devices, data objects in object storage services are organised using flat hierarchies of containers, known as &#8221;<em>buckets</em>&#8221;. Objects within buckets are identified by unique identifiers, known as &#8221;<em>keys</em>&#8221;. Metadata can also be stored alongside data objects for additional context.</p>
-
-<p>Object stores provide simple access to files by applications, rather than users.</p>
-
-<h2>advantages of an object store</h2>
-
-<h3>scalable and elastic storage</h3>
-
-<p>Rather than having a disk drive, with a fixed amount of storage, object stores provide scalable and elastic storage for data objects. Users are <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage">charged</a> based upon the amount of data stored, API requests and bandwidth used. Object stores are built to scale as storage needs grow towards the <a href="https://www.ibm.com/cloud/object-storage/faq">petabyte range</a>.</p>
-
-<h3>simple http access</h3>
-
-<p>Object stores provide a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP-based API endpoint</a> to interact with the data objects.</p>
-
-<p>Rather than using a standard library methods to access the file system, which translates into system calls to the operating system, files are available over a standard HTTP endpoint.</p>
-
-<p><a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">Client libraries</a> provide a simple interface for interacting with the remote endpoints.</p>
-
-<h3>expose direct access to files</h3>
-
-<p>Files stored in object storage can be made <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">publicly accessible</a>. Client applications can access files directly without needing to use an application backend as a proxy.</p>
-
-<p>Special URLs can also be generated to provide <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url">temporary access to files</a> for external clients. Clients can even use these URLs to directly upload and modify files. URLs are set to expire after a fixed amount of time.</p>
-
-<h2>ibm cloud object storage</h2>
-
-<p><a href="https://bluemix.net/">IBM Cloud</a> provides an object storage service called <a href="https://console.bluemix.net/docs/services/cloud-object-storage/about-cos.html">IBM Cloud Object Storage</a>. This service provides the following features concerning resiliency, reliability and cost.</p>
-
-<h3>data resiliency</h3>
-
-<p>Buckets&#8217; contents can be stored with the following automatic <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">data resiliency choices</a>.</p>
-
-<ul>
-<li><strong><em>Cross Region.</em></strong> Store data across three regions within a geographic area.</li>
-<li><strong><em>Regional.</em></strong> Store data in multiple data centres within a single geographic region.</li>
-<li><strong><em>Single Data Centre.</em></strong> Store data across multiple devices in a single data centre.</li>
-</ul>
-
-
-<p>Cross Region is the best choice for &#8221;<em>regional concurrent access and highest availability</em>&#8221;. Regional is used for <em>&#8220;high availability and performance&#8221;</em>. Single Data Centre is appropriate when <em>&#8220;when data locality matters most&#8221;.</em></p>
-
-<h3>storage classes</h3>
-
-<p>Data access patterns can be used to save costs by choosing the appropriate <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/classes.html#use-storage-classes">storage class for data storage</a>.</p>
-
-<p>IBM Cloud Object Storage offers the following storage classes: <strong><em>Standard, Vault, Cold Vault, Flex.</em></strong></p>
-
-<p><em>Standard class</em> is used for workloads with frequent data access. <em>Vault and Cold Vault</em> are used with infrequent data retrieval and data archiving workloads. <em>Flex</em> is a mixed storage class for workloads where access patterns are more difficult to predict.</p>
-
-<h3>costs</h3>
-
-<p>Storage class and data resiliency options are used to <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">calculate the cost of service usage</a>.</p>
-
-<p>Storage is charged based upon the amount of data storage used, operational requests (GET, POST, PUT…) and outgoing public bandwidth.</p>
-
-<p>Storage classes affect the price of data retrieval operations and storage costs. Storage classes used for archiving, e.g. <em>cold vault</em>, charge less for data storage and more for operational requests. Storage classes used for frequency access, e.g. <em>standard</em>, charge more for data storage and less for operational requests.</p>
-
-<p>Higher resiliency data storage is more expensive than lower resiliency storage.</p>
-
-<h3>lite plan</h3>
-
-<p>IBM Cloud Object Storage provides a generous free tier (<em>25GB storage per month, 5GB public bandwidth</em>) for Lite account users. <a href="https://www.ibm.com/cloud/lite-account">IBM Cloud Lite accounts</a> provide perpetual access to a free set of IBM Cloud resources. Lite accounts do not expire after a time period or need a credit card to sign up.</p>
-
-<h2>conclusion</h2>
-
-<p>Serving files from serverless runtimes is often accomplished using object storage services.</p>
-
-<p>Object stores provide a scalable and cost-effective service for managing files without using storage infrastructure directly. Storing files in an object store provides simple access from serverless runtimes and even allows the files to be made directly accessible to end users.</p>
-
-<p>In the next blog posts, I&#8217;m going to show you how to set up IBM Cloud Object Storage and access files from serverless applications on IBM Cloud Functions. I&#8217;ll be demonstrating this approach for both the Node.js and Swift runtimes.</p>
 ]]></content>
   </entry>
   

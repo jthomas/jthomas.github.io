@@ -4,7 +4,7 @@
   <title><![CDATA[Category: apache | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/apache/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-05-10T16:19:44+01:00</updated>
+  <updated>2019-05-14T15:32:11+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,162 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Accessing Long-Running Apache OpenWhisk Actions Results]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/"/>
+    <updated>2019-05-14T11:35:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results</id>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> actions are invoked by sending HTTP POST requests to the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. Invocation requests have two <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md#actions">different modes</a>: <strong>blocking</strong> and <strong>non-blocking</strong>.</p>
+
+<p><strong>Blocking invocations</strong> mean the platform won't send the HTTP response until the action finishes. This allows it to include the action result in the response.  Blocking invocations are used when you want to invoke an action and wait for the result.</p>
+
+<p>```
+$ wsk action invoke my_action --blocking
+ok: invoked /_/my_action with id db70ef682fae4f8fb0ef682fae2f8fd5
+{</p>
+
+<pre><code>"activationId": "db70ef682fae4f8fb0ef682fae2f8fd5",
+...
+"response": {
+    "result": { ... },
+    "status": "success",
+    "success": true
+},
+...
+</code></pre>
+
+<p>}
+```</p>
+
+<p><strong>Non-blocking invocations</strong> return as soon as the platform processes the invocation request. This is before the action has finished executing. HTTP responses from non-blocking invocations only include activation identifiers, as the action result is not available.</p>
+
+<p><code>
+$ wsk action invoke my_action
+ok: invoked /_/my_action with id d2728aaa75394411b28aaa7539341195
+</code></p>
+
+<p><strong>HTTP responses from a blocking invocation will only wait for a limited amount of time before returning.</strong> This defaults to 65 seconds in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/resources/application.conf#L21">platform configuration file</a>. If an action invocation has not finished before this timeout limit, a HTTP 5xx status response is returned.</p>
+
+<p>Hmmm… 🤔</p>
+
+<p><strong><em>"So, how can you invoke an action and wait for the result when actions take longer than this limit?"</em></strong></p>
+
+<p>This question comes up regularly from developers building applications using the platform. I've decided to turn my answer into a blog post to help others struggling with this issue (after answering this question again this week 😎).</p>
+
+<h3>solution</h3>
+
+<ul>
+<li><em>Invoke the action using a <a href="https://github.com/apache/incubator-openwhisk-client-js#invoke-action">non-blocking invocation</a>.</em></li>
+<li><em>Use the returned activation identifier to poll the <a href="https://github.com/apache/incubator-openwhisk-client-js#retrieve-resource">activation result API</a>.</em></li>
+<li><em>The HTTP response for the activation result will return a HTTP 404 response until the action finishes.</em></li>
+</ul>
+
+
+<p>When polling for activation results from non-blocking invocations, you should enforce a limit on the maximum polling time allowed. This is because HTTP 404s can be returned due to other scenarios (e.g. invalid activation identifiers). Enforcing a time limit ensures that, in the event of issues in the application code or the platform, the polling loop with eventually stop!</p>
+
+<p><em>Setting the maximum polling time to the action timeout limit (plus a small offset) is a good approach.</em></p>
+
+<p>An action cannot run for longer than its timeout limit. If the activation record is not available after this duration has elapsed (plus a small offset to handle internal platform delays), something has gone wrong. Continuing to poll after this point runs the risk of turning the polling operation into an infinite loop...</p>
+
+<h3>example code</h3>
+
+<p>This example provides an implementation of this approach for Node.js using the <a href="https://github.com/apache/incubator-openwhisk-client-js">JavaScript Client SDK</a>.</p>
+
+<p>```javascript
+"use strict";</p>
+
+<p>const openwhisk = require('openwhisk')</p>
+
+<p>const options = { apihost: <API_HOST>, api_key: <API_KEY> }
+const ow = openwhisk(options)</p>
+
+<p>// action duration limit (+ small offset)
+const timeout_ms = 85000
+// delay between polling requests
+const polling_delay = 1000
+// action to invoke
+const action = 'delay'</p>
+
+<p>const now = () => (new Date().getTime())
+const max_polling_time = now() + timeout_ms</p>
+
+<p>const delay = async ms => new Promise(resolve => setTimeout(resolve, ms))</p>
+
+<p>const activation = await ow.actions.invoke({name: action})
+console.log(<code>new activation id: ${activation.activationId}</code>)</p>
+
+<p>let result = null</p>
+
+<p>do {
+  try {</p>
+
+<pre><code>result = await ow.activations.get({ name: activation.activationId })
+console.log(`activation result (${activation.activationId}) now available!`)
+</code></pre>
+
+<p>  } catch (err) {</p>
+
+<pre><code>if (err.statusCode !== 404) {
+  throw err
+}
+console.log(`activation result (${activation.activationId}) not available yet`)
+</code></pre>
+
+<p>  }</p>
+
+<p>  await delay(polling_delay)
+} while (!result &amp;&amp; now() &lt; max_polling_time)</p>
+
+<p>console.log(<code>activation result (${activation.activationId})</code>, result)
+```</p>
+
+<h3>testing it out</h3>
+
+<p>Here is the source code for an action which will not return until 70 seconds have passed. Blocking invocations firing this action will result in a HTTP timeout before the response is returned.</p>
+
+<p>```javascript
+const delay = async ms => new Promise(resolve => setTimeout(resolve, ms))</p>
+
+<p>function main() {
+  return delay(70*1000)
+}
+```</p>
+
+<p>Using the script above, the action result will be retrieved from a non-blocking invocation.</p>
+
+<ul>
+<li><em>Create an action from the source file in the example above.</em></li>
+</ul>
+
+
+<p><code>
+wsk action create delay delay.js --timeout 80000 --kind nodejs:10
+</code></p>
+
+<ul>
+<li><em>Run the Node.js script to invoke this action and poll for the activation result.</em></li>
+</ul>
+
+
+<p><code>
+node script.js
+</code></p>
+
+<p>If the script runs correctly, log messages will display the polling status and then the activation result.</p>
+
+<p><code>
+$ node script.js
+new activation id: d4efc4641b544320afc4641b54132066
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+...
+activation result (d4efc4641b544320afc4641b54132066) now available!
+activation result (d4efc4641b544320afc4641b54132066) { ... }
+</code></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Saving Money and Time With Node.js Worker Threads in Serverless Functions]]></title>

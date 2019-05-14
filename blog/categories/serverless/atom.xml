@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-05-10T16:19:44+01:00</updated>
+  <updated>2019-05-14T15:32:11+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,162 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Accessing Long-Running Apache OpenWhisk Actions Results]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/"/>
+    <updated>2019-05-14T11:35:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results</id>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> actions are invoked by sending HTTP POST requests to the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. Invocation requests have two <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md#actions">different modes</a>: <strong>blocking</strong> and <strong>non-blocking</strong>.</p>
+
+<p><strong>Blocking invocations</strong> mean the platform won't send the HTTP response until the action finishes. This allows it to include the action result in the response.  Blocking invocations are used when you want to invoke an action and wait for the result.</p>
+
+<p>```
+$ wsk action invoke my_action --blocking
+ok: invoked /_/my_action with id db70ef682fae4f8fb0ef682fae2f8fd5
+{</p>
+
+<pre><code>"activationId": "db70ef682fae4f8fb0ef682fae2f8fd5",
+...
+"response": {
+    "result": { ... },
+    "status": "success",
+    "success": true
+},
+...
+</code></pre>
+
+<p>}
+```</p>
+
+<p><strong>Non-blocking invocations</strong> return as soon as the platform processes the invocation request. This is before the action has finished executing. HTTP responses from non-blocking invocations only include activation identifiers, as the action result is not available.</p>
+
+<p><code>
+$ wsk action invoke my_action
+ok: invoked /_/my_action with id d2728aaa75394411b28aaa7539341195
+</code></p>
+
+<p><strong>HTTP responses from a blocking invocation will only wait for a limited amount of time before returning.</strong> This defaults to 65 seconds in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/resources/application.conf#L21">platform configuration file</a>. If an action invocation has not finished before this timeout limit, a HTTP 5xx status response is returned.</p>
+
+<p>Hmmm… 🤔</p>
+
+<p><strong><em>"So, how can you invoke an action and wait for the result when actions take longer than this limit?"</em></strong></p>
+
+<p>This question comes up regularly from developers building applications using the platform. I've decided to turn my answer into a blog post to help others struggling with this issue (after answering this question again this week 😎).</p>
+
+<h3>solution</h3>
+
+<ul>
+<li><em>Invoke the action using a <a href="https://github.com/apache/incubator-openwhisk-client-js#invoke-action">non-blocking invocation</a>.</em></li>
+<li><em>Use the returned activation identifier to poll the <a href="https://github.com/apache/incubator-openwhisk-client-js#retrieve-resource">activation result API</a>.</em></li>
+<li><em>The HTTP response for the activation result will return a HTTP 404 response until the action finishes.</em></li>
+</ul>
+
+
+<p>When polling for activation results from non-blocking invocations, you should enforce a limit on the maximum polling time allowed. This is because HTTP 404s can be returned due to other scenarios (e.g. invalid activation identifiers). Enforcing a time limit ensures that, in the event of issues in the application code or the platform, the polling loop with eventually stop!</p>
+
+<p><em>Setting the maximum polling time to the action timeout limit (plus a small offset) is a good approach.</em></p>
+
+<p>An action cannot run for longer than its timeout limit. If the activation record is not available after this duration has elapsed (plus a small offset to handle internal platform delays), something has gone wrong. Continuing to poll after this point runs the risk of turning the polling operation into an infinite loop...</p>
+
+<h3>example code</h3>
+
+<p>This example provides an implementation of this approach for Node.js using the <a href="https://github.com/apache/incubator-openwhisk-client-js">JavaScript Client SDK</a>.</p>
+
+<p>```javascript
+"use strict";</p>
+
+<p>const openwhisk = require('openwhisk')</p>
+
+<p>const options = { apihost: <API_HOST>, api_key: <API_KEY> }
+const ow = openwhisk(options)</p>
+
+<p>// action duration limit (+ small offset)
+const timeout_ms = 85000
+// delay between polling requests
+const polling_delay = 1000
+// action to invoke
+const action = 'delay'</p>
+
+<p>const now = () => (new Date().getTime())
+const max_polling_time = now() + timeout_ms</p>
+
+<p>const delay = async ms => new Promise(resolve => setTimeout(resolve, ms))</p>
+
+<p>const activation = await ow.actions.invoke({name: action})
+console.log(<code>new activation id: ${activation.activationId}</code>)</p>
+
+<p>let result = null</p>
+
+<p>do {
+  try {</p>
+
+<pre><code>result = await ow.activations.get({ name: activation.activationId })
+console.log(`activation result (${activation.activationId}) now available!`)
+</code></pre>
+
+<p>  } catch (err) {</p>
+
+<pre><code>if (err.statusCode !== 404) {
+  throw err
+}
+console.log(`activation result (${activation.activationId}) not available yet`)
+</code></pre>
+
+<p>  }</p>
+
+<p>  await delay(polling_delay)
+} while (!result &amp;&amp; now() &lt; max_polling_time)</p>
+
+<p>console.log(<code>activation result (${activation.activationId})</code>, result)
+```</p>
+
+<h3>testing it out</h3>
+
+<p>Here is the source code for an action which will not return until 70 seconds have passed. Blocking invocations firing this action will result in a HTTP timeout before the response is returned.</p>
+
+<p>```javascript
+const delay = async ms => new Promise(resolve => setTimeout(resolve, ms))</p>
+
+<p>function main() {
+  return delay(70*1000)
+}
+```</p>
+
+<p>Using the script above, the action result will be retrieved from a non-blocking invocation.</p>
+
+<ul>
+<li><em>Create an action from the source file in the example above.</em></li>
+</ul>
+
+
+<p><code>
+wsk action create delay delay.js --timeout 80000 --kind nodejs:10
+</code></p>
+
+<ul>
+<li><em>Run the Node.js script to invoke this action and poll for the activation result.</em></li>
+</ul>
+
+
+<p><code>
+node script.js
+</code></p>
+
+<p>If the script runs correctly, log messages will display the polling status and then the activation result.</p>
+
+<p><code>
+$ node script.js
+new activation id: d4efc4641b544320afc4641b54132066
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+...
+activation result (d4efc4641b544320afc4641b54132066) now available!
+activation result (d4efc4641b544320afc4641b54132066) { ... }
+</code></p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Saving Money and Time With Node.js Worker Threads in Serverless Functions]]></title>
@@ -1066,207 +1222,6 @@ publicKeys: (await openpgp.key.readArmored(public_keys)).keys
 <p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I've also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
 
 <p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[OpenWhisk Web Action Errors With Sequences]]></title>
-    <link href="http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/"/>
-    <updated>2019-02-27T10:00:00+00:00</updated>
-    <id>http://jamesthom.as/blog/2019/02/27/openwhisk-web-action-errors-with-sequences</id>
-    <content type="html"><![CDATA[<p>This week, I came across an interesting problem when building HTTP APIs on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</p>
-
-<p>{% blockquote  %}
-How can Apache OpenWhisk Web Actions, implemented using action sequences, handle application errors that need the sequence to stop processing and a custom HTTP response to be returned?
-{% endblockquote %}</p>
-
-<p>This came from wanting to add custom <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication">HTTP authentication</a> to existing Web Actions. I had decided to enhance existing Web Actions with authentication using action sequences. This would combine a new action for authentication validation with the existing API route handlers.</p>
-
-<p>{% img /images/sequences-and-web-actions/outline.png  %}</p>
-
-<p>When the HTTP authentication is valid, the authentication action becomes a "<a href="https://en.wikipedia.org/wiki/NOP_(code)">no-op</a>", which passes along the HTTP request to the route handler action to process as normal.</p>
-
-<p><strong>But what happens when authentication fails?</strong></p>
-
-<p>The authentication action needs to stop request processing and return a <a href="https://httpstatuses.com/401">HTTP 401</a> response immediately.</p>
-
-<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
-
-<p><em>Does Apache OpenWhisk even support this?</em></p>
-
-<p>Fortunately, it does (phew) and I eventually worked out how to do this (based on a combination of re-reading <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/">documentation</a>, the platform <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/scala/org/apache/openwhisk/core/controller/WebActions.scala">source code</a> and just trying stuff out!).</p>
-
-<p><em>Before explaining how to return custom HTTP responses using web action errors in sequences, let's review web actions, actions sequences and why developers often use them together...</em></p>
-
-<h2>Web Actions</h2>
-
-<p><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> are OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> that can be invoked using external HTTP requests.</p>
-
-<p>Incoming HTTP requests are provided as event parameters. HTTP responses are controlled using attributes (<code>statusCode</code>, <code>body</code>, <code>headers</code>) in the action result.</p>
-
-<p>Web Actions can be invoked directly, using the platform API, or connected to <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway endpoints</a>.</p>
-
-<h3>example</h3>
-
-<p>Here is an example Web Action that returns a static HTML page.</p>
-
-<p>```javascript
-function main() {
-  return {</p>
-
-<pre><code>headers: {      
-  'Content-Type': 'text/html'
-},
-statusCode: 200,
-body: '&lt;html&gt;&lt;body&gt;&lt;h3&gt;hello&lt;/h3&gt;&lt;/body&gt;&lt;/html&gt;'
-</code></pre>
-
-<p>  }
-}
-```</p>
-
-<h3>exposing web actions</h3>
-
-<p>Web actions can be exported from any existing action by setting an <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/annotations.md#annotations-specific-to-web-actions">annotation</a>.</p>
-
-<p>This is handled automatically by CLI using the <code>—web</code> configuration flag when creating or updating actions.</p>
-
-<p><code>
-wsk action create ACTION_NAME ACTION_CODE --web true
-</code></p>
-
-<h2>Action Sequences</h2>
-
-<p>Multiple actions can be composed together into a "meta-action" using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-action-sequences">sequences</a>.</p>
-
-<p>Sequence configuration defines a series of existing actions to be called sequentially upon invocation.  Actions connected in sequences can use different runtimes and even be sequences themselves.</p>
-
-<p><code>
-wsk action create mySequence --sequence action_a,action_b,action_c
-</code></p>
-
-<p>Input events are passed to the first action in the sequence. Action results from each action in the sequence are passed to the next action in the sequence. The response from the last action in the sequence is returned as the action result.</p>
-
-<h3>example</h3>
-
-<p>Here is a sequence (<code>mySequence</code>) composed of three actions (<code>action_a</code>, <code>action_b</code>, <code>action_c</code>).</p>
-
-<p><code>
-wsk action create mySequence --sequence action_a,action_b,action_c
-</code></p>
-
-<p>Invoking <code>mySequence</code> will invoke <code>action_a</code> with the input parameters. <code>action_b</code> will be invoked with the result from <code>action_a</code>.  <code>action_c</code> will be invoked with the result from <code>action_b</code>. The result returned by <code>action_c</code> will be returned as the sequence result.</p>
-
-<h2>Web Actions from Action Sequences</h2>
-
-<p>Using Action Sequences as Web Actions is a useful pattern for externalising common HTTP request and response processing tasks into separate serverless functions.</p>
-
-<p>These common actions can be included in multiple Web Actions, rather than manually duplicating the same boilerplate code in each HTTP route action. This is similar to the "<a href="https://dzone.com/articles/understanding-middleware-pattern-in-expressjs">middleware</a>" pattern used by lots of common web application frameworks.</p>
-
-<p>Web Actions using this approach are easier to test, maintain and allows API handlers to implement core business logic rather than lots of duplicate boilerplate code.</p>
-
-<h3>authentication example</h3>
-
-<p>In my application, new authenticated web actions were composed of two actions (<code>check_auth</code> and the API route handler, e.g. <code>route_handler</code>).</p>
-
-<p>Here is an outline of the <code>check_auth</code> function in Node.js.</p>
-
-<p>```javascript
-const check_auth = (params) => {
-  const headers = params.__ow_headers
-  const auth = headers['authorization']</p>
-
-<p>  if (!is_auth_valid(auth)) {</p>
-
-<pre><code>// stop sequence processing and return HTTP 401?
-</code></pre>
-
-<p>  }</p>
-
-<p>  // ...else pass along request to next sequence action
-  return params
-}
-```</p>
-
-<p>The <code>check_auth</code> function will inspect the HTTP request and validate the authorisation token. If the token is valid, the function returns the input parameters untouched, which leads the platform the invoke the <code>route_handler</code> to generate the HTTP response from the API route.</p>
-
-<p><strong>But what happens if the authentication is invalid?</strong></p>
-
-<p>The  <code>check_auth</code> action needs to return a HTTP 401 response immediately, rather than proceeding to the  <code>route_handler</code> action.</p>
-
-<p>{% img /images/sequences-and-web-actions/options.png  %}</p>
-
-<h3>handling errors - synchronous results</h3>
-
-<p>Sequence actions can stop sequence processing by returning an error. Action errors are indicated by action results which include an "error" property or return rejected promises (for asynchronous results). Upon detecting an error, the platform will return the error result as the sequence action response.</p>
-
-<p><em>If <code>check_auth</code> returns an error upon authentication failures, sequence processing can be halted, but how to control the HTTP response?</em></p>
-
-<p><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#error-handling">Error responses</a> can also control the HTTP response, using the same properties (<code>statusCode</code>, <code>headers</code> and <code>body</code>) as a successful invocation result, with one difference: <strong>those properties must be the children of the <code>error</code> property rather than top-level properties.</strong></p>
-
-<p>This example shows the error result needed to generate an immediate HTTP 401 response.</p>
-
-<p>```json
-{
-   "error": {</p>
-
-<pre><code>  "statusCode": 401,
-  "body": "Authentication credentials are invalid."
-}
-</code></pre>
-
-<p>}
-```</p>
-
-<p>In Node.js, this can be returned using a synchronous result as shown here.</p>
-
-<p>```javascript
-const check_auth = (params) => {
-  const headers = params.__ow_headers
-  const auth = headers['authorization']</p>
-
-<p>  if (!is_auth_valid(auth)) {</p>
-
-<pre><code>const response = { statusCode: 401, body: "Authentication credentials are invalid." }
-return { error: response }
-</code></pre>
-
-<p>  }</p>
-
-<p>  return params
-}
-```</p>
-
-<h3>handling errors - using promises</h3>
-
-<p>If a rejected Promise is used to return an error from an asynchronous operation, the promise result needs to contain the HTTP response properties as <strong>top-level properties</strong>, rather than under an <code>error</code> parent. This is because the Node.js runtime automatically <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L118">serialises the promise value</a> to an <code>error</code> property on the activation result.</p>
-
-<p>```javascript
-const check_auth = (params) => {
-  const headers = params.__ow_headers
-  const auth = headers['authorization']</p>
-
-<p>  if (!is_auth_valid(auth)) {</p>
-
-<pre><code>const response = { statusCode: 401, body: "Authentication credentials are invalid." }
-return Promise.reject(response)
-</code></pre>
-
-<p>  }</p>
-
-<p>  return params
-}
-```</p>
-
-<h2>conclusion</h2>
-
-<p>Creating web actions from sequences is a novel way to implement the "HTTP middleware" pattern on serverless platforms. Surrounding route handlers with pre-HTTP request modifier actions for common tasks, allows route handlers to remove boilerplate code and focus on the core business logic.</p>
-
-<p>In my application, I wanted to use this pattern was being used for custom HTTP authentication validation.</p>
-
-<p>When the HTTP request contains the correct credentials, the request is passed along unmodified. When the credentials are invalid, the action needs to stop sequence processing and return a HTTP 401 response.</p>
-
-<p>Working out how to do this wasn't immediately obvious from the documentation. HTTP response parameters need to included under the <code>error</code> property for synchronous results. I have now opened a PR to improve the project documentation about this.</p>
 ]]></content>
   </entry>
   
