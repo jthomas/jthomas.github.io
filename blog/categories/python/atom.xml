@@ -4,7 +4,7 @@
   <title><![CDATA[Category: python | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/python/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-05-14T15:32:11+01:00</updated>
+  <updated>2019-07-03T14:10:55+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -14,15 +14,322 @@
 
   
   <entry>
+    <title type="html"><![CDATA[Serverless APIs for MAX models]]></title>
+    <link href="http://jamesthom.as/blog/2019/07/02/serverless-max-models/"/>
+    <updated>2019-07-02T10:25:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/07/02/serverless-max-models</id>
+    <content type="html"><![CDATA[<p>IBM's <a href="https://developer.ibm.com/exchanges/models/">Model Asset eXchange</a> provides a <a href="https://developer.ibm.com/exchanges/models/all/">curated list</a> of free Machine Learning models for developers. Models currently published include detecting <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">emotions</a> or <a href="https://developer.ibm.com/exchanges/models/all/max-facial-age-estimator/">ages</a> in faces from images, <a href="https://developer.ibm.com/exchanges/models/all/max-weather-forecaster/">forecasting the weather</a>, converting <a href="https://developer.ibm.com/exchanges/models/all/max-speech-to-text-converter/">speech to text</a> and more. Models are pre-trained and ready for use in the cloud.</p>
+
+<p>Models are published as series of <a href="https://hub.docker.com/search?q=codait&amp;type=image">public Docker images</a>. Images automatically expose a HTTP API for model predictions. Documentation in the model repositories explains how to run images locally (using Docker) or deploy to the cloud (using Kubernetes). This got me thinking…</p>
+
+<p><strong>Could MAX models be used from serverless functions?</strong> 🤔</p>
+
+<p>Running machine learning models on serverless platforms can take advantage of the horizontal scalability to process large numbers of computationally intensive classification tasks in parallel. Coupled with the serverless pricing structure ("<em>no charge for idle</em>"), this can be an extremely cheap and effective way to perform model classifications in the cloud.</p>
+
+<p><strong>CHALLENGE ACCEPTED!</strong> 🦸‍♂️🦸‍♀️</p>
+
+<p>After a couple days of experimentation, I had worked out an easy way to <a href="https://github.com/jthomas/serverless-max-models">automatically expose MAX models as Serverless APIs</a> on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.  🎉🎉🎉</p>
+
+<p><em>I've given instructions below on how to create those APIs from the models using a simple script. If you just want to use the models, follow those instructions. If you are interested in understanding how this works, keep reading as I explain afterwards what I did...</em></p>
+
+<h2>Running MAX models on IBM Cloud Functions</h2>
+
+<p><a href="https://github.com/jthomas/serverless-max-models">This repository</a> contains a <a href="https://github.com/jthomas/serverless-max-models/blob/master/build.sh">bash script</a> which builds custom Docker runtimes with MAX models for usage on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>. Pushing these images to Docker Hub allows IBM Cloud Functions to use them as <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom runtimes</a>. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> created from these custom runtime images expose the same Prediction API described in the model documentation. They can be used with no further changes or custom code needed.</p>
+
+<h3>prerequisites</h3>
+
+<p>Please follow the links below to set up the following tools before proceeding.</p>
+
+<ul>
+<li><a href="https://www.docker.com/">Docker</a></li>
+<li><a href="https://hub.docker.com/">Docker Hub account</a></li>
+<li><a href="https://cloud.ibm.com/registration">IBM Cloud account</a></li>
+<li><a href="https://cloud.ibm.com/openwhisk/learn/cli">IBM Cloud Functions CLI installed</a></li>
+</ul>
+
+
+<p><strong>Check out the "<a href="https://github.com/jthomas/serverless-max-models">Serverless MAX Models</a> repository. Run all the following commands from that folder.</strong></p>
+
+<p><code>
+git clone https://github.com/jthomas/serverless-max-models
+cd serverless-max-models
+</code></p>
+
+<h3>build custom runtime images</h3>
+
+<ul>
+<li>Set the following environment variables (<code>MODELS</code>) with <a href="https://hub.docker.com/search?q=codait&amp;type=image">MAX model names</a> and run build script.
+
+<ul>
+<li><code>MODELS</code>: MAX model names, e.g. <code>max-facial-emotion-classifier</code></li>
+<li><code>USERNAME</code>: Docker Hub username.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><code>
+MODELS="..." USERNAME="..." ./build.sh
+</code></p>
+
+<p>This will create Docker images locally with the MAX model names and push to Docker Hub for usage in IBM Cloud Functions. <strong>IBM Cloud Functions only supports public Docker images as custom runtimes.</strong></p>
+
+<h3>create actions using custom runtimes</h3>
+
+<ul>
+<li>Create a Web Action using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker runtime</a>.</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512
+</code></p>
+
+<ul>
+<li>Retrieve the Web Action URL (<code>https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/&lt;ACTION&gt;</code>)</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action get &lt;MODEL_IMAGE&gt; --url
+</code></p>
+
+<h3>invoke web action url with prediction api parameters</h3>
+
+<p>Use the same API request parameters as defined in the Prediction API specification with the Web Action URL. This will invoke model predictions and return the result as the HTTP response, e.g.</p>
+
+<p><code>
+curl -F "image=@assets/happy-baby.jpeg" -XPOST &lt;WEB_ACTION_URL&gt;
+</code></p>
+
+<p><em>NOTE: The first invocation after creating an action may incur long cold-start delays due to the platform pulling the remote image into the local registry. Once the image is available in the platform, both further cold and warm invocations will be much faster.</em></p>
+
+<h2>Example</h2>
+
+<p>Here is an example of creating a serverless API using the <code>max-facial-emotion-classifier</code> <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">MAX model</a>. Further examples of models which have been tested are available <a href="https://github.com/jthomas/serverless-max-models/blob/master/README.md#models">here</a>. If you encounter problems, please <a href="https://github.com/jthomas/serverless-max-models/issues">open an issue</a> on Github.</p>
+
+<h3>max-facial-emotion-classifier</h3>
+
+<ul>
+<li><a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">Facial Emotion Classifier (<code>max-facial-emotion-classifier</code>)</a></li>
+</ul>
+
+
+<p>Start by creating the action using the custom runtime and then retrieve the Web Action URL.</p>
+
+<p><code>
+$ ibmcloud wsk action create max-facial-emotion-classifier --docker &lt;DOCKERHUB_NAME&gt;/max-facial-emotion-classifier --web true -m 512
+ok: created action max-facial-emotion-classifier
+$ ibmcloud wsk action get max-facial-emotion-classifier --url
+ok: got action max-facial-emotion-classifier
+https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier
+</code></p>
+
+<p>According to the <a href="http://max-facial-emotion-classifier.max.us-south.containers.appdomain.cloud/">API definition</a> for this model, the prediction API expects a form submission with an image file to classify. Using a <a href="https://github.com/IBM/MAX-Facial-Emotion-Classifier/blob/master/assets/happy-baby.jpeg">sample image</a> from the model repo, the model can be tested using curl.</p>
+
+<p><code>
+$ curl -F "image=@happy-baby.jpeg" -XPOST https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier
+</code></p>
+
+<p>```json
+{
+  "status": "ok",
+  "predictions": [</p>
+
+<pre><code>{
+  "detection_box": [
+    0.15102639296187684,
+    0.3828125,
+    0.5293255131964809,
+    0.5830078125
+  ],
+  "emotion_predictions": [
+    {
+      "label_id": "1",
+      "label": "happiness",
+      "probability": 0.9860254526138306
+    },
+    ...
+  ]
+}
+</code></pre>
+
+<p>  ]
+}
+```</p>
+
+<h4>performance</h4>
+
+<p><em>Example Invocation Duration (Cold):</em> ~4.8 seconds</p>
+
+<p><em>Example Invocation Duration (Warm):</em> ~ 800 ms</p>
+
+<h2>How does this work?</h2>
+
+<h3>background</h3>
+
+<p>Running machine learning classifications using pre-trained models from serverless functions has historically been challenging due to the following reason…</p>
+
+<blockquote><p>Developers do not control runtime environments in (most) serverless cloud platforms. Libraries and dependencies needed by the functions must be provided in the deployment package. Most platforms limit deployment package sizes (~50MB compressed &amp; ~250MB uncompressed).</p></blockquote>
+
+<p>Machine Learning libraries and models can be much larger than those deployment size limits. This stops them being included in deployment packages. Loading files dynamically during invocations may be possible but incurs extremely long cold-start delays and additional costs.</p>
+
+<p>Fortunately, <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is based on the open-source serverless project, <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. This platform supports bespoke function runtimes using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker images</a>. Machine learning libraries and models can therefore be provided in custom runtimes. This removes the need to include them in deployment packages or be loaded at runtime.</p>
+
+<p><em>Interested in reading other blog posts about using machine learning libraries and toolkits with IBM Cloud Functions? See <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">these posts</a> for <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">more details</a>.</em></p>
+
+<h3>MAX model images</h3>
+
+<p>IBM's <a href="https://developer.ibm.com/exchanges/models/all/">Model Asset eXchange</a> publishes Docker images for each model, alongside the pre-trained model files. Images expose a <a href="https://github.com/IBM/MAX-Text-Sentiment-Classifier#3-use-the-model">HTTP API for predictions</a> using the model on port 5000, built using Python and Flask. <a href="http://max-text-sentiment-classifier.max.us-south.containers.appdomain.cloud/">Swagger files</a> for the APIs describe the available operations, input parameters and response bodies.</p>
+
+<p>These images use a custom application framework (<a href="https://pypi.org/project/maxfw/">maxfw</a>), based on Flask, to standardise exposing MAX models as HTTP APIs. This framework handles input parameter validation, response marshalling, CORS support, etc. This allows model runtimes to just implement the prediction API handlers, rather than the entire HTTP application.</p>
+
+<p>Since the framework already handles exposing the model as a HTTP API, I started looking for a way to simulate an external HTTP request coming into the framework. If this was possible, I could trigger this fake request from a Python Web Action to perform the model classification from input parameters. The Web Action would then covert the HTTP response returned into the valid Web Action response parameters.</p>
+
+<h3>flask test client</h3>
+
+<p>Reading through the Flask <a href="http://flask.pocoo.org/docs/1.0/testing/">documentation</a>, I came across the perfect solution! 👏👏👏</p>
+
+<blockquote><p>Flask provides a way to test your application by exposing the Werkzeug test Client and handling the context locals for you. You can then use that with your favourite testing solution.</p></blockquote>
+
+<p>This allows application routes to be executed with the <a href="https://werkzeug.palletsprojects.com/en/0.15.x/test/#werkzeug.test.Client">test client</a>, without actually running the HTTP server.</p>
+
+<p><code>python
+max_app = MAXApp(API_TITLE, API_DESC, API_VERSION)
+max_app.add_api(ModelPredictAPI, '/predict')
+test_client = max_app.app.test_client()
+r = test_client.post('/model/predict', data=content, headers=headers)
+</code></p>
+
+<p>Using this code within a serverless Python function allows function invocations to trigger the prediction API.  The serverless function only has to convert input parameters to the fake HTTP request and then serialise the response back to JSON.</p>
+
+<h3>python docker action</h3>
+
+<p>The custom MAX model runtime image needs to implement the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">HTTP API expected</a> by Apache OpenWhisk. This API is used to instantiate the runtime environment and then pass in invocation parameters on each request. Since the runtime image contains all files and code need to process requests, the <code>/init</code> handler becomes a <a href="https://english.stackexchange.com/questions/25993/what-does-no-op-mean">no-op</a>. The <code>/run</code> handler converts <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#http-context">Web Action HTTP parameters</a> into the fake HTTP request.</p>
+
+<p>Here is the Python script used to proxy incoming Web Actions requests to the framework model service.</p>
+
+<p>```python
+from maxfw.core import MAXApp
+from api import ModelPredictAPI
+from config import API_TITLE, API_DESC, API_VERSION
+import json
+import base64
+from flask import Flask, request, Response</p>
+
+<p>max_app = MAXApp(API_TITLE, API_DESC, API_VERSION)
+max_app.add_api(ModelPredictAPI, '/predict')</p>
+
+<h1>Use flask test client to simulate HTTP requests for the prediction APIs</h1>
+
+<h1>HTTP request data will come from action invocation parameters, neat huh? :)</h1>
+
+<p>test_client = max_app.app.test_client()
+app = Flask(<strong>name</strong>)</p>
+
+<h1>This implements the Docker runtime API used by Apache OpenWhisk</h1>
+
+<h1>https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md</h1>
+
+<h1>/init is a no-op as everything is provided in the image.</h1>
+
+<p>@app.route("/init", methods=['POST'])
+def init():</p>
+
+<pre><code>return ''
+</code></pre>
+
+<h1>Action invocation requests will be received as the <code>value</code> parameter in request body.</h1>
+
+<h1>Web Actions provide HTTP request parameters as <code>__ow_headers</code> &amp; <code>__ow_body</code> parameters.</h1>
+
+<p>@app.route("/run", methods=['POST'])
+def run():</p>
+
+<pre><code>body = request.json
+form_body = body['value']['__ow_body']
+headers = body['value']['__ow_headers']
+
+# binary image content provided as base64 strings
+content = base64.b64decode(form_body)
+
+# send fake HTTP request to prediction API with invocation data
+r = test_client.post('/model/predict', data=content, headers=headers)
+r_headers = dict((x, y) for x, y in r.headers)
+
+# binary data must be encoded as base64 strings to return in JSON response
+is_image = r_headers['Content-Type'].startswith('image')
+r_data = base64.b64encode(r.data) if is_image else r.data
+body = r_data.decode("utf-8")
+
+response = {'headers': r_headers, 'status': r.status_code, 'body': body }
+print (r.status)
+return Response(json.dumps(response), status=200, mimetype='application/json')
+</code></pre>
+
+<p>app.run(host='0.0.0.0', port=8080)
+```</p>
+
+<h3>building into an image</h3>
+
+<p>Since the MAX models already exist as public Docker images, those images can be used as base images when building custom runtimes. Those base images handle adding model files and all dependencies needed to execute them into the image.</p>
+
+<p>This is the <code>Dockerfile</code> used by the build script to create the custom model image. The <code>model</code> parameter refers to the build argument containing the model name.</p>
+
+<p>```bash
+ARG model
+FROM codait/${model}:latest</p>
+
+<p>ADD openwhisk.py .</p>
+
+<p>EXPOSE 8080</p>
+
+<p>CMD python openwhisk.py
+```</p>
+
+<p>This is then used from the following build script to create a custom runtime image for the model.</p>
+
+<p>```bash</p>
+
+<h1>!/bin/bash</h1>
+
+<p>set -e -u</p>
+
+<p>for model in $MODELS; do
+  echo "Building $model runtime image"
+  docker build -t $model --build-arg model=$model .
+  echo "Pushing $model to Docker Hub"
+  docker tag $model $USERNAME/$model
+  docker push $USERNAME/$model
+done
+```</p>
+
+<p>Once the image is published to Docker Hub, it can be referenced when creating new Web Actions (using the <code>—docker</code> parameter). 😎</p>
+
+<p><code>
+ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512
+</code></p>
+
+<h2>Conclusion</h2>
+
+<p>IBM's Model Asset eXchange is a curated collection of Machine Learning models, ready to deploy to the cloud for a variety of tasks. All models are available as a series of public Docker images. Models images automatically expose HTTP APIs for classifications.</p>
+
+<p>Documentation in the model repositories explains how to run them locally and deploy using Kubernetes, but what about using on serverless cloud platforms? Serverless platforms are becoming a popular option for deploying Machine Learning models, due to horizontal scalability and cost advantages.</p>
+
+<p>Looking through the source code for the model images, I discovered a mechanism to hook into the custom model framework used to export the model files as HTTP APIs. This allowed me write a simple wrapper script to proxy serverless function invocations to the model prediction APIs. API responses would be serialised back into the Web Action response format.</p>
+
+<p>Building this script into a new Docker image, using the existing model image as the base image, created a new runtime which could be used on the platform. Web Actions created from this runtime image would automatically expose the same HTTP APIs as the existing image!</p>
+]]></content>
+  </entry>
+  
+  <entry>
     <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
     <link href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/"/>
     <updated>2017-08-04T09:48:00+01:00</updated>
     <id>http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk</id>
     <content type="html"><![CDATA[<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
 
-<p>{% blockquote OpenWhisk system details, https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb %}
-The maximum code size for the action is 48MB.
-{% endblockquote %}</p>
+<p><blockquote><p>The maximum code size for the action is 48MB.</p><footer><strong>OpenWhisk system details,</strong> <cite><a href='https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb'>github.com/apache/blob/master/&hellip;</a></cite></footer></blockquote></p>
 
 <p>Applications with lots of third-party modules, native libraries or external tools may be soon find themselves running into this limit. Node.js libraries are <a href="https://medium.com/friendship-dot-js/i-peeked-into-my-node-modules-directory-and-you-wont-believe-what-happened-next-b89f63d21558">notorious for having large amounts of dependencies</a>.</p>
 

@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Apache OpenWhisk actions are invoked by sending HTTP POST requests to the platform API. Invocation requests have two different modes: blocking and &hellip;">
+  <meta name="description" content="IBM&#8217;s Model Asset eXchange provides a curated list of free Machine Learning models for developers. Models currently published include detecting &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,426 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX Models</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-07-02T10:25:00+01:00" pubdate data-updated="true">Jul 2<span>nd</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>IBM&#8217;s <a href="https://developer.ibm.com/exchanges/models/">Model Asset eXchange</a> provides a <a href="https://developer.ibm.com/exchanges/models/all/">curated list</a> of free Machine Learning models for developers. Models currently published include detecting <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">emotions</a> or <a href="https://developer.ibm.com/exchanges/models/all/max-facial-age-estimator/">ages</a> in faces from images, <a href="https://developer.ibm.com/exchanges/models/all/max-weather-forecaster/">forecasting the weather</a>, converting <a href="https://developer.ibm.com/exchanges/models/all/max-speech-to-text-converter/">speech to text</a> and more. Models are pre-trained and ready for use in the cloud.</p>
+
+<p>Models are published as series of <a href="https://hub.docker.com/search?q=codait&amp;type=image">public Docker images</a>. Images automatically expose a HTTP API for model predictions. Documentation in the model repositories explains how to run images locally (using Docker) or deploy to the cloud (using Kubernetes). This got me thinking…</p>
+
+<p><strong>Could MAX models be used from serverless functions?</strong> 🤔</p>
+
+<p>Running machine learning models on serverless platforms can take advantage of the horizontal scalability to process large numbers of computationally intensive classification tasks in parallel. Coupled with the serverless pricing structure (&#8221;<em>no charge for idle</em>&#8221;), this can be an extremely cheap and effective way to perform model classifications in the cloud.</p>
+
+<p><strong>CHALLENGE ACCEPTED!</strong> 🦸‍♂️🦸‍♀️</p>
+
+<p>After a couple days of experimentation, I had worked out an easy way to <a href="https://github.com/jthomas/serverless-max-models">automatically expose MAX models as Serverless APIs</a> on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.  🎉🎉🎉</p>
+
+<p><em>I&#8217;ve given instructions below on how to create those APIs from the models using a simple script. If you just want to use the models, follow those instructions. If you are interested in understanding how this works, keep reading as I explain afterwards what I did&#8230;</em></p>
+
+<h2>Running MAX models on IBM Cloud Functions</h2>
+
+<p><a href="https://github.com/jthomas/serverless-max-models">This repository</a> contains a <a href="https://github.com/jthomas/serverless-max-models/blob/master/build.sh">bash script</a> which builds custom Docker runtimes with MAX models for usage on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>. Pushing these images to Docker Hub allows IBM Cloud Functions to use them as <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom runtimes</a>. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> created from these custom runtime images expose the same Prediction API described in the model documentation. They can be used with no further changes or custom code needed.</p>
+
+<h3>prerequisites</h3>
+
+<p>Please follow the links below to set up the following tools before proceeding.</p>
+
+<ul>
+<li><a href="https://www.docker.com/">Docker</a></li>
+<li><a href="https://hub.docker.com/">Docker Hub account</a></li>
+<li><a href="https://cloud.ibm.com/registration">IBM Cloud account</a></li>
+<li><a href="https://cloud.ibm.com/openwhisk/learn/cli">IBM Cloud Functions CLI installed</a></li>
+</ul>
+
+
+<p><strong>Check out the &#8221;<a href="https://github.com/jthomas/serverless-max-models">Serverless MAX Models</a> repository. Run all the following commands from that folder.</strong></p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/jthomas/serverless-max-models 
+</span><span class='line'>cd serverless-max-models </span></code></pre></td></tr></table></div></figure>
+
+
+<h3>build custom runtime images</h3>
+
+<ul>
+<li>Set the following environment variables (<code>MODELS</code>) with <a href="https://hub.docker.com/search?q=codait&amp;type=image">MAX model names</a> and run build script.
+
+<ul>
+<li><code>MODELS</code>: MAX model names, e.g. <code>max-facial-emotion-classifier</code></li>
+<li><code>USERNAME</code>: Docker Hub username.</li>
+</ul>
+</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>MODELS="..." USERNAME="..." ./build.sh</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This will create Docker images locally with the MAX model names and push to Docker Hub for usage in IBM Cloud Functions. <strong>IBM Cloud Functions only supports public Docker images as custom runtimes.</strong></p>
+
+<h3>create actions using custom runtimes</h3>
+
+<ul>
+<li>Create a Web Action using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker runtime</a>.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Retrieve the Web Action URL (<code>https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/&lt;ACTION&gt;</code>)</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud wsk action get &lt;MODEL_IMAGE&gt; --url</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>invoke web action url with prediction api parameters</h3>
+
+<p>Use the same API request parameters as defined in the Prediction API specification with the Web Action URL. This will invoke model predictions and return the result as the HTTP response, e.g.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>curl -F "image=@assets/happy-baby.jpeg" -XPOST &lt;WEB_ACTION_URL&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>NOTE: The first invocation after creating an action may incur long cold-start delays due to the platform pulling the remote image into the local registry. Once the image is available in the platform, both further cold and warm invocations will be much faster.</em></p>
+
+<h2>Example</h2>
+
+<p>Here is an example of creating a serverless API using the <code>max-facial-emotion-classifier</code> <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">MAX model</a>. Further examples of models which have been tested are available <a href="https://github.com/jthomas/serverless-max-models/blob/master/README.md#models">here</a>. If you encounter problems, please <a href="https://github.com/jthomas/serverless-max-models/issues">open an issue</a> on Github.</p>
+
+<h3>max-facial-emotion-classifier</h3>
+
+<ul>
+<li><a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">Facial Emotion Classifier (<code>max-facial-emotion-classifier</code>)</a></li>
+</ul>
+
+
+<p>Start by creating the action using the custom runtime and then retrieve the Web Action URL.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ ibmcloud wsk action create max-facial-emotion-classifier --docker &lt;DOCKERHUB_NAME&gt;/max-facial-emotion-classifier --web true -m 512
+</span><span class='line'>ok: created action max-facial-emotion-classifier
+</span><span class='line'>$ ibmcloud wsk action get max-facial-emotion-classifier --url
+</span><span class='line'>ok: got action max-facial-emotion-classifier
+</span><span class='line'>https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier</span></code></pre></td></tr></table></div></figure>
+
+
+<p>According to the <a href="http://max-facial-emotion-classifier.max.us-south.containers.appdomain.cloud/">API definition</a> for this model, the prediction API expects a form submission with an image file to classify. Using a <a href="https://github.com/IBM/MAX-Facial-Emotion-Classifier/blob/master/assets/happy-baby.jpeg">sample image</a> from the model repo, the model can be tested using curl.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ curl -F "image=@happy-baby.jpeg" -XPOST https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;predictions&quot;</span><span class="p">:</span> <span class="p">[</span>
+</span><span class='line'>    <span class="p">{</span>
+</span><span class='line'>      <span class="nt">&quot;detection_box&quot;</span><span class="p">:</span> <span class="p">[</span>
+</span><span class='line'>        <span class="mf">0.15102639296187684</span><span class="p">,</span>
+</span><span class='line'>        <span class="mf">0.3828125</span><span class="p">,</span>
+</span><span class='line'>        <span class="mf">0.5293255131964809</span><span class="p">,</span>
+</span><span class='line'>        <span class="mf">0.5830078125</span>
+</span><span class='line'>      <span class="p">],</span>
+</span><span class='line'>      <span class="nt">&quot;emotion_predictions&quot;</span><span class="p">:</span> <span class="p">[</span>
+</span><span class='line'>        <span class="p">{</span>
+</span><span class='line'>          <span class="nt">&quot;label_id&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;happiness&quot;</span><span class="p">,</span>
+</span><span class='line'>          <span class="nt">&quot;probability&quot;</span><span class="p">:</span> <span class="mf">0.9860254526138306</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>        <span class="err">...</span>
+</span><span class='line'>      <span class="p">]</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>  <span class="p">]</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>performance</h4>
+
+<p><em>Example Invocation Duration (Cold):</em> ~4.8 seconds</p>
+
+<p><em>Example Invocation Duration (Warm):</em> ~ 800 ms</p>
+
+<h2>How does this work?</h2>
+
+<h3>background</h3>
+
+<p>Running machine learning classifications using pre-trained models from serverless functions has historically been challenging due to the following reason…</p>
+
+<blockquote><p>Developers do not control runtime environments in (most) serverless cloud platforms. Libraries and dependencies needed by the functions must be provided in the deployment package. Most platforms limit deployment package sizes (~50MB compressed &amp; ~250MB uncompressed).</p></blockquote>
+
+<p>Machine Learning libraries and models can be much larger than those deployment size limits. This stops them being included in deployment packages. Loading files dynamically during invocations may be possible but incurs extremely long cold-start delays and additional costs.</p>
+
+<p>Fortunately, <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is based on the open-source serverless project, <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. This platform supports bespoke function runtimes using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker images</a>. Machine learning libraries and models can therefore be provided in custom runtimes. This removes the need to include them in deployment packages or be loaded at runtime.</p>
+
+<p><em>Interested in reading other blog posts about using machine learning libraries and toolkits with IBM Cloud Functions? See <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">these posts</a> for <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">more details</a>.</em></p>
+
+<h3>MAX model images</h3>
+
+<p>IBM&#8217;s <a href="https://developer.ibm.com/exchanges/models/all/">Model Asset eXchange</a> publishes Docker images for each model, alongside the pre-trained model files. Images expose a <a href="https://github.com/IBM/MAX-Text-Sentiment-Classifier#3-use-the-model">HTTP API for predictions</a> using the model on port 5000, built using Python and Flask. <a href="http://max-text-sentiment-classifier.max.us-south.containers.appdomain.cloud/">Swagger files</a> for the APIs describe the available operations, input parameters and response bodies.</p>
+
+<p>These images use a custom application framework (<a href="https://pypi.org/project/maxfw/">maxfw</a>), based on Flask, to standardise exposing MAX models as HTTP APIs. This framework handles input parameter validation, response marshalling, CORS support, etc. This allows model runtimes to just implement the prediction API handlers, rather than the entire HTTP application.</p>
+
+<p>Since the framework already handles exposing the model as a HTTP API, I started looking for a way to simulate an external HTTP request coming into the framework. If this was possible, I could trigger this fake request from a Python Web Action to perform the model classification from input parameters. The Web Action would then covert the HTTP response returned into the valid Web Action response parameters.</p>
+
+<h3>flask test client</h3>
+
+<p>Reading through the Flask <a href="http://flask.pocoo.org/docs/1.0/testing/">documentation</a>, I came across the perfect solution! 👏👏👏</p>
+
+<blockquote><p>Flask provides a way to test your application by exposing the Werkzeug test Client and handling the context locals for you. You can then use that with your favourite testing solution.</p></blockquote>
+
+<p>This allows application routes to be executed with the <a href="https://werkzeug.palletsprojects.com/en/0.15.x/test/#werkzeug.test.Client">test client</a>, without actually running the HTTP server.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="n">max_app</span> <span class="o">=</span> <span class="n">MAXApp</span><span class="p">(</span><span class="n">API_TITLE</span><span class="p">,</span> <span class="n">API_DESC</span><span class="p">,</span> <span class="n">API_VERSION</span><span class="p">)</span>
+</span><span class='line'><span class="n">max_app</span><span class="o">.</span><span class="n">add_api</span><span class="p">(</span><span class="n">ModelPredictAPI</span><span class="p">,</span> <span class="s">&#39;/predict&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="n">test_client</span> <span class="o">=</span> <span class="n">max_app</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">test_client</span><span class="p">()</span>
+</span><span class='line'><span class="n">r</span> <span class="o">=</span> <span class="n">test_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s">&#39;/model/predict&#39;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using this code within a serverless Python function allows function invocations to trigger the prediction API.  The serverless function only has to convert input parameters to the fake HTTP request and then serialise the response back to JSON.</p>
+
+<h3>python docker action</h3>
+
+<p>The custom MAX model runtime image needs to implement the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">HTTP API expected</a> by Apache OpenWhisk. This API is used to instantiate the runtime environment and then pass in invocation parameters on each request. Since the runtime image contains all files and code need to process requests, the <code>/init</code> handler becomes a <a href="https://english.stackexchange.com/questions/25993/what-does-no-op-mean">no-op</a>. The <code>/run</code> handler converts <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#http-context">Web Action HTTP parameters</a> into the fake HTTP request.</p>
+
+<p>Here is the Python script used to proxy incoming Web Actions requests to the framework model service.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+</pre></td><td class='code'><pre><code class='python'><span class='line'><span class="kn">from</span> <span class="nn">maxfw.core</span> <span class="kn">import</span> <span class="n">MAXApp</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">api</span> <span class="kn">import</span> <span class="n">ModelPredictAPI</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">config</span> <span class="kn">import</span> <span class="n">API_TITLE</span><span class="p">,</span> <span class="n">API_DESC</span><span class="p">,</span> <span class="n">API_VERSION</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">json</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">base64</span>
+</span><span class='line'><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">Flask</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">Response</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">max_app</span> <span class="o">=</span> <span class="n">MAXApp</span><span class="p">(</span><span class="n">API_TITLE</span><span class="p">,</span> <span class="n">API_DESC</span><span class="p">,</span> <span class="n">API_VERSION</span><span class="p">)</span>
+</span><span class='line'><span class="n">max_app</span><span class="o">.</span><span class="n">add_api</span><span class="p">(</span><span class="n">ModelPredictAPI</span><span class="p">,</span> <span class="s">&#39;/predict&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Use flask test client to simulate HTTP requests for the prediction APIs</span>
+</span><span class='line'><span class="c"># HTTP request data will come from action invocation parameters, neat huh? :)</span>
+</span><span class='line'><span class="n">test_client</span> <span class="o">=</span> <span class="n">max_app</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">test_client</span><span class="p">()</span>
+</span><span class='line'><span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># This implements the Docker runtime API used by Apache OpenWhisk</span>
+</span><span class='line'><span class="c"># https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md</span>
+</span><span class='line'><span class="c"># /init is a no-op as everything is provided in the image.</span>
+</span><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&quot;/init&quot;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s">&#39;POST&#39;</span><span class="p">])</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">init</span><span class="p">():</span>
+</span><span class='line'>    <span class="k">return</span> <span class="s">&#39;&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c"># Action invocation requests will be received as the `value` parameter in request body.</span>
+</span><span class='line'><span class="c"># Web Actions provide HTTP request parameters as `__ow_headers` &amp; `__ow_body` parameters.</span>
+</span><span class='line'><span class="nd">@app.route</span><span class="p">(</span><span class="s">&quot;/run&quot;</span><span class="p">,</span> <span class="n">methods</span><span class="o">=</span><span class="p">[</span><span class="s">&#39;POST&#39;</span><span class="p">])</span>
+</span><span class='line'><span class="k">def</span> <span class="nf">run</span><span class="p">():</span>
+</span><span class='line'>    <span class="n">body</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">json</span>
+</span><span class='line'>    <span class="n">form_body</span> <span class="o">=</span> <span class="n">body</span><span class="p">[</span><span class="s">&#39;value&#39;</span><span class="p">][</span><span class="s">&#39;__ow_body&#39;</span><span class="p">]</span>
+</span><span class='line'>    <span class="n">headers</span> <span class="o">=</span> <span class="n">body</span><span class="p">[</span><span class="s">&#39;value&#39;</span><span class="p">][</span><span class="s">&#39;__ow_headers&#39;</span><span class="p">]</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># binary image content provided as base64 strings</span>
+</span><span class='line'>    <span class="n">content</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">form_body</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># send fake HTTP request to prediction API with invocation data</span>
+</span><span class='line'>    <span class="n">r</span> <span class="o">=</span> <span class="n">test_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s">&#39;/model/predict&#39;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">r_headers</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">r</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c"># binary data must be encoded as base64 strings to return in JSON response</span>
+</span><span class='line'>    <span class="n">is_image</span> <span class="o">=</span> <span class="n">r_headers</span><span class="p">[</span><span class="s">&#39;Content-Type&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;image&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="n">r_data</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_image</span> <span class="k">else</span> <span class="n">r</span><span class="o">.</span><span class="n">data</span>
+</span><span class='line'>    <span class="n">body</span> <span class="o">=</span> <span class="n">r_data</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&quot;utf-8&quot;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">response</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;headers&#39;</span><span class="p">:</span> <span class="n">r_headers</span><span class="p">,</span> <span class="s">&#39;status&#39;</span><span class="p">:</span> <span class="n">r</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="s">&#39;body&#39;</span><span class="p">:</span> <span class="n">body</span> <span class="p">}</span>
+</span><span class='line'>    <span class="k">print</span> <span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">status</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">Response</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">response</span><span class="p">),</span> <span class="n">status</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">mimetype</span><span class="o">=</span><span class="s">&#39;application/json&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&#39;0.0.0.0&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8080</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>building into an image</h3>
+
+<p>Since the MAX models already exist as public Docker images, those images can be used as base images when building custom runtimes. Those base images handle adding model files and all dependencies needed to execute them into the image.</p>
+
+<p>This is the <code>Dockerfile</code> used by the build script to create the custom model image. The <code>model</code> parameter refers to the build argument containing the model name.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>ARG model
+</span><span class='line'>FROM codait/<span class="k">${</span><span class="nv">model</span><span class="k">}</span>:latest
+</span><span class='line'>
+</span><span class='line'>ADD openwhisk.py .
+</span><span class='line'>
+</span><span class='line'>EXPOSE 8080
+</span><span class='line'>
+</span><span class='line'>CMD python openwhisk.py
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This is then used from the following build script to create a custom runtime image for the model.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'><span class="c">#!/bin/bash</span>
+</span><span class='line'>
+</span><span class='line'><span class="nb">set</span> -e -u
+</span><span class='line'>
+</span><span class='line'><span class="k">for </span>model in <span class="nv">$MODELS</span>; <span class="k">do</span>
+</span><span class='line'><span class="k">  </span><span class="nb">echo</span> <span class="s2">&quot;Building $model runtime image&quot;</span>
+</span><span class='line'>  docker build -t <span class="nv">$model</span> --build-arg <span class="nv">model</span><span class="o">=</span><span class="nv">$model</span> .
+</span><span class='line'>  <span class="nb">echo</span> <span class="s2">&quot;Pushing $model to Docker Hub&quot;</span>
+</span><span class='line'>  docker tag <span class="nv">$model</span> <span class="nv">$USERNAME</span>/<span class="nv">$model</span>
+</span><span class='line'>  docker push <span class="nv">$USERNAME</span>/<span class="nv">$model</span>
+</span><span class='line'><span class="k">done</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once the image is published to Docker Hub, it can be referenced when creating new Web Actions (using the <code>—docker</code> parameter). 😎</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='bash'><span class='line'>ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web <span class="nb">true</span> -m 512
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Conclusion</h2>
+
+<p>IBM&#8217;s Model Asset eXchange is a curated collection of Machine Learning models, ready to deploy to the cloud for a variety of tasks. All models are available as a series of public Docker images. Models images automatically expose HTTP APIs for classifications.</p>
+
+<p>Documentation in the model repositories explains how to run them locally and deploy using Kubernetes, but what about using on serverless cloud platforms? Serverless platforms are becoming a popular option for deploying Machine Learning models, due to horizontal scalability and cost advantages.</p>
+
+<p>Looking through the source code for the model images, I discovered a mechanism to hook into the custom model framework used to export the model files as HTTP APIs. This allowed me write a simple wrapper script to proxy serverless function invocations to the model prediction APIs. API responses would be serialised back into the Web Action response format.</p>
+
+<p>Building this script into a new Docker image, using the existing model image as the base image, created a new runtime which could be used on the platform. Web Actions created from this runtime image would automatically expose the same HTTP APIs as the existing image!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2639,497 +3059,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2019/01/25/provisioning-ibm-cloud-services-with-terraform/">Provisioning IBM Cloud Services With Terraform</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2019-01-25T10:09:00+00:00" pubdate data-updated="true">Jan 25<span>th</span>, 2019</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><strong>This blog post will teach you how to provision <a href="https://cloud.ibm.com/catalog">applications services</a> on <a href="https://cloud.ibm.com/">IBM Cloud</a> with <a href="https://www.terraform.io/">Terraform</a>.</strong></p>
-
-<p>Terraform is an open-source &#8221;<a href="https://en.wikipedia.org/wiki/Infrastructure_as_code">infrastructure-as-code</a>&#8221; tool. It allows cloud resources to be defined using a <a href="https://www.terraform.io/docs/configuration/syntax.html">declarative configuration file</a>. The <a href="https://www.terraform.io/docs/commands/index.html">Terraform CLI</a> then uses this file to automatically provision and maintain cloud infrastructure needed by your application. This allows the creation of reproducible environments in the cloud across your application life cycle.</p>
-
-<p>IBM Cloud created an <a href="https://github.com/IBM-Cloud/terraform-provider-ibm">official provider plugin</a> for Terraform. This allows IBM Cloud services to be <a href="https://ibm-cloud.github.io/tf-ibm-docs/">declared</a> in Terraform configuration files. This is a much better approach than using the CLI or IBM Cloud UI to create application services manually.</p>
-
-<p><strong>The following steps needed to set up Terraform with IBM Cloud will be explained.</strong></p>
-
-<ul>
-<li><em>Install Terraform CLI tools and IBM Cloud Provider Plugin.</em></li>
-<li><em>Create API keys for platform access.</em></li>
-<li><em>Terraform configuration for IBM Cloud services.</em></li>
-<li><em>Terraform CLI commands to provision IBM Cloud services.</em></li>
-</ul>
-
-
-<p>Ready? Let&#8217;s go! 😎😎😎</p>
-
-<h2>Install Terraform</h2>
-
-<ul>
-<li><a href="https://www.terraform.io/intro/getting-started/install.html">Download and install</a> Terraform for your system.</li>
-</ul>
-
-
-<p>Once installed, the <code>terraform</code> command will be available.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ terraform
-</span><span class='line'>Usage: terraform [-version] [-help] &lt;command&gt; [args]
-</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Install IBM Cloud Terraform Plugin</h2>
-
-<ul>
-<li>Download the IBM Cloud Terraform plugin binary from the <a href="https://github.com/IBM-Cloud/terraform-provider-ibm/releases">Github releases page</a>.</li>
-<li>Unzip the release archive to extract the plugin binary (<code>terraform-provider-ibm_vX.Y.Z</code>).</li>
-<li>Move the binary into the <a href="https://www.terraform.io/docs/configuration/providers.html#third-party-plugins">Terraform plugins directory</a> for the platform.
-
-<ul>
-<li><em>Linux/Unix/OS X:</em> <code>~/.terraform.d/plugins</code></li>
-<li><em>Windows:</em> <code>%APPDATA%\terraform.d\plugins</code></li>
-</ul>
-</li>
-</ul>
-
-
-<h2>IBM Cloud Authentication Credentials</h2>
-
-<p>IBM Cloud&#8217;s Terraform provider plugin needs authentication credentials to interact with the platform. This is best handled by creating an API key and exporting as an environment variable. API keys can be created from the <a href="https://console.bluemix.net/docs/cli/reference/ibmcloud/download_cli.html#install_use">IBM Cloud CLI</a> or the <a href="https://cloud.ibm.com/iam#/users">web site</a>.</p>
-
-<h3>using the cli</h3>
-
-<ul>
-<li>Run the <a href="https://console.bluemix.net/docs/cli/reference/ibmcloud/cli_api_policy.html#ibmcloud_iam_api_key_create">following command</a> to generate an API key.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud iam api-key-create terraform-api-key</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <code>apikey</code> property in the JSON output is the API key value.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>{
-</span><span class='line'>  "name": "terraform-api-key",
-</span><span class='line'>  "description": "...",
-</span><span class='line'>  "apikey": "xxx-yyy-zzz",
-</span><span class='line'>  "createdAt": "...",
-</span><span class='line'>  "locked": false,
-</span><span class='line'>  "uuid": "..."
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Store this value securely. API keys cannot be retrieved after creation!</em></p>
-
-<h3>using the web site.</h3>
-
-<ul>
-<li>From the <a href="https://cloud.ibm.com/iam#/users">IAM Users page</a>, select a user account.</li>
-<li>Under the &#8221;<em>API keys</em>&#8221; table, click the &#8221;<em>Create an IBM Cloud API Key</em>&#8221; button.</li>
-<li>Give the key a name and (optional) description.</li>
-<li>Make a note of the API key value returned. API keys cannot be retrieved after creation.</li>
-</ul>
-
-
-<h3>exporting as an environment variable</h3>
-
-<ul>
-<li>Expose the API key as an environment variable to provide credentials to Terraform.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>export BM_API_KEY=API_KEY_VALUE</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Terraform configuration</h2>
-
-<p>We can now start to write configuration files to describe IBM Cloud services we want to provision. Terraform configuration files are human-readable text files, ending with the <code>.tf</code> extension, which contain <a href="https://github.com/hashicorp/hcl">HashiCorp Configuration Language</a> (HCL) syntax.</p>
-
-<p>IBM Cloud platform services come in two flavours: IAM managed resource instances and older Cloud Foundry-based service instances. This is due to the history of IBM Cloud starting as Bluemix, a Cloud Foundry-based cloud platform. Both platform services types can be provisioned using Terraform.</p>
-
-<p>Most IBM Cloud platform services are available today as &#8221;<strong>resource instances</strong>&#8221;.</p>
-
-<h3>create new configuration file</h3>
-
-<ul>
-<li>Create a new <code>infra.tf</code> file which contains the following syntax.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>provider "ibm" {}</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>add resource instances</h3>
-
-<p><a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/resource_instance.html">Resource instances</a> can be added to the configuration file as follows.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>resource "ibm_resource_instance" "resource_instance_name" {
-</span><span class='line'>  name              = "test"
-</span><span class='line'>  service           = "service-id"
-</span><span class='line'>  plan              = "service-plan"
-</span><span class='line'>  location          = "region-info"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><code>resource_instance_name</code> - identifier for this service in the configuration, referenced by service keys.</li>
-<li><code>name</code> - user-provided service name used by the platform to identify service.</li>
-<li><code>service</code> - service identifier on the platform (can be found in the service documentation page).</li>
-<li><code>plan</code> - service plan used for billing.</li>
-<li><code>location</code> - cloud region used during service provisioning.</li>
-</ul>
-
-
-<p>Here is an example of provisioning a <a href="https://cloud.ibm.com/catalog/services/cloudant">Cloudant</a> database using the <code>ibm_resource_instance</code> configuration.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>resource "ibm_resource_instance" "cloudant" {
-</span><span class='line'>  name              = "my-cloudant-db"
-</span><span class='line'>  service           = "cloudantnosqldb"
-</span><span class='line'>  plan              = "lite"
-</span><span class='line'>  location          = "us-south"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Other parameters are supported for resource configuration, see the <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/resource_instance.html">docs</a> for more details&#8230;</em></p>
-
-<h3>add resource keys</h3>
-
-<p>Applications accessing resource instances need service credentials. Access keys can also be provisioned using <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/resource_key.html">Terraform configuration</a>.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>resource "ibm_resource_key" "resource_key_name" {
-</span><span class='line'>  name                 = "my-key-name"
-</span><span class='line'>  role                 = "&lt;IAM_ROLE&gt;"
-</span><span class='line'>  resource_instance_id = "${ibm_resource_instance.resource_instance_name.id}"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><code>name</code> - user-provided key name used by the platform to identify the credentials.</li>
-<li><code>role</code> - IBM Cloud <a href="https://cloud.ibm.com/docs/iam/users_roles.html#iamusermanrol">IAM roles</a> (as supported by the service, e.g. Writer or Reader).</li>
-</ul>
-
-
-<p>Here is an example of provisioning a resource key for the <a href="https://cloud.ibm.com/catalog/services/cloudant">Cloudant</a> example from above.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>resource "ibm_resource_key" "cloudant_key" {
-</span><span class='line'>  name                  = "my-db-key"
-</span><span class='line'>  role                  = "Manager"
-</span><span class='line'>  resource_instance_id  = "${ibm_resource_instance.cloudant.id}"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>(optional) add services instances to configuration</h3>
-
-<p>Use the <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/service_instance.html">following configuration</a> to provision older Cloud Foundry services.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>resource "ibm_service_instance" "service_instance_name" {
-</span><span class='line'>  name       = "test"
-</span><span class='line'>  space_guid = "cf-space-guid"
-</span><span class='line'>  service    = "service-id"
-</span><span class='line'>  plan       = "service-plan"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><code>service_instance_name</code> - identifier for this service in the configuration, referenced by service keys.</li>
-<li><code>name</code> - user-provided service name used by the platform to identify the service.</li>
-<li><code>service</code> - service identifier on the platform (can be found in the service documentation page).</li>
-<li><code>plan</code> - service plan used for billing.</li>
-</ul>
-
-
-<h3>(optional) add service instance keys</h3>
-
-<p>Applications accessing service instances need service credentials. Service keys can also be provisioned using <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/service_key.html">Terraform configuration</a>.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>resource "ibm_service_key" "service_key_name" {
-</span><span class='line'>  name                 = "my-key-name"
-</span><span class='line'>  service_instance_guid = "${ibm_service_instance.service_instance_name.id}"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><code>name</code> - user-provided key name used by the platform to identify the credentials.</li>
-<li><code>service_instance_guid</code> - Service instance GUID.</li>
-</ul>
-
-
-<h3>add output configuration</h3>
-
-<p>Accessing service keys and other service details is handled with <code>output</code> <a href="https://www.terraform.io/docs/configuration/outputs.html">configuration</a> in Terraform files.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>output "app_credentials" {
-</span><span class='line'>  value = "${ibm_resource_key.resource_key_name.credentials}"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Output values can be logged to the console using the <a href="https://www.terraform.io/docs/commands/output.html">Terraform CLI</a>.</p>
-
-<p>Here is an example of accessing Cloudant credentials provisioned in the example above.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>output "cloudant_credentials" {
-</span><span class='line'>  value = "${ibm_resource_key.cloudant_key.credentials}"
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Run Terraform commands</h2>
-
-<p>Having finished the configuration file to describe our applications services, the Terraform CLI can now provision those services!</p>
-
-<ul>
-<li><a href="https://www.terraform.io/docs/commands/init.html">Initialise</a> the terraform project.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>terraform init</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><a href="https://www.terraform.io/docs/commands/validate.html">Validate</a> the configuration file for syntax errors.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>terraform validate</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><a href="https://www.terraform.io/docs/commands/plan.html">Display</a> the platform changes to be executed on the configuration file.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>terraform plan</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Here is the example output from running that command with the Cloudant database example.</em></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-<span class='line-number'>28</span>
-<span class='line-number'>29</span>
-<span class='line-number'>30</span>
-<span class='line-number'>31</span>
-<span class='line-number'>32</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>Refreshing Terraform state in-memory prior to plan...
-</span><span class='line'>The refreshed state will be used to calculate this plan, but will not be
-</span><span class='line'>persisted to local or remote state storage.
-</span><span class='line'>
-</span><span class='line'>------------------------------------------------------------------------
-</span><span class='line'>
-</span><span class='line'>An execution plan has been generated and is shown below.
-</span><span class='line'>Resource actions are indicated with the following symbols:
-</span><span class='line'>  + create
-</span><span class='line'>
-</span><span class='line'>Terraform will perform the following actions:
-</span><span class='line'>
-</span><span class='line'>  + ibm_resource_instance.cloudant
-</span><span class='line'>      id:                   &lt;computed&gt;
-</span><span class='line'>      location:             "us-south"
-</span><span class='line'>      name:                 "my-cloudant-db"
-</span><span class='line'>      plan:                 "lite"
-</span><span class='line'>      service:              "cloudantnosqldb"
-</span><span class='line'>      status:               &lt;computed&gt;
-</span><span class='line'>
-</span><span class='line'>  + ibm_resource_key.cloudant_key
-</span><span class='line'>      id:                   &lt;computed&gt;
-</span><span class='line'>      credentials.%:        &lt;computed&gt;
-</span><span class='line'>      name:                 "my-db-key"
-</span><span class='line'>      parameters.%:         &lt;computed&gt;
-</span><span class='line'>      resource_instance_id: "${ibm_resource_instance.cloudant.id}"
-</span><span class='line'>      role:                 "Manager"
-</span><span class='line'>      status:               &lt;computed&gt;
-</span><span class='line'>
-</span><span class='line'>Plan: 2 to add, 0 to change, 0 to destroy.
-</span><span class='line'>
-</span><span class='line'>------------------------------------------------------------------------
-</span></code></pre></td></tr></table></div></figure>
-
-
-<ul>
-<li><a href="https://www.terraform.io/docs/commands/apply.html">Execute</a> the planned changes using <code>apply</code>.</li>
-</ul>
-
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>terraform apply -auto-approve</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Terraform will now provision the platform services, resources keys and output credentials to the console.</p>
-
-<p><em>Here is the example output from running that command with the Cloudant database example.</em></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-<span class='line-number'>22</span>
-<span class='line-number'>23</span>
-<span class='line-number'>24</span>
-<span class='line-number'>25</span>
-<span class='line-number'>26</span>
-<span class='line-number'>27</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>ibm_resource_instance.cloudant: Creating...
-</span><span class='line'>  location: "" =&gt; "us-south"
-</span><span class='line'>  name:     "" =&gt; "my-cloudant-db"
-</span><span class='line'>  plan:     "" =&gt; "lite"
-</span><span class='line'>  service:  "" =&gt; "cloudantnosqldb"
-</span><span class='line'>  status:   "" =&gt; "&lt;computed&gt;"
-</span><span class='line'>ibm_resource_instance.cloudant: Still creating... (10s elapsed)
-</span><span class='line'>ibm_resource_instance.cloudant: Still creating... (20s elapsed)
-</span><span class='line'>ibm_resource_instance.cloudant: Creation complete after 21s (ID: ...)
-</span><span class='line'>ibm_resource_key.cloudant_key: Creating...
-</span><span class='line'>  credentials.%:        "" =&gt; "&lt;computed&gt;"
-</span><span class='line'>  name:                 "" =&gt; "my-db-key"
-</span><span class='line'>  parameters.%:         "" =&gt; "&lt;computed&gt;"
-</span><span class='line'>  resource_instance_id: "" =&gt; "crn:v1:bluemix:public:cloudantnosqldb:us-south:a/...::"
-</span><span class='line'>  role:                 "" =&gt; "Manager"
-</span><span class='line'>  status:               "" =&gt; "&lt;computed&gt;"
-</span><span class='line'>ibm_resource_key.cloudant_key: Creation complete after 8s (ID: ...)
-</span><span class='line'>
-</span><span class='line'>Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
-</span><span class='line'>
-</span><span class='line'>Outputs:
-</span><span class='line'>
-</span><span class='line'>cloudant_credentials = {
-</span><span class='line'>  apikey = &lt;API_KEY_VALUE&gt;
-</span><span class='line'>  host = &lt;DB_HOST&gt;
-</span><span class='line'>  ...
-</span><span class='line'>}</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>API keys from the <code>cloudant_credentials</code> output section can be used applications to interact with the provisioned database! 👏👏👏</strong></p>
-
-<h2>Conclusion</h2>
-
-<p>Provisioning cloud services using Terraform is a great way to manage application resources on IBM Cloud.</p>
-
-<p>Applications resources are defined in a declarative configuration file, following the &#8220;infrastructure-as-code&#8221; approach to managing cloud environments. This configuration is maintained in the application&#8217;s source code repository to enable reproducible environments.</p>
-
-<p>IBM Cloud provides an official provider plugin for Terraform. This allows IBM Cloud services to be defined through custom configuration primitives. Developers can then use the Terraform CLI to provision new resources and extract service keys needed to access those services. 💯💯💯</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -3145,6 +3074,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/">Accessing Long-Running Apache OpenWhisk Actions Results</a>
       </li>
     
@@ -3158,10 +3091,6 @@
     
       <li class="post">
         <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/">Automating Apache OpenWhisk Releases With Serverless</a>
       </li>
     
   </ul>

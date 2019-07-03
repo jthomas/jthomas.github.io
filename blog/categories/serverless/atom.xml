@@ -4,7 +4,7 @@
   <title><![CDATA[Category: serverless | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/serverless/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-05-14T15:32:11+01:00</updated>
+  <updated>2019-07-03T14:10:55+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,315 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless APIs for MAX models]]></title>
+    <link href="http://jamesthom.as/blog/2019/07/02/serverless-max-models/"/>
+    <updated>2019-07-02T10:25:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/07/02/serverless-max-models</id>
+    <content type="html"><![CDATA[<p>IBM's <a href="https://developer.ibm.com/exchanges/models/">Model Asset eXchange</a> provides a <a href="https://developer.ibm.com/exchanges/models/all/">curated list</a> of free Machine Learning models for developers. Models currently published include detecting <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">emotions</a> or <a href="https://developer.ibm.com/exchanges/models/all/max-facial-age-estimator/">ages</a> in faces from images, <a href="https://developer.ibm.com/exchanges/models/all/max-weather-forecaster/">forecasting the weather</a>, converting <a href="https://developer.ibm.com/exchanges/models/all/max-speech-to-text-converter/">speech to text</a> and more. Models are pre-trained and ready for use in the cloud.</p>
+
+<p>Models are published as series of <a href="https://hub.docker.com/search?q=codait&amp;type=image">public Docker images</a>. Images automatically expose a HTTP API for model predictions. Documentation in the model repositories explains how to run images locally (using Docker) or deploy to the cloud (using Kubernetes). This got me thinking…</p>
+
+<p><strong>Could MAX models be used from serverless functions?</strong> 🤔</p>
+
+<p>Running machine learning models on serverless platforms can take advantage of the horizontal scalability to process large numbers of computationally intensive classification tasks in parallel. Coupled with the serverless pricing structure ("<em>no charge for idle</em>"), this can be an extremely cheap and effective way to perform model classifications in the cloud.</p>
+
+<p><strong>CHALLENGE ACCEPTED!</strong> 🦸‍♂️🦸‍♀️</p>
+
+<p>After a couple days of experimentation, I had worked out an easy way to <a href="https://github.com/jthomas/serverless-max-models">automatically expose MAX models as Serverless APIs</a> on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.  🎉🎉🎉</p>
+
+<p><em>I've given instructions below on how to create those APIs from the models using a simple script. If you just want to use the models, follow those instructions. If you are interested in understanding how this works, keep reading as I explain afterwards what I did...</em></p>
+
+<h2>Running MAX models on IBM Cloud Functions</h2>
+
+<p><a href="https://github.com/jthomas/serverless-max-models">This repository</a> contains a <a href="https://github.com/jthomas/serverless-max-models/blob/master/build.sh">bash script</a> which builds custom Docker runtimes with MAX models for usage on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>. Pushing these images to Docker Hub allows IBM Cloud Functions to use them as <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom runtimes</a>. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> created from these custom runtime images expose the same Prediction API described in the model documentation. They can be used with no further changes or custom code needed.</p>
+
+<h3>prerequisites</h3>
+
+<p>Please follow the links below to set up the following tools before proceeding.</p>
+
+<ul>
+<li><a href="https://www.docker.com/">Docker</a></li>
+<li><a href="https://hub.docker.com/">Docker Hub account</a></li>
+<li><a href="https://cloud.ibm.com/registration">IBM Cloud account</a></li>
+<li><a href="https://cloud.ibm.com/openwhisk/learn/cli">IBM Cloud Functions CLI installed</a></li>
+</ul>
+
+
+<p><strong>Check out the "<a href="https://github.com/jthomas/serverless-max-models">Serverless MAX Models</a> repository. Run all the following commands from that folder.</strong></p>
+
+<p><code>
+git clone https://github.com/jthomas/serverless-max-models
+cd serverless-max-models
+</code></p>
+
+<h3>build custom runtime images</h3>
+
+<ul>
+<li>Set the following environment variables (<code>MODELS</code>) with <a href="https://hub.docker.com/search?q=codait&amp;type=image">MAX model names</a> and run build script.
+
+<ul>
+<li><code>MODELS</code>: MAX model names, e.g. <code>max-facial-emotion-classifier</code></li>
+<li><code>USERNAME</code>: Docker Hub username.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><code>
+MODELS="..." USERNAME="..." ./build.sh
+</code></p>
+
+<p>This will create Docker images locally with the MAX model names and push to Docker Hub for usage in IBM Cloud Functions. <strong>IBM Cloud Functions only supports public Docker images as custom runtimes.</strong></p>
+
+<h3>create actions using custom runtimes</h3>
+
+<ul>
+<li>Create a Web Action using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker runtime</a>.</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512
+</code></p>
+
+<ul>
+<li>Retrieve the Web Action URL (<code>https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/&lt;ACTION&gt;</code>)</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action get &lt;MODEL_IMAGE&gt; --url
+</code></p>
+
+<h3>invoke web action url with prediction api parameters</h3>
+
+<p>Use the same API request parameters as defined in the Prediction API specification with the Web Action URL. This will invoke model predictions and return the result as the HTTP response, e.g.</p>
+
+<p><code>
+curl -F "image=@assets/happy-baby.jpeg" -XPOST &lt;WEB_ACTION_URL&gt;
+</code></p>
+
+<p><em>NOTE: The first invocation after creating an action may incur long cold-start delays due to the platform pulling the remote image into the local registry. Once the image is available in the platform, both further cold and warm invocations will be much faster.</em></p>
+
+<h2>Example</h2>
+
+<p>Here is an example of creating a serverless API using the <code>max-facial-emotion-classifier</code> <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">MAX model</a>. Further examples of models which have been tested are available <a href="https://github.com/jthomas/serverless-max-models/blob/master/README.md#models">here</a>. If you encounter problems, please <a href="https://github.com/jthomas/serverless-max-models/issues">open an issue</a> on Github.</p>
+
+<h3>max-facial-emotion-classifier</h3>
+
+<ul>
+<li><a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">Facial Emotion Classifier (<code>max-facial-emotion-classifier</code>)</a></li>
+</ul>
+
+
+<p>Start by creating the action using the custom runtime and then retrieve the Web Action URL.</p>
+
+<p><code>
+$ ibmcloud wsk action create max-facial-emotion-classifier --docker &lt;DOCKERHUB_NAME&gt;/max-facial-emotion-classifier --web true -m 512
+ok: created action max-facial-emotion-classifier
+$ ibmcloud wsk action get max-facial-emotion-classifier --url
+ok: got action max-facial-emotion-classifier
+https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier
+</code></p>
+
+<p>According to the <a href="http://max-facial-emotion-classifier.max.us-south.containers.appdomain.cloud/">API definition</a> for this model, the prediction API expects a form submission with an image file to classify. Using a <a href="https://github.com/IBM/MAX-Facial-Emotion-Classifier/blob/master/assets/happy-baby.jpeg">sample image</a> from the model repo, the model can be tested using curl.</p>
+
+<p><code>
+$ curl -F "image=@happy-baby.jpeg" -XPOST https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier
+</code></p>
+
+<p>```json
+{
+  "status": "ok",
+  "predictions": [</p>
+
+<pre><code>{
+  "detection_box": [
+    0.15102639296187684,
+    0.3828125,
+    0.5293255131964809,
+    0.5830078125
+  ],
+  "emotion_predictions": [
+    {
+      "label_id": "1",
+      "label": "happiness",
+      "probability": 0.9860254526138306
+    },
+    ...
+  ]
+}
+</code></pre>
+
+<p>  ]
+}
+```</p>
+
+<h4>performance</h4>
+
+<p><em>Example Invocation Duration (Cold):</em> ~4.8 seconds</p>
+
+<p><em>Example Invocation Duration (Warm):</em> ~ 800 ms</p>
+
+<h2>How does this work?</h2>
+
+<h3>background</h3>
+
+<p>Running machine learning classifications using pre-trained models from serverless functions has historically been challenging due to the following reason…</p>
+
+<blockquote><p>Developers do not control runtime environments in (most) serverless cloud platforms. Libraries and dependencies needed by the functions must be provided in the deployment package. Most platforms limit deployment package sizes (~50MB compressed &amp; ~250MB uncompressed).</p></blockquote>
+
+<p>Machine Learning libraries and models can be much larger than those deployment size limits. This stops them being included in deployment packages. Loading files dynamically during invocations may be possible but incurs extremely long cold-start delays and additional costs.</p>
+
+<p>Fortunately, <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is based on the open-source serverless project, <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. This platform supports bespoke function runtimes using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker images</a>. Machine learning libraries and models can therefore be provided in custom runtimes. This removes the need to include them in deployment packages or be loaded at runtime.</p>
+
+<p><em>Interested in reading other blog posts about using machine learning libraries and toolkits with IBM Cloud Functions? See <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">these posts</a> for <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">more details</a>.</em></p>
+
+<h3>MAX model images</h3>
+
+<p>IBM's <a href="https://developer.ibm.com/exchanges/models/all/">Model Asset eXchange</a> publishes Docker images for each model, alongside the pre-trained model files. Images expose a <a href="https://github.com/IBM/MAX-Text-Sentiment-Classifier#3-use-the-model">HTTP API for predictions</a> using the model on port 5000, built using Python and Flask. <a href="http://max-text-sentiment-classifier.max.us-south.containers.appdomain.cloud/">Swagger files</a> for the APIs describe the available operations, input parameters and response bodies.</p>
+
+<p>These images use a custom application framework (<a href="https://pypi.org/project/maxfw/">maxfw</a>), based on Flask, to standardise exposing MAX models as HTTP APIs. This framework handles input parameter validation, response marshalling, CORS support, etc. This allows model runtimes to just implement the prediction API handlers, rather than the entire HTTP application.</p>
+
+<p>Since the framework already handles exposing the model as a HTTP API, I started looking for a way to simulate an external HTTP request coming into the framework. If this was possible, I could trigger this fake request from a Python Web Action to perform the model classification from input parameters. The Web Action would then covert the HTTP response returned into the valid Web Action response parameters.</p>
+
+<h3>flask test client</h3>
+
+<p>Reading through the Flask <a href="http://flask.pocoo.org/docs/1.0/testing/">documentation</a>, I came across the perfect solution! 👏👏👏</p>
+
+<blockquote><p>Flask provides a way to test your application by exposing the Werkzeug test Client and handling the context locals for you. You can then use that with your favourite testing solution.</p></blockquote>
+
+<p>This allows application routes to be executed with the <a href="https://werkzeug.palletsprojects.com/en/0.15.x/test/#werkzeug.test.Client">test client</a>, without actually running the HTTP server.</p>
+
+<p><code>python
+max_app = MAXApp(API_TITLE, API_DESC, API_VERSION)
+max_app.add_api(ModelPredictAPI, '/predict')
+test_client = max_app.app.test_client()
+r = test_client.post('/model/predict', data=content, headers=headers)
+</code></p>
+
+<p>Using this code within a serverless Python function allows function invocations to trigger the prediction API.  The serverless function only has to convert input parameters to the fake HTTP request and then serialise the response back to JSON.</p>
+
+<h3>python docker action</h3>
+
+<p>The custom MAX model runtime image needs to implement the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">HTTP API expected</a> by Apache OpenWhisk. This API is used to instantiate the runtime environment and then pass in invocation parameters on each request. Since the runtime image contains all files and code need to process requests, the <code>/init</code> handler becomes a <a href="https://english.stackexchange.com/questions/25993/what-does-no-op-mean">no-op</a>. The <code>/run</code> handler converts <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#http-context">Web Action HTTP parameters</a> into the fake HTTP request.</p>
+
+<p>Here is the Python script used to proxy incoming Web Actions requests to the framework model service.</p>
+
+<p>```python
+from maxfw.core import MAXApp
+from api import ModelPredictAPI
+from config import API_TITLE, API_DESC, API_VERSION
+import json
+import base64
+from flask import Flask, request, Response</p>
+
+<p>max_app = MAXApp(API_TITLE, API_DESC, API_VERSION)
+max_app.add_api(ModelPredictAPI, '/predict')</p>
+
+<h1>Use flask test client to simulate HTTP requests for the prediction APIs</h1>
+
+<h1>HTTP request data will come from action invocation parameters, neat huh? :)</h1>
+
+<p>test_client = max_app.app.test_client()
+app = Flask(<strong>name</strong>)</p>
+
+<h1>This implements the Docker runtime API used by Apache OpenWhisk</h1>
+
+<h1>https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md</h1>
+
+<h1>/init is a no-op as everything is provided in the image.</h1>
+
+<p>@app.route("/init", methods=['POST'])
+def init():</p>
+
+<pre><code>return ''
+</code></pre>
+
+<h1>Action invocation requests will be received as the <code>value</code> parameter in request body.</h1>
+
+<h1>Web Actions provide HTTP request parameters as <code>__ow_headers</code> &amp; <code>__ow_body</code> parameters.</h1>
+
+<p>@app.route("/run", methods=['POST'])
+def run():</p>
+
+<pre><code>body = request.json
+form_body = body['value']['__ow_body']
+headers = body['value']['__ow_headers']
+
+# binary image content provided as base64 strings
+content = base64.b64decode(form_body)
+
+# send fake HTTP request to prediction API with invocation data
+r = test_client.post('/model/predict', data=content, headers=headers)
+r_headers = dict((x, y) for x, y in r.headers)
+
+# binary data must be encoded as base64 strings to return in JSON response
+is_image = r_headers['Content-Type'].startswith('image')
+r_data = base64.b64encode(r.data) if is_image else r.data
+body = r_data.decode("utf-8")
+
+response = {'headers': r_headers, 'status': r.status_code, 'body': body }
+print (r.status)
+return Response(json.dumps(response), status=200, mimetype='application/json')
+</code></pre>
+
+<p>app.run(host='0.0.0.0', port=8080)
+```</p>
+
+<h3>building into an image</h3>
+
+<p>Since the MAX models already exist as public Docker images, those images can be used as base images when building custom runtimes. Those base images handle adding model files and all dependencies needed to execute them into the image.</p>
+
+<p>This is the <code>Dockerfile</code> used by the build script to create the custom model image. The <code>model</code> parameter refers to the build argument containing the model name.</p>
+
+<p>```bash
+ARG model
+FROM codait/${model}:latest</p>
+
+<p>ADD openwhisk.py .</p>
+
+<p>EXPOSE 8080</p>
+
+<p>CMD python openwhisk.py
+```</p>
+
+<p>This is then used from the following build script to create a custom runtime image for the model.</p>
+
+<p>```bash</p>
+
+<h1>!/bin/bash</h1>
+
+<p>set -e -u</p>
+
+<p>for model in $MODELS; do
+  echo "Building $model runtime image"
+  docker build -t $model --build-arg model=$model .
+  echo "Pushing $model to Docker Hub"
+  docker tag $model $USERNAME/$model
+  docker push $USERNAME/$model
+done
+```</p>
+
+<p>Once the image is published to Docker Hub, it can be referenced when creating new Web Actions (using the <code>—docker</code> parameter). 😎</p>
+
+<p><code>
+ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512
+</code></p>
+
+<h2>Conclusion</h2>
+
+<p>IBM's Model Asset eXchange is a curated collection of Machine Learning models, ready to deploy to the cloud for a variety of tasks. All models are available as a series of public Docker images. Models images automatically expose HTTP APIs for classifications.</p>
+
+<p>Documentation in the model repositories explains how to run them locally and deploy using Kubernetes, but what about using on serverless cloud platforms? Serverless platforms are becoming a popular option for deploying Machine Learning models, due to horizontal scalability and cost advantages.</p>
+
+<p>Looking through the source code for the model images, I discovered a mechanism to hook into the custom model framework used to export the model files as HTTP APIs. This allowed me write a simple wrapper script to proxy serverless function invocations to the model prediction APIs. API responses would be serialised back into the Web Action response format.</p>
+
+<p>Building this script into a new Docker image, using the existing model image as the base image, created a new runtime which could be used on the platform. Web Actions created from this runtime image would automatically expose the same HTTP APIs as the existing image!</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Accessing Long-Running Apache OpenWhisk Actions Results]]></title>
@@ -961,267 +1270,6 @@ deploy:
 <p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I'll be notified by email.</p>
 
 <p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
-    <link href="http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/"/>
-    <updated>2019-04-10T15:00:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless</id>
-    <content type="html"><![CDATA[<p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
-
-<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
-
-<p><em>Automating this process has the following benefits...</em></p>
-
-<ul>
-<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
-<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
-<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
-</ul>
-
-
-<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
-
-<h2>background</h2>
-
-<h3>apache software foundation</h3>
-
-<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>...</p>
-
-<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF's official release infrastructure.</p>
-
-<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
-
-<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
-
-<ul>
-<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
-<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
-<li><em>All source files have license headers.</em></li>
-<li><em>No compiled archives bundled in source archives.</em></li>
-</ul>
-
-
-<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
-
-<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
-
-<h3>apache openwhisk releases</h3>
-
-<p>As a committer and PMC member on the Apache OpenWhisk project, I'm eligible to vote on new releases.</p>
-
-<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
-
-<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
-
-<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
-
-<h1>apache openwhisk release verifier</h1>
-
-<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
-
-<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
-
-<p><img src="/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
-
-<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
-
-<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
-
-<h2>architecture</h2>
-
-<p><img src="/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
-
-<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
-
-<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
-
-<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
-
-<h3>available release candidates</h3>
-
-<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
-
-<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
-
-<p>```sh
-$ http get https://apache-api.jamesthom.as/api/versions
-HTTP/1.1 200 OK
-...
-{</p>
-
-<pre><code>"versions": [
-    "apache-openwhisk-0.11.0-incubating-rc1",
-    "apache-openwhisk-0.11.0-incubating-rc2",
-    "apache-openwhisk-1.13.0-incubating-rc1",
-    "apache-openwhisk-1.13.0-incubating-rc2",
-    "apache-openwhisk-2.0.0-incubating-rc2",
-    "apache-openwhisk-3.19.0-incubating-rc1"
-]
-</code></pre>
-
-<p>}
-```</p>
-
-<h3>release candidate version info</h3>
-
-<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
-
-<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
-
-<p>```sh
-$ http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
-HTTP/1.1 200 OK
-...</p>
-
-<p>{</p>
-
-<pre><code>"files": [
-    "openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz",
-    "openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz",
-    "openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz"
-]
-</code></pre>
-
-<p>}
-```</p>
-
-<h3>release verification</h3>
-
-<p>Having selected a release candidate version, clicking the "<em>Validate</em>" button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
-
-<p><em>This serverless function will carry out the following verification steps...</em></p>
-
-<h4>checking download links</h4>
-
-<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
-
-<h4>checking SHA512 hash values</h4>
-
-<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
-
-<p><code>sh
-openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
-3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
- B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
-</code></p>
-
-<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
-
-<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
-
-<p>```javascript
-const hash = async (file_stream, hash_file, name) => {
-  return new Promise((resolve, reject) => {</p>
-
-<pre><code>const sha512 = parse_hash_from_file(hash_file)
-
-const hmac = crypto.createHash('sha512')
-file_stream.pipe(hmac)
-
-hmac.on('readable', () =&gt; {
-  const stream_hash = hmac.read().toString('hex')
-  const valid = stream_hash === sha512.signature
-  logger.log(`file (${name}) calculated hash: ${stream_hash}`)
-  logger.log(`file (${name}) hash from file:  ${sha512.signature}`)
-  resolve({valid})
-})
-
-hmac.on('error', err =&gt; reject(err))
-</code></pre>
-
-<p>  })
-}
-```</p>
-
-<h4>validating PGP signatures</h4>
-
-<p><strong>Node.js' crypto library does not support validating PGP signatures.</strong></p>
-
-<p>I've used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
-
-<ul>
-<li><em>Message contents to check.</em></li>
-<li><em>PGP signature for the message.</em></li>
-<li><em>Public key for the private key used to sign the release.</em></li>
-</ul>
-
-
-<p>The "message" to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
-
-<p>```
------BEGIN PGP SIGNATURE-----
-Version: GnuPG v1</p>
-
-<p>iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP+wbtJ1ONZJQKjyDVx8uASMDQ
-...
------END PGP SIGNATURE-----
-```</p>
-
-<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
-
-<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
-
-<p>```javascript
-const signature = async (file_stream, signature, public_keys, name) => {
-  const options = {</p>
-
-<pre><code>message: openpgp.message.fromBinary(file_stream),
-signature: await openpgp.signature.readArmored(signature),
-publicKeys: (await openpgp.key.readArmored(public_keys)).keys
-</code></pre>
-
-<p>  }</p>
-
-<p>  const verified = await openpgp.verify(options)
-  await openpgp.stream.readToEnd(verified.data)
-  const valid = await verified.signatures[0].verified</p>
-
-<p>  return { valid }
-}
-```</p>
-
-<h4>scanning archive files</h4>
-
-<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
-
-<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
-
-<h3>capturing validation logs</h3>
-
-<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
-
-<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
-
-<h3>showing results</h3>
-
-<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
-
-<p><img src="/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
-
-<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
-
-<p><img src="/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
-
-<h2>other tools</h2>
-
-<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
-
-<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
-
-<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
-
-<h2>conclusion</h2>
-
-<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
-
-<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a "better" PMC member.</p>
-
-<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I've also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
-
-<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
 ]]></content>
   </entry>
   
