@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: redis | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/redis/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-07-22T15:43:20+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Connecting to IBM Cloud Databases for Redis from Node.js]]></title>
+    <link href="http://jamesthom.as/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/"/>
+    <updated>2019-07-22T12:31:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js</id>
+    <content type="html"><![CDATA[<p>This blog post explains how to connect to an <a href="https://www.ibm.com/cloud/databases-for-redis">IBM Cloud Databases for Redis</a> instance from a <a href="https://nodejs.org/en/">Node.js</a> application. There is a (small) difference between the connection details needed for an IBM Cloud Databases for Redis instance compared to a local instance of the open-source database. This is due to all IBM Cloud Databases using <a href="https://cloud.ibm.com/docs/services/databases-for-redis?topic=databases-for-redis-external-app#driver-tls-and-self-signed-certificate-support">secured TLS connections</a> with <a href="https://en.wikipedia.org/wiki/Self-signed_certificate">self-signed certificates</a>.</p>
+
+<p><em>I keep running into this issue (and forgetting how to fix it</em> 🤦‍♂️<em>), so I'm documenting the solution here to help myself (and others) who might run into it…</em> 🦸‍♂️</p>
+
+<h2>Connecting to Redis (without TLS connections)</h2>
+
+<p>Most Node.js application use the <code>redis</code> <a href="https://www.npmjs.com/package/redis">NPM library</a> to interact with an instance of the database. This library has a <code>createClient</code> <a href="">method</a> which returns an instance of the client. The Node.js application passes a connection string into the <code>createClient</code> method. This string contains the hostname, port, username and password for the database instance.</p>
+
+<p><code>javascript
+const redis = require("redis"),
+const url = 'redis://user:secret@localhost:6379/'
+const client = redis.createClient(url);
+</code></p>
+
+<p>The client fires a <code>connect</code> event once the <a href="https://github.com/NodeRedis/node_redis#connection-and-other-events">connection is established</a> or an <code>error</code> event if <a href="https://github.com/NodeRedis/node_redis#connection-and-other-events">issues are encountered</a>.</p>
+
+<h2>IBM Cloud Databases for Redis Service Credentials</h2>
+
+<p>IBM Cloud Databases for Redis provide service credentials through the <a href="https://cloud.ibm.com/docs/services/databases-for-redis?topic=databases-for-redis-connection-strings#the-_service-credentials_-panel">instance management console</a>. Service credentials are JSON objects with connection properties for client libraries, the CLI and other tools. Connection strings for the Node.js client library are available in the <code>connection.rediss.composed</code> field.</p>
+
+<p><strong><em>So, I just copy this field value and use with the <code>redis.createClient</code> method? Not so fast...</em></strong></p>
+
+<p>IBM Cloud Databases for Redis uses TLS to secure all connections to the Redis instances. This is denoted by the connection string using the <code>rediss://</code> URL prefix, rather than <code>redis://</code>. Using that connection string (without further connection properties), will lead to the following error being thrown by the Node.js application.</p>
+
+<p><code>
+Error: Redis connection to &lt;id&gt;.databases.appdomain.cloud:port failed - read ECONNRESET
+  at TCP.onread (net.js:657:25) errno: 'ECONNRESET', code: 'ECONNRESET', syscall: 'read'
+</code></p>
+
+<p>If the <code>createClient</code> forces a TLS connection to be used <code>createClient(url, { tls: {} })</code>, this error will be replaced with a different one about self-signed certificates.</p>
+
+<p>```
+Error: Redis connection to <id>.databases.appdomain.cloud:port failed failed - self signed certificate in certificate chain</p>
+
+<pre><code>at TLSSocket.onConnectSecure (_tls_wrap.js:1055:34)
+at TLSSocket.emit (events.js:182:13)
+at TLSSocket._finishInit (_tls_wrap.js:635:8) code: 'SELF_SIGNED_CERT_IN_CHAIN'
+</code></pre>
+
+<p>```</p>
+
+<p><em>Hmmmm, how to fix this?</em> 🤔</p>
+
+<h2>Connecting to Redis (with TLS connections)</h2>
+
+<p>All connections to IBM Cloud Databases are secured with TLS using self-signed certificates. Public certificates for the signing authorities are provided as Base64 strings in the service credentials. These certificates can be provided in the client constructor to support self-signed TLS connections.</p>
+
+<p><strong><em>Here are the steps needed to use those self-signed certificates with the client library...</em></strong></p>
+
+<ul>
+<li>Extract the <code>connection.rediss.certificate.certificate_base64</code> value from the service credentials.</li>
+</ul>
+
+
+<p><img src="/images/redis-certificates.png" alt="Redis Service Credentials" /></p>
+
+<ul>
+<li>Decode the Base64 string in Node.js to extract the PEM certificate string.</li>
+</ul>
+
+
+<p><code>javascript
+const ca = Buffer.from(cert_base64, 'base64').toString('utf-8')
+</code></p>
+
+<ul>
+<li>Provide the certificate file string as the <code>ca</code> property in the <code>tls</code> object for the client constructor.</li>
+</ul>
+
+
+<p><code>javascript
+const tls = { ca };
+const client = redis.createClient(url, { tls });
+</code></p>
+
+<ul>
+<li>…Relax! 😎</li>
+</ul>
+
+
+<p><em>The <code>tls</code> property is passed through to the <code>tls.connect</code> <a href="https://nodejs.org/api/tls.html#tls_tls_connect_options_callback">method</a> in Node.js, which is used to setup the TLS connection. This method supports a <code>ca</code> parameter to extend the trusted CA certificates pre-installed in the system. By providing the self-signed certificate using this property, the errors above will not be seen.</em></p>
+
+<h2>Conclusion</h2>
+
+<p>It took me a while to <a href="https://compose.com/articles/ssl-connections-arrive-for-redis-on-compose/">work out</a> how to connect to TLS-secured Redis instances from a Node.js application. <a href="https://stackoverflow.com/questions/10888610/ignore-invalid-self-signed-ssl-certificate-in-node-js-with-https-request/39099130#39099130">Providing the self-signed certificate</a> in the client constructor is a much better solution than having to <a href="https://stackoverflow.com/a/21961005/1427084">disable  all unauthorised TLS connections</a>!</p>
+
+<p>Since I don't write new Redis client code very often, I keep forgetting the correct constructor parameters to make this work. Turning this solution into a blog post will (hopefully) embed it in my brain (or at least provide a way to find the answer instead of having to grep through old project code). This might even be useful to others Googling for a solution to those error messages...</p>
+]]></content>
+  </entry>
+  
+</feed>

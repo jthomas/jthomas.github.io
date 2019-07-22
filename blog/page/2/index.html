@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="This blog post will teach you how to provision applications services on IBM Cloud with Terraform. Terraform is an open-source &#8221;infrastructure- &hellip;">
+  <meta name="description" content="This blog post will explain how to run large Java applications on Apache OpenWhisk. Java actions are deployed from JAR files containing application &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,212 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2019/02/05/large-java-applications-on-openwhisk/">Large (Java) Applications on Apache OpenWhisk</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-02-05T10:49:00+00:00" pubdate data-updated="true">Feb 5<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>This blog post will explain how to run large <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-java.md">Java applications</a> on <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>.</p>
+
+<p>Java actions are <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-java.md">deployed from JAR files</a> containing application class files. External libraries can be used by bundling those dependencies into a <a href="https://stackoverflow.com/questions/19150811/what-is-a-fat-jar">fat JAR file</a>. The JAR file must be less than the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-default-48mb">maximum action size</a> of 48MB.</p>
+
+<blockquote><p>So, what if the application uses lots of external libraries and the JAR file is larger than 48MB? 🤔</p></blockquote>
+
+<p>Apache OpenWhisk&#8217;s support for <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">custom Docker runtimes</a> provides a workaround. In a <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">previous blog post</a>, we showed how this feature could be used with Python applications which rely on lots of external libraries.</p>
+
+<p>Using the same approach with Java, a <a href="https://github.com/apache/incubator-openwhisk-runtime-java/">custom Java runtime</a> can be created with additional libraries pre-installed. Those libraries do not need to be included in the application jar, which will just contain private class files. This should hopefully reduce the JAR file to under the action size limit.</p>
+
+<p><em>Let&#8217;s walk through an example to show how this works&#8230;.</em></p>
+
+<h2>Example Java Class using External Libraries</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='java'><span class='line'><span class="kn">import</span> <span class="nn">com.google.gson.JsonObject</span><span class="o">;</span>
+</span><span class='line'><span class="kn">import</span> <span class="nn">org.apache.commons.text.WordUtils</span><span class="o">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">public</span> <span class="kd">class</span> <span class="nc">Capitialize</span> <span class="o">{</span>
+</span><span class='line'>    <span class="kd">public</span> <span class="kd">static</span> <span class="n">JsonObject</span> <span class="nf">main</span><span class="o">(</span><span class="n">JsonObject</span> <span class="n">args</span><span class="o">)</span> <span class="o">{</span>
+</span><span class='line'>        <span class="n">String</span> <span class="n">name</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="na">getAsJsonPrimitive</span><span class="o">(</span><span class="s">&quot;message&quot;</span><span class="o">).</span><span class="na">getAsString</span><span class="o">();</span>
+</span><span class='line'>        <span class="n">JsonObject</span> <span class="n">response</span> <span class="o">=</span> <span class="k">new</span> <span class="n">JsonObject</span><span class="o">();</span>
+</span><span class='line'>        <span class="n">response</span><span class="o">.</span><span class="na">addProperty</span><span class="o">(</span><span class="s">&quot;capitalized&quot;</span><span class="o">,</span> <span class="n">WordUtils</span><span class="o">.</span><span class="na">capitalize</span><span class="o">(</span><span class="n">name</span><span class="o">));</span>
+</span><span class='line'>        <span class="k">return</span> <span class="n">response</span><span class="o">;</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This example Java action capitalises sentences from the input event. It uses the <a href="https://commons.apache.org/proper/commons-text/">Apache Commons Text library</a> to handle <a href="https://commons.apache.org/proper/commons-text/javadocs/api-release/org/apache/commons/text/WordUtils.html#capitalize(java.lang.String)">capitialisation</a> of input strings. This external library will be installed in the runtime, rather than bundled in the application JAR file.</p>
+
+<h2>Build Custom Java Runtime</h2>
+
+<ul>
+<li>Clone the existing <a href="https://github.com/apache/incubator-openwhisk-runtime-java/">Apache OpenWhisk Java runtime repository</a>.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>git clone https://github.com/apache/incubator-openwhisk-runtime-java
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Edit the <code>core/java8/proxy/build.gradle</code> file and update the <code>dependencies</code> <a href="https://github.com/apache/incubator-openwhisk-runtime-java/blob/master/core/java8/proxy/build.gradle#L24-L26">configuration</a> with extra dependencies needed in the runtime.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>dependencies <span class="o">{</span>
+</span><span class='line'>    compile <span class="s1">&#39;com.google.code.gson:gson:2.6.2&#39;</span>
+</span><span class='line'>    compile <span class="s1">&#39;org.apache.commons:commons-text:1.6&#39;</span> // &lt;-- the additional library
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Note: <code>com.google.code.gson:gson:2.6.2</code> is used by the runtime to handle JSON encoding/decoding. Do not remove this dependency.</em></p>
+
+<ul>
+<li>Execute the following command to build the custom <a href="https://en.wikipedia.org/wiki/Docker_%28software%29">Docker</a> image.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>./gradlew core:java8:distDocker
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Push Image To Docker Hub</h2>
+
+<p>If the build process succeeds, a local Docker image named <code>java8action</code> should be available. This needs to be pushed to <a href="https://hub.docker.com/">Docker Hub</a> to allow Apache OpenWhisk to use it.</p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag</a> the custom image with a <a href="https://hub.docker.com/signup">Docker Hub username</a>.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker tag java8action &lt;DOCKERHUB_USERNAME&gt;/java8action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push</a> the tagged custom image to Docker Hub.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>docker push &lt;DOCKERHUB_USERNAME&gt;/java8action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Create OpenWhisk Action With Custom Runtime</h2>
+
+<ul>
+<li>Compile the Java source file.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>javac Capitialize.java
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create the application JAR from the class file.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>jar cvf capitialize.jar Capitialize.class
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Create the Java action with the custom runtime.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>wsk action create capitialize capitialize.jar --main Capitialize --docker &lt;DOCKERHUB_USERNAME&gt;/java8action
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em><code>--main</code> is the class file name containing the action handler in the JAR file. <code>--docker</code> is the Docker image name for the custom runtime.</em></p>
+
+<h2>Test it out!</h2>
+
+<ul>
+<li>Execute the <code>capitialize</code> action with input text to returned capitalised sentences.</li>
+</ul>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>wsk action invoke capitialize -b -r -p message <span class="s2">&quot;this is a sentence&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If this works, the following JSON should be printed to the console.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;capitalized&quot;</span><span class="p">:</span> <span class="s2">&quot;This Is A Sentence&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The external library has been used in the application without including it in the application JAR file! 💯💯💯</p>
+
+<h2>Conclusion</h2>
+
+<p>Apache OpenWhisk supports running Java applications using fat JARs, which bundle application source code and external dependencies. JAR files cannot be more than 48MB, which can be challenging when applications uses lots of external libraries.</p>
+
+<p>If application source files and external libraries result in JAR files larger than this limit, Apache OpenWhisk&#8217;s support for custom Docker runtimes provide a solution for running large Java applications on the platform.</p>
+
+<p>By building a custom Java runtime, extra libraries can be pre-installed in the runtime. These dependencies do not need to be included in the application JAR file, which reduces the file size to under the action size limit. 👍</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3435,297 +3641,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2018/06/05/binding-iam-services-to-ibm-cloud-functions/">Binding IAM Services to IBM Cloud Functions</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2018-06-05T09:47:00+01:00" pubdate data-updated="true">Jun 5<span>th</span>, 2018</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
-
-<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
-
-<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
-
-<blockquote><p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p></blockquote>
-
-
-<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
-
-<p><em>Let&#8217;s look at how this works&#8230;</em></p>
-
-<h2>Binding IAM Credentials</h2>
-
-<h3>Requirements</h3>
-
-<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
-
-<ul>
-<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
-<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
-</ul>
-
-
-<p>You will need the following information to bind a service credentials.</p>
-
-<ul>
-<li>Service name.</li>
-<li><em>(Optional)</em> Instance name.</li>
-<li><em>(Optional)</em> Credentials identifier.</li>
-</ul>
-
-
-<h3>Using the CLI</h3>
-
-<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
-
-<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
-
-<h3>Accessing from actions</h3>
-
-<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
-
-<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>   <span class="nt">&quot;__bx_creds&quot;</span><span class="p">:{</span>
-</span><span class='line'>      <span class="nt">&quot;service-name&quot;</span><span class="p">:{</span>
-</span><span class='line'>         <span class="nt">&quot;apikey&quot;</span><span class="p">:</span><span class="s2">&quot;&lt;API_KEY&gt;&quot;</span><span class="p">,</span>
-</span><span class='line'>         <span class="err">...</span>
-</span><span class='line'>      <span class="p">}</span>
-</span><span class='line'>   <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Default parameters are automatically merged into the request parameters during invocations.</p>
-
-<h2>Common Questions</h2>
-
-<h4>How can I tell whether a service instance uses IAM-based authentication?</h4>
-
-<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
-
-<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
-
-<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
-
-<h4>How can I find the service name for an IAM-based service instance?</h4>
-
-<p>Run the <code>ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
-
-<p>Service names are shown as the <code>Service Name:</code> field value.</p>
-
-<h4>How can I list available service credentials for an IAM-based service instance?</h4>
-
-<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt; </code> command.</p>
-
-<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
-
-<h4>How can I manually retrieve IAM-based credentials for an instance?</h4>
-
-<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
-
-<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
-
-<h4>How can I create new service credentials?</h4>
-
-<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
-
-<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
-
-<h2>Example - Cloud Object Storage</h2>
-
-<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let&#8217;s look at an example&#8230;.</em></p>
-
-<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
-
-<p><strong>Let&#8217;s look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
-
-<p>Using the CLI, we can check an instance of this service is available&#8230;</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-instances
-</span><span class='line'>Retrieving service instances in resource group default..
-</span><span class='line'>OK
-</span><span class='line'>Name                     Location   State    Type               Tags
-</span><span class='line'>my-cos-storage           global     active   service_instance
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
-
-<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-instance my-cos-storage
-</span><span class='line'>Retrieving service instance my-cos-storage in resource group default..
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>Name:                  my-cos-storage
-</span><span class='line'>ID:                    crn:v1:bluemix:public:cloud-object-storage:global:&lt;GUID&gt;:
-</span><span class='line'>GUID:                  &lt;GUID&gt;
-</span><span class='line'>Location:              global
-</span><span class='line'>Service Name:          cloud-object-storage
-</span><span class='line'>Service Plan Name:     lite
-</span><span class='line'>Resource Group Name:   default
-</span><span class='line'>State:                 active
-</span><span class='line'>Type:                  service_instance
-</span><span class='line'>Tags:
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
-
-<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-keys --instance-name my-cos-storage
-</span><span class='line'>Retrieving service keys in resource group default...
-</span><span class='line'>OK
-</span><span class='line'>Name                     State    Created At
-</span><span class='line'>serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
-
-<p>Retrieving the service key details shows us the API secret for this credential.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ibmcloud resource service-key serverless-credentials
-</span><span class='line'>Retrieving service key serverless-credentials in resource group default...
-</span><span class='line'>OK
-</span><span class='line'>
-</span><span class='line'>Name:          serverless-credentials
-</span><span class='line'>ID:            &lt;ID&gt;
-</span><span class='line'>Created At:    Tue Jun  5 09:11:06 UTC 2018
-</span><span class='line'>State:         active
-</span><span class='line'>Credentials:
-</span><span class='line'>               ...
-</span><span class='line'>               apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
-
-<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>bx wsk service <span class="nb">bind </span>cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
-</span><span class='line'>Credentials <span class="s1">&#39;serverless-credentials&#39;</span> from <span class="s1">&#39;cloud-object-storage&#39;</span> service instance <span class="s1">&#39;my-cos-storage&#39;</span> bound to <span class="s1">&#39;params&#39;</span>.
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>bx wsk action get params
-</span><span class='line'>ok: got action params
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>  ...
-</span><span class='line'>  <span class="s2">&quot;parameters&quot;</span>: <span class="o">[{</span>
-</span><span class='line'>    <span class="s2">&quot;key&quot;</span>: <span class="s2">&quot;__bx_creds&quot;</span>,
-</span><span class='line'>    <span class="s2">&quot;value&quot;</span>: <span class="o">{</span>
-</span><span class='line'>      <span class="s2">&quot;cloud-object-storage&quot;</span>: <span class="o">{</span>
-</span><span class='line'>        <span class="s2">&quot;apikey&quot;</span>: <span class="s2">&quot;&lt;API_KEY_SECRET&gt;&quot;</span>,
-</span><span class='line'>        ...
-</span><span class='line'>      <span class="o">}</span>
-</span><span class='line'>    <span class="o">}</span>
-</span><span class='line'>  <span class="o">}]</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/3/">&larr; Older</a>
@@ -3743,6 +3658,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
       </li>
     
@@ -3756,10 +3675,6 @@
     
       <li class="post">
         <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/">Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions</a>
       </li>
     
   </ul>
