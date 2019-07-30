@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="This blog post will explain how to run large Java applications on Apache OpenWhisk. Java actions are deployed from JAR files containing application &hellip;">
+  <meta name="description" content="Imagine you have an OpenWhisk action to send emails to users to verify their email addresses. User profiles, containing email addresses and &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,204 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/">CouchDB Filters With OpenWhisk Triggers</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-02-12T14:22:00+00:00" pubdate data-updated="true">Feb 12<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Imagine you have an <a href="http://openwhisk.incubator.apache.org/">OpenWhisk</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">action</a> to send emails to users to verify their email addresses. User profiles, containing email addresses and verification statuses, are maintained in a <a href="https://couchdb.apache.org/">CouchDB</a> database.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="err">...</span>
+</span><span class='line'>    <span class="nt">&quot;email&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;address&quot;</span><span class="p">:</span> <span class="s2">&quot;user@host.com&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;unverified&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Setting up a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed</a> allows the email action <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/triggers_rules.md">to be invoked</a> when the user profile changes. When user profiles have unverified email addresses, the action can send verification emails.</p>
+
+<p>Whilst this works fine - it will result in a lot of unnecessary invocations. All modifications to user profiles, not just the email field, will result in the action being invoked. This will incur a cost despite the action having nothing to do.</p>
+
+<blockquote><p>How can we restrict document change events to just those we care about?</p></blockquote>
+
+<p>CouchDB <a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html#filter-functions">filter functions</a> to the rescue 🦸‍♂️🦸‍.</p>
+
+<h2>CouchDB Filter Functions</h2>
+
+<p><a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html#filter-functions">Filter functions</a> are Javascript functions executed against (potential) <a href="http://guide.couchdb.org/draft/notifications.html">change feed events</a>. The function is invoked with each document update. The return value is evaluated as a boolean variable. If true, the document is published on the changes feed. Otherwise, the event is filtered from the changes feed.</p>
+
+<h3>example</h3>
+
+<p>Filter functions are created through <a href="https://docs.couchdb.org/en/stable/ddocs/ddocs.html">design documents</a>. Function source strings are stored as properties under the <code>filters</code> document attribute. Key names are used as filter identifiers.</p>
+
+<p>Filter functions should have the following interface.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">function</span><span class="p">(</span><span class="nx">doc</span><span class="p">,</span> <span class="nx">req</span><span class="p">){</span>
+</span><span class='line'>    <span class="c1">// document passes test</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">doc</span><span class="p">.</span><span class="nx">property</span> <span class="o">==</span> <span class="s1">&#39;value&#39;</span><span class="p">){</span>
+</span><span class='line'>        <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// ... else ignore document upate</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p> <code>doc</code> is the modified document object and <code>req</code> contains (optional) request parameters.</p>
+
+<p><em>Let&#8217;s now explain how to create a filter function to restrict profile update events to just those with unverified email addresses&#8230;</em></p>
+
+<h2>Filtering Profile Updates</h2>
+
+<h3>user profile documents</h3>
+
+<p>In this example, email addresses are stored in user profile documents under the <code>email</code> property. <code>address</code> contains the user&#8217;s email address and <code>status</code> records the verification status (<code>unverified</code> or <code>verified</code>).</p>
+
+<p>When a new user is added, or an existing user changes their email address, the <code>status</code> attribute is set to <code>unverified</code>. This indicates a verification message needs to be sent to the email address.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="err">...</span>
+</span><span class='line'>    <span class="nt">&quot;email&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nt">&quot;address&quot;</span><span class="p">:</span> <span class="s2">&quot;user@host.com&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nt">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;unverified&quot;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>unverified email filter</h3>
+
+<p>Here is the CouchDB filter function that will ignore document updates with verified email addresses.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">function(doc)</span><span class="p">{</span>
+</span><span class='line'>    <span class="err">if</span> <span class="err">(doc.email.status</span> <span class="err">==</span> <span class="err">&#39;unverified&#39;){</span>
+</span><span class='line'>        <span class="err">return</span> <span class="err">true;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="err">return</span> <span class="kc">false</span>
+</span><span class='line'><span class="err">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>design document with filters</h3>
+
+<p>Save the following JSON document in CouchDB. This creates a new design document (<code>profile</code>) containing a filter function (<code>unverified-emails</code>).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="nt">&quot;_id&quot;</span><span class="p">:</span> <span class="s2">&quot;_design/profile&quot;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nt">&quot;filters&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nt">&quot;unverified-emails&quot;</span><span class="p">:</span> <span class="s2">&quot;function (doc) {\n  if (doc.email.status == &#39;unverified&#39;) {\n    return true\n  }\n  return false\n}&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="nt">&quot;language&quot;</span><span class="p">:</span> <span class="s2">&quot;javascript&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>trigger feed with filter</h3>
+
+<p>Once the design document is created, the filter name can be used as a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant#create-the-trigger-using-the-filter-function">trigger feed parameter</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="err">wsk</span> <span class="err">trigger</span> <span class="err">create</span> <span class="err">verify_emails</span> <span class="err">--feed</span> <span class="err">/_/myCloudant/changes</span> <span class="err">\</span>
+</span><span class='line'><span class="err">--param</span> <span class="err">dbname</span> <span class="err">user_profiles</span> <span class="err">\</span>
+</span><span class='line'><span class="err">--param</span> <span class="err">filter</span> <span class="s2">&quot;profile/unverified-emails&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The trigger only fires when a profile change contains an unverified email address. No more unnecessary invocations, which saves us money! 😎</p>
+
+<h3>caveats</h3>
+
+<p><em>&#8220;Why are users getting multiple verification emails?&#8221;</em> 😡</p>
+
+<p>If a user changes their profile information, whilst leaving their email address the same but before clicking the verification email, an additional email will be sent.</p>
+
+<p>This is because the <code>status</code> field is still in the <code>unverified</code> state when the next document update occurs. Filter functions are stateless and can&#8217;t decide if this email address has already been seen.</p>
+
+<p>Instead of leaving the <code>status</code> field as <code>unverified</code>, the email action should change the state to another value, e.g. <code>pending</code>, to indicate the verification email has been sent.</p>
+
+<p>Any further document updates, whilst waiting for the verification response, won&#8217;t pass the filter and users won&#8217;t receive multiple emails. 👍</p>
+
+<h2>Conclusion</h2>
+
+<p>CouchDB filters are an easy way to subscribe to a subset of events from the changes feed. Combining CouchDB trigger feeds with filters allows actions to ignore irrelevant document updates. Multiple trigger feeds can be set up from a single database using filter functions.</p>
+
+<p>As well as saving unnecessary invocations (and therefore money), this can simplify data models. A single database can be used to store all documents, rather than having to split different types into multiple databases, whilst still supporting changes feeds per document type.</p>
+
+<p>This is an awesome feature of CouchDB!</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3301,346 +3499,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2018/07/10/debugging-node-dot-js-openwhisk-actions/">Debugging Node.js OpenWhisk Actions</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2018-07-10T09:00:00+01:00" pubdate data-updated="true">Jul 10<span>th</span>, 2018</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Debugging serverless applications is one of the <a href="https://www.stackery.io/blog/the-serverless-learning-curve/">most challenging issues</a> developers face when using serverless platforms. How can you use debugging tools without any access to the runtime environment?</p>
-
-<p>Last week, I worked out <a href="https://twitter.com/thomasj/status/1013006648439443458">how to expose the Node.js debugger</a> in the Docker environment used for the application runtime in Apache OpenWhisk.</p>
-
-<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">Want to use Node.js debugger for <a href="https://twitter.com/openwhisk?ref_src=twsrc%5Etfw">@openwhisk</a> actions? Start runtime container locally with this command to expose v8 inspector.<br>$ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node &#8211;inspect=0.0.0.0:9229 app.js<br>Then connect Chrome Dev Tools or <a href="https://twitter.com/code?ref_src=twsrc%5Etfw">@code</a>. 💯 <a href="https://t.co/X4i01QEOmg">pic.twitter.com/X4i01QEOmg</a></p>&mdash; James Thomas (@thomasj) <a href="https://twitter.com/thomasj/status/1013006648439443458?ref_src=twsrc%5Etfw">June 30, 2018</a></blockquote>
-
-
-<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
-
-
-<p>Using the remote debugging service, we can set breakpoints and step through action handlers live, rather than just being reliant on logs and metrics to diagnose bugs.</p>
-
-<p><strong>So, how does this work?</strong></p>
-
-<p><em>Let&#8217;s find out more about how Apache OpenWhisk executes serverless functions&#8230;</em></p>
-
-<h2>Background</h2>
-
-<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is the open-source serverless platform which powers <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. OpenWhisk <a href="https://medium.com/openwhisk/uncovering-the-magic-how-serverless-platforms-really-work-3cb127b05f71">uses Docker containers</a> to create isolated runtime environments for executing serverless functions.</p>
-
-<p>Containers are started on-demand as invocation requests arrive. Serverless function source files are dynamically injected into the runtime and executed for each invocation. Between invocations, containers are paused and kept in a cache for re-use with further invocations.</p>
-
-<p>The benefit of using an open-source serverless platform is that the <a href="https://github.com/search?q=incubator-openwhisk-runtime">build files</a> used to create runtime images are also open-source. OpenWhisk also automatically builds and publishes all <a href="https://hub.docker.com/r/openwhisk/">runtime images externally</a> on Docker Hub. Running containers using these images allows us to simulate the remote serverless runtime environment.</p>
-
-<h3>Runtime Images</h3>
-
-<p>All OpenWhisk runtime images are <a href="https://hub.docker.com/r/openwhisk/">published externally</a> on Docker Hub.</p>
-
-<p>Runtime images <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">start a HTTP server</a> which listens on port 8080. This HTTP server must implement two API endpoints (<code>/init</code> &amp; <code>/run</code>) accepting HTTP POST requests. The platform uses these endpoints to initialise the runtime with action code and then invoke the action with event parameters.</p>
-
-<p>More details on the API endpoints can be found in this <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">blog post</a> on creating Docker-based actions.</p>
-
-<h3>Node.js Runtime Image</h3>
-
-<p>This repository contains the source code used to create <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">Node.js runtime environment image</a>.</p>
-
-<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">https://github.com/apache/incubator-openwhisk-runtime-nodejs</a></p>
-
-<p>Both <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs8Action">Node.js 8</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">6 runtimes</a>  are built from a <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejsActionBase">common base image</a>. This base image contains an <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/app.js">Express.js server</a> which handles the platform API requests. The <code>app.js</code> file containing the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">is executed</a> when the containers starts.</p>
-
-<p>JavaScript code is injected into the runtime using the <code>/init</code> API. Actions created from source code are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">dynamically evaluated</a> to instantiate the code in the runtime. Actions created from zip files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">extracted into a temporary directory</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">imported as a Node.js module</a>.</p>
-
-<p>Once instantiated, actions are executed using the <code>/run</code> API. Event parameters are come from the request body. Each time a new request is received, the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">calls the action handler with event parameters</a>. Returned values are serialised as the JSON body in the API response.</p>
-
-<h3>Starting Node.js Runtime Containers</h3>
-
-<p><a href="https://docs.docker.com/engine/reference/commandline/run/">Use this command</a> to start the Node.js runtime container locally.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ docker run -it -p 8080:8080 openwhisk/action-nodejs-v8</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Once the container has started, port 8080 on localhost will be mapped to the HTTP service exposed by the runtime environment. This can be used to inject serverless applications into the runtime environment and invoke the serverless function handler with event parameters.</p>
-
-<h2>Node.js Remote Debugging</h2>
-
-<p>Modern versions of the Node.js runtime have a command-line flag (<code>--inspect</code>) to expose a <a href="https://nodejs.org/api/debugger.html#debugger_advanced_usage">remote debugging service</a>. This service runs a WebSocket server on localhost which implements the <a href="https://chromedevtools.github.io/devtools-protocol/">Chrome DevTools Protocol</a>.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>$ node --inspect index.js
-</span><span class='line'>Debugger listening on 127.0.0.1:9229.</span></code></pre></td></tr></table></div></figure>
-
-
-<p>External tools can connect to this port to provide debugging capabilities for Node.js code.</p>
-
-<p>Docker images for the OpenWhisk Node.js runtimes use the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">following command</a> to start the internal Node.js process. <strong>Remote debugging is not enabled by default.</strong></p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>node --expose-gc app.js</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Docker allows containers to override the default image start command using a <a href="https://docs.docker.com/engine/reference/run/">command line argument</a>.</p>
-
-<p><strong>This command will start the OpenWhisk Node.js runtime container with the remote debugging service enabled.</strong> Binding the HTTP API and WebSocket ports to the host machine allows us to access those services remotely.</p>
-
-<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class=''><span class='line'>docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Once a container from the runtime image has started, we can connect our favourite debugging tools&#8230;</em></p>
-
-<h3>Chrome Dev Tools</h3>
-
-<p>To connect <a href="https://developers.google.com/web/tools/chrome-devtools/">Chrome Dev Tools</a> to the remote Node.js debugging service, follow these steps.</p>
-
-<ul>
-<li>Open the following page in Chrome: <a href="chrome://inspect/#devices">chrome://inspect/#devices</a></li>
-</ul>
-
-
-<p><img src="/images/debugging/devtools.png" title="Chrome Dev Tools" ></p>
-
-<p>Chrome Dev Tools is configured to open a connection on port 9229 on localhost. If the web socket connection succeeds, the debugging target should be listed in the &#8220;Remote Target&#8221; section.</p>
-
-<ul>
-<li>Click the &#8221;<em>Open dedicated DevTools for Node</em>&#8221; link.</li>
-</ul>
-
-
-<p>In the &#8220;Sources&#8221; panel the JavaScript files loaded by the Node.js process are available.</p>
-
-<p><img src="/images/debugging/devtools-debugging.png" title="Chrome Dev Tools Debugging" ></p>
-
-<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
-
-<h3>VSCode</h3>
-
-<p><a href="https://code.visualstudio.com/">Visual Studio Code</a> supports remote debugging of Node.js code using the Chrome Dev Tools protocol. Follow these steps to connect the editor to the remote debugging service.</p>
-
-<ul>
-<li>Click the menu item &#8221;<em>Debug -> Add Configuration</em>&#8221;</li>
-<li>Select the &#8221;<em>Node.js: Attach to Remote Program</em>&#8221; from the Intellisense menu.</li>
-<li>Edit the default configuration to have the following values.</li>
-</ul>
-
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;node&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;request&quot;</span><span class="p">:</span> <span class="s2">&quot;attach&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Attach to Remote&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;address&quot;</span><span class="p">:</span> <span class="s2">&quot;127.0.0.1&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;port&quot;</span><span class="p">:</span> <span class="mi">9229</span><span class="p">,</span>
-</span><span class='line'>  <span class="nt">&quot;localRoot&quot;</span><span class="p">:</span> <span class="s2">&quot;${workspaceFolder}&quot;</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><img src="/images/debugging/vscode.png" title="Visual Studio Code" ></p>
-
-<ul>
-<li>Choose the new &#8221;<em>attach to remote</em>&#8221; debugging profile and click the Run button.</li>
-</ul>
-
-
-<p>The &#8221;<em>Loaded Scripts</em>&#8221; window will show all the JavaScript files loaded by the Node.js process.</p>
-
-<p><img src="/images/debugging/vscode-debugging.png" title="Visual Studio Code Debugging" ></p>
-
-<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
-
-<h3>Breakpoint Locations</h3>
-
-<p>Here are some useful locations to set breakpoints to catch errors in your serverless functions for the OpenWhisk Node.js runtime environments.</p>
-
-<h4>Initialisation Errors - Source Actions</h4>
-
-<p>If you are creating OpenWhisk actions from JavaScript source files, the code is dynamically evaluated during  the <code>/init</code> request at <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">this location</a>. Putting a breakpoint here will allow you to catch errors thrown during that <code>eval()</code> call.</p>
-
-<h4>Initialisation Errors - Binary Actions</h4>
-
-<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">this location</a> is where the archive is extracted in the runtime filesystem. Putting a breakpoint here will catch errors from the extraction call and runtime checks for a valid JavaScript module.</p>
-
-<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">This code</a> is where the JavaScript module is imported once it has been extracted. Putting a breakpoint here will catch errors thrown importing the module into the Node.js environment.</p>
-
-<h4>Action Handler Errors</h4>
-
-<p>For both source file and zipped module actions, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">this location</a> is where the action handler is invoked on each <code>/run</code> request. Putting a breakpoint here will catch errors thrown from within action handlers.</p>
-
-<h2>Invoking OpenWhisk Actions</h2>
-
-<p>Once you have attached the debugger to the remote Node.js process, you need to send the API requests to simulate the platform invocations. Runtime containers use separate HTTP endpoints to import the action source code into the runtime environment (<code>/init</code>)  and then fire the invocation requests (<code>/run</code>).</p>
-
-<h4>Generating Init Request Body - Source Files</h4>
-
-<p>If you are creating OpenWhisk actions from JavaScript source files, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;FUNCTION NAME IN SOURCE FILE&gt;&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;code&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;INSERT SOURCE HERE&gt;&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>code</code> is the JavaScript source to be evaluated which contains the action handler. <code>main</code> is the function name in the source file used for the action handler.</p>
-
-<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the source code in <code>file.js</code>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cat file.js | jq -sR  <span class="s1">&#39;{value: {main: &quot;main&quot;, code: .}}&#39;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Generating Init Request Body - Zipped Modules</h4>
-
-<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;FUNCTION NAME ON JS MODULE&gt;&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;code&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;INSERT BASE64 ENCODED STRING FROM ZIP FILE HERE&gt;&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;binary&quot;</span><span class="p">:</span> <span class="kc">true</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><code>code</code> must be a Base64 encoded string for the zip file. <code>main</code> is the function name returned in the imported JavaScript module to call as the action handler.</p>
-
-<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the zip file in <code>action.zip</code>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>base64 action.zip | tr -d <span class="s1">&#39;\n&#39;</span> | jq -sR <span class="s1">&#39;{value: {main: &quot;main&quot;, binary: true, code: .}}&#39;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Sending Init Request</h4>
-
-<p>The <a href="https://httpie.org/">HTTPie</a> tool makes it simple to send HTTP requests from the command-line.</p>
-
-<p>Using this tool, the following command will initialise the runtime container with an OpenWhisk action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http post localhost:8080/init &lt; init.json
-</span><span class='line'>HTTP/1.1 200 OK
-</span><span class='line'>...
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;OK&quot;</span>: <span class="nb">true</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>If this HTTP request returns without an error, the action is ready to be invoked.</p>
-
-<p><em>No further initialisation requests are needed unless you want to modify the action deployed.</em></p>
-
-<h4>Generating Run Request Body</h4>
-
-<p>Invocations of the action handler functions are triggered from a HTTP POST to the <code>/run</code> API endpoint.</p>
-
-<p>Invocations parameters are sent in the JSON request body, using a JSON object with a <code>value</code> field.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='json'><span class='line'><span class="p">{</span>
-</span><span class='line'>  <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nt">&quot;some-param-name&quot;</span><span class="p">:</span> <span class="s2">&quot;some-param-value&quot;</span><span class="p">,</span>
-</span><span class='line'>    <span class="nt">&quot;another-param-name&quot;</span><span class="p">:</span> <span class="s2">&quot;another-param-value&quot;</span><span class="p">,</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h4>Sending Run Request</h4>
-
-<p>Using the <a href="https://httpie.org/">HTTPie</a> tool, the following command will invoke the OpenWhisk action.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>http post localhost:8080/run &lt; run.json
-</span><span class='line'>HTTP/1.1 200 OK
-</span><span class='line'>...
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello world&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Returned values from the action handler are serialised as the JSON body in the HTTP response. Issuing further HTTP POST requests to the <code>/run</code> endpoint allows us to re-invoke the action.</p>
-
-<h2>Conclusion</h2>
-
-<p>Lack of debugging tools is one of the biggest complaints from developers migrating to serverless platforms.</p>
-
-<p>Using an open-source serverless platform helps with this problem, by making it simple to run the same containers locally that are used for the platform&#8217;s runtime environments. Debugging tools can then be started from inside these local environments to simulate remote access.</p>
-
-<p>In this example, this approach was used to enable the remote debugging service from the OpenWhisk Node.js runtime environment. The same approach could be used for any language and debugging tool needing local access to the runtime environment.</p>
-
-<p>Having access to the Node.js debugger is huge improvement when debugging challenging issues, rather than just being reliant on logs and metrics collected by the platform.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/3/">&larr; Older</a>
@@ -3658,6 +3516,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
       </li>
     
@@ -3671,10 +3533,6 @@
     
       <li class="post">
         <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
       </li>
     
   </ul>

@@ -9,9 +9,8 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Before Christmas, Addy Osmani
-sent out the following
-tweet asking for a Dojo-version of the TodoMVC application. Quick updates: Added ExtJS and MVC- &hellip;">
+  <meta name="description" content="In this first article, we going to look at using DojoX MVC to define our
+application Models, showing the use of the new StatefulModel class. Later in &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -79,6 +78,326 @@ tweet asking for a Dojo-version of the TodoMVC application. Quick updates: Added
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/26/dojomvc-models/">Creating Todo MVC in Dojo - Part 1: Models</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-02-26T10:33:00+00:00" pubdate data-updated="true">Feb 26<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In this first article, we going to look at using <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> to define our
+application Models, showing the use of the new <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a> class. Later in
+the series, we&#8217;ll look at binding our defined Model to a View template, rendering
+the HTML output and hooking into user events.</p>
+
+<h2>Introducing StatefulModels</h2>
+
+<p><a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> uses a specific class for representing Models in the MVC pattern,
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a>. By using or extending this class, applications have access to a
+native JavaScript data model that integrates with all the classes under the MVC
+package. StatefulModel extends the <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html">Dojo Stateful</a> class, introduced in Dojo 1.6
+to provide a way to monitor widget property changes, to support more complex
+behaviour, such as binding to and updating View component, validating of model
+values and much more.</p>
+
+<p>StatefulModels are instantiated from a plain JavaScript object, representing the initial data structure
+for the model, or even from a Dojo Store (with support for both synchronous and asynchronous results). To assist the conversion of complex JavaScript objects, a factory function is provided
+that will traverse the source data, recursively converting all data properties to use the
+StatefulModel class.</p>
+
+<p>Further details on the StatefulModel class can be found <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">here</a>.</p>
+
+<h2>Defining a Model</h2>
+
+<p>Reviewing the <a href="https://github.com/addyosmani/todomvc/wiki/Todo-Application-Specification">TodoMVC specification</a>,
+our application Model needs to contain a list of todo tasks, each one
+containing a description and that task&#8217;s completed state. The task&#8217;s
+description will be provided by the user and can later be modified. As the task
+is completed, the task&#8217;s internal state must be updated. Representing the todo
+tasks as an array of objects will allow binding to a <a href="http://livedocs.dojotoolkit.org/dojox/mvc/Repeat">Repeat View</a>, having a HTML template
+rendered for each task in the Model.</p>
+
+<p>Looking at the application, there&#8217;s two additional properties in the View that are derived from
+other Model attributes, counts for the completed and remaining tasks. To allow automatic binding of these
+values into our View template, we&#8217;re going to represent these directly in our model. Later on, we&#8217;ll
+set up binding between Model values to allow those composite values to be calculated automatically.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">todos</span><span class="o">:</span> <span class="p">[</span>
+</span><span class='line'>        <span class="p">{</span>
+</span><span class='line'>            <span class="nx">text</span><span class="o">:</span> <span class="s2">&quot;Must write this blog article&quot;</span>
+</span><span class='line'>            <span class="nx">isDone</span><span class="o">:</span> <span class="kc">false</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>    <span class="p">],</span>
+</span><span class='line'>    <span class="nx">remaining</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">complete</span><span class="o">:</span> <span class="mi">0</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">dojox</span><span class="p">.</span><span class="nx">mvc</span><span class="p">.</span><span class="nx">newStatefulModel</span><span class="p">({</span><span class="nx">data</span><span class="o">:</span> <span class="nx">data</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once we&#8217;ve defined our Model as a native JavaScript object, we can use the
+StatefulModel factory to perform the conversion to StatefulModel classes, as
+shown in the sample above. The result of this function is our application
+Model, which we can then bind to our View and interact with via the Controller.</p>
+
+<p>The StatefulModel class supports any native JavaScript type, we&#8217;re using
+strings for the description, booleans for the completed state and numbers for
+the computed totals.</p>
+
+<h2>Binding to Model changes</h2>
+
+<p>Once you&#8217;ve defined a model, you&#8217;ll want to be notified of any attribute changes.
+Using Dojo Stateful&#8217;s <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html#watch">&#8220;watch&#8221;</a> method, we can register a function to be executed
+whenever that model&#8217;s attributes are modified using the getter &amp; setter pattern.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">model</span><span class="p">.</span><span class="nx">watch</span><span class="p">(</span><span class="s2">&quot;attribute&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">attribute</span><span class="p">,</span> <span class="nx">new_value</span><span class="p">,</span> <span class="nx">old_value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>The <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Bind.html">dojox.mvc.Bind</a> module extends this functionality to cover two common patterns,
+listening to changes on a series of attributes and binding model properties together.
+The &#8220;bindInputs&#8221; function allows an array of model attributes to be passed in, executing a callback
+whenever any of the attributes change.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">mvc</span><span class="p">.</span><span class="nx">bindInputs</span><span class="p">([</span><span class="nx">model</span><span class="p">.</span><span class="nx">first_attr</span><span class="p">,</span> <span class="nx">model</span><span class="p">.</span><span class="nx">second_attr</span><span class="p">,</span> <span class="p">...],</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">attribute</span><span class="p">,</span> <span class="nx">new_value</span><span class="p">,</span> <span class="nx">old_value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>More usefully, the &#8220;bind&#8221; function sets up a one way coupling between a source and destination model attribute.
+Whenever the source attribute value changes, the destination model attribute will be automatically updated with
+the same result. If you want to transform the source value before it&#8217;s updated in the destination model, an optional
+function callback can be passed in. This will be called with the new attribute
+value and the return value used to update the destination model.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">mvc</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="nx">source_model</span><span class="p">,</span> <span class="s2">&quot;attr&quot;</span><span class="p">,</span> <span class="nx">dest_model</span><span class="p">,</span> <span class="s2">&quot;attr&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">attribute</span><span class="p">,</span> <span class="nx">new_value</span><span class="p">,</span> <span class="nx">old_value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// Return transformed value to update dest_model with</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h2>Creating composite model values</h2>
+
+<p>In the TodoMVC application our model has two attributes, &#8220;remaining&#8221; &amp; &#8220;completed&#8221;, that need to computed
+automatically from other model values.</p>
+
+<p>Calculating the &#8220;completed&#8221; total is performed by looping through the &#8220;todos&#8221; array and counting
+the tasks which have an &#8220;isDone&#8221; attribute as true. Whenever a task&#8217;s &#8220;isDone&#8221; value changes
+we want to re-calculate and update the &#8220;completed&#8221; total. Whenever a new task is added, we
+automatically bind the new item to our calculating function, which updates the composite value
+with the new count if any of our model tasks are modified.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">bindIsDone</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">item</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">mvc</span><span class="p">.</span><span class="nx">bindInputs</span><span class="p">([</span><span class="nx">item</span><span class="p">.</span><span class="nx">isDone</span><span class="p">],</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;updateTotalItemsLeft&quot;</span><span class="p">));</span>
+</span><span class='line'><span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">updateTotalItemsLeft</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">remaining</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">array</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">item</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nx">item</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">item</span><span class="p">.</span><span class="nx">isDone</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}).</span><span class="nx">length</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once we have the &#8220;completed&#8221; total, the &#8220;remaining&#8221; attribute can be easily calculated
+if we know the total number of tasks. Using the &#8220;bind&#8221; method ensures this happens automatically,
+using optional transform function to create the new composite value.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">mvc</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">remaining</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">complete</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s2">&quot;length&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="nx">value</span><span class="p">;</span>
+</span><span class='line'><span class="p">}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Extending StatefulModel</h2>
+
+<p>Defining our Model requires application code to declare the composite (completed, remaining) attributes, bind to changes on the
+current (and future) todo tasks and deal with persisting data to local storage. Rather than having this code in the application
+controller, we can extend the StatefulModel class to encapsulate all this
+logic. Using Dojo&#8217;s <a href="http://dojotoolkit.org/reference-guide/dojo/declare.html">Declare</a> module, we can create a new
+class which extends StatefulModel, allowing us to set the initial model properties as class attributes rather than having to call
+the dojox.mvc.newStatefulModel() factory manually. The skeleton outline for our StatefulModel extension is shown below, we&#8217;ve removed
+some internal methods for brevity.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">define</span><span class="p">([</span><span class="s2">&quot;dojo/_base/declare&quot;</span><span class="p">,</span> <span class="s2">&quot;dojox/mvc/StatefulModel&quot;</span><span class="p">,</span> <span class="s2">&quot;todo/store/LocalStorage&quot;</span><span class="p">,</span> <span class="s2">&quot;dojox/mvc&quot;</span><span class="p">],</span>
+</span><span class='line'>    <span class="kd">function</span><span class="p">(</span><span class="nx">declare</span><span class="p">,</span> <span class="nx">StatefulModel</span><span class="p">,</span> <span class="nx">LocalStorage</span><span class="p">,</span> <span class="nx">mvc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">declare</span><span class="p">([</span><span class="nx">StatefulModel</span><span class="p">],</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">data</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">id</span><span class="o">:</span> <span class="s2">&quot;local_storage_todos&quot;</span><span class="p">,</span>
+</span><span class='line'>            <span class="nx">todos</span> <span class="o">:</span> <span class="p">[],</span>
+</span><span class='line'>            <span class="nx">remaining</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>            <span class="nx">complete</span><span class="o">:</span> <span class="mi">0</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">store</span><span class="o">:</span> <span class="k">new</span> <span class="nx">LocalStorage</span><span class="p">(),</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">constructor</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">data</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">store</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">id</span><span class="p">)</span> <span class="o">||</span> <span class="k">this</span><span class="p">.</span><span class="nx">data</span><span class="p">;</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">_createModel</span><span class="p">(</span><span class="nx">data</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">setUpModelBinding</span><span class="p">();</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">updateTotalItemsLeft</span><span class="p">();</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">setUpModelBinding</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">mvc</span><span class="p">.</span><span class="nx">bind</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">incomplete</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">complete</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="k">return</span> <span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="s2">&quot;length&quot;</span><span class="p">)</span> <span class="o">-</span> <span class="nx">value</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}));</span>
+</span><span class='line'>            <span class="nx">array</span><span class="p">.</span><span class="nx">forEach</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;bindIsDone&quot;</span><span class="p">));</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">watch</span><span class="p">(</span><span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;onTodosModelChange&quot;</span><span class="p">));</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">updateTotalItemsLeft</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">incomplete</span><span class="p">.</span><span class="nx">set</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="nx">array</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">todos</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">item</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="k">return</span> <span class="nx">item</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">item</span><span class="p">.</span><span class="nx">isDone</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+</span><span class='line'>            <span class="p">}).</span><span class="nx">length</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>The internal &#8220;data&#8221; and &#8220;store&#8221; attributes correspond to properties on the base
+StatefulModel class. StatefulModel&#8217;s constructor will automatically transform raw
+JavaScript objects, set via the &#8220;data&#8221; property, into the corresponding
+StatefulModels.</p>
+
+<p>Unfortunately, it doesn&#8217;t contain code for automatically
+populating the initial model from the &#8220;store&#8221; property, this is handled in the
+&#8220;dojox.mvc.newStatefulModel&#8221; factory. Therefore, we manually construct the
+initial model values from the store, if available, and re-call the &#8220;_createModel&#8221; function
+in our constructor.</p>
+
+<p>Once the model has been instantiated, we can declare and initialise our composite model bindings
+as well as binding to the initial todo tasks pulled from persistent storage.</p>
+
+<p>You can see the source code for the final version of the TodoModel class
+<a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo/model">here</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>In this first article, we&#8217;ve reviewed how to use DojoX MVC&#8217;s StatefulModel
+class to create application Models that we can later bind to Views within the
+application. Using the StatefulModel class, we can bind to model properties,
+having callbacks executed when one or more attribute values changed.</p>
+
+<p>Taking this further, we can bind model properties together, creating dynamic
+models whose properties automatically update as others change. Combining this
+functionality, we defined composite model attributes for the &#8220;completed&#8221; and
+&#8220;remaining&#8221; properties that were automatically calculated as the todo tasks&#8217;
+state changed, wrapping this code within an extension of the StatefulModel
+class.</p>
+
+<p>Next time, we&#8217;ll be looking at another component of the MVC pattern, Views. Using the TodoMVC application
+as our example, we&#8217;ll show how to define View templates, bind our Model with the View to generate the application&#8217;s HTML and
+ensure user interactions with the todo tasks automatically update the Model.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -312,6 +631,10 @@ I&#8217;m looking forward to DojoConf 2012 already&#8230;</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
       </li>
     
@@ -325,10 +648,6 @@ I&#8217;m looking forward to DojoConf 2012 already&#8230;</p>
     
       <li class="post">
         <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/">Apache OpenWhisk Web Action HTTP Proxy</a>
       </li>
     
   </ul>
