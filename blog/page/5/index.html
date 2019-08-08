@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="OpenWhisk recently announced the following changes to Docker-based Actions. Developers can now deploy runtime files to the Action environment prior &hellip;">
+  <meta name="description" content="In an earlier blog post, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,201 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2017/01/17/openwhisk-and-go/">Openwhisk and Go</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-01-17T09:00:00+00:00" pubdate data-updated="true">Jan 17<span>th</span>, 2017</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/">In an earlier blog post</a>, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for each serverless function and hosting them on Docker Hub.</p>
+
+<p><a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">Recent updates</a>  to Docker-based Actions have made this process much simpler. Developers don&#8217;t need to build and expose public images anymore.</p>
+
+<p>Let&#8217;s re-visit the example from the previous post and see how to get it running using this new approach…</p>
+
+<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
+
+<h2>Go Language Actions</h2>
+
+<p>Go&#8217;s <a href="https://golang.org/pkg/go/build/">build system</a> combines application source code and dependencies into a single execution binary. Bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
+
+<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
+
+<h3>Action Source Code</h3>
+
+<p>Here&#8217;s a simple Go function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn&#8217;t present, it defaults to <code>Stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
+</span><span class='line'>
+</span><span class='line'><span class="kn">import</span> <span class="s">&quot;encoding/json&quot;</span>
+</span><span class='line'><span class="kn">import</span> <span class="s">&quot;fmt&quot;</span>
+</span><span class='line'><span class="kn">import</span> <span class="s">&quot;os&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="c1">// native actions receive one argument, the JSON object as a string</span>
+</span><span class='line'>  <span class="nx">arg</span> <span class="o">:=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">Args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="c1">// unmarshal the string to a JSON object</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">obj</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}</span>
+</span><span class='line'>  <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">arg</span><span class="p">),</span> <span class="o">&amp;</span><span class="nx">obj</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">name</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nx">obj</span><span class="p">[</span><span class="s">&quot;name&quot;</span><span class="p">].(</span><span class="kt">string</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">!</span><span class="nx">ok</span> <span class="p">{</span>
+</span><span class='line'>      <span class="nx">name</span> <span class="p">=</span> <span class="s">&quot;Stranger&quot;</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="nx">msg</span> <span class="o">:=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span><span class="s">&quot;msg&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s">&quot;Hello, &quot;</span> <span class="o">+</span> <span class="nx">name</span> <span class="o">+</span> <span class="s">&quot;!&quot;</span><span class="p">)}</span>
+</span><span class='line'>  <span class="nx">res</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">msg</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nb">string</span><span class="p">(</span><span class="nx">res</span><span class="p">))</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Building this locally allows us to test it works.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">run</span> <span class="nx">test</span><span class="p">.</span><span class="k">go</span> <span class="err">&#39;</span><span class="p">{</span><span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;James&quot;</span><span class="p">}</span><span class="err">&#39;</span>
+</span><span class='line'><span class="p">{</span><span class="s">&quot;msg&quot;</span><span class="p">:</span><span class="s">&quot;Hello, James!&quot;</span><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
+
+<h3>Cross-Compiling Locally</h3>
+
+<p>Go 1.5 <a href="https://dave.cheney.net/2015/08/22/cross-compilation-with-go-1-5">introduced much improved</a> support for cross-compilation.</p>
+
+<p>If you have the development environment installed locally, you can compile the binary for another platform by setting environment variables. The full list of supported architectures is available <a href="https://golang.org/doc/install/source#environment">here</a>.</p>
+
+<p><em>OpenWhisk uses an <a href="https://hub.docker.com/_/alpine/">Alpine Linux-based</a> environment to execute Actions.</em></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>env <span class="nv">GOOS</span><span class="o">=</span>linux <span class="nv">GOARCH</span><span class="o">=</span>amd64 go build exec.go
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>file <span class="nb">exec</span>
+</span><span class='line'><span class="nb">exec</span>: ELF 64-bit LSB executable, x86-64, version 1 <span class="o">(</span>SYSV<span class="o">)</span>, statically linked, not stripped
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Cross-Compiling Using Docker</h3>
+
+<p>If you don&#8217;t want to install the Go development toolchain, Docker can be used to start a container with the environment set up.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull golang
+</span><span class='line'><span class="nv">$ </span>docker run -it -v <span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:/go/src golang
+</span><span class='line'>root@0a2f1655eece:/go# <span class="nb">cd </span>src/
+</span><span class='line'>root@0a2f1655eece:/go/src# go build exec.go
+</span><span class='line'>root@0a2f1655eece:/go/src# ls
+</span><span class='line'><span class="nb">exec  </span>exec.go
+</span><span class='line'><span class="nv">$ </span>file <span class="nb">exec</span>
+</span><span class='line'><span class="nb">exec</span>: ELF 64-bit LSB executable, x86-64, version 1 <span class="o">(</span>SYSV<span class="o">)</span>, statically linked, not stripped
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Create &amp; Deploy Archive</h3>
+
+<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
+
+<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip action.zip <span class="nb">exec</span>
+</span><span class='line'><span class="nb">  </span>adding: <span class="nb">exec</span> <span class="o">(</span>deflated 66%<span class="o">)</span>
+</span><span class='line'><span class="nv">$ </span>wsk action create go_test action.zip --docker
+</span><span class='line'>ok: created action go_test
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Invoking Action</h3>
+
+<p>Test the action from the command-line to verify it works.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke go_test --blocking --result
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, Stranger!&quot;</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'><span class="nv">$ </span>wsk action invoke go_test --blocking --result --param name James
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, James!&quot;</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Success 😎.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2204,407 +2399,6 @@ The <a href="https://github.com/jthomas/openwhisk_mqtt_feed/blob/master/README.m
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2016/05/10/bots-with-ibm-watson/">Cognitive Bots With IBM Watson</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2016-05-10T16:29:00+01:00" pubdate data-updated="true">May 10<span>th</span>, 2016</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Later this month, I&#8217;m speaking at Twilio&#8217;s conference about
-<a href="https://www.twilio.com/signal/schedule/6L9DFzeXKg0OOIQW42eik2/building-cognitive-bots-with-ibm-watson">building cognitive bots with IBM Watson</a>.
-Preparing for this presentation, I&#8217;ve been experimenting with the IBM Watson
-services to build sample bots that can understand, and act on, natural language.</p>
-
-<p>IBM&#8217;s artificial intelligence system, <a href="https://en.wikipedia.org/wiki/Watson_(computer">Watson</a>, now provides a
-series of <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/services-catalog.html">&#8220;cognitive&#8221; services</a>
-available through <a href="https://bluemix.net">IBM&#8217;s Bluemix cloud platform</a>.
-Developers can integrate everything from natural language processing, image and
-speech recognition, emotion analysis and more into their applications using
-RESTful APIs.</p>
-
-<p>The <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">Watson Developer Cloud</a>
-site has numerous
-<a href="https://github.com/watson-developer-cloud/dialog-nodejs">sample</a>
-<a href="https://github.com/watson-developer-cloud/conversational-agent-application-starter-kit">apps</a>
-to help you understand how to integrate the services together to build &#8220;cognitive&#8221; bots.</p>
-
-<p>In one of the samples, the <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">Dialog service</a>
-is used to develop a <a href="http://dialog-demo.mybluemix.net/">pizza ordering bot</a>.
-Users can order a pizza, specifying the size, toppings and delivery method,
-using natural language.</p>
-
-<p>After understanding how this sample worked, I had an idea to enhance it with
-the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">tone analysis service</a>&#8230;</p>
-
-<h2>Where the heck is my pizza?</h2>
-
-<p>Let&#8217;s imagine the customer has ordered a delivery using pizza-bot and the
-driver is being (even) slower than normal.</p>
-
-<p>If the customer asks</p>
-
-<p><strong>&#8220;Where is my pizza?&#8221;</strong></p>
-
-<p>We return the standard message all pizza takeaways use when calling to
-inquire where the driver is&#8230;.</p>
-
-<p><strong>&#8220;The driver has just left, he&#8217;ll be ten minutes.&#8221;</strong></p>
-
-<p><em>An hour later&#8230;</em></p>
-
-<p>When the driver still hasn&#8217;t arrived, the customer would probably ask again and
-with a bit less civility&#8230;</p>
-
-<p><strong>&#8220;Where the heck is my pizza? I ordered an hour ago! This is ridiculous.&#8221;</strong></p>
-
-<p>At this point, the &#8220;just ten minutes&#8221; reply is not going to be well received!</p>
-
-<p>Building bots that can understand conversation tone will mean we can script a
-suitable response, rather than infuriating our hungry customers.</p>
-
-<p>Using the tone analyser service, I wanted to enhance the sample to use
-conversation sentiment to affect the dialogue.
-Bot responses should be generated based upon both user
-input and conversation sentiment.</p>
-
-<p><img src="/images/pizza_rage.gif"></p>
-
-<p>Let&#8217;s review both services before looking at how to combine them to create the
-improved pizza bot&#8230;</p>
-
-<h2>IBM Watson Dialog</h2>
-
-<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">IBM Watson Dialog service</a>
-enables a developer to automate scripting
-conversations, using natural language, between a virtual agent and a user.
-Developers build up a <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml">decision tree for dialogue</a>,
-using a markup language to define the conversation paths.</p>
-
-<p>Developers can then utilise the pre-defined linguistic model to converse with
-users. The system will keep track of the conversation state when processing
-user input to generate a suitable response. It can also store
-<a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilevar">conversation properties</a>, either extracted from user input or manually updated through the
-API.</p>
-
-<p>These conversation properties can be used to <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilecheck">control the dialogue branching</a>.</p>
-
-<p>Documentation on the service is available <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/">here</a>.</p>
-
-<h2>IBM Watson Tone Analyser</h2>
-
-<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer Service</a>
-uses linguistic analysis to detect three types of tones from text: emotion, social tendencies, and language style.</p>
-
-<p>Emotions identified include things like anger, fear, joy, sadness, and disgust.
-Identified social tendencies include things from the Big Five personality
-traits used by some psychologists. These include openness, conscientiousness,
-extroversion, agreeableness, and emotional range. Identified language styles
-include confident, analytical, and tentative.</p>
-
-<p>Documentation on the service is available <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/tone-analyzer/">here</a>.</p>
-
-<h2>Extending Pizza Bot </h2>
-
-<p>Enhancing pizza bot to support dialogue about delivery times, we can start by
-identifying when the user is asking about the pizza delivery. At this point,
-unless the user is angry, we can return the default response. When sentiment
-analysis indicates this user is angry, we should branch to returning a more
-sympathetic message.</p>
-
-<h2>Matching User Input </h2>
-
-<p>Matching user input about delivery times, there a few common questions we want to capture.</p>
-
-<ul>
-<li><em>Where&#8217;s my order?</em></li>
-<li><em>How long will it be until my pizza arrives?</em></li>
-<li><em>When will my takeout get here?</em></li>
-</ul>
-
-
-<p>Creating our <a href="https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L179-L207">new conversation branch</a>
-within a folder element will allow us to
-group the necessary <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">input</a>,
-<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_grammar">grammar</a> and
-<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_output">output</a> elements as a logical section.</p>
-
-<figure class='code'><figcaption><span>Order Queries</span><a href='http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;folder</span> <span class="na">label=</span><span class="s">&quot;Order&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;input&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;grammar&gt;</span>
-</span><span class='line'>      ...
-</span><span class='line'>    <span class="nt">&lt;/grammar&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;output&gt;</span>
-</span><span class='line'>      <span class="nt">&lt;prompt</span> <span class="na">selectionType=</span><span class="s">&quot;RANDOM&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>        ...
-</span><span class='line'>      <span class="nt">&lt;/prompt&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/output&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;/input&gt;</span>
-</span><span class='line'><span class="nt">&lt;/folder&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>This structure will process the output element, to generate the bot reply, only
-if the input grammar matches user input. Adding item nodes under the input&#8217;s
-grammar element will let us define the dialogue matching criteria, shown here.</p>
-
-<figure class='code'><figcaption><span>Query Grammar</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L181-L188'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;grammar&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$where* order<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$where* pizza<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$how long* order<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$how long* pizza<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$when * order * here<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$when * pizza * here<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'><span class="nt">&lt;/grammar&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>Using <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">wildcard matching characters</a>,
-$ and *, means the grammar (&#8220;$where * order&#8221;) will match questions including &#8220;Where is my pizza?&#8221; and &#8220;Where&#8217;s my
-pizza?&#8221; rather than having to manually define every permutation.</p>
-
-<p>People often use synonyms in natural language. Rather than manually defining
-grammar rules for all alternative words for pizza and order, we can add
-<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_concept">concept elements</a>
-to automatically match these. The sample already has a concept element defined for the pizza term, we only have to add elements for order.</p>
-
-<figure class='code'><figcaption><span>Concept Entities</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L1647-L1654'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;concept&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;grammar&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Order<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Takeaway<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Takeout<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Delivery<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;/grammar&gt;</span>
-</span><span class='line'><span class="nt">&lt;/concept&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Grammar rules which include the <em>order</em> term which automatically match takeaway, takeout or delivery.</p>
-
-<h2>Adding Default Response</h2>
-
-<p>Having matched the user input, we want to return the default response from a pre-specified list.</p>
-
-<figure class='code'><figcaption><span>Bot Replies</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L198-L205'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;output&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;prompt</span> <span class="na">selectionType=</span><span class="s">&quot;RANDOM&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>I&#39;ve just checked and the driver is ten minutes away, is there anything else I can help with?<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Hmmm the driver&#39;s running a bit late, they&#39;ll be about ten minutes. Is there anything else I can help with?<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;item&gt;</span>They should be with you in ten minutes. Is there anything else I can help with?<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;/prompt&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;goto</span> <span class="na">ref=</span><span class="s">&quot;getUserInput_2442994&quot;</span><span class="nt">/&gt;</span>
-</span><span class='line'><span class="nt">&lt;/output&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h2>Handling Angry Customers</h2>
-
-<p>Within the dialog markup, <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_variables">profile variables</a>
-can be defined to store conversation entities. These variables can be referenced by
-<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_if">conditional branches</a>
-in the markup to control responses.</p>
-
-<p>Defining a new profile variable for the anger score, this value can be updated
-manually before the current user input is processed to return the dialogue
-response.</p>
-
-<figure class='code'><figcaption><span>Profile Variable</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L2062'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;variables&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;var_folder</span> <span class="na">name=</span><span class="s">&quot;Home&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>    ...
-</span><span class='line'>    <span class="nt">&lt;var</span> <span class="na">name=</span><span class="s">&quot;anger&quot;</span> <span class="na">type=</span><span class="s">&quot;NUMBER&quot;</span> <span class="na">initValue=</span><span class="s">&quot;0&quot;</span> <span class="na">description=</span><span class="s">&quot;Anger emotion score for conversation.&quot;</span><span class="nt">/&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;/var_folder&gt;</span>
-</span><span class='line'><span class="nt">&lt;/variables&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Adding a child branch, for the conditional response, after the input grammar
-will allow us to return a custom response if the profile variable for the anger
-emotion is above a threshold.</p>
-
-<figure class='code'><figcaption><span>Anger Branching</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L189-L197'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;folder</span> <span class="na">label=</span><span class="s">&quot;Order&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>  <span class="nt">&lt;input&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;grammar&gt;</span>
-</span><span class='line'>      <span class="nt">&lt;item&gt;</span>$where* order<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/grammar&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;if</span> <span class="na">matchType=</span><span class="s">&quot;ANY&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>      <span class="nt">&lt;cond</span> <span class="na">varName=</span><span class="s">&quot;anger&quot;</span> <span class="na">operator=</span><span class="s">&quot;GREATER_THEN&quot;</span><span class="nt">&gt;</span>0.50<span class="nt">&lt;/cond&gt;</span>
-</span><span class='line'>      <span class="nt">&lt;output&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;prompt</span> <span class="na">selectionType=</span><span class="s">&quot;RANDOM&quot;</span><span class="nt">&gt;</span>
-</span><span class='line'>          <span class="nt">&lt;item&gt;</span>Please accept our apologies for the delivery driver being very late. Could you call us on 0800 800 800 and we&#39;ll get this fixed?<span class="nt">&lt;/item&gt;</span>
-</span><span class='line'>        <span class="nt">&lt;/prompt&gt;</span>
-</span><span class='line'>      <span class="nt">&lt;/output&gt;</span>
-</span><span class='line'>    <span class="nt">&lt;/if&gt;</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>When we&#8217;ve detected the user is angry about the delivery delay, we direct
-them to ring the restaurant to find out what&#8217;s happened to the driver.</p>
-
-<h2>Combining Watson Services</h2>
-
-<p>Modifying the backend service that calls the Watson services, we&#8217;re now passing
-the user&#8217;s input through the Tone Analyzer service and manually updating user&#8217;s
-anger score in their profile, before calling the Dialog service.</p>
-
-<p>This anger score will be used to control the dialogue response in real-time.</p>
-
-<figure class='code'><figcaption><span>Using Tone Analyser</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/app.js#L56-L85'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">app</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/conversation&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>  <span class="nx">tone_analyzer</span><span class="p">.</span><span class="nx">tone</span><span class="p">({</span> <span class="nx">text</span><span class="o">:</span> <span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">input</span> <span class="p">},</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">tone</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">categories</span> <span class="o">=</span> <span class="nx">tone</span><span class="p">.</span><span class="nx">document_tone</span><span class="p">.</span><span class="nx">tone_categories</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">emotion_tones</span> <span class="o">=</span> <span class="nx">categories</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">tone</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>      <span class="k">return</span> <span class="nx">tone</span><span class="p">.</span><span class="nx">category_id</span> <span class="o">===</span> <span class="s1">&#39;emotion_tone&#39;</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">anger_tone</span> <span class="o">=</span> <span class="nx">emotion_tones</span><span class="p">.</span><span class="nx">tones</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">tone</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>      <span class="k">return</span> <span class="nx">tone</span><span class="p">.</span><span class="nx">tone_id</span> <span class="o">===</span> <span class="s1">&#39;anger&#39;</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">client_id</span><span class="o">:</span> <span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">client_id</span><span class="p">,</span> <span class="nx">dialog_id</span><span class="o">:</span> <span class="nx">dialog_id</span><span class="p">,</span> <span class="nx">name_values</span><span class="o">:</span> <span class="p">[{</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;anger&#39;</span><span class="p">,</span> <span class="nx">value</span><span class="o">:</span> <span class="nx">anger_tone</span><span class="p">.</span><span class="nx">score</span><span class="p">}]}</span>
-</span><span class='line'>    <span class="nx">dialog</span><span class="p">.</span><span class="nx">updateProfile</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">results</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>      <span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="nx">extend</span><span class="p">({</span> <span class="nx">dialog_id</span><span class="o">:</span> <span class="nx">dialog_id</span> <span class="p">},</span> <span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">);</span>
-</span><span class='line'>      <span class="nx">dialog</span><span class="p">.</span><span class="nx">conversation</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">results</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>        <span class="k">else</span>
-</span><span class='line'>          <span class="nx">res</span><span class="p">.</span><span class="nx">json</span><span class="p">({</span> <span class="nx">dialog_id</span><span class="o">:</span> <span class="nx">dialog_id</span><span class="p">,</span> <span class="nx">conversation</span><span class="o">:</span> <span class="nx">results</span><span class="p">});</span>
-</span><span class='line'>      <span class="p">});</span>
-</span><span class='line'>    <span class="p">})</span>
-</span><span class='line'>  <span class="p">});</span>
-</span><span class='line'><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>The <a href="https://github.com/jthomas/dialog-nodejs/commit/6d025040e005ef0d9aa976bfe20039db05f681fe">commit log</a>
-for the fork shows the full changes needed to integrate this feature.</p>
-
-<h2>Conclusion</h2>
-
-<p>Bots are a <a href="https://medium.com/chris-messina/2016-will-be-the-year-of-conversational-commerce-1586e85e3991#.524ovvaj8">huge trend for 2016</a>.
-One of the major challenges to developing your
-own bots is handling user input using natural language. How can you go beyond
-simple keyword matching and regular expressions to build solutions that
-actually understand what your user is asking?</p>
-
-<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/overview.shtml">IBM Watson Dialog service</a> users can script natural language
-conversations. Defining a linguistic model for their dialogue using markup
-language, the system can use this to process natural language and return the
-appropriate response. Conversation entities are recognised and stored in a user
-profile.</p>
-
-<p>Combining this service with the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer</a>, users can script
-conversations that use the user&#8217;s emotional tone to modify the response.</p>
-
-<p>Modifying the pizza sample, we incorporate the anger score to return a more
-appropriate response when the user is angry about their delivery being delayed.</p>
-
-<p>IBM Watson has <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">many other services</a>
-that can be integrated with the Dialog
-service using the same pattern to build &#8220;cognitive&#8221; bots. Using these services
-takes the hard work out of building bots that actually understand and respond
-with emotion to input using natural language.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/6/">&larr; Older</a>
@@ -2622,6 +2416,10 @@ with emotion to input using natural language.</p>
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
       </li>
     
@@ -2635,10 +2433,6 @@ with emotion to input using natural language.</p>
     
       <li class="post">
         <a href="/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/">Accessing Long-Running Apache OpenWhisk Actions Results</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
       </li>
     
   </ul>

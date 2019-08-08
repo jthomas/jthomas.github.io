@@ -4,7 +4,7 @@
   <title><![CDATA[Category: openwhisk | James Thomas]]></title>
   <link href="http://jamesthom.as/blog/categories/openwhisk/atom.xml" rel="self"/>
   <link href="http://jamesthom.as/"/>
-  <updated>2019-07-30T12:39:16+01:00</updated>
+  <updated>2019-08-08T10:33:32+01:00</updated>
   <id>http://jamesthom.as/</id>
   <author>
     <name><![CDATA[James Thomas]]></name>
@@ -12,6 +12,291 @@
   </author>
   <generator uri="http://octopress.org/">Octopress</generator>
 
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Functions with WebAssembly Modules]]></title>
+    <link href="http://jamesthom.as/blog/2019/08/06/serverless-and-webassembly-modules/"/>
+    <updated>2019-08-06T10:25:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/08/06/serverless-and-webassembly-modules</id>
+    <content type="html"><![CDATA[<p>Watching a <a href="https://london.serverlessdays.io/speakers/lin/">recent talk</a> by <a href="https://twitter.com/linclark">Lin Clark</a> and <a href="https://twitter.com/tschneidereit">Till Schneidereit</a> about <a href="https://webassembly.org/">WebAssembly</a> (Wasm) inspired me to start experimenting with using WebAssembly <a href="https://webassembly.org/docs/modules/">modules</a> from <a href="https://en.wikipedia.org/wiki/Serverless_computing">serverless functions</a>.</p>
+
+<p>This blog post demonstrates how to invoke functions written in C from Node.js serverless functions. Source code in C is compiled to Wasm modules and bundled in the deployment package. Node.js code implements the serverless platform handler and calls native functions upon invocations.</p>
+
+<p>The examples should work (with some modifications) on any serverless platform that supports deploying Node.js functions from a zip file. I'll be using <a href="https://cloud.ibm.com/functions/">IBM Cloud Functions</a> (<a href="https://openwhisk.apache.org/">Apache OpenWhisk</a>).</p>
+
+<h2>WebAssembly</h2>
+
+<blockquote><p>WebAssembly (abbreviated <em>Wasm</em>) is a binary instruction format for a stack-based virtual machine. Wasm is designed as a portable target for compilation of high-level languages like C/C++/Rust.</p>
+
+<p><a href="https://webassembly.org/">https://webassembly.org/</a></p></blockquote>
+
+<p>Wasm started as a project to run low-level languages in the browser. This was envisioned as a way to execute computationally intensive tasks in the client, e.g. image manipulation, machine learning, graphics engines. This would improve performance for those tasks compared to using JavaScript.</p>
+
+<p>WebAssembly compiles languages like C, C++ and Rust to a portable instruction format, rather than platform-specific machine code. Compiled Wasm files are interpreted by a Wasm VM in the browser or other runtimes. <a href="https://developer.mozilla.org/en-US/docs/WebAssembly/Using_the_JavaScript_API">APIs have been defined</a> to support importing and executing Wasm modules from JavaScript runtimes. These APIs have been implemented in multiple browsers and recent Node.js versions (v8.0.0+).</p>
+
+<p><strong>This means Node.js serverless functions, using a runtime version above 8.0.0, can use WebAssembly!</strong></p>
+
+<h3>Wasm Modules + Serverless</h3>
+
+<p><em>"Why would we want to use WebAssembly Modules from Node.js Serverless Functions?"</em> 🤔</p>
+
+<h4>Performance</h4>
+
+<p>Time is literally money with serverless platforms. The faster the code executes, the less it will cost. Using C, C++ or Rust code, compiled to Wasm modules, for <a href="https://medium.com/@torch2424/webassembly-is-fast-a-real-world-benchmark-of-webassembly-vs-es6-d85a23f8e193">computationally intensive tasks</a> can be much faster than the same algorithms implemented in JavaScript.</p>
+
+<h4>Easier use of native libraries</h4>
+
+<p>Node.js already <a href="https://github.com/nodejs/node-gyp">has a way</a> to use native libraries (in C or C++) from the runtime. This works by compiling the native code during the NPM installation process. Libraries bundled in deployment packages need to be compiled for the serverless platform runtime, not the development environment.</p>
+
+<p>Developers often resort to using <a href="https://github.com/apache/openwhisk/blob/master/docs/actions-nodejs.md#handling-npm-libraries-with-native-dependencies">specialised containers</a> or <a href="https://aws.amazon.com/blogs/compute/nodejs-packages-in-lambda/">VMs</a>, that try to match the runtime environments, for library compilation. This process is error-prone, difficult to debug and a source of problems for developers new to serverless.</p>
+
+<p>Wasm is deliberately platform independent. This means Wasm code compiled locally will work on any Wasm runtime. No more worrying about platform architectures and complex toolchains for native libraries!</p>
+
+<h4>Additional runtime support</h4>
+
+<p><a href="https://github.com/appcypher/awesome-wasm-langs">Dozens of languages</a> now support compiling to WebAssembly.</p>
+
+<p>Want to write serverless functions in Rust, C, or Lua? No problem! By wrapping Wasm modules with a small Node.js handler function, developers can write their serverless applications in any language with "compile to Wasm" support.</p>
+
+<p>Developers don't have to be restricted to the runtimes provided by the platform.</p>
+
+<h3>JS APIs in Node.js</h3>
+
+<p>Here is the code needed to load a Wasm module from Node.js. Wasm modules are distributed in <code>.wasm</code> files. Loaded modules are instantiated into instances, by providing a configurable runtime environment. Functions exported from Wasm modules can then be invoked on these instances from Node.js.</p>
+
+<p><code>javascript
+const wasm_module = 'library.wasm'
+const bytes = fs.readFileSync(wasm_module)
+const wasmModule = new WebAssembly.Module(bytes);
+const wasmMemory = new WebAssembly.Memory({initial: 512});
+const wasmInstance = new WebAssembly.Instance(wasmModule, { env: { memory: wasmMemory } }})
+</code></p>
+
+<h4>Calling Functions</h4>
+
+<p>Exported Wasm functions are available on the <code>exports</code> property of the <code>wasmInstance</code>. These properties can be invoked as normal functions.</p>
+
+<p><code>javascript
+const result = wasmInstance.exports.add(2, 2)
+</code></p>
+
+<h4>Passing &amp; Returning Values</h4>
+
+<p>Exported Wasm functions can only receive and return <a href="https://webassembly.github.io/spec/core/syntax/types.html">native Wasm types</a>. This (<a href="https://github.com/WebAssembly/reference-types">currently</a>) means only integers.</p>
+
+<p>Values that can be represented as a series of numbers, e.g. strings or arrays, can be <a href="https://stackoverflow.com/questions/41875728/pass-a-javascript-array-as-argument-to-a-webassembly-function">written directly</a> to the Wasm instance memory heap from Node.js. Heap memory references can be passed as the function parameter values, allowing the Wasm code to read these values. More complex types (e.g. JS objects) are not supported.</p>
+
+<p>This process can also be <a href="https://stackoverflow.com/questions/41353389/how-can-i-return-a-javascript-string-from-a-webassembly-function">used in reverse</a>, with Wasm functions returning heap references to pass back strings or arrays with the function result.</p>
+
+<p>For more details on how memory works in Web Assembly, please see this <a href="https://hacks.mozilla.org/2017/07/memory-in-webassembly-and-why-its-safer-than-you-think/">page</a>.</p>
+
+<h2>Examples</h2>
+
+<p>Having covered the basics, let's look at some examples...</p>
+
+<p>I'll start with calling a <a href="https://gist.github.com/jthomas/5de757fd36b3c6904e5c5f12c8264b41">simple C function from a Node.js serverless function</a>. This will demonstrate the complete steps needed to compile and use a small C program as a Wasm module. Then I'll look at a more real-world use-case, <a href="https://github.com/jthomas/openwhisk-image-resize-wasm">dynamic image resizing</a>. This will use a C library compiled to Wasm to improve performance.</p>
+
+<p>Examples will be deployed to <a href="https://cloud.ibm.com/functions">IBM Cloud Functions</a> (<a href="https://openwhisk.apache.org/">Apache OpenWhisk</a>). They should work on other serverless platforms (supporting the Node.js runtime) with small modifications to the handler function's interface.</p>
+
+<h3>Simple Function Calls</h3>
+
+<h4>Create Source Files</h4>
+
+<ul>
+<li>Create a file <code>add.c</code> with the following contents:</li>
+</ul>
+
+
+<p><code>c
+int add(int a, int b) {
+  return a + b;
+}
+</code></p>
+
+<ul>
+<li>Create a file (<code>index.js</code>) with the following contents:</li>
+</ul>
+
+
+<p>```javascript
+'use strict';
+const fs = require('fs');
+const util = require('util')</p>
+
+<p>const WASM_MODULE = 'add.wasm'
+let wasm_instance</p>
+
+<p>async function load_wasm(wasm_module) {
+  if (!wasm_instance) {</p>
+
+<pre><code>const bytes = fs.readFileSync(wasm_module);
+const memory = new WebAssembly.Memory({initial: 1});
+const env = {
+  __memory_base: 0, memory
+}
+
+const { instance, module } = await WebAssembly.instantiate(bytes, { env });
+wasm_instance = instance
+</code></pre>
+
+<p>  }</p>
+
+<p>  return wasm_instance.exports._add
+}</p>
+
+<p>exports.main = async function ({ a = 1, b = 1 }) {
+  const add = await load_wasm(WASM_MODULE)
+  const sum = add(a, b)
+  return { sum }
+}
+```</p>
+
+<ul>
+<li>Create a file (<code>package.json</code>) with the following contents:</li>
+</ul>
+
+
+<p><code>json
+{
+  "name": "wasm",
+  "version": "1.0.0",
+  "main": "index.js"
+}
+</code></p>
+
+<h4>Compile Wasm Module</h4>
+
+<p>This C source file needs compiling to a WebAssembly module. There are different projects to handle this. I will be using <a href="https://emscripten.org/">Emscripten</a>, which uses LLVM to compile C and C++ to WebAssembly.</p>
+
+<ul>
+<li><p><a href="https://emscripten.org/docs/getting_started/downloads.html">Install</a> the <a href="https://emscripten.org/">Emscripten</a> toolchain.</p></li>
+<li><p>Run the following command to generate the Wasm module.</p></li>
+</ul>
+
+
+<p><code>sh
+emcc -s WASM=1 -s SIDE_MODULE=1 -s EXPORTED_FUNCTIONS="['_add']" -O1 add.c -o add.wasm
+</code></p>
+
+<p><em>The <code>SIDE_MODULE</code> option tells the compiler the Wasm module will be loaded manually using the JS APIs. This stops Emscripten generating a corresponding JS file to do this automatically. Functions exposed on the Wasm module are controlled by the <code>EXPORTED_FUNCTIONS</code> configuration parameter.</em></p>
+
+<h4>Deploy Serverless Function</h4>
+
+<ul>
+<li>Create deployment package with source files.</li>
+</ul>
+
+
+<p><code>
+zip action.zip index.js add.wasm package.json
+</code></p>
+
+<ul>
+<li>Create serverless function from deployment package.</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action create wasm action.zip --kind nodejs:10
+</code></p>
+
+<ul>
+<li>Invoke serverless function to test Wasm module.</li>
+</ul>
+
+
+<p>```
+$ ibmcloud wsk action invoke wasm -r -p a 2 -p b 2
+{</p>
+
+<pre><code>"sum": 4
+</code></pre>
+
+<p>}
+```</p>
+
+<p>It works! 🎉🎉🎉</p>
+
+<p>Whilst this is a trivial example, it demonstrates the workflow needed to compile C source files to Wasm modules and invoke exported functions from Node.js serverless functions. Let's move onto a more realistic example...</p>
+
+<h3>Dynamic Image Resizing</h3>
+
+<p>This <a href="https://github.com/jthomas/openwhisk-image-resize-wasm">repository</a> contains a serverless function to resize images using a C library called via WebAssembly. It is a fork of the <a href="https://github.com/cloudflare/cloudflare-workers-wasm-demo">original code</a> created by Cloudflare for their Workers platform. See the original repository for details on what the repository contains and how the files work.</p>
+
+<h4>Checkout Repository</h4>
+
+<ul>
+<li>Retrieve the source files by checking out this <a href="https://github.com/jthomas/openwhisk-image-resize-wasm">repository</a>.</li>
+</ul>
+
+
+<p><code>
+git clone https://github.com/jthomas/openwhisk-image-resize-wasm
+</code></p>
+
+<p>This repository contains the pre-compiled Wasm module (<code>resize.wasm</code>) needed to resize images using the <a href="https://github.com/nothings/stb">stb library</a>. The module exposes two functions: <code>init</code> and <code>resize</code>.</p>
+
+<p>The <code>init</code> function <a href="https://github.com/jthomas/openwhisk-image-resize-wasm/blob/master/main.c#L29-L38">returns a heap reference</a> to write the image bytes for processing <a href="https://github.com/jthomas/openwhisk-image-resize-wasm/blob/master/worker.js#L59">into</a>. The <code>resize</code> <a href="https://github.com/jthomas/openwhisk-image-resize-wasm/blob/master/main.c#L49">function</a> is called with two values, the image byte array length and new width value. It uses these values to read the image bytes from the heap and calls the library functions to resize the image to the desired width. Resized image bytes are written back to the heap and the new byte array length is returned.</p>
+
+<h4>Deploy Serverless Function</h4>
+
+<ul>
+<li>Create deployment package from source files.</li>
+</ul>
+
+
+<p><code>
+zip action.zip resizer.wasm package.json worker.js
+</code></p>
+
+<ul>
+<li>Create serverless function from deployment package.</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action update resizer action.zip --kind nodejs:10 --web true
+</code></p>
+
+<ul>
+<li>Retrieve HTTP URL for Web Action.</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action get resizer --url
+</code></p>
+
+<p><em>This should return a URL like:</em> <code>https://&lt;region&gt;.cloud.ibm.com/api/v1/web/&lt;ns&gt;/default/resizer</code></p>
+
+<ul>
+<li>Open the Web Action URL with the <code>.http</code> extension.</li>
+</ul>
+
+
+<p><code>
+https://&lt;region&gt;.cloud.ibm.com/api/v1/web/&lt;ns&gt;/default/resizer.http
+</code></p>
+
+<p>This should return the following image resized to 250 pixels (from 900 pixels).</p>
+
+<p><img src="https://bit.ly/2ZlP838" alt="Pug with Ice-cream" /></p>
+
+<p>URL query parameters (<code>url</code> and <code>width</code>) can be used to modify the image source or output width for the next image, e.g.</p>
+
+<p><code>
+https://&lt;region&gt;.cloud.ibm.com/api/v1/web/&lt;ns&gt;/default/resizer.http?url=&lt;IMG_URL&gt;&amp;width=500
+</code></p>
+
+<h2>Conclusion</h2>
+
+<p>WebAssembly may have started as a way to run native code in the browser, but soon expanded to server-side runtime environments like Node.js. WebAssembly modules are supported on any serverless platform with a Node.js v8.0.0+ runtime.</p>
+
+<p>Wasm provides a fast, safe and secure way to ship portable modules from compiled languages. Developers don't have to worry about whether the module is compiled for the correct platform architecture or linked against unavailable dynamic libraries. This is especially useful for serverless functions in Node.js, where compiling native libraries for production runtimes can be challenging.</p>
+
+<p>Wasm modules can be used to improve performance for computationally intensive calculations, which lowers invocation times and, therefore, costs less. It also provides an easy way to utilise additional runtimes on serverless platforms without any changes by the platform provider.</p>
+]]></content>
+  </entry>
   
   <entry>
     <title type="html"><![CDATA[Serverless APIs for MAX models]]></title>
@@ -979,297 +1264,6 @@ EXPOSE 8080</p>
 <p>Web application sources files can be injected into the runtime environment during initialisation or built straight into the custom runtime image. No significant changes are required in the web application and it does not need custom framework plugins.</p>
 
 <p>Apache OpenWhisk's support for custom Docker runtimes opens up a huge range of opportunities for running more varied workloads on serverless platforms - and this is a great example of that!</p>
-]]></content>
-  </entry>
-  
-  <entry>
-    <title type="html"><![CDATA[Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions]]></title>
-    <link href="http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/"/>
-    <updated>2019-04-23T15:08:00+01:00</updated>
-    <id>http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions</id>
-    <content type="html"><![CDATA[<p>How do you set up a <a href="https://dzone.com/articles/what-is-cicd">CI/CD pipeline</a> for serverless applications?</p>
-
-<p>This blog post will explain how to use <a href="https://travis-ci.org/">Travis CI</a>, <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/avajs/ava">AVA testing framework</a> to set up a fully-automated build, deploy and test pipeline for a serverless application. It will use a real example of a production <a href="https://github.com/jthomas/openwhisk-release-verification">serverless application</a>, built using <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> and running on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. The CI/CD pipeline will execute the following tasks...</p>
-
-<ul>
-<li><strong>Run project unit tests.</strong></li>
-<li><strong>Deploy application to test environment.</strong></li>
-<li><strong>Run acceptance tests against test environment.</strong></li>
-<li><strong>Deploy application to production environment.</strong></li>
-<li><strong>Run smoke tests against production environment.</strong></li>
-</ul>
-
-
-<p>Before diving into the details of the CI/CD pipeline setup, let's start by showing the example serverless application being used for this project...</p>
-
-<h2>Serverless Project - <a href="http://apache.jamesthom.as/">http://apache.jamesthom.as/</a></h2>
-
-<p>The "<a href="https://github.com/jthomas/openwhisk-release-verification">Apache OpenWhisk Release Verification</a>" project is a serverless web application to help committers verify release candidates for the open-source project. It automates running the verification steps from the <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">ASF release checklist</a> using serverless functions. Automating release candidate validation makes it easier for  committers to participate in release voting.</p>
-
-<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
-
-<p>The project consists of a static web assets (HTML, JS, CSS files) and HTTP APIs. Static web assets are hosted by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>. HTTP APIs are implemented as Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> and exposed using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway</a> service. <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> is used to host the Apache OpenWhisk application.</p>
-
-<p>No other cloud services, like databases, are needed by the backend. Release candidate information is retrieved in real-time by parsing the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">HTML page</a> from the ASF website.</p>
-
-<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Serverless Architecture" /></p>
-
-<h3>Configuration</h3>
-
-<p><a href="https://github.com/serverless/serverless">The Serverless Framework</a> (with the <a href="https://github.com/serverless/serverless-openwhisk">Apache OpenWhisk provider plugin</a>) is used to define the serverless functions used in the application. HTTP endpoints are also defined in the YAML configuration file.</p>
-
-<p>```yaml
-service: release-verfication</p>
-
-<p>provider:
-  name: openwhisk
-  runtime: nodejs:10</p>
-
-<p>functions:
-  versions:</p>
-
-<pre><code>handler: index.versions
-events:
-  - http: GET /api/versions
-</code></pre>
-
-<p>  version_files:</p>
-
-<pre><code>handler: index.version_files
-events:
-  - http:
-      method: GET
-      path: /api/versions/{version}
-      resp: http
-</code></pre>
-
-<p>...</p>
-
-<p>plugins:
-  - serverless-openwhisk
-```</p>
-
-<p>The framework handles all deployment and configuration tasks for the application. Setting up the application in a new environment is as simple as running the <code>serverless deploy</code> <a href="https://github.com/serverless/serverless">command</a>.</p>
-
-<h3>Environments</h3>
-
-<p>Apache OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#fully-qualified-names">namespaces</a> to group individual packages, actions, triggers and rules. Different namespaces can be used to provide isolated environments for applications.</p>
-
-<p>IBM Cloud Functions automatically creates <a href="https://cloud.ibm.com/docs/openwhisk?topic=cloud-functions-cloudfunctions_cli#region_info">user-based namespaces</a> in platform instances. These auto-generated namespaces mirror the IBM Cloud organisation and space used to access the instance. Creating <a href="https://cloud.ibm.com/docs/account?topic=account-orgsspacesusers#cf-org-concepts">new spaces within an organisation</a> will provision extra namespaces.</p>
-
-<p>I'm using a custom organisation for the application with three different spaces: <strong>dev</strong>, <strong>test</strong> and <strong>prod</strong>.</p>
-
-<p><strong>dev</strong> is used as a test environment to deploy functions during development. <strong>test</strong> is used by the CI/CD pipeline to deploy a temporary instance of the application during acceptance tests. <strong>prod</strong> is the production environment hosting the external application actions.</p>
-
-<h3>Credentials</h3>
-
-<p>The <a href="https://cloud.ibm.com/docs/cli?topic=cloud-cli-install-ibmcloud-cli">IBM Cloud CLI</a> is used to handle IBM Cloud Functions credentials. <a href="https://cloud.ibm.com/docs/iam?topic=iam-manapikey">Platform API keys</a> will be used to log in the CLI from the CI/CD system.</p>
-
-<p>When Cloud Functions CLI commands are issued (after targeting a new region, organisation or space), API keys for that Cloud Functions instance are automatically retrieved and stored locally. The Serverless Framework knows how to use these local credentials when interacting with the platform.</p>
-
-<h3>High Availability?</h3>
-
-<p>The Apache OpenWhisk Release Verifier is not a critical cloud application which needs "<a href="https://en.wikipedia.org/wiki/Five_nines">five nines</a>" of availability. The application is idle most of the time. It does not need a <a href="https://en.wikipedia.org/wiki/High_availability">highly available</a> serverless architecture. This means the build pipeline does not have to...</p>
-
-<ul>
-<li><a href="https://cloud.ibm.com/docs/tutorials?topic=solution-tutorials-multi-region-serverless#multi-region-serverless">Deploy application instances in multiple cloud regions.</a></li>
-<li><a href="https://www.ibm.com/blogs/bluemix/2019/04/load-balancing-api-calls-across-regions-with-ibm-cloud-internet-services-and-cloud-api-gateway/">Set up a global load balancer between regional instances.</a></li>
-<li>Support "<a href="https://www.martinfowler.com/bliki/BlueGreenDeployment.html">zero downtime deploys</a>" to minimise downtime during deployments.</li>
-<li>Automatic roll-back to previous versions on production issues.</li>
-</ul>
-
-
-<p>New deployments will simply overwrite resources in the production namespace in a single region. If the production site is broken after a deployment, the smoke tests should catch this and email me to fix it!</p>
-
-<h2>Testing</h2>
-
-<p>Given this tool will be used to check release candidates for the open-source project, I wanted to ensure it worked properly! Incorrect validation results could lead to invalid source archives being published.</p>
-
-<p>I've chosen to rely heavily on unit tests to check the core business logic. These tests ensure all validation tasks work correctly, including PGP signature verification, cryptographic hash matching, LICENSE file contents and other ASF requirements for project releases.</p>
-
-<p>Additionally, I've used end-to-end acceptance tests to validate the HTTP APIs work as expected. HTTP requests are sent to the API GW endpoints, with responses compared against expected values. All available release candidates are run through the validation process to check no errors are returned.</p>
-
-<h3>Unit Tests</h3>
-
-<p><a href="https://en.wikipedia.org/wiki/Unit_testing">Unit tests</a> are implemented with the <a href="https://github.com/avajs/ava">AVA testing framework</a>. Unit tests live in the <code>unit/test/</code> <a href="https://github.com/jthomas/openwhisk-release-verification/tree/master/test/unit">folder</a>.</p>
-
-<p>The <code>npm test</code> command alias runs the <code>ava test/unit/</code> command to execute all unit tests. This command can be executed locally, during development, or from the CI/CD pipeline.</p>
-
-<p>```bash
-$ npm test</p>
-
-<blockquote><p>release-verification@1.0.0 test ~/code/release-verification
-ava test/unit/</p></blockquote>
-
-<p> 27 tests passed
-```</p>
-
-<h3>Acceptance Tests</h3>
-
-<p><a href="https://en.wikipedia.org/wiki/Acceptance_testing">Acceptance tests</a> check API endpoints return the expected responses for valid (and invalid) requests. Acceptance tests are executed against the API Gateway endpoints for an application instance.</p>
-
-<p>The hostname used for HTTP requests is controlled using an environment variable (<code>HOST</code>). Since the same test suite test is used for acceptance and smoke tests, setting this environment variable is the only configuration needed to run tests against different environments.</p>
-
-<p>API endpoints in the test and production environments are exposed using different custom sub-domains (<code>apache-api.jamesthom.as</code> and <code>apache-api-test.jamesthom.as</code>). NPM <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L8-L9">scripts are used</a> to provide commands (<code>acceptance-test</code> &amp; <code>acceptance-prod</code>) which set the environment hostname before running the test suite.</p>
-
-<p>```javascript
-"scripts": {</p>
-
-<pre><code>"acceptance-test": "HOST=apache-api-test.jamesthom.as ava -v --fail-fast test/acceptance/",
-"acceptance-prod": "HOST=apache-api.jamesthom.as ava -v --fail-fast test/acceptance/"
-</code></pre>
-
-<p>  },
-```</p>
-
-<p>```
-$ npm run acceptance-prod</p>
-
-<blockquote><p>release-verification@1.0.0 acceptance-prod ~/code/release-verification
-HOST=apache-api.jamesthom.as ava -v --fail-fast  test/acceptance/</p></blockquote>
-
-<p>  ✔ should return list of release candidates (3.7s)</p>
-
-<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions
-</code></pre>
-
-<p>  ✔ should return 404 for file list when release candidate is invalid (2.1s)</p>
-
-<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions/unknown
-</code></pre>
-
-<p>  ...</p>
-
-<p>  6 tests passed
-```</p>
-
-<p>Acceptance tests are also implemented with the AVA testing framework. All acceptance tests live in a single <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/test/acceptance/api.js">test file</a> (<code>unit/acceptance/api.js</code>).</p>
-
-<h2>CI/CD Pipeline</h2>
-
-<p>When new commits are pushed to the <code>master</code> branch on the project repository, the following steps needed to be kicked off by the build pipeline…</p>
-
-<ul>
-<li><em>Run project unit tests.</em></li>
-<li><em>Deploy application to test environment.</em></li>
-<li><em>Run acceptance tests against test environment.</em></li>
-<li><em>Deploy application to production environment.</em></li>
-<li><em>Run smoke tests against production environment.</em></li>
-</ul>
-
-
-<p>If any of the steps fail, the build pipeline should stop and send me a notification email.</p>
-
-<h3>Travis</h3>
-
-<p><a href="https://travis-ci.org/">Travis CI</a> is used to implement the CI/CD build pipeline. Travis CI uses a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml">custom file</a> (<code>.travis.yml</code>) in the project repository to configure the build pipeline. This YAML file defines commands to execute during each phase of build pipeline. If any of the commands fail, the build will stop at that phase without proceeding.</p>
-
-<p><em>Here is the completed <code>.travis.yml</code> file for this project: https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml</em></p>
-
-<p>I'm using the following Travis CI <a href="https://docs.travis-ci.com/user/job-lifecycle#the-job-lifecycle">build phases</a> to implement the pipeline: <strong>install</strong>, <strong>before_script</strong>, <strong>script</strong>, <strong>before_deploy</strong> and <strong>deploy</strong>. Commands will run in the Node.js 10 build environment, which pre-installs the language runtime and package manager.</p>
-
-<p><code>yaml
-language: node_js
-node_js:
-  - "10"
-</code></p>
-
-<h4>install</h4>
-
-<p>In the <code>install</code> <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L5-L9">phase</a>, I need to set up the build environment to deploy the application and run tests.</p>
-
-<p>This means installing the IBM Cloud CLI, <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions CLI plugin</a>, The Serverless Framework (with Apache OpenWhisk plugin), application test framework (AvaJS) and other project dependencies.</p>
-
-<p>The IBM Cloud CLI is installed using a shell script. Running a CLI sub-command installs the <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions plugin</a>.</p>
-
-<p>The Serverless Framework is installed as global NPM package (using <code>npm -g install</code>). The Apache OpenWhisk provider plugin is handled as <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L13-L23">normal project dependency</a>, along with the test framework. Both those dependencies are installed using NPM.</p>
-
-<p><code>yaml
-install:
-  - curl -fsSL https://clis.cloud.ibm.com/install/linux | sh
-  - ibmcloud plugin install cloud-functions
-  - npm install serverless -g
-  - npm install
-</code></p>
-
-<h4>before_script</h4>
-
-<p>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L11-L16">phase</a> is used to run unit tests, catching errors in core business logic, before setting up credentials (used in the <code>script</code> phase) for the acceptance test environment. Unit test failures will halt the build immediately, skipping test and production deployments.</p>
-
-<p>Custom variables provide the API key, platform endpoint, organisation and space identifiers which are used for the test environment. The CLI is authenticated using these values, before running the <code>ibmcloud fn api list</code> command. This ensures Cloud Functions credentials are available locally, as used by The Serverless Framework.</p>
-
-<p><code>yaml
-before_script:
-  - npm test
-  - ibmcloud login --apikey $IBMCLOUD_API_KEY -a $IBMCLOUD_API_ENDPOINT
-  - ibmcloud target -o $IBMCLOUD_ORG -s $IBMCLOUD_TEST_SPACE
-  - ibmcloud fn api list &gt; /dev/null
-  - ibmcloud target
-</code></p>
-
-<h4>script</h4>
-
-<p>With the build system configured, the application can be deployed to test environment, followed by running acceptance tests. If either deployment or acceptance tests fail, the build will stop, skipping the production deployment.</p>
-
-<p>Acceptance tests use an environment variable to configure the hostname test cases are executed against. The <code>npm run acceptance-test</code> alias command sets this value to the test environment hostname (<code>apache-api-test.jamesthom.as</code>) before running the test suite.</p>
-
-<p><code>yaml
-script:
-  - sls deploy
-  - npm run acceptance-test
-</code></p>
-
-<h4>before_deploy</h4>
-
-<p>Before deploying to production, Cloud Functions credentials need to be updated. The IBM Cloud CLI is used to target the production environment, before running a Cloud Functions CLI command. This updates local credentials with the production environment credentials.</p>
-
-<p><code>yaml
-before_deploy:
-  - ibmcloud target -s $IBMCLOUD_PROD_SPACE
-  - ibmcloud fn api list &gt; /dev/null
-  - ibmcloud target
-</code></p>
-
-<h4>deploy</h4>
-
-<p>If all the proceeding stages have successfully finished, the application can be deployed to the production. Following this final deployment, smoke tests are used to check production APIs still work as expected.</p>
-
-<p>Smoke tests are just the same acceptance tests executed against the production environment. The <code>npm run acceptance-prod</code> alias command sets the hostname configuration value to the production environment  (<code>apache-api.jamesthom.as</code>) before running the test suite.</p>
-
-<p><code>yaml
-deploy:
-  provider: script
-  script: sls deploy &amp;&amp; npm run acceptance-prod
-  skip_cleanup: true
-</code></p>
-
-<p><em>Using the <code>skip_cleanup</code> parameter leaves installed artifacts from previous phases in the build environment. This means we don't have to re-install the IBM Cloud CLI, The Serverless Framework or NPM dependencies needed to run the production deployment and smoke tests.</em></p>
-
-<h3>success?</h3>
-
-<p>If all of the <a href="https://travis-ci.org/jthomas/openwhisk-release-verification">build phases</a> are successful, the latest project code should have been deployed to the production environment. 💯💯💯</p>
-
-<p><img src="/images/build-screenshot.png" alt="Build Screenshoot" /></p>
-
-<p>If the build failed due to unit test failures, the test suite can be ran locally to fix any errors. Deployment failures can be investigated using the console output logs from Travis CI. Acceptance test issues, against test or production environments, can be debugged by logging into those environments locally and running the test suite from my development machine.</p>
-
-<h2>Conclusion</h2>
-
-<p>Using Travis CI with The Serverless Framework and a JavaScript testing framework, I was able to set up a fully-automated CI/CD deployment pipeline for the Apache OpenWhisk release candidate verification tool.</p>
-
-<p>Using a CI/CD pipeline, rather than a manual approach, for deployments has the following advantages...</p>
-
-<ul>
-<li>No more manual and error-prone deploys relying on a human 👨‍💻 :)</li>
-<li>Automatic unit &amp; acceptance test execution catch errors before deployments.</li>
-<li>Production environment only accessed by CI/CD system, reducing accidental breakages.</li>
-<li>All cloud resources must be configured in code. No "<a href="https://martinfowler.com/bliki/SnowflakeServer.html">snowflake</a>" environments allowed.</li>
-</ul>
-
-
-<p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I'll be notified by email.</p>
-
-<p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
 ]]></content>
   </entry>
   

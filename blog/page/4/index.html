@@ -9,7 +9,7 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="Debugging serverless applications in production is often reliant on application logs, due to having no access to the runtime environment. No SSHing &hellip;">
+  <meta name="description" content="Serverless applications are not &#8220;No Ops&#8221;, despite the meme. 🙄 Monitoring runtime metrics is still crucial for serverless applications. &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -77,6 +77,92 @@
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">Monitoring Serverless Applications Metrics</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2017-12-15T10:53:00+00:00" pubdate data-updated="true">Dec 15<span>th</span>, 2017</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Serverless applications are not &#8220;No Ops&#8221;, <a href="https://thenewstack.io/serverless-computing-growing-quickly/">despite the meme</a>. 🙄</p>
+
+<p>Monitoring runtime metrics is <a href="https://hackernoon.com/how-we-monitor-serverless-apps-with-hundreds-of-functions-d0f1fa938d1e">still crucial for serverless applications</a>. Identifying, diagnosing and resolving issues in production requires data on execution durations, errors thrown, resource usage statistics amongst other metrics.</p>
+
+<p><a href="https://bluemix.net/">IBM Cloud</a> has a comprehensive <a href="https://console.bluemix.net/catalog/?category=devops">series of tools</a> for monitoring application metrics. In this blog post series, we&#8217;re going to look at using these tools to monitor metrics from serverless applications. 💯💯💯</p>
+
+<h2>overview</h2>
+
+<p>We&#8217;ll start with understanding how to capture metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications. Then we&#8217;ll look at methods for automatically sending metric values into the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a>. Once metric data is being captured, we&#8217;ll explore <a href="https://grafana.com/">Grafana</a> to create dashboards to monitor data values in real-time. Finally, we&#8217;ll look at configuring alerting services to notify us when issues occur.</p>
+
+<p><em>Here&#8217;s a sneak peak of some of the dashboards we&#8217;ll be creating from serverless application metrics…</em></p>
+
+<p><img src="/images/serverless_metrics/action-metrics.gif"></p>
+
+<h2>blog posts</h2>
+
+<p>Here are the links to the blog posts in the series…</p>
+
+<ul>
+<li>Part 1: <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">Capturing Runtime Metrics For OpenWhisk Applications</a></li>
+<li>Part 2: <a href="/blog/2018/01/05/visualising-metrics-with-grafana-dashboards/">Visualising Serverless Metrics With Grafana Dashboards</a></li>
+<li>Part 3: <a href="/blog/2018/01/25/configuring-alert-notifications-using-serverless-metrics/">Configuring Alert Notifications Based on Metric Rules</a></li>
+</ul>
+
+
+<p>You can start now with the <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">first blog post</a>, other blog posts will follow soon….</p>
+
+<h2>tldr?</h2>
+
+<p><em>pssst. want to set this up without reading all those boring words and stuff?</em></p>
+
+<p>Here are the links to the open-source libraries used to set this up. Follow the instructions in the repositories to enable capturing and forwarding metrics to the monitoring service.</p>
+
+<ul>
+<li><a href="https://github.com/jthomas/openwhisk-metrics">openwhisk-metrics</a></li>
+<li><a href="https://github.com/jthomas/cloud-functions-monitoring-service">cloud-functions-monitoring-service</a></li>
+</ul>
+
+
+<p>Here are the JSON configuration files for the Grafana dashboards.</p>
+
+<p><a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b</a></p>
+
+<p>Import these files to create new dashboards and add the following template variables.</p>
+
+<ul>
+<li><strong>$region</strong> => ibm.public.cloud-functions.*</li>
+<li><strong>$namespace</strong> => ibm.public.cloud-functions.$region.*</li>
+<li><strong>$actions</strong> => ibm.public.cloud-functions.$region.$namespace.*</li>
+</ul>
+
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -3484,201 +3570,6 @@
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2017/01/17/openwhisk-and-go/">Openwhisk and Go</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2017-01-17T09:00:00+00:00" pubdate data-updated="true">Jan 17<span>th</span>, 2017</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><a href="http://jamesthom.as/blog/2016/06/21/serverless-go-actions/">In an earlier blog post</a>, I explained how to use Go language binaries on OpenWhisk using Docker-based Actions. It relied on building Docker images for each serverless function and hosting them on Docker Hub.</p>
-
-<p><a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">Recent updates</a>  to Docker-based Actions have made this process much simpler. Developers don&#8217;t need to build and expose public images anymore.</p>
-
-<p>Let&#8217;s re-visit the example from the previous post and see how to get it running using this new approach…</p>
-
-<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
-
-<h2>Go Language Actions</h2>
-
-<p>Go&#8217;s <a href="https://golang.org/pkg/go/build/">build system</a> combines application source code and dependencies into a single execution binary. Bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
-
-<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
-
-<h3>Action Source Code</h3>
-
-<p>Here&#8217;s a simple Go function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn&#8217;t present, it defaults to <code>Stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-<span class='line-number'>14</span>
-<span class='line-number'>15</span>
-<span class='line-number'>16</span>
-<span class='line-number'>17</span>
-<span class='line-number'>18</span>
-<span class='line-number'>19</span>
-<span class='line-number'>20</span>
-<span class='line-number'>21</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
-</span><span class='line'>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;encoding/json&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;fmt&quot;</span>
-</span><span class='line'><span class="kn">import</span> <span class="s">&quot;os&quot;</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>  <span class="c1">// native actions receive one argument, the JSON object as a string</span>
-</span><span class='line'>  <span class="nx">arg</span> <span class="o">:=</span> <span class="nx">os</span><span class="p">.</span><span class="nx">Args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-</span><span class='line'>
-</span><span class='line'>  <span class="c1">// unmarshal the string to a JSON object</span>
-</span><span class='line'>  <span class="kd">var</span> <span class="nx">obj</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{}</span>
-</span><span class='line'>  <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">arg</span><span class="p">),</span> <span class="o">&amp;</span><span class="nx">obj</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">name</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="nx">obj</span><span class="p">[</span><span class="s">&quot;name&quot;</span><span class="p">].(</span><span class="kt">string</span><span class="p">)</span>
-</span><span class='line'>  <span class="k">if</span> <span class="p">!</span><span class="nx">ok</span> <span class="p">{</span>
-</span><span class='line'>      <span class="nx">name</span> <span class="p">=</span> <span class="s">&quot;Stranger&quot;</span>
-</span><span class='line'>  <span class="p">}</span>
-</span><span class='line'>  <span class="nx">msg</span> <span class="o">:=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span><span class="s">&quot;msg&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s">&quot;Hello, &quot;</span> <span class="o">+</span> <span class="nx">name</span> <span class="o">+</span> <span class="s">&quot;!&quot;</span><span class="p">)}</span>
-</span><span class='line'>  <span class="nx">res</span><span class="p">,</span> <span class="nx">_</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">msg</span><span class="p">)</span>
-</span><span class='line'>  <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nb">string</span><span class="p">(</span><span class="nx">res</span><span class="p">))</span>
-</span><span class='line'><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Building this locally allows us to test it works.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">run</span> <span class="nx">test</span><span class="p">.</span><span class="k">go</span> <span class="err">&#39;</span><span class="p">{</span><span class="s">&quot;name&quot;</span><span class="p">:</span> <span class="s">&quot;James&quot;</span><span class="p">}</span><span class="err">&#39;</span>
-</span><span class='line'><span class="p">{</span><span class="s">&quot;msg&quot;</span><span class="p">:</span><span class="s">&quot;Hello, James!&quot;</span><span class="p">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
-
-<h3>Cross-Compiling Locally</h3>
-
-<p>Go 1.5 <a href="https://dave.cheney.net/2015/08/22/cross-compilation-with-go-1-5">introduced much improved</a> support for cross-compilation.</p>
-
-<p>If you have the development environment installed locally, you can compile the binary for another platform by setting environment variables. The full list of supported architectures is available <a href="https://golang.org/doc/install/source#environment">here</a>.</p>
-
-<p><em>OpenWhisk uses an <a href="https://hub.docker.com/_/alpine/">Alpine Linux-based</a> environment to execute Actions.</em></p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>env <span class="nv">GOOS</span><span class="o">=</span>linux <span class="nv">GOARCH</span><span class="o">=</span>amd64 go build exec.go
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>file <span class="nb">exec</span>
-</span><span class='line'><span class="nb">exec</span>: ELF 64-bit LSB executable, x86-64, version 1 <span class="o">(</span>SYSV<span class="o">)</span>, statically linked, not stripped
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Cross-Compiling Using Docker</h3>
-
-<p>If you don&#8217;t want to install the Go development toolchain, Docker can be used to start a container with the environment set up.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull golang
-</span><span class='line'><span class="nv">$ </span>docker run -it -v <span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>:/go/src golang
-</span><span class='line'>root@0a2f1655eece:/go# <span class="nb">cd </span>src/
-</span><span class='line'>root@0a2f1655eece:/go/src# go build exec.go
-</span><span class='line'>root@0a2f1655eece:/go/src# ls
-</span><span class='line'><span class="nb">exec  </span>exec.go
-</span><span class='line'><span class="nv">$ </span>file <span class="nb">exec</span>
-</span><span class='line'><span class="nb">exec</span>: ELF 64-bit LSB executable, x86-64, version 1 <span class="o">(</span>SYSV<span class="o">)</span>, statically linked, not stripped
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Create &amp; Deploy Archive</h3>
-
-<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
-
-<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>zip action.zip <span class="nb">exec</span>
-</span><span class='line'><span class="nb">  </span>adding: <span class="nb">exec</span> <span class="o">(</span>deflated 66%<span class="o">)</span>
-</span><span class='line'><span class="nv">$ </span>wsk action create go_test action.zip --docker
-</span><span class='line'>ok: created action go_test
-</span></code></pre></td></tr></table></div></figure>
-
-
-<h3>Invoking Action</h3>
-
-<p>Test the action from the command-line to verify it works.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>wsk action invoke go_test --blocking --result
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, Stranger!&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span><span class='line'><span class="nv">$ </span>wsk action invoke go_test --blocking --result --param name James
-</span><span class='line'><span class="o">{</span>
-</span><span class='line'>    <span class="s2">&quot;msg&quot;</span>: <span class="s2">&quot;Hello, James!&quot;</span>
-</span><span class='line'><span class="o">}</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p>Success 😎.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/5/">&larr; Older</a>
@@ -3696,6 +3587,10 @@
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
       </li>
     
@@ -3709,10 +3604,6 @@
     
       <li class="post">
         <a href="/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/">Accessing Long-Running Apache OpenWhisk Actions Results</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
       </li>
     
   </ul>

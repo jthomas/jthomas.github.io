@@ -9,10 +9,9 @@
   <meta name="author" content="James Thomas">
 
   
-  <meta name="description" content="&#8220;Serverless&#8221; cloud platforms are a
-major trend in 2016.
-Following on from Amazon&#8217;s Lambda service,
-released eighteen months ago, &hellip;">
+  <meta name="description" content="Later this month, I&#8217;m speaking at Twilio&#8217;s conference about
+building cognitive bots with IBM Watson.
+Preparing for this presentation, I&# &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -80,6 +79,407 @@ released eighteen months ago, &hellip;">
     <div id="content">
       <div class="blog-index">
   
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2016/05/10/bots-with-ibm-watson/">Cognitive Bots With IBM Watson</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2016-05-10T16:29:00+01:00" pubdate data-updated="true">May 10<span>th</span>, 2016</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Later this month, I&#8217;m speaking at Twilio&#8217;s conference about
+<a href="https://www.twilio.com/signal/schedule/6L9DFzeXKg0OOIQW42eik2/building-cognitive-bots-with-ibm-watson">building cognitive bots with IBM Watson</a>.
+Preparing for this presentation, I&#8217;ve been experimenting with the IBM Watson
+services to build sample bots that can understand, and act on, natural language.</p>
+
+<p>IBM&#8217;s artificial intelligence system, <a href="https://en.wikipedia.org/wiki/Watson_(computer">Watson</a>, now provides a
+series of <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/services-catalog.html">&#8220;cognitive&#8221; services</a>
+available through <a href="https://bluemix.net">IBM&#8217;s Bluemix cloud platform</a>.
+Developers can integrate everything from natural language processing, image and
+speech recognition, emotion analysis and more into their applications using
+RESTful APIs.</p>
+
+<p>The <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">Watson Developer Cloud</a>
+site has numerous
+<a href="https://github.com/watson-developer-cloud/dialog-nodejs">sample</a>
+<a href="https://github.com/watson-developer-cloud/conversational-agent-application-starter-kit">apps</a>
+to help you understand how to integrate the services together to build &#8220;cognitive&#8221; bots.</p>
+
+<p>In one of the samples, the <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">Dialog service</a>
+is used to develop a <a href="http://dialog-demo.mybluemix.net/">pizza ordering bot</a>.
+Users can order a pizza, specifying the size, toppings and delivery method,
+using natural language.</p>
+
+<p>After understanding how this sample worked, I had an idea to enhance it with
+the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">tone analysis service</a>&#8230;</p>
+
+<h2>Where the heck is my pizza?</h2>
+
+<p>Let&#8217;s imagine the customer has ordered a delivery using pizza-bot and the
+driver is being (even) slower than normal.</p>
+
+<p>If the customer asks</p>
+
+<p><strong>&#8220;Where is my pizza?&#8221;</strong></p>
+
+<p>We return the standard message all pizza takeaways use when calling to
+inquire where the driver is&#8230;.</p>
+
+<p><strong>&#8220;The driver has just left, he&#8217;ll be ten minutes.&#8221;</strong></p>
+
+<p><em>An hour later&#8230;</em></p>
+
+<p>When the driver still hasn&#8217;t arrived, the customer would probably ask again and
+with a bit less civility&#8230;</p>
+
+<p><strong>&#8220;Where the heck is my pizza? I ordered an hour ago! This is ridiculous.&#8221;</strong></p>
+
+<p>At this point, the &#8220;just ten minutes&#8221; reply is not going to be well received!</p>
+
+<p>Building bots that can understand conversation tone will mean we can script a
+suitable response, rather than infuriating our hungry customers.</p>
+
+<p>Using the tone analyser service, I wanted to enhance the sample to use
+conversation sentiment to affect the dialogue.
+Bot responses should be generated based upon both user
+input and conversation sentiment.</p>
+
+<p><img src="/images/pizza_rage.gif"></p>
+
+<p>Let&#8217;s review both services before looking at how to combine them to create the
+improved pizza bot&#8230;</p>
+
+<h2>IBM Watson Dialog</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">IBM Watson Dialog service</a>
+enables a developer to automate scripting
+conversations, using natural language, between a virtual agent and a user.
+Developers build up a <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml">decision tree for dialogue</a>,
+using a markup language to define the conversation paths.</p>
+
+<p>Developers can then utilise the pre-defined linguistic model to converse with
+users. The system will keep track of the conversation state when processing
+user input to generate a suitable response. It can also store
+<a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilevar">conversation properties</a>, either extracted from user input or manually updated through the
+API.</p>
+
+<p>These conversation properties can be used to <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilecheck">control the dialogue branching</a>.</p>
+
+<p>Documentation on the service is available <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/">here</a>.</p>
+
+<h2>IBM Watson Tone Analyser</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer Service</a>
+uses linguistic analysis to detect three types of tones from text: emotion, social tendencies, and language style.</p>
+
+<p>Emotions identified include things like anger, fear, joy, sadness, and disgust.
+Identified social tendencies include things from the Big Five personality
+traits used by some psychologists. These include openness, conscientiousness,
+extroversion, agreeableness, and emotional range. Identified language styles
+include confident, analytical, and tentative.</p>
+
+<p>Documentation on the service is available <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/tone-analyzer/">here</a>.</p>
+
+<h2>Extending Pizza Bot </h2>
+
+<p>Enhancing pizza bot to support dialogue about delivery times, we can start by
+identifying when the user is asking about the pizza delivery. At this point,
+unless the user is angry, we can return the default response. When sentiment
+analysis indicates this user is angry, we should branch to returning a more
+sympathetic message.</p>
+
+<h2>Matching User Input </h2>
+
+<p>Matching user input about delivery times, there a few common questions we want to capture.</p>
+
+<ul>
+<li><em>Where&#8217;s my order?</em></li>
+<li><em>How long will it be until my pizza arrives?</em></li>
+<li><em>When will my takeout get here?</em></li>
+</ul>
+
+
+<p>Creating our <a href="https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L179-L207">new conversation branch</a>
+within a folder element will allow us to
+group the necessary <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">input</a>,
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_grammar">grammar</a> and
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_output">output</a> elements as a logical section.</p>
+
+<figure class='code'><figcaption><span>Order Queries</span><a href='http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;folder</span> <span class="na">label=</span><span class="s">&quot;Order&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;input&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;grammar&gt;</span>
+</span><span class='line'>      ...
+</span><span class='line'>    <span class="nt">&lt;/grammar&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;output&gt;</span>
+</span><span class='line'>      <span class="nt">&lt;prompt</span> <span class="na">selectionType=</span><span class="s">&quot;RANDOM&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>        ...
+</span><span class='line'>      <span class="nt">&lt;/prompt&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/output&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;/input&gt;</span>
+</span><span class='line'><span class="nt">&lt;/folder&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This structure will process the output element, to generate the bot reply, only
+if the input grammar matches user input. Adding item nodes under the input&#8217;s
+grammar element will let us define the dialogue matching criteria, shown here.</p>
+
+<figure class='code'><figcaption><span>Query Grammar</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L181-L188'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;grammar&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$where* order<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$where* pizza<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$how long* order<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$how long* pizza<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$when * order * here<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;item&gt;</span>$when * pizza * here<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'><span class="nt">&lt;/grammar&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>Using <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">wildcard matching characters</a>,
+$ and *, means the grammar (&#8220;$where * order&#8221;) will match questions including &#8220;Where is my pizza?&#8221; and &#8220;Where&#8217;s my
+pizza?&#8221; rather than having to manually define every permutation.</p>
+
+<p>People often use synonyms in natural language. Rather than manually defining
+grammar rules for all alternative words for pizza and order, we can add
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_concept">concept elements</a>
+to automatically match these. The sample already has a concept element defined for the pizza term, we only have to add elements for order.</p>
+
+<figure class='code'><figcaption><span>Concept Entities</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L1647-L1654'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;concept&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;grammar&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Order<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Takeaway<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Takeout<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Delivery<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;/grammar&gt;</span>
+</span><span class='line'><span class="nt">&lt;/concept&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Grammar rules which include the <em>order</em> term which automatically match takeaway, takeout or delivery.</p>
+
+<h2>Adding Default Response</h2>
+
+<p>Having matched the user input, we want to return the default response from a pre-specified list.</p>
+
+<figure class='code'><figcaption><span>Bot Replies</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L198-L205'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;output&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;prompt</span> <span class="na">selectionType=</span><span class="s">&quot;RANDOM&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>I&#39;ve just checked and the driver is ten minutes away, is there anything else I can help with?<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>Hmmm the driver&#39;s running a bit late, they&#39;ll be about ten minutes. Is there anything else I can help with?<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;item&gt;</span>They should be with you in ten minutes. Is there anything else I can help with?<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;/prompt&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;goto</span> <span class="na">ref=</span><span class="s">&quot;getUserInput_2442994&quot;</span><span class="nt">/&gt;</span>
+</span><span class='line'><span class="nt">&lt;/output&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Handling Angry Customers</h2>
+
+<p>Within the dialog markup, <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_variables">profile variables</a>
+can be defined to store conversation entities. These variables can be referenced by
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_if">conditional branches</a>
+in the markup to control responses.</p>
+
+<p>Defining a new profile variable for the anger score, this value can be updated
+manually before the current user input is processed to return the dialogue
+response.</p>
+
+<figure class='code'><figcaption><span>Profile Variable</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L2062'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;variables&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;var_folder</span> <span class="na">name=</span><span class="s">&quot;Home&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>    ...
+</span><span class='line'>    <span class="nt">&lt;var</span> <span class="na">name=</span><span class="s">&quot;anger&quot;</span> <span class="na">type=</span><span class="s">&quot;NUMBER&quot;</span> <span class="na">initValue=</span><span class="s">&quot;0&quot;</span> <span class="na">description=</span><span class="s">&quot;Anger emotion score for conversation.&quot;</span><span class="nt">/&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;/var_folder&gt;</span>
+</span><span class='line'><span class="nt">&lt;/variables&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Adding a child branch, for the conditional response, after the input grammar
+will allow us to return a custom response if the profile variable for the anger
+emotion is above a threshold.</p>
+
+<figure class='code'><figcaption><span>Anger Branching</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L189-L197'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='xml'><span class='line'><span class="nt">&lt;folder</span> <span class="na">label=</span><span class="s">&quot;Order&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>  <span class="nt">&lt;input&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;grammar&gt;</span>
+</span><span class='line'>      <span class="nt">&lt;item&gt;</span>$where* order<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/grammar&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;if</span> <span class="na">matchType=</span><span class="s">&quot;ANY&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>      <span class="nt">&lt;cond</span> <span class="na">varName=</span><span class="s">&quot;anger&quot;</span> <span class="na">operator=</span><span class="s">&quot;GREATER_THEN&quot;</span><span class="nt">&gt;</span>0.50<span class="nt">&lt;/cond&gt;</span>
+</span><span class='line'>      <span class="nt">&lt;output&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;prompt</span> <span class="na">selectionType=</span><span class="s">&quot;RANDOM&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>          <span class="nt">&lt;item&gt;</span>Please accept our apologies for the delivery driver being very late. Could you call us on 0800 800 800 and we&#39;ll get this fixed?<span class="nt">&lt;/item&gt;</span>
+</span><span class='line'>        <span class="nt">&lt;/prompt&gt;</span>
+</span><span class='line'>      <span class="nt">&lt;/output&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;/if&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When we&#8217;ve detected the user is angry about the delivery delay, we direct
+them to ring the restaurant to find out what&#8217;s happened to the driver.</p>
+
+<h2>Combining Watson Services</h2>
+
+<p>Modifying the backend service that calls the Watson services, we&#8217;re now passing
+the user&#8217;s input through the Tone Analyzer service and manually updating user&#8217;s
+anger score in their profile, before calling the Dialog service.</p>
+
+<p>This anger score will be used to control the dialogue response in real-time.</p>
+
+<figure class='code'><figcaption><span>Using Tone Analyser</span><a href='https://github.com/jthomas/dialog-nodejs/blob/master/app.js#L56-L85'>link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">app</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/conversation&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">tone_analyzer</span><span class="p">.</span><span class="nx">tone</span><span class="p">({</span> <span class="nx">text</span><span class="o">:</span> <span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">input</span> <span class="p">},</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">tone</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">categories</span> <span class="o">=</span> <span class="nx">tone</span><span class="p">.</span><span class="nx">document_tone</span><span class="p">.</span><span class="nx">tone_categories</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">emotion_tones</span> <span class="o">=</span> <span class="nx">categories</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">tone</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="nx">tone</span><span class="p">.</span><span class="nx">category_id</span> <span class="o">===</span> <span class="s1">&#39;emotion_tone&#39;</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">anger_tone</span> <span class="o">=</span> <span class="nx">emotion_tones</span><span class="p">.</span><span class="nx">tones</span><span class="p">.</span><span class="nx">find</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">tone</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">return</span> <span class="nx">tone</span><span class="p">.</span><span class="nx">tone_id</span> <span class="o">===</span> <span class="s1">&#39;anger&#39;</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span><span class="nx">client_id</span><span class="o">:</span> <span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">client_id</span><span class="p">,</span> <span class="nx">dialog_id</span><span class="o">:</span> <span class="nx">dialog_id</span><span class="p">,</span> <span class="nx">name_values</span><span class="o">:</span> <span class="p">[{</span><span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;anger&#39;</span><span class="p">,</span> <span class="nx">value</span><span class="o">:</span> <span class="nx">anger_tone</span><span class="p">.</span><span class="nx">score</span><span class="p">}]}</span>
+</span><span class='line'>    <span class="nx">dialog</span><span class="p">.</span><span class="nx">updateProfile</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">results</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="nx">extend</span><span class="p">({</span> <span class="nx">dialog_id</span><span class="o">:</span> <span class="nx">dialog_id</span> <span class="p">},</span> <span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">);</span>
+</span><span class='line'>      <span class="nx">dialog</span><span class="p">.</span><span class="nx">conversation</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">results</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">else</span>
+</span><span class='line'>          <span class="nx">res</span><span class="p">.</span><span class="nx">json</span><span class="p">({</span> <span class="nx">dialog_id</span><span class="o">:</span> <span class="nx">dialog_id</span><span class="p">,</span> <span class="nx">conversation</span><span class="o">:</span> <span class="nx">results</span><span class="p">});</span>
+</span><span class='line'>      <span class="p">});</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>  <span class="p">});</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <a href="https://github.com/jthomas/dialog-nodejs/commit/6d025040e005ef0d9aa976bfe20039db05f681fe">commit log</a>
+for the fork shows the full changes needed to integrate this feature.</p>
+
+<h2>Conclusion</h2>
+
+<p>Bots are a <a href="https://medium.com/chris-messina/2016-will-be-the-year-of-conversational-commerce-1586e85e3991#.524ovvaj8">huge trend for 2016</a>.
+One of the major challenges to developing your
+own bots is handling user input using natural language. How can you go beyond
+simple keyword matching and regular expressions to build solutions that
+actually understand what your user is asking?</p>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/overview.shtml">IBM Watson Dialog service</a> users can script natural language
+conversations. Defining a linguistic model for their dialogue using markup
+language, the system can use this to process natural language and return the
+appropriate response. Conversation entities are recognised and stored in a user
+profile.</p>
+
+<p>Combining this service with the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer</a>, users can script
+conversations that use the user&#8217;s emotional tone to modify the response.</p>
+
+<p>Modifying the pizza sample, we incorporate the anger score to return a more
+appropriate response when the user is angry about their delivery being delayed.</p>
+
+<p>IBM Watson has <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">many other services</a>
+that can be integrated with the Dialog
+service using the same pattern to build &#8220;cognitive&#8221; bots. Using these services
+takes the hard work out of building bots that actually understand and respond
+with emotion to input using natural language.</p>
+</div>
+  
+  
+
+
+    </article>
   
   
     <article>
@@ -2173,223 +2573,6 @@ a remote console, it&#8217;s preferable to describe our tasks as code and let th
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/blog/2015/07/16/geopix-live-photos/">GeoPix Live Photos</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2015-07-16T13:26:00+01:00" pubdate data-updated="true">Jul 16<span>th</span>, 2015</time>
-        
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
-application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
-
-<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
-
-
-
-
-<blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online. </p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote>
-
-
-<p>I&#8217;ve been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
-enhancement&#8230;</p>
-
-<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
-
-<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
-is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
-maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
-to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
-for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
-
-<p>Adding support for live photos will require two new features&#8230;</p>
-
-<ul>
-<li><em>Triggering backend events when new photos are available</em></li>
-<li><em>Sending these photos in real-time to the web page</em></li>
-</ul>
-
-
-<h2>Change Notifications Using CouchDB</h2>
-
-<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
-The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
-
-<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
-to start following database changes and register callbacks for updates.</p>
-
-<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
-handler. We follow all changes that occur in the future (<em>since: &#8220;now&#8221;</em>) and include the full document contents
-in the change event (<em>include_docs: true</em>).</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">Cloudant</span><span class="p">({</span><span class="nx">account</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">username</span><span class="p">,</span> <span class="nx">password</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">password</span><span class="p">},</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">cloudant</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">geopix</span> <span class="o">=</span> <span class="nx">cloudant</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">database</span><span class="p">);</span>
-</span><span class='line'>    <span class="kd">var</span> <span class="nx">feed</span> <span class="o">=</span> <span class="nx">geopix</span><span class="p">.</span><span class="nx">follow</span><span class="p">({</span><span class="nx">include_docs</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="nx">since</span><span class="o">:</span> <span class="s2">&quot;now&quot;</span><span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>      <span class="c1">// ....we can now send this data to the web pages</span>
-</span><span class='line'>    <span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">follow</span><span class="p">();</span>
-</span><span class='line'><span class="p">})</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
-
-<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
-
-<h2>Real-time Web with Socket.IO</h2>
-
-<p>Introducing <a href="">Socket.IO</a>&#8230;</p>
-
-<blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote>
-
-
-<p>Sounds great!</p>
-
-<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
-will be used by the client to listen for new images and then update the page.</p>
-
-<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
-Socket.IO can use either WebSocket or long-polling transport protocols.</p>
-
-<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">express</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;express&#39;</span><span class="p">);</span>
-</span><span class='line'><span class="kd">var</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">express</span><span class="p">();</span>
-</span><span class='line'><span class="kd">var</span> <span class="nx">server</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;http&#39;</span><span class="p">).</span><span class="nx">Server</span><span class="p">(</span><span class="nx">app</span><span class="p">);</span>
-</span><span class='line'><span class="kd">var</span> <span class="nx">io</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;socket.io&#39;</span><span class="p">)(</span><span class="nx">server</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'><span class="c1">// ...snipped out the app routes for express</span>
-</span><span class='line'>
-</span><span class='line'><span class="nx">io</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connection&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">socket</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;New Client WSS Connection.&#39;</span><span class="p">)</span>
-</span><span class='line'><span class="p">});</span>
-</span><span class='line'>
-</span><span class='line'><span class="kd">var</span> <span class="nx">port</span> <span class="o">=</span> <span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">VCAP_APP_PORT</span> <span class="o">||</span> <span class="mi">3000</span><span class="p">);</span>
-</span><span class='line'><span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="nx">port</span><span class="p">);</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
-
-<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">io</span><span class="p">.</span><span class="nx">sockets</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="nx">change</span><span class="p">);</span>
-</span><span class='line'><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p><strong>Now we&#8217;re sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
-
-<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
-Once we&#8217;ve included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
-with the new elements.</p>
-
-<p>We&#8217;re sending the full database document associated with each photo to the client. The raw image bytes are stored as an
-<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
-
-<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
-<span class='line-number'>2</span>
-<span class='line-number'>3</span>
-<span class='line-number'>4</span>
-<span class='line-number'>5</span>
-<span class='line-number'>6</span>
-<span class='line-number'>7</span>
-<span class='line-number'>8</span>
-<span class='line-number'>9</span>
-<span class='line-number'>10</span>
-<span class='line-number'>11</span>
-<span class='line-number'>12</span>
-<span class='line-number'>13</span>
-</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">socket</span> <span class="o">=</span> <span class="nx">io</span><span class="p">();</span> <span class="c1">// TIP: io() with no args does auto-discovery</span>
-</span><span class='line'><span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
-</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;WSS Connected&#39;</span><span class="p">);</span>
-</span><span class='line'>
-</span><span class='line'>    <span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">image</span><span class="p">)</span> <span class="p">{</span> <span class="c1">// TIP: you can avoid listening on `connect` and listen on events directly too!</span>
-</span><span class='line'>        <span class="kd">var</span> <span class="nx">attachment</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_attachments</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-</span><span class='line'>        <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s2">&quot;/image/&quot;</span> <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_id</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="nx">attachment</span><span class="p">;</span>
-</span><span class='line'>        <span class="nx">add_new_image</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">clientDate</span><span class="p">,</span> <span class="s1">&#39;latitude: &#39;</span>
-</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">latitude</span> <span class="o">+</span> <span class="s1">&#39;, longitude: &#39;</span>
-</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">longitude</span> <span class="o">+</span> <span class="s1">&#39;, altitude: &#39;</span>
-</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">altitude</span><span class="p">);</span>
-</span><span class='line'>    <span class="p">});</span>
-</span><span class='line'><span class="p">});</span>
-</span></code></pre></td></tr></table></div></figure>
-
-
-<p></p>
-
-<p>&#8230;and that&#8217;s it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
-
-<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
-
-<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
-CouchDB with Socket.IO.</p>
-
-<p>CouchDB&#8217;s <em>_changes</em> API provided an easy way to follow
-all modifications to database documents in real-time. Socket.IO made the
-configuration and management of real-time event streams between our server and
-client straightforward.</p>
-
-<p><em>With minimal code changes, we simply connected these two technologies to create
-a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/7/">&larr; Older</a>
@@ -2407,6 +2590,10 @@ a real-time photo stream for our GeoPix application. <strong>Awesome</strong></e
   <ul id="recent_posts">
     
       <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
         <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
       </li>
     
@@ -2420,10 +2607,6 @@ a real-time photo stream for our GeoPix application. <strong>Awesome</strong></e
     
       <li class="post">
         <a href="/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/">Accessing Long-Running Apache OpenWhisk Actions Results</a>
-      </li>
-    
-      <li class="post">
-        <a href="/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/">Saving Money and Time With Node.js Worker Threads in Serverless Functions</a>
       </li>
     
   </ul>
