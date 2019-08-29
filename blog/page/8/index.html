@@ -1,0 +1,2727 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Doctor Watson is an IBM Bluemix application to answer medical questions over the phone, using IBM Watson and Twilio. Ringing an external phone &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/page/8/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div class="blog-index">
+  
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/02/27/doctor-watson/">Doctor Watson</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-02-27T15:01:00+00:00" pubdate data-updated="true">Feb 27<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/doctor_watson.png"></p>
+
+<p><a href="http://doctor-watson.mybluemix.net/">Doctor Watson</a> is an IBM Bluemix application to answer medical questions over the phone, using IBM Watson and Twilio.</p>
+
+<p>Ringing an external phone number, the application will answer and ask for a medical question to help with. Translating your speech into text and using IBM Watson&#8217;s Question and Answer service, Doctor Watson will query the medical corpus.</p>
+
+<p>Top rated answers will be converted to speech and used as a response over the phone. Users can continue to ask more questions for further information.</p>
+
+<p><em>Putting together this complex application, with voice recognition, telephony handling and a medical knowledge base, was incredibly simple using the IBM Bluemix platform.</em></p>
+
+<p>Source code for the application: <a href="https://github.com/jthomas/doctor-watson">https://github.com/jthomas/doctor-watson</a></p>
+
+<p>Fork and deploy the repository to have your own version of Doctor Watson!</p>
+
+<p><a href="https://bluemix.net/deploy?repository=https://github.com/jthomas/doctor-watson" target="_blank"><img src="http://bluemix.net/deploy/button.png" alt="Bluemix button" /></a></p>
+
+<p><strong>Want to know how the project was built? Read on&#8230;</strong></p>
+
+<h2>Overview</h2>
+
+<p>Doctor Watson is a NodeJS application using <a href="http://expressjs.com/">Express</a>, a framework for building web applications, to handle serving static content and creating REST APIs.</p>
+
+<p>The front page gives an overview of the application, served from static HTML files with templating to inject the phone number at runtime.</p>
+
+<p>HTTP endpoints handle the incoming messages from Twilio as users make new phone calls. The application&#8217;s public URL will be bound to a phone number using Twilio&#8217;s account administration.</p>
+
+<p>Services for IBM Watson are exposed for the application using the IBM Bluemix platform. Text to Speech and Question and Answer services are used during phone call handling.</p>
+
+<p>The application can be deployed on IBM Bluemix, IBM&#8217;s public hosted Cloud Foundry platform.</p>
+
+<h2>Handling phone calls</h2>
+
+<p><a href="https://www.twilio.com/">Twilio</a> provides &#8220;telephony-as-a-service&#8221;, making applications able to respond to telephone calls and text messages using a REST API.</p>
+
+<p>Twilio has been made available on the IBM Bluemix platform. Binding this service to your application will provide the authentication credentials to use with the Twilio <a href="http://twilio.github.io/twilio-node/">client library</a>.</p>
+
+<p>Users register external phone numbers through the service, which are bound to  external web addresses controlled by the user. When a person dials that number, the service makes a HTTP call with the details to the application. HTTP responses dictates how to handle the phone call, allowing you to record audio from the user, redirect to another number, play an audio file and much more.</p>
+
+<p>We&#8217;re using ExpressJS to expose the HTTP endpoints used to handle incoming Twilio messages. Twilio&#8217;s client libraries abstract the low-level network requests behind a JavaScript interface.</p>
+
+<p>This code snippet shows the outline for message processing.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">app</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/some/path&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="c1">// req.body -&gt; XML body parsed to JS object</span>
+</span><span class='line'>  <span class="c1">// do some processing</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
+</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">command</span><span class="p">(...);</span> <span class="c1">// where command is a &#39;verb&#39; from TwilML</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>TwilML is <a href="https://www.twilio.com/docs/api/twiml">Twilio Markup Language</a>, an XML message with instructions you can use to tell Twilio how to handle incoming phone calls and SMS messages.</p>
+
+<p>TwimlResponse instances generate the XML message responses. Primary verbs from the TwilML specification are available as chainable function calls on the class instance.</p>
+
+<h3>Doctor Watson Call Flow</h3>
+
+<p>When the user first calls the phone number, Twilio sends a TwilML message over a HTTP POST request to http://doctor-watson.mybluemix.net/calls.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">log</span><span class="p">.</span><span class="nx">info</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">CallSid</span> <span class="o">+</span> <span class="s2">&quot;-&gt; calls/&quot;</span><span class="p">);</span>
+</span><span class='line'>  <span class="nx">log</span><span class="p">.</span><span class="nx">debug</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
+</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s1">&#39;Hello this is Doctor Watson, how can I help you? Press any key after you have finished speaking&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">,</span> <span class="nx">action</span><span class="o">:</span> <span class="s2">&quot;/calls/recording&quot;</span><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We&#8217;re using the TwilML response to give the user information on asking a question. Recording their response, the audio file with their question will be sent in another request to the &#8216;/calls/recording&#8217; location.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/recording&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">enqueue_question</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s2">&quot;Let me think about that.&quot;</span><span class="p">).</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">&quot;/calls/holding&quot;</span><span class="p">);</span>
+</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using the audio file with the user&#8217;s question, available as the request body, we now schedule a call to the Watson services.</p>
+
+<p>With the question answering request in-progress, we redirect the user into a holding loop.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/holding&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
+</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">pause</span><span class="p">({</span><span class="nx">length</span><span class="o">:</span> <span class="mi">5</span><span class="p">})</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s2">&quot;I&#39;m still thinking&quot;</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">&quot;/calls/holding&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Every five seconds, we relay a message over the phone call until the answer has been returned.</p>
+
+<p>Within the callback for the Question and Answer service, we have the following code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">forward_to</span> <span class="o">=</span> <span class="nx">cfenv</span><span class="p">.</span><span class="nx">getAppEnv</span><span class="p">().</span><span class="nx">url</span> <span class="o">+</span> <span class="s2">&quot;/calls/answer&quot;</span><span class="p">;</span>
+</span><span class='line'><span class="nx">client</span><span class="p">.</span><span class="nx">calls</span><span class="p">(</span><span class="nx">call_ssid</span><span class="p">).</span><span class="nx">update</span><span class="p">({</span><span class="nx">url</span><span class="o">:</span> <span class="nx">forward_to</span><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This uses the Twilio client to update the location for a live call, redirecting to the location which returns the answer.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">router</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;/answer&#39;</span><span class="p">,</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="nx">twilio_auth_token</span><span class="p">),</span> <span class="kd">function</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">();</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="nx">answers</span><span class="p">[</span><span class="nx">req</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">CallSid</span><span class="p">])</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="s2">&quot;Do you have another question?&quot;</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">,</span> <span class="nx">action</span><span class="o">:</span> <span class="s2">&quot;/calls/recording&quot;</span><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">res</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="nx">twiml</span><span class="p">);</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we&#8217;ve shown how to handle phone calls, let&#8217;s dig into the Watson services&#8230;</p>
+
+<h2>Using the Watson Services</h2>
+
+<p>IBM Bluemix continues to roll out <a href="https://developer.ibm.com/watson/blog/2015/02/04/new-watson-services-available/">more services</a> to the Watson catalogue. There are now fifteen services to help you create cognitive applications.</p>
+
+<p>Doctor Watson uses <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/speech-to-text.html">Speech to Text</a> and <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/question-answer.html">Question and Answer</a>.</p>
+
+<p>All services come with <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">great documentationn</a> to get help get you started, with sample code, API definitions and client libraries for different languages.</p>
+
+<p>We&#8217;re using the <a href="https://www.npmjs.com/package/watson-developer-cloud">NodeJS client library</a> in Doctor Watson.</p>
+
+<h3>Converting audio recording to text</h3>
+
+<p>When we have a new audio recording containing the user question, this needs converting into text to query the Watson Q&amp;A service.</p>
+
+<p>Twilio makes the recording available at any external URL as a WAV file with an 8Khz sample rate. Watson&#8217;s Speech to Text services has a minimum sample rate for audio input for 16Khz.</p>
+
+<p>Before sending the file to the service, we need to up-sample the audio.</p>
+
+<p>Searching for a Node package that might help, uncovered this <a href="https://www.npmjs.com/package/sox">library</a>. Using the SOX audio processing library, we can easily convert audio files between sample rates.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">job</span> <span class="o">=</span> <span class="nx">sox</span><span class="p">.</span><span class="nx">transcode</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="nx">output</span><span class="p">,</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">sampleRate</span><span class="o">:</span> <span class="mi">16000</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">format</span><span class="o">:</span> <span class="s1">&#39;wav&#39;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">channelCount</span><span class="o">:</span> <span class="mi">1</span>
+</span><span class='line'>  <span class="p">});</span>
+</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">});</span>
+</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;progress&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">amountDone</span><span class="p">,</span> <span class="nx">amountTotal</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">debug</span><span class="p">(</span><span class="s2">&quot;progress&quot;</span><span class="p">,</span> <span class="nx">amountDone</span><span class="p">,</span> <span class="nx">amountTotal</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;end&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">log</span><span class="p">.</span><span class="nx">debug</span><span class="p">(</span><span class="s2">&quot;Transcoding finished.&quot;</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">});</span>
+</span><span class='line'>  <span class="nx">job</span><span class="p">.</span><span class="nx">start</span><span class="p">();</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This package relies on the SOX C library, which isn&#8217;t installed on the default host environment in IBM Bluemix. Overcoming this hurdle meant creating a <a href="https://github.com/jthomas/nodejs-buildpack">custom NodeJS buildpack</a> which installed the pre-built binaries into the application runtime. I&#8217;m saving the details of this for another blog post&#8230;</p>
+
+<p>Using the Watson client library, we can send this audio to the external service for converting to text.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">speech_to_text</span> <span class="o">=</span> <span class="nx">watson</span><span class="p">.</span><span class="nx">speech_to_text</span><span class="p">({</span>
+</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="nx">USERNAME</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">password</span><span class="o">:</span> <span class="nx">PASSWORD</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">version</span><span class="o">:</span> <span class="s1">&#39;v1&#39;</span>
+</span><span class='line'><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">audio</span><span class="o">:</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">createReadStream</span><span class="p">(</span><span class="nx">audio</span><span class="p">),</span>
+</span><span class='line'>  <span class="nx">content_type</span><span class="o">:</span> <span class="s1">&#39;audio/l16; rate=16000&#39;</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">speech_to_text</span><span class="p">.</span><span class="nx">recognize</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">question</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">results</span><span class="p">[</span><span class="nx">res</span><span class="p">.</span><span class="nx">result_index</span><span class="p">],</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>&#8230; which we can now use to query the healthcare corpus for the Watson Q&amp;A service.</p>
+
+<h3>Getting answers</h3>
+
+<p>When asking questions, we need to set the correct corpus to query for answers.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">question_and_answer_healthcare</span> <span class="o">=</span> <span class="nx">watson</span><span class="p">.</span><span class="nx">question_and_answer</span><span class="p">({</span>
+</span><span class='line'>  <span class="nx">username</span><span class="o">:</span> <span class="nx">USERNAME</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">password</span><span class="o">:</span> <span class="nx">PASSWORD</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">version</span><span class="o">:</span> <span class="s1">&#39;v1&#39;</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">dataset</span><span class="o">:</span> <span class="s1">&#39;healthcare&#39;</span>
+</span><span class='line'><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">ask</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">question</span><span class="p">,</span> <span class="nx">cb</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">question_and_answer_healthcare</span><span class="p">.</span><span class="nx">ask</span><span class="p">({</span> <span class="nx">text</span><span class="o">:</span> <span class="nx">question</span><span class="p">},</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">response</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="k">return</span> <span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>      <span class="kd">var</span> <span class="nx">first_answer</span> <span class="o">=</span> <span class="nx">response</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">question</span><span class="p">.</span><span class="nx">evidencelist</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">text</span><span class="p">;</span>
+</span><span class='line'>      <span class="nx">cb</span><span class="p">(</span><span class="nx">first_answer</span><span class="p">);</span>
+</span><span class='line'>  <span class="p">});</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This triggers the callback we&#8217;ve registered with the first answer in the returned results. Answers are stored as values in a map, with the key as the call ssid, before triggering the redirect to the &#8216;/calls/answer&#8217; location shown above.</p>
+
+<h2>Deploying to Bluemix</h2>
+
+<p>Hosting the application on IBM Bluemix uses the following manifest file to configure the application at runtime.</p>
+
+<pre>
+---
+applications:
+- name: doctor-watson
+  memory: 256M 
+  buildpack: https://github.com/jthomas/nodejs-buildpack.git
+  command: node app.js
+  services:
+  - twilio
+  - speech_to_text
+  - question_and_answer
+</pre>
+
+
+<p>We&#8217;re binding the services to the application and specifying the custom buildpack to expose the SOX library at runtime.</p>
+
+<p>Following this&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push // and Doctor Watson is live!
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Check out the source code here for further details. You can even run your own version of the application, follow the instructions in the README.md</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2014/07/22/zero-downtime-deployments-using-bluemix/">Zero Downtime Deployments Using IBM Bluemix</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-07-22T14:42:00+01:00" pubdate data-updated="true">Jul 22<span>nd</span>, 2014</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Here&#8217;s a video I&#8217;ve made showing you how to deploy new versions of an
+application on IBM Bluemix without the end-user having to suffer any down time:</p>
+
+<iframe width="420" height="315" src="//www.youtube.com/embed/yfLi2hLfgSU" frameborder="0" allowfullscreen></iframe>
+
+
+<p>Utilising the <a href="http://martinfowler.com/bliki/BlueGreenDeployment.html">Blue Green deployment pattern</a>, we deploy the
+new version to a separate host within the production environment, rather than
+taking down and updating the existing application. The HTTP router in front of
+the applications controls tunnelling application requests between the different
+versions. Once we verified the new version is working correctly, we can turn
+off the previous version and transfer all traffic to the new instance.</p>
+
+<p><strong>This complex deployment pattern is automatically supported by the Cloud Foundry
+technology underpinning IBM Bluemix</strong>.</p>
+
+<p><em>Staging multiple versions of an application, bound to the same external address, with automatic load balancing is handled transparently by the platform.</em></p>
+
+<p><em>This works for any language or
+runtime without any modifications to your application.</em></p>
+
+<p>There are a few <a href="https://www.ng.%20bluemix.net/docs/#manageapps/index-gentopic3.html#d2e1">different ways</a>
+to achieve this deployment approach using the
+platform. The example in the video only uses three commands
+with the ‘cf’ tool.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>// Rename the existing application to allow staging a new instance without
+</span><span class='line'>// overwriting existing version.
+</span><span class='line'><span class="nv">$ </span>cf rename app old_app
+</span><span class='line'>
+</span><span class='line'>// Deploy the updated application, which will be bound to the same external
+</span><span class='line'>// address. HTTP traffic is load balanced between the two versions automatically.
+</span><span class='line'><span class="nv">$ </span>cf push
+</span><span class='line'>
+</span><span class='line'>// Verify the new application is working and <span class="k">then </span>turn off the old instance.
+</span><span class='line'><span class="nv">$ </span>cf stop old_app
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Amazing!</strong></p>
+
+<p><strong>Update (July 20th 2018)</strong>: <em>There is now a <a href="https://github.com/bluemixgaragelondon/cf-blue-green-deploy">CLI plugin</a> for Cloud Foundry that automates this approach. Check it out!</em></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/02/04/monkigras/">Monki Gras</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-02-04T16:07:00+00:00" pubdate data-updated="true">Feb 4<span>th</span>, 2013</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Last week was <a href="http://monkigras.com">Monki Gras</a>, the conference organised by
+<a href="http://redmonk.com/">RedMonk</a>, with this year&#8217;s theme being &#8221;<em>scaling craft</em>&#8221;.</p>
+
+<blockquote><p>We plan to explore Craft that helps scale Technology, or Technology that helps<br/>scale Craft. What are the limits of a craft-based approach? Does quality have<br/>to suffer as businesses scale?</p><footer><strong>James Governor</strong> <cite><a href='http://redmonk.com/jgovernor/2013/01/07/scaling-craft-tech-and-beer-monki-gras-conference-2013/'>redmonk.com/jgovernor/2013/01/&hellip;</a></cite></footer></blockquote>
+
+
+<p>Held over two days in London&#8217;s <a href="http://www.conwayhall.org.uk/">Conway Hall</a>,
+there was an incredible <a href="http://monkigras.com/agenda/">line-up of speakers</a>,
+social events and <a href="http://www.londonfieldsbrewery.co.uk/">evening activities</a>.</p>
+
+<p>Talks were on a diverse range of topics, from best practices for scaling virtual teams to printing your own steam train. Here are my notes
+on those I found most interesting (or, more likely, remembered to write something down&#8230;).</p>
+
+<h2><a href="http://rc3.org/">Rafe Colburn</a> - &#8220;Artisan Software Manufacture&#8221;</h2>
+
+<p>Rafe started his talk by defining characteristics associated with craft and
+mass production, which are normally held up as polar opposites.  Traditionally,
+craft became a byword for quality, whereas mass production signalled
+consistency and resilience. Combining aspects from both domains will often lead
+to the best results.</p>
+
+<p>Consider Apple&#8217;s tag line these days, <em>designed in California, produced in
+China</em>, craft and mass production.</p>
+
+<p>When running an engineering team at <a href="http://etsy.com">Etsy</a>, Rafe detailed the best practices they
+used to ensure they shipped high quality software.</p>
+
+<ul>
+<li><p><em>Measure and monitor everything</em> - This spans all areas of engineering from user
+request metrics produced by the site, application errors generated and enormous A/B testing, etc.</p></li>
+<li><p><em>Automate repeatable processes</em> - New developer can be set-up straight away due to their use of VMs, allowing them to
+start shipping straight away. Continuous integration and automated deployment were core principles of their engineering set-up.</p></li>
+<li><p><em>Growing Craftmanship</em> - Etsy encouraged &#8220;craftmanship&#8221; as a culture internally through activities such as regular
+code reviews, annual bootcamps to shift developers between different teams, scheduled &#8220;bug rotations&#8221; to mix developers together to tackle
+the bug queue and code reading clubs, where developers review open-source software together.</p></li>
+</ul>
+
+
+<p>Finally, spend the time saved on the most important aspect of software development, your employees and keeping them happy.</p>
+
+<h2><a href="http://design.ibm.com">Phil Gilbert</a> - &#8220;Design Thinking at IBM&#8221;</h2>
+
+<p>IBM&#8217;s CEO, <a href="http://en.wikipedia.org/wiki/Ginni_Rometty">Ginni Rometty</a>, recently announced a new division to lead design
+across the entire company, cutting through the individual brands and products,
+transforming IBM into a design-led company.</p>
+
+<p>With close to 480,000 employees,
+this is a herculean task and Phil Gilbert has been put in charge.
+Phil previously led the effort to consolidate IBM&#8217;s BPM portfolio down from nearly
+twenty products to only four.</p>
+
+<p>His team has developed a new framework to deliver
+<a href="http://en.wikipedia.org/wiki/Ginni_Rometty"><strong>&#8220;design-led thinking&#8221;</strong></a> throughout IBM, rather than a formulaic set of policies
+and procedures to enforce design from top-down.</p>
+
+<p>Using the military analogy of
+<a href="http://blogs.hbr.org/frontline-leadership/2010/11/dont-play-golf-in-a-football-g.html">Commander&#8217;s intent</a>
+, the goal was to empower product teams within IBM to embrace design-led thinking, rather than appearing
+as &#8220;just another corporate diktat&#8221;.</p>
+
+<p>Key building blocks in the framework were&#8230;</p>
+
+<ul>
+<li><p><em>Lead Users</em> - Continual and regular engagement with intended consumers straight from the design phase.</p></li>
+<li><p><em>Release Hills</em> - Used to split design and development effort into achievable iterations.</p></li>
+<li><p><em>Metrics</em> - Provide visibility around objective operational data.</p></li>
+<li><p><em>Wiki-based Release BluePrint</em> - Used as source of truth within project, peer-reviewed artifacts, shared between consumers.</p></li>
+</ul>
+
+
+<p>Full details about this new initiative can be found on the <a href="http://design.ibm.com/uxd/design.jsp?site=home&amp;top=x1&amp;left=y3">IBM Design</a> site.</p>
+
+<h2><a href="https://twitter.com/TheSteve0">Steve Citron-Pousty</a> - &#8220;Ecosystem management brings the science to scaling&#8221;</h2>
+
+<p>Steve knows a thing or two about &#8220;ecosystems&#8221;, working as a developer advocate
+for Red Hat and having a PhD in Ecology.</p>
+
+<p>Drawing on his past experience from
+academia, Steve talked about using lessons learned from real ecosystem
+management, specifically Yellowstone Natural Park, to enable more effective
+developer outreach programmes.</p>
+
+<p>Ecosystems experiments come in different forms, natural (let&#8217;s observe the
+effects of a natural disaster) and planned (let&#8217;s introduce a
+new species), choosing the right experiment type can greatly improve the
+results.</p>
+
+<p>Add monitoring to your ecosystem experiments, e.g. A/B testing on click-through rates for
+email marketing, allowing you to perform statistical analysis to quantatively
+assess the outcomes.</p>
+
+<h2><a href="http://redmonk.com/dberkholz/">Donnie Berkholz</a> - &#8220;What Data Scientist Can Learn From DevOps&#8221;</h2>
+
+<p>Donnie Berkholz, analyst at Redmonk, was previous a biological researcher
+working on drug discovery. His talk expanded from this
+<a href="http://redmonk.com/dberkholz/2012/11/06/what-can-data-scientists-learn-from-devops/">article</a>
+about how data scientists could benefit from applying &#8220;engineering culture&#8221;.</p>
+
+<p>The main theme was that traditional statisticians come from a world
+built with custom scripts using R, hand-written log books and manual analysis.
+As &#8220;data scientists&#8221; merge this existing world with better technologies there
+was an enormous amount of &#8220;best practices&#8221; from software engineering that could
+be applied with great success.</p>
+
+<p>Concrete suggestions included source control for artifacts, continuous testing for
+code and data, online collaboration using wikis and engineering for scale.</p>
+
+<p>Slides for the talk are available <a href="http://www.slideshare.net/dberkholz/data-science-devops-and-drinks-the-perfect-combination">here</a>.</p>
+
+<h2><a href="http://prettylittlestatemachine.com/">Shanley Kane</a> - &#8220;Scaling Product Management&#8221;</h2>
+
+<p>Shanley compared <a href="http://en.wikipedia.org/wiki/Inferno_(Dante)">Dante&#8217;s Inferno</a> to
+Product Management, using the nine circles of Hell as metaphors for common issues
+and providing solutions from Paradiso and the spheres of Heaven.</p>
+
+<ul>
+<li><p><em>Fraud</em> - Roadmaps are arbitrary documents with timelines and feature. Premature
+decision making that encourages death marches.  Remove road maps and
+collaborate on living &#8220;working what are working on&#8221; document.</p></li>
+<li><p><em>Greed</em> - You can&#8217;t do everything you want (within a fixed time period).
+Shanley&#8217;s heuristic says, <em>&#8220;take what you want to do, divide it by four, take
+the original time you think you need and double it&#8221;</em>.</p></li>
+<li><p><em>Gluttony</em> - Stop using &#8220;all the tools&#8221;. Perfect tools don&#8217;t exist, lower your expectations and standardise across teams.</p></li>
+<li><p><em>Limbo</em> - Technical debt hinder progress, grows over time. Stop hiding it away, acknowledge it and plan to resolve it.</p></li>
+<li><p><em>Anger</em> - Continually dismissing peoples&#8217; opinions leads to distrust and resentment. Create culture of discussion, including trade-offs and whys. Include
+other departments apart from engineering.</p></li>
+</ul>
+
+
+<h2><a href="https://twitter.com/Tim_Webb_">Tim Webb</a> - &#8220;Tips &amp; tricks, and tools from a company that&#8217;s never had a headquarters.&#8221;</h2>
+
+<p>Tim&#8217;s talked about scaling remote-working teams and how his company makes it
+work.</p>
+
+<p>Setting expectations was key to successful collaboration, how available
+are people supposed to be during core working hours?</p>
+
+<p>Remote working can be
+successful but you can&#8217;t ignore physical distances, having a team with
+employees in Latin America, United Kingdom and China makes it difficult to even
+schedule a conference call.</p>
+
+<p>Use tools a variety of tools, from Google Hangouts
+to Skype, to encourage collaboration. Default to &#8220;over-sharing&#8221; to ensure
+everybody stays in touch.</p>
+
+<h2><a href="https://twitter.com/tnm">Ted Nyman</a> - &#8220;Scaling Happiness&#8221;</h2>
+
+<p>Github has now grown to over 140 employees but still hasn&#8217;t employed a formal manager.</p>
+
+<p>Rather than having a hierarchical organisational, with managers dictating strategy and direction,
+Github&#8217;s engineer&#8217;s work on what they find most interesting and progress happens through consensus and
+discussion.</p>
+
+<p>Ted spoke about &#8220;freedom perks&#8221;, calling out companies who use excessive benefits, e.g. free food,
+rather than engaging work to hold onto employees.</p>
+
+<p><em>Authenticity and autonomy are key to happiness for employees.</em></p>
+
+<p>Github&#8217;s lack of a formal structure creates a culture which embraces disorder, tolerates mistakes and lets teams
+form naturally. This culture eventually reinforces the original structure.</p>
+
+<p>Slides are available <a href="http://ted.io/scaling-happiness.html">here</a>.</p>
+
+<hr />
+
+<p>I&#8217;m looking forward to next year already&#8230;</p>
+
+<p><strong>Finally, thanks to <a href="http://redmonk.com/jgovernor/">James Governor</a> and the rest of the organisers for putting on a fantastic event.
+It must have taken an enormous amount of effort to pull off a high-quality event on this scale.</strong></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2013/01/15/server-side-dijit/">Server Side Dijit</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2013-01-15T10:08:00+00:00" pubdate data-updated="true">Jan 15<span>th</span>, 2013</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Modern Dojo applications often use declarative programming, annotating HTML
+elements with custom attributes containing module identifiers, to declare widgets
+and use client-side rendering with HTML templates to convert web pages into
+JavaScript applications.</p>
+
+<p><strong>Client-side rendering often comes with a major complaint, the dreaded
+&#8220;pop-up effect&#8221;.</strong></p>
+
+<p><img src="/images/white_screen.png"></p>
+
+<p>This happens because the HTML initially displayed
+does not contain widget templates until after client-side rendering has
+finished. Essentially, the application has to load twice, once to download all
+the JS, CSS and HTML resources, then again, to render widgets client-side.</p>
+
+<p>Usually this is hidden behind an overlay screen, which becomes especially
+annoying in multi-page applications.</p>
+
+<p><strong>So, what can we do?</strong></p>
+
+<p>Templated widgets provide a good pattern for building re-usable application modules but client-side rendering can
+provide a less ideal user experience.</p>
+
+<p>Reading an article about the <a href="http://anyasq.com/79-im-a-technical-lead-on-the-google+-team">technology stack behind Google+</a>, Google
+were using page widgets with templates supported by the <a href="https://developers.google.com/closure/library/">Closure framework</a>. However, they had
+an interesting idea to overcome the client-side rendering issue&#8230;</p>
+
+<blockquote><p>We often render our Closure templates server-side<br/>so the page renders before any JavaScript is loaded, then the JavaScript finds<br/>the right DOM nodes and hooks up event handlers, etc. to make it responsive.</p><footer><strong>Joseph Smarr</strong> <cite><a href='http://anyasq.com/79-im-a-technical-lead-on-the-google+-team'>anyasq.com/&hellip;</a></cite></footer></blockquote>
+
+
+<p><strong>Could we use the same server-side rendering technique in Dojo applications?</strong></p>
+
+<p>Doing a little investigation, Dojo&#8217;s abstractions around widget rendering made it perfect
+for server-side rendering.</p>
+
+<p><strong>Tl;DR? Project source code is available on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.</strong></p>
+
+<h2>Dijit Widget Lifecycle</h2>
+
+<p>Dojo widgets inherit from the following base class,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetBase.html">dijit/_WidgetBase</a>,
+which provides the widget lifecycle, which can be extended with custom implementations.</p>
+
+<ul>
+<li><strong>constructor</strong></li>
+<li><strong>parameters</strong> are mixed into the widget instance</li>
+<li><strong>postMixInProperties</strong> - Invoked before rendering occurs, and before any DOM nodes are created.</li>
+<li><strong>buildRendering</strong> - Used to define the widget&#8217;s DOM nodes</li>
+<li><strong>setters are called</strong> - Custom attribute setters are called</li>
+<li><strong>postCreate</strong> - Widget has been rendered.</li>
+<li><strong>startup</strong> - Parsing and creation of any child widgets completed.</li>
+</ul>
+
+
+<p>All lifecycle methods are executed in linear order for each new widget instance.
+Having clear abstractions around where and when the widget rendering
+occurs in the lifecycle (buildRendering) makes extending simple.</p>
+
+<p>Rendering widget templates is provided by an additional mixin,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_TemplatedMixin.html">dijit/_TemplatedMixin</a>.</p>
+
+<p>There&#8217;s also a further extension, <a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetsInTemplateMixin.html">dijit/_WidgetsInTemplateMixin</a>,
+for ensuring child widgets within the template are instantiated correctly during rendering.</p>
+
+<p>If we provide a pre-rendered template within the page, the client-side
+renderer will hook up that DOM node as the widget&#8217;s DOM node, using a
+custom lifecycle extension, rather than attempting to construct the HTML
+template client-side.</p>
+
+<p>We only need to modify the <em>buildRendering</em> phase, every
+other lifecycle phase will run normally.</p>
+
+<h2>Rendering Templates Server-Side</h2>
+
+<p>Now we know where to hook up a pre-rendered template, how would we render the templates server-side?</p>
+
+<p>We want to support server-side rendering with only minimal changes to an application.</p>
+
+<h3> Running Dojo on NodeJS</h3>
+
+<p>With the recent popularity of NodeJS, we have an excellent server-side
+JavaScript environment. If we configure Dojo to run within this platform, we
+should be able to construct page widgets server-side, delegating template
+rendering to the same lifecycle used client-side.</p>
+
+<p>This code below shows how to configure Dojo on NodeJS.</p>
+
+<figure class='code'><figcaption><span>Loading Dojo on NodeJS</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">dojoConfig</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">packages</span><span class="o">:</span> <span class="p">[</span>
+</span><span class='line'>        <span class="p">{</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;dojo&quot;</span><span class="p">,</span> <span class="nx">location</span><span class="o">:</span> <span class="s2">&quot;./lib/dojo&quot;</span><span class="p">},</span>
+</span><span class='line'>        <span class="p">{</span><span class="nx">name</span><span class="o">:</span> <span class="s2">&quot;dijit&quot;</span><span class="p">,</span> <span class="nx">location</span><span class="o">:</span> <span class="s2">&quot;./lib/dijit&quot;</span><span class="p">}</span>
+</span><span class='line'>    <span class="p">],</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;./lib/dojo/dojo.js&quot;</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once we&#8217;ve evaluated the dojo.js file within NodeJS, the AMD loader (<em>require/define</em>) is available through properties on the
+<em>global</em> object. We can use these functions to load additional DTK or custom AMD modules. Accessing
+page widgets using the AMD loader, we can execute the lifecycle methods to trigger template rendering, read the
+rendered template and include the output within the application&#8217;s HTML pages.</p>
+
+<p><strong>Unfortunately, there&#8217;s one thing missing&#8230; access to the DOM!</strong></p>
+
+<h3>Simulating a Browser </h3>
+
+<p>Dojo widgets need access to the <a href="http://en.wikipedia.org/wiki/Document_Object_Model">DOM</a> when rendering the static HTML template into live DOM nodes.
+Running inside a NodeJS instance, rather than a browser, this API is missing.</p>
+
+<p>Luckily, there&#8217;s a pure-JavaScript implementation of a DOM, which can be executed within NodeJS, called <a href="https://github.com/tmpvar/jsdom">JSDOM</a>.</p>
+
+<p>Importing this package within our application simulates those APIs, allowing page widgets to render normally and, more importantly, letting
+us access the live DOM nodes which result from widget rendering.</p>
+
+<p>Finally, creating Dojo widgets within our fake browser environment triggered a
+few issues, due to the configuration used with the NodeJS loader.</p>
+
+<p>The code snippet below shows how we initialise a server-side DOM and fix those configuration issues.</p>
+
+<figure class='code'><figcaption><span>Server-Side DOM with Dojo</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">jsdom</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;jsdom&quot;</span><span class="p">).</span><span class="nx">jsdom</span><span class="p">,</span>
+</span><span class='line'>    <span class="nb">document</span> <span class="o">=</span> <span class="nx">jsdom</span><span class="p">(</span><span class="s2">&quot;&lt;html&gt;&lt;/html&gt;&quot;</span><span class="p">),</span>
+</span><span class='line'>    <span class="nb">window</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createWindow</span><span class="p">();</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">has</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/has&quot;</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">win</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/_base/window&quot;</span><span class="p">),</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Manually add event listener test as this was only included in </span>
+</span><span class='line'><span class="c1">// the &quot;host-browser&quot; profile.</span>
+</span><span class='line'><span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-addeventlistener&quot;</span><span class="p">,</span> <span class="o">!!</span><span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">);</span>
+</span><span class='line'><span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-attributes-explicit&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Fix global property to point to &quot;window&quot; </span>
+</span><span class='line'><span class="nx">win</span><span class="p">.</span><span class="nx">global</span> <span class="o">=</span> <span class="nb">window</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Now we can successfully create widgets on the server-side, how do we know which
+widgets to create for an application?</em></p>
+
+<h3>Declarative Dojo Applications</h3>
+
+<p>Dojo provides a mechanism to convert HTML elements, annotated with module identifiers, into page widgets at runtime.</p>
+
+<p>Using the <a href="http://dojotoolkit.org/reference-guide/1.8/dojo/parser.html">dojo/parser</a>
+module, once the page has loaded, it will automatically instantiate the widgets, passing in
+parameters and other attributes defined in the markup.</p>
+
+<p>An example of declarative widget declaration is shown below.</p>
+
+<figure class='code'><figcaption><span>Declarative widgets</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;select</span> <span class="na">name=</span><span class="s">&quot;state&quot;</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit/form/Select&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;TN&quot;</span><span class="nt">&gt;</span>Tennessee<span class="nt">&lt;/option&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;VA&quot;</span> <span class="na">selected=</span><span class="s">&quot;selected&quot;</span><span class="nt">&gt;</span>Virginia<span class="nt">&lt;/option&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;WA&quot;</span><span class="nt">&gt;</span>Washington<span class="nt">&lt;/option&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;FL&quot;</span><span class="nt">&gt;</span>Florida<span class="nt">&lt;/option&gt;</span>
+</span><span class='line'>    <span class="nt">&lt;option</span> <span class="na">value=</span><span class="s">&quot;CA&quot;</span><span class="nt">&gt;</span>California<span class="nt">&lt;/option&gt;</span>
+</span><span class='line'><span class="nt">&lt;/select&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Application pages using declarative markup can easily be scanned to find application widgets that are needed. As we&#8217;re able to
+run AMD modules server-side, we can simply use the existing Dojo parser with our server-side DOM to do the hard work for us!</p>
+
+<h3>Server-side Parsing</h3>
+
+<p>For a sample page we want to pre-render, we inject the HTML source into our DOM and run the parser over the current instance. Once the parser
+has finished, the server-side DOM will contain the rendered templates for each widget.</p>
+
+<figure class='code'><figcaption><span>Using dojo/parser with JSDOM</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">parser</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/parser&quot;</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">source</span> <span class="o">=</span> <span class="s2">&quot;... page html goes here ...&quot;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Overwrite finished document contents</span>
+</span><span class='line'><span class="c1">// with new source and run parser over the DOM.</span>
+</span><span class='line'><span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">source</span><span class="p">);</span>
+</span><span class='line'><span class="nx">parser</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nb">document</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">source</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">innerHTML</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using JSDOM like this, script tags within the page aren&#8217;t evaluated, letting us handle the module loading
+and parsing externally in NodeJS.</p>
+
+<p>However, this presented a challenge as module dependencies declared in these
+script tags were ignored, leaving the parser to instantiate declarative widgets from modules which hadn&#8217;t been loaded.</p>
+
+<p><em>Luckily, in the Dojo 1.8 release, the parser was enhanced to automatically load any missing module dependencies during the parsing phase.
+Phew&#8230;</em></p>
+
+<p>Finally, once a widget&#8217;s template has been rendered, any other operations
+performed by the parser are unnecessary.  Creating a &#8220;lite&#8221; parser which
+removed these code paths, which also provided a place for the extensions
+described later, was started from a copy of the existing parser.</p>
+
+<p>Using the AMD &#8220;aliases&#8221; configuration, this module transparently replaced the existing parser during server-side rendering.</p>
+
+<h3>Mixins For Pre-Rendering</h3>
+
+<p>Rendering widgets server-side, using NodeJS and JSDOM, works for simple widgets but what happens when you use
+layout widgets, which rely on accessing the browser&#8217;s layout properties? What if you have separate code paths for different browsers
+which affect the template string?</p>
+
+<p>There are numerous scenarios where we rely on data that&#8217;s impractical to simulate
+within our fake browser.</p>
+
+<p><em>So, how do we pre-render these widgets? We don&#8217;t!</em></p>
+
+<p>Ignoring these widgets, which leaves them to render normally client-side.</p>
+
+<p>Identifying widgets to render server-side takes advantage of a new declarative
+parameter used by the parser since 1.8, <em>data-dojo-mixins</em>. This parameter
+allows additional modules to be mixed into the declarative class instance by
+the parser.</p>
+
+<p>Using this parameter with a custom module,
+<em>server_side/_TemplatedMixin</em>, on widgets to be pre-rendered, as shown below,
+make identification easy. Additionally, this class
+will contain the lifecycle extensions that modifies client-side rendering.</p>
+
+<figure class='code'><figcaption><span>Custom Declarative Mixins </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;div</span> <span class="na">data-dojo-type=</span><span class="s">&quot;dijit/CalendarLite&quot;</span> <span class="na">data-dojo-mixins=</span><span class="s">&quot;server_side/_TemplatedMixin&quot;</span><span class="nt">&gt;&lt;/div&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Automating Rendering</h3>
+
+<p><strong>Now we&#8217;ve identified the mechanism for server-side rendering, how can we automate this process
+for all application pages?</strong></p>
+
+<p><a href="https://github.com/senchalabs/connect">Connect</a> is <em>&#8220;an extensible HTTP server framework for
+node, providing high performance plugins known as middleware&#8221;</em>.</p>
+
+<p>Using this framework as our HTTP server means we can write a custom middleware plugin
+that will automatically parse, pre-render and serve all our application pages.</p>
+
+<p>Connect plugins are functions that accept three parameters, the request and
+response objects, along with a callback to signal this plugin&#8217;s work has
+finished. Each registered plugin will be executed for each request.</p>
+
+<p>We&#8217;ve decomposed the library into two files, server_side.js, which exposes a
+valid express plugin, and render.js, which provides a simple interface for the
+server-side rendering, described above. The complete version of the code for both modules is included below.</p>
+
+<figure class='code'><figcaption><span>server_side.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">render</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;./render.js&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">config</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// Create AMD packages from module configuration.</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">page</span> <span class="o">=</span> <span class="nx">render</span><span class="p">({</span>
+</span><span class='line'>        <span class="nx">dojo</span><span class="o">:</span> <span class="nx">config</span><span class="p">.</span><span class="nx">dojo</span> <span class="o">+</span> <span class="s2">&quot;/dojo&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nx">dijit</span><span class="o">:</span> <span class="nx">config</span><span class="p">.</span><span class="nx">dojo</span> <span class="o">+</span> <span class="s2">&quot;/dijit&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nx">server_side</span><span class="o">:</span> <span class="nx">__dirname</span> <span class="o">+</span> <span class="s2">&quot;/../public/js/server_side&quot;</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">ignore</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">accept</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">return</span> <span class="nx">accept</span><span class="p">.</span><span class="nx">indexOf</span><span class="p">(</span><span class="s2">&quot;text/html&quot;</span><span class="p">)</span> <span class="o">===</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'>        <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c1">// Only hook into text/html requests....</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="nx">ignore</span><span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">headers</span><span class="p">.</span><span class="nx">accept</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">return</span> <span class="nx">next</span><span class="p">();</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">write</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">write</span><span class="p">,</span>
+</span><span class='line'>            <span class="nx">end</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">end</span><span class="p">,</span>
+</span><span class='line'>            <span class="nx">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c1">// We need entire page contents, not just the chunks.</span>
+</span><span class='line'>        <span class="c1">// Proxy original methods while we&#39;re buffering.</span>
+</span><span class='line'>        <span class="nx">res</span><span class="p">.</span><span class="nx">write</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">chunk</span><span class="p">,</span> <span class="nx">encoding</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="nx">buffer</span> <span class="o">=</span> <span class="nx">buffer</span><span class="p">.</span><span class="nx">concat</span><span class="p">(</span><span class="nx">chunk</span><span class="p">);</span>
+</span><span class='line'>            <span class="k">return</span> <span class="kc">true</span><span class="p">;</span>
+</span><span class='line'>        <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">res</span><span class="p">.</span><span class="nx">end</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">chunk</span><span class="p">,</span> <span class="nx">encoding</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">if</span> <span class="p">(</span><span class="nx">chunk</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>                <span class="nx">res</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">chunk</span><span class="p">);</span>
+</span><span class='line'>            <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>            <span class="c1">// Fix content-length, we now have more data to send.</span>
+</span><span class='line'>            <span class="kd">var</span> <span class="nx">rendered</span> <span class="o">=</span> <span class="nx">page</span><span class="p">(</span><span class="nx">buffer</span><span class="p">);</span>
+</span><span class='line'>            <span class="nx">res</span><span class="p">.</span><span class="nx">setHeader</span><span class="p">(</span><span class="s2">&quot;Content-Length&quot;</span><span class="p">,</span> <span class="nx">rendered</span><span class="p">.</span><span class="nx">length</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>            <span class="k">return</span> <span class="nx">end</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">res</span><span class="p">,</span> <span class="nx">rendered</span><span class="p">,</span> <span class="nx">encoding</span><span class="p">);</span>
+</span><span class='line'>        <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="nx">next</span><span class="p">();</span>
+</span><span class='line'>    <span class="p">};</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span>render.js</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">jsdom</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;jsdom&quot;</span><span class="p">).</span><span class="nx">jsdom</span><span class="p">,</span>
+</span><span class='line'>    <span class="nb">document</span> <span class="o">=</span> <span class="nx">jsdom</span><span class="p">(</span><span class="s2">&quot;&lt;html&gt;&lt;/html&gt;&quot;</span><span class="p">),</span>
+</span><span class='line'>    <span class="nb">window</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">createWindow</span><span class="p">();</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">packages</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// Fix window objects in global scope.</span>
+</span><span class='line'>    <span class="nx">global</span><span class="p">.</span><span class="nb">document</span> <span class="o">=</span> <span class="nb">document</span><span class="p">;</span>
+</span><span class='line'>    <span class="nx">global</span><span class="p">.</span><span class="nx">navigator</span> <span class="o">=</span> <span class="nb">window</span><span class="p">.</span><span class="nx">navigator</span><span class="p">;</span>
+</span><span class='line'>    <span class="nx">global</span><span class="p">.</span><span class="nb">window</span> <span class="o">=</span> <span class="nb">window</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">amd_packages</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">packages</span><span class="p">).</span><span class="nx">map</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="p">{</span> <span class="nx">name</span><span class="o">:</span> <span class="nx">key</span><span class="p">,</span> <span class="nx">location</span><span class="o">:</span> <span class="nx">packages</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="p">};</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Deliberately create global &quot;dojoConfig&quot; variable.</span>
+</span><span class='line'>    <span class="nx">dojoConfig</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">packages</span><span class="o">:</span> <span class="nx">amd_packages</span><span class="p">,</span>
+</span><span class='line'>        <span class="c1">// _WidgetsInTemplateMixin call parser directly to instantiate children. </span>
+</span><span class='line'>        <span class="c1">// We need it to use our custom parser so use AMD-remapping magic!</span>
+</span><span class='line'>        <span class="nx">aliases</span><span class="o">:</span> <span class="p">[[</span><span class="s2">&quot;dojo/parser&quot;</span><span class="p">,</span> <span class="s2">&quot;server_side/parser&quot;</span><span class="p">]],</span>
+</span><span class='line'>        <span class="nx">deps</span><span class="o">:</span> <span class="p">[</span><span class="s2">&quot;server_side/parser&quot;</span><span class="p">,</span> <span class="s2">&quot;dojo/has&quot;</span><span class="p">,</span> <span class="s2">&quot;dojo/_base/window&quot;</span><span class="p">,</span> <span class="s2">&quot;server_side/registry&quot;</span><span class="p">]</span>
+</span><span class='line'>    <span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">require</span><span class="p">(</span><span class="nx">packages</span><span class="p">.</span><span class="nx">dojo</span> <span class="o">+</span> <span class="s2">&quot;/dojo.js&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Once Dojo has been evalulated, require &amp; define methods </span>
+</span><span class='line'>    <span class="c1">// from AMD API as exposed as properties on &quot;global&quot; object.</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">has</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/has&quot;</span><span class="p">),</span>
+</span><span class='line'>        <span class="nx">win</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;dojo/_base/window&quot;</span><span class="p">),</span>
+</span><span class='line'>        <span class="nx">registry</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;server_side/registry&quot;</span><span class="p">),</span>
+</span><span class='line'>        <span class="nx">parser</span> <span class="o">=</span> <span class="nx">global</span><span class="p">.</span><span class="nx">require</span><span class="p">(</span><span class="s2">&quot;server_side/parser&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Now we need to manually fix a few things to make Dojo </span>
+</span><span class='line'>    <span class="c1">// simulate running in a browser.</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Manually add event listener test as this was only included in </span>
+</span><span class='line'>    <span class="c1">// the &quot;host-browser&quot; profile.</span>
+</span><span class='line'>    <span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-addeventlistener&quot;</span><span class="p">,</span> <span class="o">!!</span><span class="nb">document</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">);</span>
+</span><span class='line'>    <span class="nx">has</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s2">&quot;dom-attributes-explicit&quot;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Fix global property to point to &quot;window&quot; </span>
+</span><span class='line'>    <span class="nx">win</span><span class="p">.</span><span class="nx">global</span> <span class="o">=</span> <span class="nb">window</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">return</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">source</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="c1">// Clear any previously rendered widgets from registry,</span>
+</span><span class='line'>        <span class="c1">// simulate fresh page load.</span>
+</span><span class='line'>        <span class="nx">registry</span><span class="p">.</span><span class="nx">reset</span><span class="p">();</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c1">// Overwrite finished document contents</span>
+</span><span class='line'>        <span class="c1">// with new source and run parser over the DOM.</span>
+</span><span class='line'>        <span class="nb">document</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">source</span><span class="p">);</span>
+</span><span class='line'>        <span class="nx">parser</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nb">document</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">return</span> <span class="nb">document</span><span class="p">.</span><span class="nx">innerHTML</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">};</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using this new plugin in an application is demonstrated in the code below, which
+serves the &#8220;public&#8221; directory as the application&#8217;s source root.</p>
+
+<figure class='code'><figcaption><span>Server-side Rendering Application </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">connect</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">),</span>
+</span><span class='line'>    <span class="nx">server_side</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;../lib/server_side&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">connect</span><span class="p">()</span>
+</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">connect</span><span class="p">.</span><span class="nx">directory</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s1">&#39;/public&#39;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">icons</span><span class="o">:</span> <span class="kc">true</span> <span class="p">}))</span>
+</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">server_side</span><span class="p">({</span><span class="nx">dojo</span><span class="o">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">DOJO_SOURCE</span><span class="p">}))</span>
+</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s2">&quot;/dojo&quot;</span><span class="p">,</span> <span class="nx">connect</span><span class="p">.</span><span class="kr">static</span><span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">DOJO_SOURCE</span><span class="p">))</span>
+</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="s2">&quot;/server_side&quot;</span><span class="p">,</span> <span class="nx">connect</span><span class="p">.</span><span class="kr">static</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s1">&#39;/../public/js/server_side&#39;</span><span class="p">))</span>
+</span><span class='line'>  <span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">connect</span><span class="p">.</span><span class="kr">static</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s1">&#39;/public&#39;</span><span class="p">))</span>
+</span><span class='line'>  <span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="mi">3000</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<h2>Using Server-Side Rendered Templates</h2>
+
+<p>Once the pre-rendered page has been returned to the browser, the normal client-side
+parsing will take place to instantiate the page widgets. For widgets whose templates are
+included within the page, we need to ensure the normal client-side rendering is bypassed.</p>
+
+<p>In this scenario, we connect the widget&#8217;s <em>domNode</em> property to the DOM node that the
+declarative widget was instantiated from.</p>
+
+<h3>Extending buildRendering</h3>
+
+<p>Adding a HTML template to your widget is achieved by inheriting from
+<em>dijit/_TemplatedMixin</em>, which provides the &#8220;buildRendering&#8221; implementation to
+convert a HTML string stored under &#8220;templateString&#8221; into live DOM nodes.</p>
+
+<p>Although we want to skip creating DOM nodes from the template, there are other steps, e.g. attaching event handlers, which must be ran normally.
+Using a custom mixin to identify declarative widgets for server-side rendering, <em>server_side/_TemplatedMixin</em>, also provides
+the extension point to modify the rendering process.</p>
+
+<p>Overwriting the default implementation of &#8220;buildRendering&#8221; through this mixin led
+to unresolvable issues.</p>
+
+<p>We&#8217;re forced to call any super-class &#8220;buildRendering&#8221; implementations, through
+&#8220;this.inherited(arguments)&#8221;, to ensure any custom code paths that also extend this method are executed.
+However, this will reach the original <em>dijit/_TemplatedMixin</em> module, which we need to skip.</p>
+
+<p>Monkey-patching the _TemplatedMixin prototype became the easiest solution.</p>
+
+<p>Once our custom mixin is loaded,
+we overwrite &#8220;buildRendering&#8221; which a new implementation. Using a custom flag, provided by our mixin, we check
+whether to continue with the normal code path for client-side rendering, otherwise we run our stripped down version.</p>
+
+<figure class='code'><figcaption><span>Monkey-patching _TemplatedMixin</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">br</span> <span class="o">=</span> <span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">buildRendering</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">fc</span> <span class="o">=</span> <span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">_fillContent</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Stripped down of the original function source below.</span>
+</span><span class='line'><span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">buildRendering</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">serverSide</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nx">br</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="k">this</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Source DOM node already the pre-rendered template nodes.</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">node</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">srcNodeRef</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">node</span><span class="p">.</span><span class="nx">removeAttribute</span><span class="p">(</span><span class="s2">&quot;data-dojo-type&quot;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Call down to _Widget.buildRendering() to get base classes assigned</span>
+</span><span class='line'>    <span class="nx">_WidgetBase</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">buildRendering</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="k">this</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">_attachTemplateNodes</span><span class="p">(</span><span class="nx">node</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">n</span><span class="p">,</span><span class="nx">p</span><span class="p">){</span> <span class="k">return</span> <span class="nx">n</span><span class="p">.</span><span class="nx">getAttribute</span><span class="p">(</span><span class="nx">p</span><span class="p">);</span> <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">_beforeFillContent</span><span class="p">();</span>       <span class="c1">// hook for _WidgetsInTemplateMixin</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="c1">// Don&#39;t pass srcRefNode reference as it doesn&#39;t exist.</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">_fillContent</span><span class="p">();</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Override to turn into a no-op, we don&#39;t want to attach source</span>
+</span><span class='line'><span class="c1">// ref nodes client side as it&#39;s been done on the server.</span>
+</span><span class='line'><span class="nx">_TemplatedMixin</span><span class="p">.</span><span class="nx">prototype</span><span class="p">.</span><span class="nx">_fillContent</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="k">this</span><span class="p">.</span><span class="nx">serverSide</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">return</span> <span class="nx">fc</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="nx">arguments</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We performed the same trick for the <em>fillContent</em> method due to similar issues, along with a new implementation
+of <em>attachTemplateNodes</em> in the mixin.</p>
+
+<p>With this minimal change to the client-side rendering process, widgets pick up their templates from the existing page and are
+instantiated normally. Hooking up template nodes as properties on the parent, attaching event handlers and setting data bindings
+behaves as expected.</p>
+
+<h3>Putting It Together</h3>
+
+<p><strong>Using our custom middleware for server-side rendering, along with our client-side rendering modifications,
+users accessing pages will see the templated widgets straight away, removing the &#8220;double-rendering&#8221; effect
+and the need for loading screens.</strong></p>
+
+<p><img src="/images/pre_rendered.png"></p>
+
+<p><em>This image above the same widgets rendered client-side and server-side when the page loads, but before
+client-side rendering has finished.</em></p>
+
+<p>Server-side rendering also comes with client-side performance benefits,
+reducing the number of costly DOM operations performed during application loading.
+This may be especially useful for low-power devices with mobile browsers.</p>
+
+<p>Extending, rather than replacing, the normal Dojo rendering lifecycle allows us to transparently delegate rendering
+to the client-side for unsupported widgets. Excellent abstractions already provided for the lifecycle in the toolkit make
+the extension conceptually simple.</p>
+
+<p>There are restrictions that come with this implementation, discussed below, but working within these
+constraints it is possible for the majority of templated widgets to be rendered server-side.</p>
+
+<h2>Source Code</h2>
+
+<p>All source code for the project lives on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.
+Feel free to file issues, patches and comments at the project home page.</p>
+
+<p>Once you have checked out the project code, run the following command to
+start a test application comparing client-side and server-side rendering side
+by side.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span><span class="nb">export </span><span class="nv">DOJO_SOURCE</span><span class="o">=</span>/path/to/dojo-release-1.8.0-src
+</span><span class='line'><span class="nv">$ </span>npm start
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once the server has started, visit <a href="http://localhost:3000">http://localhost:3000</a>.</p>
+
+<p>You can also install the module as an NPM package, <a href="https://npmjs.org/package/server_side_dijit">server_side_dijit</a>,
+and use the plugin within your existing Connect application.</p>
+
+<h2>Issues</h2>
+
+<p>We&#8217;ve already mentioned potential pitfalls which restrict server-side
+rendering. These include widgets that use browser dimensions to dynamically
+calculate sizing e.g. layout managers, use client-side resources to construct
+templates e.g. reading cookie data, expect access to remote resources e.g
+XHR&#8217;ing session details, and many, many more.</p>
+
+<p>Letting those widgets default to client-side template rendering provides a safe fallback.</p>
+
+<p>Discovering which existing Dojo widgets can support server-side rendering requires manual
+testing. Within the project directory, under the &#8220;/test/public&#8221; location, we&#8217;ve started
+collecting test pages which demonstrate those widgets which are known to work. Looking at those
+pages should provide a good indication of the current level of support.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/10/22/london-js/">London JS - Watson</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-10-22T16:43:00+01:00" pubdate data-updated="true">Oct 22<span>nd</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Last month, I was invited to speak at LondonJS on the machine learning and artificial intelligence behind IBM Watson.</p>
+
+<p>I jokingly said the talk would win the prize for the &#8220;least amount of JavaScript-related content in a LondonJS talk&#8221;.</p>
+
+<p>The idea was to introduce the audience to topics (machine learning) that might be relevant in the future and IBM Watson was a
+great example that people love hearing about.</p>
+
+<p>Slides for the event are now posted online, check them out <a href="https://speakerdeck.com/u/jthomas/p/a-computer-called-watson">here</a>.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/08/08/olympic-bubbles/">Olympic Bubbles</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-08-08T08:44:00+01:00" pubdate data-updated="true">Aug 8<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Introducing <strong>Olympic Bubbles</strong>, an experiment visualising mentions of the
+London 2012 Olympics sports on Twitter in real-time.</p>
+
+<p><img src="/images/olympic_bubbles.png"></p>
+
+<p>With the London 2012 Olympics having multiple events running concurrently, Twitter&#8217;s become invaluable
+for catching up on the day&#8217;s action, deciding what to watch and getting real-time insight into current events.</p>
+
+<p>Having recently started to play with a JavaScript visualisation library (<a href="http://d3js.org/">D3</a>), this seemed like a great opportunity
+to connect the two activities and automate the analysis of Twitter to visualise the most talked about Olympic sports.</p>
+
+<p>Before we can visualise the data, we needed a way to filter the Twitter firehose for tweets mentioning the Olympic games&#8230;</p>
+
+<h2>Analysing tweets for Olympic sports</h2>
+
+<p>Twitter provides a <a href="https://dev.twitter.com/docs/streaming-apis/streams/public">public API</a> for filtering their
+stream, based on keyword matching, but there are two issues with this service:</p>
+
+<ul>
+<li><strong>No access to the firehose.</strong> Results don&#8217;t represent the full set of matches from the Twitter &#8220;firehose&#8221;, only a sample are returned.</li>
+<li><strong>Polling, not real-time.</strong> No support for receiving results in real-time, the client has to manually poll for new results over HTTP.</li>
+</ul>
+
+
+<p>These problems made Twitter&#8217;s API unsuitable and an alternative was needed&#8230;</p>
+
+<p>Enter <a href="http://datasift.com">DataSift.</a></p>
+
+<blockquote><p>DataSift is a real-time media curation platform, allowing you to mine the<br/>Twitter Firehose for tweets matching the specific criteria of your choice.<br/>DataSift&#8217;s custom Curation Stream Definition Language allows you to filter<br/>based on any meta data within a tweet</p><footer><strong>Twitter</strong> <cite><a href='https://dev.twitter.com/docs/twitter-data-providers'>Partner Providers of Twitter Data</a></cite></footer></blockquote>
+
+
+<p>DataSift are one of only two companies with unrestricted access to the Twitter &#8220;firehose&#8221;. They provide a free
+trial account, with enough credit to mine 10,000 tweets.</p>
+
+<h3>Write a custom stream filter</h3>
+
+<p>DataSift provides a custom query language, <a href="http://dev.datasift.com/csdl">CSDL (Curated Stream Definition Language)</a>,
+for defining stream filters that can match messages based upon text, location, users and much more.</p>
+
+<p>Defining a new filter, we&#8217;re interested in all messages that contain references to the London 2012 Olympics along with a sport.
+Matching all tweets containing key words can be performed using the <em>contains</em> <a href="http://dev.datasift.com/docs/operators">operator</a>
+on the <em>content</em> <a href="http://dev.datasift.com/docs/targets/common-interaction">property</a> of the <em>interaction</em> <a href="http://dev.datasift.com/docs/targets/common-interaction">instance</a>.
+Each <em>interaction</em> represents a single tweet from the Twitter Firehose.</p>
+
+<p>The example below shows how to match any tweets which mention the word
+<strong>olympic</strong> but ignore those without a valid sport, using the
+<em>conjunction</em> and <em>contains_any</em> operator to make sure those matched messages
+also contain one of the pre-defined keywords for the sports.</p>
+
+<figure class='code'><figcaption><span>Olympic Sports Filter</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">interaction</span><span class="p">.</span><span class="nx">content</span> <span class="nx">contains</span> <span class="s2">&quot;olympic&quot;</span>
+</span><span class='line'><span class="nx">AND</span>
+</span><span class='line'><span class="nx">interaction</span><span class="p">.</span><span class="nx">content</span> <span class="nx">contains_any</span> <span class="s2">&quot;</span>
+</span><span class='line'><span class="s2">    Archery,</span>
+</span><span class='line'><span class="s2">    Athletics,</span>
+</span><span class='line'><span class="s2">    Badminton,</span>
+</span><span class='line'><span class="s2">    ...</span>
+</span><span class='line'><span class="s2">    Volleyball,</span>
+</span><span class='line'><span class="s2">    Water Polo,</span>
+</span><span class='line'><span class="s2">    Weightlifting,</span>
+</span><span class='line'><span class="s2">    Wrestling&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Looking over the CSDL documentation, there was a feature that allowed user generated
+<a href="http://dev.datasift.com/docs/advanced/tag-keyword">tags</a> to be appended to filtered messages.
+Rather than having the client-side code manually
+parse each message to determine which sports were referenced, we can append a tag during
+the filtering process, as shown below.</p>
+
+<figure class='code'><figcaption><span>Tagging Sports</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">tag</span> <span class="s2">&quot;archery&quot;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">interaction</span><span class="p">.</span><span class="nx">content</span> <span class="nx">contains</span> <span class="s2">&quot;archery&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">tag</span> <span class="s2">&quot;athletics&quot;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">interaction</span><span class="p">.</span><span class="nx">content</span> <span class="nx">contains</span> <span class="s2">&quot;athletics&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">tag</span> <span class="s2">&quot;badminton&quot;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">interaction</span><span class="p">.</span><span class="nx">content</span> <span class="nx">contains</span> <span class="s2">&quot;badminton&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once the stream has been defined, making it public allows any user to access the
+stream results. You can see the full stream definition and view a preview of the results
+<a href="http://datasift.com/stream/27473/olympics-2012#app1-preview">here</a>.</p>
+
+<h3>Real-time results</h3>
+
+<p>Now we have a stream defined, we need to access the results in the browser in real-time.
+Along with a traditional REST API, DataSift also provides a streaming API using <a href="https://developer.mozilla.org/en-US/docs/WebSockets">WebSockets</a>.
+WebSockets provide a <strong>bi-directional channel for messages between a client and server, without having to poll for replies</strong>. Using their streaming endpoint,
+we receive messages from our filtered firehose in real-time.</p>
+
+<p>Setting up the connection and monitoring for new messages was extremely simple, as shown below. Each time a new message arrives,
+we increment the frequency count for each of the pre-defined sports based on the interaction tag.</p>
+
+<figure class='code'><figcaption><span>DataSift Streaming API</span><a href='http://dev.datasift.com/docs/streaming-api/websockets-streaming'>Documentation</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">ws</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">WebSocket</span><span class="p">(</span><span class="s1">&#39;ws://websocket.datasift.com/&lt;hash&gt;?username=&lt;username&gt;&amp;api_key=&lt;api_key&gt;&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">ws</span><span class="p">.</span><span class="nx">onmessage</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">evt</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">msg</span> <span class="o">=</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">evt</span><span class="p">.</span><span class="nx">data</span><span class="p">),</span>
+</span><span class='line'>        <span class="nx">tags</span> <span class="o">=</span> <span class="nx">stats</span><span class="p">.</span><span class="nx">interaction</span><span class="p">.</span><span class="nx">tags</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">tags</span><span class="p">.</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">tag</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="c1">// now publish notification of new tagged messages...</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Visualising The Tweets</h2>
+
+<p><em>Now we have the data, how should we visualise the results?</em></p>
+
+<p>There are hundreds of <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/charting.html">different</a>
+<a href="http://www.highcharts.com/">charting</a> <a href="http://code.google.com/p/flot/">libraries</a>
+for JavaScript but
+rather than drawing a static histogram of the sport frequencies, we want to incorporate
+the real-time aspect into the visualisation. As new messages are received, the visualisation
+should grow and morph, tied to the transitional nature of the data.</p>
+
+<p><a href="http://d3js.org">D3</a> is a JavaScript visualisation library which provides just that capability.</p>
+
+<blockquote><p>D3.js is a JavaScript library for manipulating documents based on data, allowing<br/>you to bind arbitrary data to a Document Object Model (DOM), and then apply data-driven transformations to the document.</p></blockquote>
+
+
+<p>Developed by <a href="http://bost.ocks.org/mike/">Mike Bostock</a> of the Stanford Visualisation Group, the library has fantastic
+<a href="https://github.com/mbostock/d3/wiki">documentation</a> along with an extensive <a href="https://github.com/mbostock/d3/wiki/Gallery">examples gallery</a>,
+which provides a great starting point for developers.</p>
+
+<h3>Creating Bubbles</h3>
+
+<p>Reviewing the gallery, the <a href="http://mbostock.github.com/d3/ex/bubble.html"><strong>Bubble</strong></a> example seemed like a good starting point.
+Each bubble would represent a single sport and the size would be proportional to the frequency of tweets for that sport.</p>
+
+<p><em>Given a list of sports and frequencies, how do we know where to render the nodes and what size they should be?</em></p>
+
+<p>D3 provides a series of algorithms for converting data series into visual layouts, the Bubble example uses
+<a href="https://github.com/mbostock/d3/wiki/Pack-Layout">Pack</a>. This layout turns a hierarchical data structure into
+<em>&#8220;enclosure diagrams using containment (nesting) to represent the hierarchy&#8221;</em>.</p>
+
+<p>Running our data through this function, shown below, produces a series of
+position values (coordinate location pairs with radius) to construct
+our bubbles from.</p>
+
+<figure class='code'><figcaption><span>Generating Bubble Positions</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">sports</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">archery</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">athletics</span><span class="o">:</span> <span class="mi">2</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">badminton</span><span class="o">:</span> <span class="mi">3</span>
+</span><span class='line'>    <span class="p">...</span>
+</span><span class='line'><span class="p">};</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">layout</span> <span class="o">=</span> <span class="nx">d3</span><span class="p">.</span><span class="nx">layout</span><span class="p">.</span><span class="nx">pack</span><span class="p">().</span><span class="nx">sort</span><span class="p">(</span><span class="kc">null</span><span class="p">).</span><span class="nx">size</span><span class="p">([</span><span class="k">this</span><span class="p">.</span><span class="nx">width</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">height</span><span class="p">]);</span>
+</span><span class='line'>    <span class="nx">positions</span> <span class="o">=</span> <span class="nx">layout</span><span class="p">.</span><span class="nx">nodes</span><span class="p">({</span><span class="nx">children</span><span class="o">:</span> <span class="nx">d3</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">sports</span><span class="p">)}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>Using the position information, we need to bind these values to appropriate
+DOM elements. Following the example code, we&#8217;re going to render an SVG <a href="https://developer.mozilla.org/en-US/docs/SVG/Element/g">Group</a> node
+to contain the <a href="https://developer.mozilla.org/en-US/docs/SVG/Element/circle">Circle</a> element with a
+<a href="https://developer.mozilla.org/en-US/docs/SVG/Element/text">Text</a> node (displaying the sport&#8217;s label). The example
+below shows the code needed for this.</p>
+
+<figure class='code'><figcaption><span>Rendering Bubble Nodes</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">vis</span> <span class="o">=</span> <span class="nx">d3</span><span class="p">.</span><span class="nx">select</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">node</span><span class="p">).</span><span class="nx">append</span><span class="p">(</span><span class="s2">&quot;svg&quot;</span><span class="p">)</span>
+</span><span class='line'>            <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;width&quot;</span><span class="p">,</span> <span class="nx">width</span><span class="p">)</span>
+</span><span class='line'>            <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;height&quot;</span><span class="p">,</span> <span class="nx">height</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">chart</span> <span class="o">=</span> <span class="nx">vis</span><span class="p">.</span><span class="nx">selectAll</span><span class="p">(</span><span class="s2">&quot;g.node&quot;</span><span class="p">)</span>
+</span><span class='line'>               <span class="p">.</span><span class="nx">data</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">layout</span><span class="p">.</span><span class="nx">nodes</span><span class="p">(</span><span class="nx">data</span><span class="p">))</span>
+</span><span class='line'>               <span class="p">.</span><span class="nx">enter</span><span class="p">().</span><span class="nx">append</span><span class="p">(</span><span class="s2">&quot;g&quot;</span><span class="p">)</span>
+</span><span class='line'>               <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="s2">&quot;translate(&quot;</span> <span class="o">+</span> <span class="nx">d</span><span class="p">.</span><span class="nx">x</span> <span class="o">+</span> <span class="s2">&quot;,&quot;</span> <span class="o">+</span> <span class="nx">d</span><span class="p">.</span><span class="nx">y</span> <span class="o">+</span> <span class="s2">&quot;)&quot;</span><span class="p">;</span> <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Append circle with radius from layout and fill with arbitary colour</span>
+</span><span class='line'><span class="nx">chart</span><span class="p">.</span><span class="nx">append</span><span class="p">(</span><span class="s2">&quot;circle&quot;</span><span class="p">)</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">d</span><span class="p">.</span><span class="nx">r</span><span class="p">;</span> <span class="p">})</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">style</span><span class="p">(</span><span class="s2">&quot;fill&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">fill</span><span class="p">(</span><span class="nx">d</span><span class="p">.</span><span class="nx">key</span><span class="p">)</span> <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Add text label to bubble. </span>
+</span><span class='line'><span class="nx">chart</span><span class="p">.</span><span class="nx">append</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;text-anchor&quot;</span><span class="p">,</span> <span class="s2">&quot;middle&quot;</span><span class="p">)</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;dy&quot;</span><span class="p">,</span> <span class="s2">&quot;.3em&quot;</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Choosing an arbitrary colour for the bubble uses the <a href="https://github.com/mbostock/d3/wiki/Ordinal-Scales#wiki-category20c">d3.scale.category20c</a> method,
+referenced here by <em>fill()</em>, to produce a mapping between our category labels and a series of twenty colours.</p>
+
+<p>The example above is a slightly condensed version of the actual code, ignoring the handling of multi-lined labels and that font-sizes are relative
+to the bubble size, due to brevity.</p>
+
+<h3>Animating Bubbles</h3>
+
+<p><em>What happens when our data changes?</em></p>
+
+<p>As we receive more messages, the relative frequencies of the sports will change and the bubble layout will need updating.
+Using D3, we want to visually transition the bubbles to their new positions, watching them grow and shrink in real-time.</p>
+
+<p>Re-calculating the layout simply needs us to re-run the pack algorithm with the updated values, binding the new data
+to the existing chart.</p>
+
+<figure class='code'><figcaption><span>Binding Updated Layout</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">chart</span><span class="p">.</span><span class="nx">data</span><span class="p">(</span><span class="nx">layout</span><span class="p">.</span><span class="nx">nodes</span><span class="p">({</span><span class="nx">children</span><span class="o">:</span> <span class="nx">d3</span><span class="p">.</span><span class="nx">entries</span><span class="p">(</span><span class="nx">sports</span><span class="p">)}));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now, we just need to use the <a href="https://github.com/mbostock/d3/wiki/Transitions"><em>transition</em></a>
+method to translate the old properties
+to the new values, over a three second period. As we move the parent group node for
+each bubble, we need also update the bubble radius and label font size to make them
+proportional to the parent.</p>
+
+<figure class='code'><figcaption><span>Transitioning Bubbles</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// Move bubble node to new position</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">trans</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">chart</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">transition</span><span class="p">()</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">duration</span><span class="p">(</span><span class="mi">3000</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;transform&quot;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="s2">&quot;translate(&quot;</span> <span class="o">+</span> <span class="nx">d</span><span class="p">.</span><span class="nx">x</span> <span class="o">+</span> <span class="s2">&quot;,&quot;</span> <span class="o">+</span> <span class="nx">d</span><span class="p">.</span><span class="nx">y</span> <span class="o">+</span> <span class="s2">&quot;)&quot;</span><span class="p">;</span> <span class="p">})</span>
+</span><span class='line'>    <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">d</span><span class="p">.</span><span class="nx">r</span><span class="p">;</span> <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ... update circle radius</span>
+</span><span class='line'><span class="nx">trans</span><span class="p">.</span><span class="nx">select</span><span class="p">(</span><span class="s2">&quot;circle&quot;</span><span class="p">)</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">transition</span><span class="p">()</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">d</span><span class="p">.</span><span class="nx">r</span><span class="p">;</span> <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ... update text size</span>
+</span><span class='line'><span class="nx">trans</span><span class="p">.</span><span class="nx">select</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">)</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">transition</span><span class="p">()</span>
+</span><span class='line'>     <span class="p">.</span><span class="nx">attr</span><span class="p">(</span><span class="s2">&quot;font-size&quot;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">d</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="p">((</span><span class="nx">d</span><span class="p">.</span><span class="nx">r</span> <span class="o">/</span> <span class="mi">50</span><span class="p">))</span> <span class="o">+</span> <span class="s2">&quot;em&quot;</span><span class="p">;</span> <span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>&#8230;and that&#8217;s it!</strong></p>
+
+<p>Each time new messages flow in from the backend, the data values
+change, which triggers a new transition. With a real-time stream of new messages
+constantly arriving, the visualisation is constantly morphing and changing.</p>
+
+<h2>Live Demo</h2>
+
+<p>If you want to see this demo in action, there&#8217;s a hosted version at
+<a href="http://datasift.jamesthom.as">http://datasift.jamesthom.as</a>. You&#8217;ll need to sign up
+for a free DataSift account <a href="https://datasift.com/auth/register/">here</a>
+and use your authentication credentials to allow us to access the Twitter firehose.</p>
+
+<p>Source code for the demo is available on Github <a href="http://github.com/jthomas/olympic_bubbles">here</a>.</p>
+
+<h2>Finally&#8230;</h2>
+
+<p><em>Why Olympic Bubbles?</em></p>
+
+<p>It&#8217;s a terrible name but as the quote goes&#8230;</p>
+
+<blockquote><p>“There are only two hard things in Computer Science: cache invalidation and naming things”.</p></blockquote>
+
+
+<p>&#8230;and writing this demo was easier than coming up with a sensible name!</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/08/03/finding-nano/">Finding Nano - Getting Dojo Under 4KB</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-08-03T10:33:00+01:00" pubdate data-updated="true">Aug 3<span>rd</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>There was a bold claim in the release notes for the 1.7 version of The Dojo Toolkit&#8230;</p>
+
+<blockquote><p>Dojo Nano: Less than 4KB gzipped!</p></blockquote>
+
+
+<p>With the move to the AMD module format, the new fully-compliant asynchronous module loader could be reduced to
+less than four thousands bytes!</p>
+
+<p>Loading unnecessary code was a common complaint against previous versions of The Dojo Toolkit but now we
+could have complete control over loaded modules using this tiny AMD loader.</p>
+
+<p><em>Was this true?</em></p>
+
+<p><em>Running a standard build to generate a single dojo layer results in a minfied
+and gzipped file over 45,000 bytes.</em></p>
+
+<p><strong>How can we generate this nano
+loader in less than 10% of that size?</strong></p>
+
+<p>Until now, the instructions were spread over mailing
+<a href="http://comments.gmane.org/gmane.comp.web.dojo.devel/15941">list</a> <a href="http://mail.dojotoolkit.org/pipermail/dojo-interest/2011-December/060665.html">posts</a>,
+the <a href="http://livedocs.dojotoolkit.org/build/buildSystem">reference guide</a> and <a href="http://bugs.dojotoolkit.org/ticket/14381">bug tickets</a>,
+making it possible but not very easy!</p>
+
+<p>There already was an <a href="http://bugs.dojotoolkit.org/ticket/14392">open ticket</a> for the project to ship a complete nano-profile within the sample profiles.
+Taking up the challenge, I started investigating how to produce a profile that would generate a fully-functional AMD loader in under 4,000 bytes.</p>
+
+<h2>Nano-Build Profile</h2>
+
+<p>After much experimenting, tweaking and reviewing the toolkit&#8217;s source (along
+with help and advice from other contributors), the smallest usable AMD loader
+can be produced by running the following build profile.</p>
+
+<div><script src='https://gist.github.com/3163114.js'></script>
+<noscript><pre><code>var profile = (function(){
+    return {
+        layerOptimize: &quot;closure&quot;,
+        releaseDir: &quot;../../../release&quot;,
+
+        packages:[{
+            name:&quot;dojo&quot;,
+            location:&quot;../../../dojo&quot;
+        }],
+
+        defaultConfig:{
+            hasCache:{
+                &#39;dojo-built&#39;: 1,
+                &#39;dojo-loader&#39;: 1,
+                &#39;dom&#39;: 1,
+                &#39;host-browser&#39;: 1,
+                &quot;config-selectorEngine&quot;: &quot;lite&quot;
+            },
+            async:1
+        },
+
+        dojoBootText:&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;,
+
+        staticHasFeatures:{
+            &#39;config-dojo-loader-catches&#39;: 0,
+            &#39;config-tlmSiblingOfDojo&#39;: 0,
+            &#39;dojo-log-api&#39;: 0,
+            &#39;dojo-sync-loader&#39;: 0,
+            &#39;dojo-timeout-api&#39;: 0,
+            &#39;dojo-sniff&#39;: 0,
+            &#39;dojo-cdn&#39;: 0,
+            &#39;dojo-loader-eval-hint-url&#39;: 1,
+            &#39;config-stripStrict&#39;: 0,
+            &#39;ie-event-behavior&#39;: 0,
+            &#39;dojo-config-api&#39;: 0
+        },
+
+        layers: {
+            &quot;dojo/dojo&quot;: {
+                include: [],
+                customBase: 1
+            }
+        }
+    };
+})();</code></pre></noscript></div>
+
+
+<p>Once minified and gzipped, the entire loader is only <strong>3652</strong> bytes! Compared
+to the full loader with base modules, which came in a 45705 bytes, this
+represents <strong>more than a 92% reduction in file size</strong>.</p>
+
+<p>So, how does the build profile above squeeze so much space out? Let&#8217;s take a
+closer look at the parameters and explain how they contribute to the reduced
+size&#8230;</p>
+
+<h3>Custom Base Layer</h3>
+
+<p>Unless specified otherwise, the Dojo build system will always generate a <em>base</em> layer containing
+the dojo.js source file combined with all the base modules (those defined under the <em>dojo/_base</em> directory).</p>
+
+<p>Generating just the AMD loader, without all those additional modules, needs the profile to
+contain an explicit definition for the dojo base layer, allowing us to override configuration properties.</p>
+
+<p>Manually defining the base dojo layer is achieved by adding
+a new configuration object to the layers map, identified with the name <em>dojo/dojo</em>, as shown below.</p>
+
+<figure class='code'><figcaption><span>Base-less loader configuration</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">layers</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;dojo/dojo&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>        <span class="nx">include</span><span class="o">:</span> <span class="p">[],</span>
+</span><span class='line'>        <span class="nx">customBase</span><span class="o">:</span> <span class="mi">1</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Setting the <em>customBase</em> property to true will ensure the build system won&#8217;t automatically roll up all the base modules
+into the nano AMD loader. We&#8217;ve left the <em>include</em> property empty as we don&#8217;t want to add any extra modules.</p>
+
+<p>This first step in producing a nano loader <strong>reduces the minified and gzipped layer by almost 30KB</strong>!</p>
+
+<h3>Using the Closure Compiler</h3>
+
+<p>Dojo&#8217;s build system supports the use of different JavaScript minifiers, which
+perform tricks such as renaming variables and stripping whitespace in order to
+reduce the size of a JavaScript file.</p>
+
+<p>Shrinksafe is the default minifier, but in our profile we&#8217;ve chosen to use Google&#8217;s Closure compiler.</p>
+
+<figure class='code'><figcaption><span>Using closure compiler </span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">layerOptimize</span><span class="o">:</span> <span class="s2">&quot;closure&quot;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Experimenting with the different minifiers, it was apparent that Closure was
+more effective at reducing the layer file sizes by the greatest amount.</p>
+
+<p>Closure
+produces a <strong>minified layer file in 35,770 bytes, nearly 10KB less</strong> than the
+original version using Shrinksafe.</p>
+
+<p>More importantly, <em>the Closure compiler supports dead code elimination</em>. Running static analysis
+over the source files, those code branches which are unreachable will be stripped from the output.
+This feature is crucial in allowing us to tune the produced loader&#8217;s features, squeezing even more space out.</p>
+
+<h3>Static Features Configuration</h3>
+
+<p>As the Dojo Toolkit moves towards the 2.0 release, one of the major
+improvements within the code base is the use of dynamic detection for
+determining which features an environment supports, rather than relying on
+brittle user-agent sniffing.</p>
+
+<p>Using feature tests, alternative code paths can be executed to provide shim-functionality for missing platform features, using native libraries otherwise.
+Tests are executed only once, the cached result is returned for each subsequent test.</p>
+
+<p>The build system allows a pre-specified list of feature test results to be provided in the build profile. These parameters will replace
+the feature test calls within the generated layer files with the static boolean result values.</p>
+
+<p>As this happens before minification, <em>any feature test paths that can&#8217;t be
+executed will be automatically stripped by the Closure compiler</em>. This provides a huge benefit in hand-tuning
+the loader size to be as compact as possible.</p>
+
+<p>The sample below shows the static feature test results we provide to produce the minimal AMD loader.</p>
+
+<figure class='code'><figcaption><span>Static feature test results</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">staticHasFeatures</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s1">&#39;config-dojo-loader-catches&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;config-tlmSiblingOfDojo&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-log-api&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-sync-loader&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-timeout-api&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-sniff&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-cdn&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-loader-eval-hint-url&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;config-stripStrict&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;ie-event-behavior&#39;</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="s1">&#39;dojo-config-api&#39;</span><span class="o">:</span> <span class="mi">0</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using static features configuration allows us to remove all non-essential
+code needing for loading AMD modules. This includes the synchronous module
+loader code used to load non-AMD modules (<em>dojo-sync-loader</em>), the debugging methods for module loading (<em>dojo-timeout-api</em> and <em>dojo-log-api</em>), backwards
+compatibility for non-standard DOM event behaviours (<em>ie-event-behaviour</em>) and others.</p>
+
+<p>Full details on each of the feature tests defined in the toolkit will be available in the 1.8 reference guide, see
+<a href="http://livedocs.dojotoolkit.org/dojo/has#feature-names">here</a> for
+a sneak preview.</p>
+
+<p><strong>Hand tuning the static feature test results allowed the build to remove an extra 2,000 bytes from the nano loader.</strong></p>
+
+<h3>Baking in Default Configuration</h3>
+
+<p>Making the smallest AMD loader possible relies on a series of assumptions about the environment we&#8217;ll be running in
+and supported features. Rather than have the user set these values manually, we can hard code
+this configuration into the loader, allowing us to remove the code for parsing configuration values from the
+environment.</p>
+
+<p>The following configuration is provided within the nano profile.</p>
+
+<figure class='code'><figcaption><span>Default loader configuration</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">defaultConfig</span><span class="o">:</span><span class="p">{</span>
+</span><span class='line'>    <span class="nx">hasCache</span><span class="o">:</span><span class="p">{</span>
+</span><span class='line'>        <span class="s1">&#39;dojo-built&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;dojo-loader&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;dom&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;host-browser&#39;</span><span class="o">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>        <span class="s1">&#39;config-selectorEngine&#39;</span><span class="o">:</span> <span class="s1">&#39;lite&#39;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="nx">async</span><span class="o">:</span><span class="mi">1</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Along with configuration for the environment (modern-ish browser engine), we&#8217;ve set the <em>async</em> property to true, ensuring the
+loader is running in AMD-mode as we&#8217;ve removed all code for handling the legacy Dojo module format.</p>
+
+<h3>Squeezing Out Those Final Bytes</h3>
+
+<p><em>So, what&#8217;s left?</em></p>
+
+<p><em>How can we squeeze a few more bytes out?</em></p>
+
+<p>Reviewing the source code for the build system, when the dojo layer is generated, the following boot sequence is appended to the source.</p>
+
+<figure class='code'><figcaption><span>Dojo boot text</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// must use this.require to make this work in node.js</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">require</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">require</span><span class="p">;</span>
+</span><span class='line'><span class="c1">// consume the cached dojo layer</span>
+</span><span class='line'><span class="nx">require</span><span class="p">({</span><span class="nx">cache</span><span class="o">:</span><span class="p">{}});</span>
+</span><span class='line'><span class="o">!</span><span class="nx">require</span><span class="p">.</span><span class="nx">async</span> <span class="o">&amp;&amp;</span> <span class="nx">require</span><span class="p">([</span><span class="s2">&quot;dojo&quot;</span><span class="p">]);</span>
+</span><span class='line'><span class="nx">require</span><span class="p">.</span><span class="nx">boot</span> <span class="o">&amp;&amp;</span> <span class="nx">require</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">require</span><span class="p">.</span><span class="nx">boot</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This code ensures the loader will work on the NodeJS platform and ensures that all base modules are always
+requested when running in legacy mode.</p>
+
+<p>Our minimal loader doesn&#8217;t need to run outside the browser and we definitely won&#8217;t be running in legacy mode! Therefore,
+we can overwrite the layer boot text with custom code to trim the last few bytes from the nano loader, shown below.</p>
+
+<figure class='code'><figcaption><span>Custom boot text</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">dojoBootText</span><span class="o">:</span><span class="s2">&quot;require.boot &amp;&amp; require.apply(null, require.boot);&quot;</span><span class="p">,</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>&#8230;and that&#8217;s it! Combining all of the options above results in a fully-functioning AMD loader in less than 4 kilobytes.</strong></p>
+
+<p>For further details on the exact size reductions achieved by each of the profile parameters,
+see this <a href="https://docs.google.com/spreadsheet/ccc?key=0An1xGHsgw2ledE94RW9KcGtISHQ5SnNGV3hYaDRPM2c#gid=0">link</a> for the data.</p>
+
+<h2>Differences between nano-profile and profile included with toolkit</h2>
+
+<p>The profile defined above will produce the smallest functional AMD loader
+possible, sacrificing support for certain common features to reduce the file size even
+further. When producing the <em>nano</em> profile that will be shipped with the toolkit, there&#8217;s a
+slightly less aggressive approach when balancing feature completeness against file size.</p>
+
+<p>Reviewing the feature tests, we decided that <strong>two optional features should be
+included, backwards compatibility for older Internet Explorer browsers (<em>ie-event-behaviour</em>) and the
+ability for manual loader configuration (<em>dojo-config-api</em>)</strong>. These changes only produce an additional
+900 bytes and will make the minimal loader much more consumable.</p>
+
+<p>The <em>nano</em> build profile shipped with the toolkit also contains all configurable feature values, rather
+than just the minimal set needed to produce the smallest build, to demonstrate the full set of parameters
+that can be modified.</p>
+
+<p>More information about the investigations into producing this profile can be found in the contributors mailing list
+thread <a href="http://grokbase.com/t/dojo/dojo-contributors/127q9sm80w/nano-build-profile-ticket-14392">here</a>.</p>
+
+<h2>Finally&#8230;</h2>
+
+<p>This investigation was founded upon previous work by other dojo contributors.
+Thanks to <a href="https://twitter.com/blowery">Ben Lowery</a>, <a href="https://twitter.com/kitsonk">Kitson Kelly</a> and <a href="https://github.com/rcgill/">Rawld Gill</a> for their
+initial efforts and helping me out with questions.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/05/26/dojomvc-controllers/">Creating Todo MVC in Dojo - Part 3: Controllers</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-05-26T00:00:00+01:00" pubdate data-updated="true">May 26<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>In the final article of this series, we&#8217;ll be looking at creating an MVC Controller for our sample todo
+application.</p>
+
+<p>We&#8217;ve already shown how to <a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">define our application model</a>,
+creating a domain-specific todo model
+backed by localStorage, along with <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">our view template</a>,
+using widget templating to render our tasks into the page.</p>
+
+<blockquote><p>The controller translates user input into operations on the model.</p><footer><strong>Model View Controller Pattern</strong> <cite><a href='http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller'>Wikipedia</a></cite></footer></blockquote>
+
+
+<p>For our application, we need to handle the user actions to allow adding, removing and completing tasks. We already have a binding between a task&#8217;s completed state
+and our View, using the <a href="https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/form/CheckBox.js">todo.form.CheckBox</a>, allowing changes to flow back to the model without explicitly needing logic in the controller.</p>
+
+<p>Let&#8217;s look more closely at the remaining tasks&#8230;</p>
+
+<h2>Adding Tasks</h2>
+
+<p>The View template, discussed in the <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">second article</a>,
+renders the HTML elements needed to allow the user to any new tasks. Once a user has finished
+typing in their new task, signalled by pressing the enter key, we need to retrieve their text and add it to the model.</p>
+
+<p>Using Dojo&#8217;s <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html#dijit-templatedmixin">declarative programming model</a>,
+the View template includes the custom element attribute needed to connect the &#8220;onkeypress&#8221; DOM event to an event handler within our controller. When our
+widget is rendered in the page, by the Dojo parser, those connections are created automatically.</p>
+
+<figure class='code'><figcaption><span>Declarative event handling</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.html#L4'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;input</span> <span class="na">id=</span><span class="s">&quot;new-todo&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onkeypress:onKeyPress&quot;</span>
+</span><span class='line'> <span class="na">placeholder=</span><span class="s">&quot;What needs to be done?&quot;</span> <span class="na">type=</span><span class="s">&quot;text&quot;</span> <span class="na">autofocus</span><span class="nt">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>Inside our controller, each time an event is fired, the following function is executed:</p>
+
+<figure class='code'><figcaption><span>Controller event handler</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">onKeyPress</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">keyCode</span> <span class="o">!==</span> <span class="nx">keys</span><span class="p">.</span><span class="nx">ENTER</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">addToModel</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">target</span><span class="p">.</span><span class="nx">value</span><span class="p">,</span> <span class="kc">false</span><span class="p">);</span>
+</span><span class='line'>    <span class="nx">event</span><span class="p">.</span><span class="nx">target</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+</span><span class='line'>  <span class="nx">dojo_event</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="nx">event</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Unless the user has pressed the enter key, we ignore the normal user input event. Once this happens, we extract the new
+task text from the event argument and call the following convenience function to create the new task in the model.</p>
+
+<figure class='code'><figcaption><span>New model task</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L144-150'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">addToModel</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">content</span><span class="p">,</span> <span class="nx">isDone</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">insert</span> <span class="o">=</span> <span class="nx">mvc</span><span class="p">.</span><span class="nx">newStatefulModel</span><span class="p">({</span>
+</span><span class='line'>        <span class="nx">data</span><span class="o">:</span> <span class="p">{</span><span class="nx">todo_text</span><span class="o">:</span> <span class="nx">content</span><span class="p">,</span> <span class="nx">isDone</span><span class="o">:</span> <span class="nx">isDone</span><span class="p">}</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">insert</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This function creates a new Model node, containing the task text and its
+completed state, adding the result to the list of tasks. When inserting new
+entries into the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/StatefulModel.html">DojoX MVC Model</a> array, the insertion position must be
+specified explicitly. By using the current length of the list as the position,
+we always add new items at the end.</p>
+
+<p>Once the model has been modified, the View will automatically update to display the new item. We don&#8217;t need to manually
+update the rendered HTML template or even trigger re-loading of the View. By using widgets from the DojoX MVC package, changes to
+the Model are always reflected in our View in real-time.</p>
+
+<h2>Removing Tasks</h2>
+
+<p>Removing tasks begins with the user clicking the destroy icon, displayed on the right-hand side of each task. Once this happens, the Controller
+needs to trap the event, figure out which task to remove and update the Model. As the tasks&#8217; list
+can be updated during the application, having an individual event connection for each task would require handling the setting up and tearing down
+every time the list changed.</p>
+
+<p>Instead, we can use &#8220;Event Delegation&#8221;, introduced by the new Dojo event module, <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/on.html">dojo/on</a>,
+to listen for any remove events with a single connection.</p>
+
+<p>Once the widget has been rendered, signalled by the <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html#lifecycle">&#8220;postCreate&#8221;</a>
+function being called, we start listening for all click events on the destroy icons. Any events captured are passed through to our event hander, &#8220;onRemove&#8221;, to delete the associated task from the Model.</p>
+
+<figure class='code'><figcaption><span>Event Delegation</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L61-64'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">postCreate</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">on</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">domNode</span><span class="p">,</span> <span class="s2">&quot;.destroy:click&quot;</span><span class="p">,</span> <span class="nx">lang</span><span class="p">.</span><span class="nx">hitch</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;onRemove&quot;</span><span class="p">));</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">onItemStatusUpdate</span><span class="p">();</span>
+</span><span class='line'><span class="p">},</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">onRemove</span><span class="o">:</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">event</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">remove</span><span class="p">(</span><span class="nx">domAttr</span><span class="p">.</span><span class="nx">get</span><span class="p">(</span><span class="nx">event</span><span class="p">.</span><span class="nx">target</span><span class="p">,</span> <span class="s2">&quot;data-model-id&quot;</span><span class="p">));</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>With one event handler for all the remove events, the Controller won&#8217;t directly know which task within the Model the user
+has chosen to remove. To overcome this, the repeating View template for the task uses a HTML5 data attribute to store the unique task index
+on the rendered DOM element for the remove icon.</p>
+
+<p>During rendering of a <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">DojoX MVC Repeat widget</a>,
+the &#8220;index&#8221; attribute on the instance refers to the current
+position within the bound list. This index value can then easily be retrieved from the event generated and used to remove the correct task from the Model.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;button</span> <span class="na">class=</span><span class="s">&quot;destroy&quot;</span> <span class="na">data-model-id=</span><span class="s">&quot;#{this.index}&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'><span class="nt">&lt;/button&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once again, when the Model is changed, the View automatically updates. There&#8217;s no action needed from the Controller in modifying the rendering HTML template.</p>
+
+<h2>Clearing Completed Tasks</h2>
+
+<p>Once a user has completed a series of tasks, they will eventually want to remove them. Rather than having to
+remove each task individually, the application provides the ability to clear all completed tasks from the list.</p>
+
+<p>Again, we&#8217;ve used declarative programming in the View template to connect our event hander, removeCompletedItems, to the DOM event
+triggered when the user clicks the &#8220;Clear Completed&#8221; button.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='html'><span class='line'><span class="nt">&lt;button</span> <span class="na">id=</span><span class="s">&quot;clear-completed&quot;</span> <span class="na">data-dojo-attach-event=</span><span class="s">&quot;onclick:removeCompletedItems&quot;</span><span class="nt">&gt;</span>
+</span><span class='line'><span class="nt">&lt;/button&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When our handler is fired, we need to iterate over the existing tasks&#8217;
+list, removing any with the correct completed state. Removing items from the Model will left-shift the remaining items, so we need to
+take care to iterate correctly over the remaining items.</p>
+
+<figure class='code'><figcaption><span>Clearing Completed Items</span><a href='https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/app.js#L80-97'>Source Link</a></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">removeCompletedItems</span><span class="o">:</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">len</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">idx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">while</span> <span class="p">(</span><span class="nx">idx</span> <span class="o">&lt;</span> <span class="nx">len</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">[</span><span class="nx">idx</span><span class="p">].</span><span class="nx">isDone</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>            <span class="k">this</span><span class="p">.</span><span class="nx">model</span><span class="p">.</span><span class="nx">todos</span><span class="p">.</span><span class="nx">remove</span><span class="p">(</span><span class="nx">idx</span><span class="p">);</span>
+</span><span class='line'>            <span class="nx">len</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'>            <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>        <span class="p">}</span>
+</span><span class='line'>        <span class="nx">idx</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When the event handler has finished executing, the View will be updated to clear out those completed tasks.</p>
+
+<h2>Conclusion</h2>
+
+<p>In the final part of this series, we&#8217;ve looked at how to define an MVC
+Controller, responsible for mediating between user actions and model
+operations. Using declarative Dojo programming in our View template, we set up
+bindings between DOM events and event handlers in our Controller.</p>
+
+<p>When user
+actions triggered those events, our handlers were responsible for adding and
+removing todo tasks from the MVC Model class, StatefulModel, we&#8217;ve been using
+to store our application data. These changes then flowed back to the View,
+which automatically re-renders when it detects an updated Model.</p>
+
+<p>Dojo&#8217;s new MVC package, dojox.mvc, offers great capabilities for building dynamic
+JavaScript applications using the MVC programming pattern. Although it&#8217;s still maturing, hopefully this series
+has been able to demonstrate that for most applications it&#8217;s more than capable of providing the features
+developers expect in a modern JavaScript MVC library.</p>
+
+<p>If you have any further questions, feel free to leave comments below, send me an email or a tweet. The source
+code for the application is available on Github, allowing you to run the examples above and compare it against other frameworks.</p>
+
+<h3>What&#8217;s Next?</h3>
+
+<p>This series of articles was based upon the version of DojoX MVC present in the 1.7.0 release of The Dojo Toolkit. My experiences, good and bad,
+building this application were <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-January/026434.html">fed back into the community</a> to
+help improve the package in the future. With the upcoming 1.8 release of The Dojo Toolkit,
+there has been some <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-February/026811.html">major improvements</a> to the MVC package, resolving many of the issues I raised.</p>
+
+<p>When that version of the toolkit is available, I&#8217;ll re-visit the application and show how those changes would make writing this application even simpler.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/05/08/impact-slides-available/">IBM IMPACT 2012 - Session Materials Available</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-05-08T15:28:00+01:00" pubdate data-updated="true">May 8<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Last week was IBM IMPACT 2012, IBM&#8217;s premier conference for our customers in Las Vegas. I was fortunate enough to
+be there for the duration, presentating four sessions on The Dojo Toolkit. The whole event was a fantastic showcase
+for our company, the capabilities and unique values we provide. Session materials from my talks are now available
+<a href="http://speakerdeck.com/u/jthomas">externally</a>, see below for individual links.</p>
+
+<h3>IBM IMPACT Sessions</h3>
+
+<ul>
+<li><a href="http://speakerdeck.com/u/jthomas/p/optimising-your-dojo-application-using-the-dojo-build-system">Optimizing Your Dojo Application Using The Dojo Build System</a></li>
+<li><a href="http://speakerdeck.com/u/jthomas/p/moving-to-dojo-17-and-the-path-to-20">Moving to Dojo 1.7 and the Path to 2.0</a></li>
+<li><a href="http://speakerdeck.com/u/jthomas/p/beyond-dojo-the-rise-of-asynchronous-module-definition-amd">Beyond Dojo: The Rise of Advanced Micro Devices (AMD)</a></li>
+<li><a href="http://speakerdeck.com/u/jthomas/p/javascript-anti-patterns-moving-from-java-to-javascript">Unconference Session: JavaScript Anti-Patterns (Moving from Java to JavaScript)</a></li>
+</ul>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/04/22/debugging-optimised-dojo-apps/">Debugging Optimised Dojo Applications</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-04-22T15:49:00+01:00" pubdate data-updated="true">Apr 22<span>nd</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>What happens when you&#8217;ve got an error occurring only in the minified version of
+your Dojo application?</p>
+
+<p>No matter how fantastic your debugging tool, there&#8217;s
+not much it can do with an optimised JavaScript source file with all the code
+on a single line. Usually, you resort to the frustrating experience of &#8220;black
+boxing&#8221; the issue, interrogating objects in the console and trying to reverse
+engineer the meaning of their renamed variables.</p>
+
+<p>Luckily, there&#8217;s a better way to debug minified JavaScript files&#8230; <strong>Source Maps</strong>.</p>
+
+<h2>Introducing Source Maps</h2>
+
+<blockquote><p>Source maps provide a way to map a combined/minified file back to an unbuilt<br/>state. When you build for production, along with minifying and combining your<br/>JavaScript files, you generate a source map which holds information about your<br/>original files.  When you query a certain line and column number in your<br/>generated JavaScript you can do a lookup in the source map which returns the<br/>original location.  Developer tools can parse the source map automatically and<br/>make it appear as though you&#8217;re running unminified and uncombined files.</p></blockquote>
+
+
+<p>There&#8217;s an fantastic overview of the technology <a href="http://www.html5rocks.com/en/tutorials/developertools/sourcemaps/">here</a>,
+showing you how to enable support in your browser and generate the necessary files using Google&#8217;s Closure compiler.</p>
+
+<h2>Generating Source Maps For Dojo</h2>
+
+<p>The Dojo Toolkit&#8217;s build system supports using the Closure compiler for
+minification, making it an obvious next step to enable automatic generation of
+source mappings. Working on this over the weekend, I&#8217;ve been able to enhance
+the build system to generate source maps for each layer file when using the
+following command line parameter.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>sh build.sh <span class="nv">bin</span><span class="o">=</span>node <span class="nv">action</span><span class="o">=</span>release <span class="nv">profile</span><span class="o">=</span>my_profile <span class="nv">layerOptimize</span><span class="o">=</span>closure
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For more details on the implementation, along with the patch, see the
+associated <a href="http://bugs.dojotoolkit.org/ticket/15232">ticket</a> that&#8217;s been
+opened to track adding this feature into Dojo.</p>
+
+<p>When you&#8217;ve enabled source maps in your browser, switching to the scripts tab
+in Chrome&#8217;s Developer Tools now displays the unminified versions of any built layer
+files. This can be seen in action on the following
+<a href="http://public.jamesthom.as/source_maps/">page</a>.</p>
+
+<p><em>Please note, this feature is only enabled when using NodeJS
+as the build runtime and requires an upgrade of the Closure compiler
+to the latest version.</em></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  <div class="pagination">
+    
+      <a class="prev" href="/blog/page/9/">&larr; Older</a>
+    
+    <a href="/blog/archives">Blog Archives</a>
+    
+    <a class="next" href="/blog/page/7/">Newer &rarr;</a>
+    
+  </div>
+</div>
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/08/28/faster-file-transfers-with-serverless/">Faster File Transfers With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating&#8230;</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll&#8230;</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        var disqus_script = 'count.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

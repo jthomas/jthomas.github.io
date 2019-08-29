@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: deployments | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/deployments/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/"/>
+    <updated>2019-04-23T15:08:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p>How do you set up a <a href="https://dzone.com/articles/what-is-cicd">CI/CD pipeline</a> for serverless applications?</p>
+
+<p>This blog post will explain how to use <a href="https://travis-ci.org/">Travis CI</a>, <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/avajs/ava">AVA testing framework</a> to set up a fully-automated build, deploy and test pipeline for a serverless application. It will use a real example of a production <a href="https://github.com/jthomas/openwhisk-release-verification">serverless application</a>, built using <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> and running on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. The CI/CD pipeline will execute the following tasks...</p>
+
+<ul>
+<li><strong>Run project unit tests.</strong></li>
+<li><strong>Deploy application to test environment.</strong></li>
+<li><strong>Run acceptance tests against test environment.</strong></li>
+<li><strong>Deploy application to production environment.</strong></li>
+<li><strong>Run smoke tests against production environment.</strong></li>
+</ul>
+
+
+<p>Before diving into the details of the CI/CD pipeline setup, let's start by showing the example serverless application being used for this project...</p>
+
+<h2>Serverless Project - <a href="http://apache.jamesthom.as/">http://apache.jamesthom.as/</a></h2>
+
+<p>The "<a href="https://github.com/jthomas/openwhisk-release-verification">Apache OpenWhisk Release Verification</a>" project is a serverless web application to help committers verify release candidates for the open-source project. It automates running the verification steps from the <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">ASF release checklist</a> using serverless functions. Automating release candidate validation makes it easier for  committers to participate in release voting.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p>The project consists of a static web assets (HTML, JS, CSS files) and HTTP APIs. Static web assets are hosted by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>. HTTP APIs are implemented as Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> and exposed using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway</a> service. <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> is used to host the Apache OpenWhisk application.</p>
+
+<p>No other cloud services, like databases, are needed by the backend. Release candidate information is retrieved in real-time by parsing the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">HTML page</a> from the ASF website.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Serverless Architecture" /></p>
+
+<h3>Configuration</h3>
+
+<p><a href="https://github.com/serverless/serverless">The Serverless Framework</a> (with the <a href="https://github.com/serverless/serverless-openwhisk">Apache OpenWhisk provider plugin</a>) is used to define the serverless functions used in the application. HTTP endpoints are also defined in the YAML configuration file.</p>
+
+<p>```yaml
+service: release-verfication</p>
+
+<p>provider:
+  name: openwhisk
+  runtime: nodejs:10</p>
+
+<p>functions:
+  versions:</p>
+
+<pre><code>handler: index.versions
+events:
+  - http: GET /api/versions
+</code></pre>
+
+<p>  version_files:</p>
+
+<pre><code>handler: index.version_files
+events:
+  - http:
+      method: GET
+      path: /api/versions/{version}
+      resp: http
+</code></pre>
+
+<p>...</p>
+
+<p>plugins:
+  - serverless-openwhisk
+```</p>
+
+<p>The framework handles all deployment and configuration tasks for the application. Setting up the application in a new environment is as simple as running the <code>serverless deploy</code> <a href="https://github.com/serverless/serverless">command</a>.</p>
+
+<h3>Environments</h3>
+
+<p>Apache OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#fully-qualified-names">namespaces</a> to group individual packages, actions, triggers and rules. Different namespaces can be used to provide isolated environments for applications.</p>
+
+<p>IBM Cloud Functions automatically creates <a href="https://cloud.ibm.com/docs/openwhisk?topic=cloud-functions-cloudfunctions_cli#region_info">user-based namespaces</a> in platform instances. These auto-generated namespaces mirror the IBM Cloud organisation and space used to access the instance. Creating <a href="https://cloud.ibm.com/docs/account?topic=account-orgsspacesusers#cf-org-concepts">new spaces within an organisation</a> will provision extra namespaces.</p>
+
+<p>I'm using a custom organisation for the application with three different spaces: <strong>dev</strong>, <strong>test</strong> and <strong>prod</strong>.</p>
+
+<p><strong>dev</strong> is used as a test environment to deploy functions during development. <strong>test</strong> is used by the CI/CD pipeline to deploy a temporary instance of the application during acceptance tests. <strong>prod</strong> is the production environment hosting the external application actions.</p>
+
+<h3>Credentials</h3>
+
+<p>The <a href="https://cloud.ibm.com/docs/cli?topic=cloud-cli-install-ibmcloud-cli">IBM Cloud CLI</a> is used to handle IBM Cloud Functions credentials. <a href="https://cloud.ibm.com/docs/iam?topic=iam-manapikey">Platform API keys</a> will be used to log in the CLI from the CI/CD system.</p>
+
+<p>When Cloud Functions CLI commands are issued (after targeting a new region, organisation or space), API keys for that Cloud Functions instance are automatically retrieved and stored locally. The Serverless Framework knows how to use these local credentials when interacting with the platform.</p>
+
+<h3>High Availability?</h3>
+
+<p>The Apache OpenWhisk Release Verifier is not a critical cloud application which needs "<a href="https://en.wikipedia.org/wiki/Five_nines">five nines</a>" of availability. The application is idle most of the time. It does not need a <a href="https://en.wikipedia.org/wiki/High_availability">highly available</a> serverless architecture. This means the build pipeline does not have to...</p>
+
+<ul>
+<li><a href="https://cloud.ibm.com/docs/tutorials?topic=solution-tutorials-multi-region-serverless#multi-region-serverless">Deploy application instances in multiple cloud regions.</a></li>
+<li><a href="https://www.ibm.com/blogs/bluemix/2019/04/load-balancing-api-calls-across-regions-with-ibm-cloud-internet-services-and-cloud-api-gateway/">Set up a global load balancer between regional instances.</a></li>
+<li>Support "<a href="https://www.martinfowler.com/bliki/BlueGreenDeployment.html">zero downtime deploys</a>" to minimise downtime during deployments.</li>
+<li>Automatic roll-back to previous versions on production issues.</li>
+</ul>
+
+
+<p>New deployments will simply overwrite resources in the production namespace in a single region. If the production site is broken after a deployment, the smoke tests should catch this and email me to fix it!</p>
+
+<h2>Testing</h2>
+
+<p>Given this tool will be used to check release candidates for the open-source project, I wanted to ensure it worked properly! Incorrect validation results could lead to invalid source archives being published.</p>
+
+<p>I've chosen to rely heavily on unit tests to check the core business logic. These tests ensure all validation tasks work correctly, including PGP signature verification, cryptographic hash matching, LICENSE file contents and other ASF requirements for project releases.</p>
+
+<p>Additionally, I've used end-to-end acceptance tests to validate the HTTP APIs work as expected. HTTP requests are sent to the API GW endpoints, with responses compared against expected values. All available release candidates are run through the validation process to check no errors are returned.</p>
+
+<h3>Unit Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Unit_testing">Unit tests</a> are implemented with the <a href="https://github.com/avajs/ava">AVA testing framework</a>. Unit tests live in the <code>unit/test/</code> <a href="https://github.com/jthomas/openwhisk-release-verification/tree/master/test/unit">folder</a>.</p>
+
+<p>The <code>npm test</code> command alias runs the <code>ava test/unit/</code> command to execute all unit tests. This command can be executed locally, during development, or from the CI/CD pipeline.</p>
+
+<p>```bash
+$ npm test</p>
+
+<blockquote><p>release-verification@1.0.0 test ~/code/release-verification
+ava test/unit/</p></blockquote>
+
+<p> 27 tests passed
+```</p>
+
+<h3>Acceptance Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Acceptance_testing">Acceptance tests</a> check API endpoints return the expected responses for valid (and invalid) requests. Acceptance tests are executed against the API Gateway endpoints for an application instance.</p>
+
+<p>The hostname used for HTTP requests is controlled using an environment variable (<code>HOST</code>). Since the same test suite test is used for acceptance and smoke tests, setting this environment variable is the only configuration needed to run tests against different environments.</p>
+
+<p>API endpoints in the test and production environments are exposed using different custom sub-domains (<code>apache-api.jamesthom.as</code> and <code>apache-api-test.jamesthom.as</code>). NPM <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L8-L9">scripts are used</a> to provide commands (<code>acceptance-test</code> &amp; <code>acceptance-prod</code>) which set the environment hostname before running the test suite.</p>
+
+<p>```javascript
+"scripts": {</p>
+
+<pre><code>"acceptance-test": "HOST=apache-api-test.jamesthom.as ava -v --fail-fast test/acceptance/",
+"acceptance-prod": "HOST=apache-api.jamesthom.as ava -v --fail-fast test/acceptance/"
+</code></pre>
+
+<p>  },
+```</p>
+
+<p>```
+$ npm run acceptance-prod</p>
+
+<blockquote><p>release-verification@1.0.0 acceptance-prod ~/code/release-verification
+HOST=apache-api.jamesthom.as ava -v --fail-fast  test/acceptance/</p></blockquote>
+
+<p>  ✔ should return list of release candidates (3.7s)</p>
+
+<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions
+</code></pre>
+
+<p>  ✔ should return 404 for file list when release candidate is invalid (2.1s)</p>
+
+<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions/unknown
+</code></pre>
+
+<p>  ...</p>
+
+<p>  6 tests passed
+```</p>
+
+<p>Acceptance tests are also implemented with the AVA testing framework. All acceptance tests live in a single <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/test/acceptance/api.js">test file</a> (<code>unit/acceptance/api.js</code>).</p>
+
+<h2>CI/CD Pipeline</h2>
+
+<p>When new commits are pushed to the <code>master</code> branch on the project repository, the following steps needed to be kicked off by the build pipeline…</p>
+
+<ul>
+<li><em>Run project unit tests.</em></li>
+<li><em>Deploy application to test environment.</em></li>
+<li><em>Run acceptance tests against test environment.</em></li>
+<li><em>Deploy application to production environment.</em></li>
+<li><em>Run smoke tests against production environment.</em></li>
+</ul>
+
+
+<p>If any of the steps fail, the build pipeline should stop and send me a notification email.</p>
+
+<h3>Travis</h3>
+
+<p><a href="https://travis-ci.org/">Travis CI</a> is used to implement the CI/CD build pipeline. Travis CI uses a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml">custom file</a> (<code>.travis.yml</code>) in the project repository to configure the build pipeline. This YAML file defines commands to execute during each phase of build pipeline. If any of the commands fail, the build will stop at that phase without proceeding.</p>
+
+<p><em>Here is the completed <code>.travis.yml</code> file for this project: https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml</em></p>
+
+<p>I'm using the following Travis CI <a href="https://docs.travis-ci.com/user/job-lifecycle#the-job-lifecycle">build phases</a> to implement the pipeline: <strong>install</strong>, <strong>before_script</strong>, <strong>script</strong>, <strong>before_deploy</strong> and <strong>deploy</strong>. Commands will run in the Node.js 10 build environment, which pre-installs the language runtime and package manager.</p>
+
+<p><code>yaml
+language: node_js
+node_js:
+  - "10"
+</code></p>
+
+<h4>install</h4>
+
+<p>In the <code>install</code> <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L5-L9">phase</a>, I need to set up the build environment to deploy the application and run tests.</p>
+
+<p>This means installing the IBM Cloud CLI, <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions CLI plugin</a>, The Serverless Framework (with Apache OpenWhisk plugin), application test framework (AvaJS) and other project dependencies.</p>
+
+<p>The IBM Cloud CLI is installed using a shell script. Running a CLI sub-command installs the <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions plugin</a>.</p>
+
+<p>The Serverless Framework is installed as global NPM package (using <code>npm -g install</code>). The Apache OpenWhisk provider plugin is handled as <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L13-L23">normal project dependency</a>, along with the test framework. Both those dependencies are installed using NPM.</p>
+
+<p><code>yaml
+install:
+  - curl -fsSL https://clis.cloud.ibm.com/install/linux | sh
+  - ibmcloud plugin install cloud-functions
+  - npm install serverless -g
+  - npm install
+</code></p>
+
+<h4>before_script</h4>
+
+<p>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L11-L16">phase</a> is used to run unit tests, catching errors in core business logic, before setting up credentials (used in the <code>script</code> phase) for the acceptance test environment. Unit test failures will halt the build immediately, skipping test and production deployments.</p>
+
+<p>Custom variables provide the API key, platform endpoint, organisation and space identifiers which are used for the test environment. The CLI is authenticated using these values, before running the <code>ibmcloud fn api list</code> command. This ensures Cloud Functions credentials are available locally, as used by The Serverless Framework.</p>
+
+<p><code>yaml
+before_script:
+  - npm test
+  - ibmcloud login --apikey $IBMCLOUD_API_KEY -a $IBMCLOUD_API_ENDPOINT
+  - ibmcloud target -o $IBMCLOUD_ORG -s $IBMCLOUD_TEST_SPACE
+  - ibmcloud fn api list &gt; /dev/null
+  - ibmcloud target
+</code></p>
+
+<h4>script</h4>
+
+<p>With the build system configured, the application can be deployed to test environment, followed by running acceptance tests. If either deployment or acceptance tests fail, the build will stop, skipping the production deployment.</p>
+
+<p>Acceptance tests use an environment variable to configure the hostname test cases are executed against. The <code>npm run acceptance-test</code> alias command sets this value to the test environment hostname (<code>apache-api-test.jamesthom.as</code>) before running the test suite.</p>
+
+<p><code>yaml
+script:
+  - sls deploy
+  - npm run acceptance-test
+</code></p>
+
+<h4>before_deploy</h4>
+
+<p>Before deploying to production, Cloud Functions credentials need to be updated. The IBM Cloud CLI is used to target the production environment, before running a Cloud Functions CLI command. This updates local credentials with the production environment credentials.</p>
+
+<p><code>yaml
+before_deploy:
+  - ibmcloud target -s $IBMCLOUD_PROD_SPACE
+  - ibmcloud fn api list &gt; /dev/null
+  - ibmcloud target
+</code></p>
+
+<h4>deploy</h4>
+
+<p>If all the proceeding stages have successfully finished, the application can be deployed to the production. Following this final deployment, smoke tests are used to check production APIs still work as expected.</p>
+
+<p>Smoke tests are just the same acceptance tests executed against the production environment. The <code>npm run acceptance-prod</code> alias command sets the hostname configuration value to the production environment  (<code>apache-api.jamesthom.as</code>) before running the test suite.</p>
+
+<p><code>yaml
+deploy:
+  provider: script
+  script: sls deploy &amp;&amp; npm run acceptance-prod
+  skip_cleanup: true
+</code></p>
+
+<p><em>Using the <code>skip_cleanup</code> parameter leaves installed artifacts from previous phases in the build environment. This means we don't have to re-install the IBM Cloud CLI, The Serverless Framework or NPM dependencies needed to run the production deployment and smoke tests.</em></p>
+
+<h3>success?</h3>
+
+<p>If all of the <a href="https://travis-ci.org/jthomas/openwhisk-release-verification">build phases</a> are successful, the latest project code should have been deployed to the production environment. 💯💯💯</p>
+
+<p><img src="/images/build-screenshot.png" alt="Build Screenshoot" /></p>
+
+<p>If the build failed due to unit test failures, the test suite can be ran locally to fix any errors. Deployment failures can be investigated using the console output logs from Travis CI. Acceptance test issues, against test or production environments, can be debugged by logging into those environments locally and running the test suite from my development machine.</p>
+
+<h2>Conclusion</h2>
+
+<p>Using Travis CI with The Serverless Framework and a JavaScript testing framework, I was able to set up a fully-automated CI/CD deployment pipeline for the Apache OpenWhisk release candidate verification tool.</p>
+
+<p>Using a CI/CD pipeline, rather than a manual approach, for deployments has the following advantages...</p>
+
+<ul>
+<li>No more manual and error-prone deploys relying on a human 👨‍💻 :)</li>
+<li>Automatic unit &amp; acceptance test execution catch errors before deployments.</li>
+<li>Production environment only accessed by CI/CD system, reducing accidental breakages.</li>
+<li>All cloud resources must be configured in code. No "<a href="https://martinfowler.com/bliki/SnowflakeServer.html">snowflake</a>" environments allowed.</li>
+</ul>
+
+
+<p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I'll be notified by email.</p>
+
+<p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
+]]></content>
+  </entry>
+  
+</feed>

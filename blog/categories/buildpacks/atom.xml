@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: buildpacks | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/buildpacks/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Node.js v4 in Cloud Foundry]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/"/>
+    <updated>2015-09-18T17:33:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry</id>
+    <content type="html"><![CDATA[<p>Last week, Node.js <a href="https://nodejs.org/en/blog/release/v4.0.0/">released the latest version</a>
+of their project, v4.0.0. This release, representing the convergence of io.js with the original Node.js
+project, came with lots of exciting features like <a href="http://apmblog.dynatrace.com/2015/09/05/all-you-need-to-know-about-node-js-4-0/">improved ES6 support</a>.</p>
+
+<p>Cloud Foundry already <a href="https://docs.cloudfoundry.org/buildpacks/node/node-tips.html">supports multiple versions</a> of the Node.js runtime.
+Developers select the desired runtime version using a parameter in their
+application's <a href="http://browsenpm.org/package.json">package descriptor</a>.</p>
+
+<p><em>So, we just update package.json to include "4.0.0" and re-deploy our application?</em></p>
+
+<p>Not yet.</p>
+
+<p>There is an <a href="https://github.com/nodejs/node/issues/2783">unresolved technical issue</a>
+delaying the <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">release</a> of "official"
+Node.js v4 support for the platform. 😿</p>
+
+<p><em>Can we add support ourselves?</em></p>
+
+<p><strong>Yes!</strong></p>
+
+<p>To do this, we need to explore how Cloud Foundry configures the runtime
+environment for applications.</p>
+
+<h2>Buildpacks</h2>
+
+<p>Rather than hardcoding supported runtimes and frameworks into the platform,
+Cloud Foundry borrowed the <a href="https://docs.cloudfoundry.org/buildpacks/"><em>buildpack model</em></a> from Heroku. Buildpacks are a
+<a href="https://docs.cloudfoundry.org/buildpacks/custom.html#custom-buildpacks">set of scripts</a>, run by the platform during deployment, to configure the runtime
+environment.</p>
+
+<p>Users can set an explicit buildpack for an application, <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#buildpack">using the manifest</a>, or let
+the platform decide. Buildpacks for <a href="https://docs.cloudfoundry.org/buildpacks/">common runtimes</a> are pre-installed with the platform.
+Buildpacks set through the manifest can point to external URLs, allowing users to create
+new buildpacks supporting custom runtimes.</p>
+
+<p>Each buildpack must contain the following files as executable scripts.</p>
+
+<ul>
+<li><strong>bin/detect</strong> - <em>determine whether a buildpack is suitable for an application.</em></li>
+<li><strong>bin/compile</strong> - <em>install and configure the runtime environment on the DEA.</em></li>
+<li><strong>bin/release</strong> - <em>provide metadata with information on executing application.</em></li>
+</ul>
+
+
+<p>Full details on existing buildpacks for the platform are available <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">here</a>.</p>
+
+<p>Node.js is supported as an "official" buildpack by the platform. This will be
+the one we will modify to add support for the latest version of the runtime.</p>
+
+<h2>Node.js Buildpack </h2>
+
+<p><a href="https://github.com/cloudfoundry/nodejs-buildpack">This</a> is the Node.js
+buildpack for Cloud Foundry. Applications using this buildpack can select the
+version of Node.js to install using the engine parameter in the package
+descriptor.</p>
+
+<p>Looking at the <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile"><em>bin/compile</em></a>
+script will show us how the Node.js runtime is installed during deployment.</p>
+
+<p>This <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile#L66-L88">snippet</a> handles
+accessing the Node.js version configured, using the node.engine parameter from package.json, before calling
+<em>install_nodejs</em> to install the correct runtime package.</p>
+
+<pre>
+install_bins() {
+  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
+  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
+
+  echo "engines.node (package.json):  ${node_engine:-unspecified}"
+  echo "engines.npm (package.json):   ${npm_engine:-unspecified (use default)}"
+  echo ""
+
+  warn_node_engine "$node_engine"
+  install_nodejs "$node_engine" "$BUILD_DIR/.heroku/node"
+  install_npm "$npm_engine" "$BUILD_DIR/.heroku/node"
+  warn_old_npm
+}
+</pre>
+
+
+<p>Searching through the buildpack for this function, it's in the
+<a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/lib/binaries.sh">lib/binaries.sh</a>
+file.  Looking at the <a href="https://github.com/heroku/heroku-buildpack-nodejs/blob/master/lib/binaries.sh#L10-L25">function code</a>, it translates the version number into a
+URL pointing to an archive with the pre-compiled Node.js binary. This archive
+file is downloaded, extracted and installed into the runtime environment.</p>
+
+<p>Translating Node.js version identifiers into archive URLs uses a special file
+in the buildpack, <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/manifest.yml">manifest.yml</a>. This file maps every supported version to a
+pre-built binary location.</p>
+
+<p>Looking at <a href="https://github.com/cloudfoundry/nodejs-buildpack/commit/8536a85cd69c867dc797c9586839a1373da4fd9d">previous commits</a> to the Node.js buildpack, adding support for additional
+versions of Node.js simply requires updating this file with the extra version
+identifier and archive URL.</p>
+
+<p>Until the Cloud Foundry team updates the buildpack to support Node.js v4, they won't
+provide an external archive containing the pre-built runtime environment.</p>
+
+<p><em>Where can we find a suitable build of the Node.js binary?</em></p>
+
+<h2>Node.js Runtime Binaries </h2>
+
+<p>Cloud Foundry borrowed the <strong>buildpack</strong> concept from <a href="https://devcenter.heroku.com/articles/buildpacks">Heroku</a> and still
+maintains backwards compatibility with their platform. Heroku buildpacks will
+work with Cloud Foundry applications. The Node.js buildpack for Cloud Foundry
+is actually still a fork of <a href="https://github.com/heroku/heroku-buildpack-nodejs">Heroku's</a>.</p>
+
+<p>Looking back through the original buildpack source, this URL template is used to translate
+Node.js versions to archive URLs being built by Heroku.</p>
+
+<p><em>http://s3pository.heroku.com/node/v$version/node-v$version-$os-$cpu.tar.gz</em></p>
+
+<p>Combining the correct version identifier and platform parameters with this
+template gave the following location for a potential build of the Node.js v4
+runtime.</p>
+
+<p><a href="">http://s3pository.heroku.com/node/v4.0.0/node-v4.0.0-linux-x64.tar.gz</a></p>
+
+<p>Running curl against the location successfully downloaded the Node.js v4 binary archive!</p>
+
+<h2>Custom v4 Buildpack</h2>
+
+<p>Forking the Cloud Foundry Node.js buildpack on Github, we can update the
+<a href="https://github.com/jthomas/nodejs-v4-buildpack/blob/master/manifest.yml#L57-L62">manifest.yml</a> with the Node.js v4 identifier pointing to the Heroku runtime
+archive. This <a href="https://github.com/jthomas/nodejs-v4-buildpack">external Git repository</a> will be used as the buildpack identifier
+in the application manfest.</p>
+
+<h2>Deploying with v4</h2>
+
+<p>Having updated our application manifest with the custom buildpack location and
+set the updated node version flag, re-deploying our application will start it
+running on Node.js v4.</p>
+
+<p>``` sh
+[20:02:29 ~]$ cf app sample-demo-app
+Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 256M x 1 instances
+urls: sample-demo-app.mybluemix.net
+last uploaded: Fri Sep 18 18:33:56 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
+
+<pre><code> state     since                    cpu    memory          disk        details
+</code></pre>
+
+<h1>0   running   2015-09-18 07:35:01 PM   0.0%   65.3M of 256M   59M of 1G</h1>
+
+<p>[20:03:13 ~]$
+```</p>
+
+<p>Looking at the logs from the deployment we can see the latest Node.js
+runtime has been downloaded and installed within our runtime environment.</p>
+
+<h2>Conclusion</h2>
+
+<p>Buildpacks are a brilliant feature of Cloud Foundry.</p>
+
+<p>Understanding how buildpacks are structured and used by the platform means we
+can start customising existing buildpacks and even start creating our own.</p>
+
+<p><strong>If you want to run Node.js applications using v4 on Cloud Foundry today, you
+can use the <a href="https://github.com/jthomas/nodejs-v4-buildpack">following buildpack</a>
+created using the instructions above.</strong></p>
+
+<p>Cloud Foundry is currently adding support for the version to
+the official buildpack, follow their progress <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">here</a>.</p>
+]]></content>
+  </entry>
+  
+</feed>

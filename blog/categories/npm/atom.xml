@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: npm | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/npm/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[NPM Modules in OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/"/>
+    <updated>2016-11-28T14:03:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk now <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">supports creating Node.js Actions from a zip file</a>. The archive file will be extracted into the runtime environment by the platform. This allows us to split microservice logic across multiple files, use third-party <a href="https://www.npmjs.com/">NPM modules</a> or include non-JavaScript assets (configuration files, images, HTML files).</p>
+
+<h2>"Hello World" Example</h2>
+
+<p>Let's look at a "Hello World" example of registering a serverless function from a zip file. Our archive will contain two files, the <a href="https://docs.npmjs.com/files/package.json">package descriptor</a> and a JavaScript file.</p>
+
+<p>Here is the minimal <code>package.json</code> file required for loading a module from a directory.</p>
+
+<p><code>json package.json
+{
+  "main": "my_file.js"
+}
+</code></p>
+
+<p>In <code>my_file.js</code>, a function is returned through the <code>main</code> property on the <code>exports</code> object. This function <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#creating-and-invoking-javascript-actions">implements the Action interface.</a></p>
+
+<p><code>javascript my_file.js
+exports.main = function (params) {
+  return {result: "Hello World"};
+};
+</code></p>
+
+<p>Creating a zip file from the current directory, we can deploy this Action through the command-line utility.</p>
+
+<p><code>sh
+$ zip -r action.zip *
+$ wsk action create hello_world --kind nodejs:default action.zip
+</code></p>
+
+<p>When this Action is invoked, the archive will be unzipped into a temporary directory. OpenWhisk loads the directory as a Node.js module and invokes the function property on the module for each invocation.</p>
+
+<p>``` sh
+$ wsk action invoke hello_world --result
+{</p>
+
+<pre><code>"result": "Hello world"
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Using NPM Dependencies</h2>
+
+<p>Let's look a more complicated example which uses an external <a href="https://www.npmjs.com/">NPM module</a> in our Action.</p>
+
+<p>``` javascript index.js
+const leftPad = require("left-pad")</p>
+
+<p>function myAction(args) {</p>
+
+<pre><code>const lines = args.lines || [];
+return { padded: lines.map(l =&gt; leftPad(l, 30, ".")) }
+</code></pre>
+
+<p>}</p>
+
+<p>exports.main = myAction;
+```</p>
+
+<p>This module uses the <a href="http://qz.com/646467/how-one-programmer-broke-the-internet-by-deleting-a-tiny-piece-of-code/">extremely popular</a> <a href="https://www.npmjs.com/package/left-pad">left-pad</a> module to process an array of strings, passed through a request parameter. The resulting output is returned in the response.</p>
+
+<p>Before using this module, we need to install the dependencies listed in <code>package.json</code>.</p>
+
+<p>``` json
+{
+  "name": "my-action",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies" : {</p>
+
+<pre><code>"left-pad" : "1.1.3"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p><strong>OpenWhisk does not automatically install dependencies listed in <code>package.json</code> in the runtime environment.</strong></p>
+
+<p>The developer has to run <code>npm install</code> locally and include the <code>node_modules</code> directory in the zip file.</p>
+
+<ul>
+<li>Install NPM dependencies locally.</li>
+</ul>
+
+
+<p><code>sh
+$ npm install
+</code></p>
+
+<ul>
+<li>Create a <code>.zip</code> archive containing all files.</li>
+</ul>
+
+
+<p><code>sh
+$ zip -r action.zip *
+</code></p>
+
+<ul>
+<li>Create the action using command-line utility.</li>
+</ul>
+
+
+<p><code>sh
+$ wsk action create packageAction --kind nodejs:default action.zip
+</code></p>
+
+<p>Now we can test out our action to check it works….</p>
+
+<p>``` sh
+$ wsk action invoke --blocking --result packageAction --param lines "[\"and now\", \"for something completely\", \"different\" ]"
+{</p>
+
+<pre><code>"padded": [
+    ".......................and now",
+    "......for something completely",
+    ".....................different"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Native Module Dependencies</h2>
+
+<p>Node.js provides a mechanism for JavaScript modules to <a href="https://nodejs.org/api/addons.html">include native platform code</a> as if they were ordinary modules. This is often used to improve performance by deferring operations to native C/C++ libraries. NPM handles compiling native code during the dependency install process.</p>
+
+<p><strong>Using modules with native dependencies in Actions requires the native code to be compiled for the platform runtime.</strong></p>
+
+<h3>Compiling dependencies with Docker</h3>
+
+<p>One solution to this problem uses Docker to simulate the same runtime environment.</p>
+
+<p>OpenWhisk uses Docker to manage the runtime environments for Actions. The <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile"><em>buildpack-deps:trusty-curl</em></a> image is used as the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejsActionBase/Dockerfile">base image for all Node.js Actions</a>.</p>
+
+<p>Running a local container from this image will give access to the same runtime environment. Running <code>npm install</code> within this container will produce the <code>node_modules</code> directory with native code compiled for the correct architecture.</p>
+
+<h3>Action With Native Modules</h3>
+
+<p>Let's look at an example…</p>
+
+<p>``` javascript index.js
+const SHA3 = require('sha3');</p>
+
+<p>function SHA(args) {
+  const d = new SHA3.SHA3Hash();
+  d.update(args.payload);
+  return { sha: d.digest('hex') };
+}</p>
+
+<p>exports.main = SHA;
+```</p>
+
+<p>This module returns a function that calculates a SHA3 cryptographic hash for the invocation payload. The hex string for the hash is returned as the function response.</p>
+
+<p>The NPM module (<a href="https://www.npmjs.com/package/sha3">sha3</a>) used to calculate the digest uses a C++ extension for the hashing algorithm.</p>
+
+<p>``` json package.json
+{
+  "name": "hashing-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {</p>
+
+<pre><code>"sha3": "^1.2.0"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h3>Action Runtime Environments</h3>
+
+<p>OpenWhisk uses a <a href="https://github.com/docker-library/buildpack-deps/blob/af914a5bde2a749884177393c8140384048dc5f9/trusty/curl/Dockerfile">public Docker image</a> as the base image for the Action environments. It then <a href="https://github.com/openwhisk/openwhisk/blob/master/core/nodejs6Action/Dockerfile">builds a custom image</a> by installing Node.js and NPM for the particular runtime version.</p>
+
+<p>Rather than building this image ourselves, we can use existing images published on <a href="https://hub.docker.com/">Docker Hub</a>.</p>
+
+<p><a href="https://nodesource.com/">NodeSource</a> provides <a href="https://hub.docker.com/u/nodesource/">public Docker images pre-installed with different Node.js versions</a>. Provided the base image (Ubuntu Trusty) and Node.js version (6.7) matches, the runtime environment will be the same.</p>
+
+<p>Starting a local container from this image, we can use Docker's <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">host volume support</a> to mount the local directory into the host container.</p>
+
+<p><code>sh
+$ docker run -it -v "/action:/usr/src/app" nodesource/trusty:6.7 /bin/sh
+</code></p>
+
+<p>Running <code>npm install</code> in the container, the <code>sha3</code> dependency is compiled and installed.</p>
+
+<p>``` sh</p>
+
+<h1>npm install</h1>
+
+<blockquote><p>sha3@1.2.0 install /usr/src/app/node_modules/sha3                                                                 <br/>
+node-gyp rebuild</p></blockquote>
+
+<p>make: Entering directory <code>/usr/src/app/node_modules/sha3/build'                                                       
+make: Warning: File</code>sha3.target.mk' has modification time 0.19 s in the future                                     <br/>
+  CXX(target) Release/obj.target/sha3/src/addon.o                                                                   <br/>
+  CXX(target) Release/obj.target/sha3/src/displayIntermediateValues.o                                               <br/>
+  CXX(target) Release/obj.target/sha3/src/KeccakF-1600-reference.o                                                  <br/>
+  CXX(target) Release/obj.target/sha3/src/KeccakNISTInterface.o                                                     <br/>
+  CXX(target) Release/obj.target/sha3/src/KeccakSponge.o                                                            <br/>
+  SOLINK_MODULE(target) Release/obj.target/sha3.node                                                                <br/>
+  COPY Release/sha3.node                                                                                            <br/>
+make: warning:  Clock skew detected.  Your build may be incomplete.                                                 <br/>
+make: Leaving directory <code>/usr/src/app/node_modules/sha3/build'                                                        
+my-action@1.0.0 /usr/src/app                                                                                          
+</code>-- sha3@1.2.0                                                                                                      <br/>
+  `-- nan@2.4.0</p>
+
+<p>```</p>
+
+<p>The <code>node_modules</code> directory will be available on the host system after exiting the container. Repeat the steps above to archive the source files and deploy our serverless function.</p>
+
+<p><code>sh
+$ zip -r action.zip *
+$ wsk action create packageAction --kind nodejs:6 action.zip  
+ok: created action packageAction          
+</code></p>
+
+<p>Invoking the Action will now use the native code to produce hash values for the invocation parameters.</p>
+
+<p>``` sh
+$ wsk action invoke packageAction -b -p payload "Hello" --result                            <br/>
+{</p>
+
+<pre><code>"sha": "c33fede18a1ae53ddb8663710f8054866beb714044fce759790459996196f101d94dfc7bd8268577f7ee3d2f8ff0cef4004a963222
+</code></pre>
+
+<p>7db84df62d2b40682d69e2"                                                                                             <br/>
+}                     <br/>
+```</p>
+
+<h2>Action Package Details</h2>
+
+<p>Upon invocation, OpenWhisk extracts the action's zip file to a temporary directory in the runtime environment. It then <a href="https://nodejs.org/api/modules.html#modules_all_together">loads the directory as a standard Node.js module</a>, using <code>require</code>.</p>
+
+<p>Node.js expects the directory to have a valid <code>package.json</code> file. The <code>main</code> property is used to define which JavaScript file is evaluated when the module is loaded. This file can assign values to the global <code>exports</code> object. These references are then returned when <code>require</code> is called for this module.</p>
+
+<p><strong>OpenWhisk expects the returned module object to have a property called <code>main</code> which references a function. This function will be executed for each invocation request.</strong></p>
+
+<p>Request parameters are passed as object properties on the first function argument. The function must return an object for the invocation response.</p>
+
+<p>Other files included in the archive will be available in the current working directory. These can also be loaded as modules or read directly from the file-system.</p>
+
+<h2>Conclusions</h2>
+
+<p>OpenWhisk support for Action packages is a huge step forward for the platform. Node.js has an enormous ecosystem of third-party modules. Developers can now easily use any of these modules within their Actions.</p>
+
+<p>This feature can also be used to include non-JS files within the runtime environment. It would be possible to use configuration files in JSON or static assets like HTML or CSS files.</p>
+
+<p><strong><em>The team are now working on providing support for other runtimes, watch this space…</em></strong></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[NPM Modules in Node-RED]]></title>
+    <link href="http://jamesthom.as/blog/2016/01/04/npm-modules-in-node-red/"/>
+    <updated>2016-01-04T15:40:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2016/01/04/npm-modules-in-node-red</id>
+    <content type="html"><![CDATA[<p>Before Christmas, <a href="https://www-304.ibm.com/connections/blogs/et/entry/home?lang=en_us">my department</a>
+at IBM had one of our semi-regular Hack Days to
+get everyone together and work on interesting ideas away from the day job. I spent
+the time playing with an idea to make exposing NPM packages in <a href="http://nodered.org">Node-RED</a> easier...</p>
+
+<p><blockquote><p>Node-RED is a visual tool for wiring the Internet of Things.</p></blockquote></p>
+
+<p>It makes it easy to create, combine and control data flowing between hardware
+devices, web APIs and open protocols. The tool exposes operations through a
+series of <em>nodes</em>, which can be created through the browser-based editor and
+connected to other nodes to create <em>message flows</em>.</p>
+
+<p>The tool comes built-in with a <a href="http://flows.nodered.org/">huge selection of nodes</a>, from connecting to a
+Raspberry Pi to handling HTTP requests, for creating flows. Users <a href="http://nodered.org/docs/creating-nodes/">create their own nodes</a>
+to expose new functionality, by creating small modules using JavaScript and HTML.
+People often wrap existing <a href="https://www.npmjs.com/">NPM modules</a> into custom Node-RED nodes to use that module functionality in flows.</p>
+
+<p><a href="https://www.npmjs.com/">NPM</a> has over two hundred thousand modules, many of which provide simple
+"stateless" functions that return a result based upon the input data. These
+modules are ideally suited for using within Node-RED message flows.</p>
+
+<p>Exposing multiple new NPM modules required creating custom Node-RED nodes for every
+module you wanted to use. Whilst the Node-RED node boilerplate is small,
+it becomes a bit laborious and repetitive to keep doing this for extremely simple modules.</p>
+
+<p>Wondering how to make this easier, I started hacking on ideas.</p>
+
+<h2><em>Two days later...</em></h2>
+
+<p><blockquote><p>Node-RED node to dynamically expose NPM modules as nodes.</p><footer><strong>node-red-contrib-npm</strong> <cite><a href='http://flows.nodered.org/node/node-red-contrib-npm'>flows.nodered.org/node/&hellip;</a></cite></footer></blockquote></p>
+
+<p><img src="/images/npm-start.png"></p>
+
+<p>This new node allows you to dynamically expose NPM modules as Node-RED nodes
+without needing to manually create new nodes for them.</p>
+
+<p>Using the node editor panel, the user can set the name of the NPM package to
+expose along with the module invocation style.</p>
+
+<p><img src="/images/npm-configure.png"></p>
+
+<p>Incoming flow messages are
+passed as an argument to the function being executed. Users can set up the node
+to call the module, a module function or even run custom setup code in response
+to incoming messages.</p>
+
+<p>Execution results, either returned directly or asynchronously
+(Promises and callback-style supported), are sent as the outgoing message
+payload.</p>
+
+<p>When the flow is deployed, the NPM module will be automatically installed and instantiated.</p>
+
+<p>Now we don't have to write lots of extra boilerplate code every time we
+want to use a tiny NPM module in a Node-RED flow, hurrah!</p>
+
+<p><em>Here's a short demonstration using the node to expose the <a href="https://www.npmjs.com/package/sentiment">sentiment</a> package
+in a flow:</em></p>
+
+<p><img src="/images/Node-RED-NPM.gif"></p>
+]]></content>
+  </entry>
+  
+</feed>

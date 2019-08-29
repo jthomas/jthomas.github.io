@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: raspberry-pi | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/raspberry-pi/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Node-RED Docker Images]]></title>
+    <link href="http://jamesthom.as/blog/2016/07/27/node-red-docker-images/"/>
+    <updated>2016-07-27T15:24:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/07/27/node-red-docker-images</id>
+    <content type="html"><![CDATA[<p>This week, I've been helping create and publish official <a href="https://www.docker.com/">Docker</a> images for the
+<a href="http://nodered.org/">Node-RED</a> project. Users can start Node-RED instances from these images using the following command.</p>
+
+<p><code>
+docker run -it -p 1880:1880 nodered/node-red-docker
+</code></p>
+
+<p>Node-RED is now publishing the <a href="https://hub.docker.com/r/nodered/node-red-docker/">following images to Docker Hub</a> for each new release.</p>
+
+<ul>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/latest">latest</a></strong> - uses <a href="https://hub.docker.com/_/node/">official Node.JS v4 base image</a>.</li>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/slim">slim</a></strong> - uses <a href="https://hub.docker.com/r/mhart/alpine-node/">Alpine Linux base image</a>.</li>
+<li><strong><a href="https://github.com/node-red/node-red-docker/tree/master/rpi">rpi</a></strong> - uses <a href="https://hub.docker.com/r/hypriot/rpi-node/">RPi-compatible base image</a>.</li>
+</ul>
+
+
+<p>When a new version is <a href="https://www.npmjs.com/package/node-red">released on NPM</a>, an <a href="https://travis-ci.org/node-red/node-red-docker">automated CI service</a> will build, test and
+publish new images with the <a href="https://hub.docker.com/r/nodered/node-red-docker/tags/">updated version tags</a>.</p>
+
+<p>The source repository for the Docker images is available at <a href="https://github.com/node-red/node-red-docker">https://github.com/node-red/node-red-docker</a>.</p>
+
+<h2>Background</h2>
+
+<p>There was a <a href="https://github.com/node-red/node-red/issues/603">long-standing issue</a> open with the project
+to provide official Docker images for the tool. Many users had <a href="https://hub.docker.com/r/cpswan/node-red/">already</a> <a href="https://github.com/jamesbrink/docker-node-red">been</a>
+<a href="http://ivyco.blogspot.co.uk/2015/03/docker-awesomeness.html">experimenting</a> with Node-RED and Docker.</p>
+
+<p><em>Reviewing the community's efforts, we wanted to create official images that
+made it simple for users to start Node-RED as Docker containers with minimal
+configuration whilst allowing for easy customisation, i.e. adding new nodes.</em></p>
+
+<p>Docker images are created using a configuration file (<a href="https://docs.docker.com/engine/reference/builder/">Dockerfile</a>) that lists the
+commands to build that image and can start by <a href="https://docs.docker.com/engine/reference/builder/#/from">using another image as the 'base'</a>.</p>
+
+<p>Node-RED is a Node.js application, published as an <a href="https://www.npmjs.com/package/node-red">NPM module</a>.
+The Node.js project publishes <a href="https://hub.docker.com/_/node/">official Docker images</a> which we used as our base image.
+These images provide an environment with the correct versions of Node.js and
+NPM installed.</p>
+
+<p>Rather than manually copying the Node-RED source code into the container image,
+we used NPM to install the source code by defining a custom <a href="https://docs.npmjs.com/files/package.json">package.json</a>
+which includes Node-RED as dependency.</p>
+
+<p>``` json package.json
+{</p>
+
+<pre><code>"name": "node-red-docker",
+"version": "0.14.5",
+"description": "Docker images for Node-RED",
+"main": "node_modules/node-red/red/red.js",
+"scripts": {
+    "start": "node-red"
+},
+...
+"dependencies": {
+    "node-red": "0.14.5"
+},
+"engines": {
+    "node": "4.*.*"
+}
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Adding this file into the container image and then running <a href="https://docs.npmjs.com/cli/install">NPM install</a>, using
+the <a href="https://docs.docker.com/engine/reference/builder/#/add">ADD</a> and <a href="https://docs.docker.com/engine/reference/builder/#/run">RUN</a> commands, will retrieve the correct Node-RED version and build
+that into the container image.</p>
+
+<p>Docker images define a <a href="https://docs.docker.com/engine/reference/builder/#/cmd">default start command</a> to run when the container is
+created. Using <em>npm start</em> for this image will parse the start script
+listed in the package.json file, which has been set to
+<em>node-red</em>.</p>
+
+<h2>Adding New Nodes</h2>
+
+<p>Node-RED has a <a href="http://flows.nodered.org/">huge community</a> which produces custom nodes for everything from
+accessing data from a <a href="http://flows.nodered.org/node/node-red-contrib-gpio">Raspberry Pi's sensors</a> to a <a href="http://flows.nodered.org/node/node-red-contrib-teslams">Tesla car</a>.</p>
+
+<p>Additional nodes <a href="http://nodered.org/docs/getting-started/adding-nodes">can be installed</a> by putting the files into your user
+directory, which defaults to <em>$HOME/.node-red</em>.</p>
+
+<p>Allowing users to install additional nodes without building new images is
+possible using <a href="https://docs.docker.com/engine/tutorials/dockervolumes/">Docker's volume support</a>. Docker data volumes can be used to
+share files between the container and the host system, by <a href="https://docs.docker.com/engine/tutorials/dockervolumes/#/mount-a-host-directory-as-a-data-volume">mounting a directory on the host as a data volume within the container</a>.</p>
+
+<p>Exposing the Node-RED user directory within the container as a data volume
+means users can mount this on the host system. Nodes installed into this
+directory, using NPM on the host system, will automatically be registered when
+Node-RED starts.</p>
+
+<p>Within the Dockerfile for the Node-RED image, the /data directory is configured
+as the user directory and <a href="https://github.com/node-red/node-red-docker/blob/master/latest/Dockerfile#L23">exported as a data volume</a>.</p>
+
+<p>Users can mount their local user directory into the container with the
+following command.</p>
+
+<p><code>sh
+docker run -it -p 1880:1880 -v ~/.node-red:/data nodered/node-red-docker
+</code></p>
+
+<h2>Environment Parameters</h2>
+
+<p>Docker <a href="http://stackoverflow.com/questions/30494050/how-to-pass-environment-variables-to-docker-containers">supports injecting environment parameter</a> values into running containers,
+using command-line options on the host system. This is often used to configure
+runtime options without users having to build new container images. Node-RED's
+Docker images support the following environment parameters.</p>
+
+<h3>Flows Configuration</h3>
+
+<p>User flow configurations are <a href="http://nodered.org/docs/getting-started/running">stored in a JSON file under the user directory</a>. This defaults to
+<em>flows.json</em> but can be configured using an environment parameter
+(<strong>FLOWS</strong>) passed to the container, as shown below.</p>
+
+<p><code>
+docker run -it -p 1880:1880 -e FLOWS=my_flows.json nodered/node-red-docker
+</code></p>
+
+<h3>Node Options</h3>
+
+<p>Node.js runtime arguments can be passed to the container using an environment
+parameter (<strong>NODE_OPTIONS</strong>). For example, to <a href="https://github.com/nodejs/node/issues/2738">fix the heap size</a> used by the Node.js
+garbage collector you would use the following command.</p>
+
+<p><code>
+docker run -it -p 1880:1880 -e NODE_OPTIONS="--max_old_space_size=128" nodered/node-red-docker
+</code></p>
+
+<h2>Alpine Linux Image</h2>
+
+<p>The official Node.js Docker image uses the <a href="https://hub.docker.com/_/debian/">Debian Jessie base image</a>. This image
+provides a full Linux install, which means dependent Docker images can be
+hundreds of megabytes in size. Node-RED's Docker image, using this base image,
+is nearly 300 MB.</p>
+
+<p>Reducing Docker image sizes can <a href="http://jasonwilder.com/blog/2014/08/19/squashing-docker-images/">dramatically reduce build and deployment times</a>.</p>
+
+<p><a href="https://www.alpinelinux.org/">Alpine Linux</a> is a lightweight Linux distribution, focused on security and
+performance. A <a href="https://hub.docker.com/_/alpine/">minimal Docker image</a> based on Alpine Linux is only 5 MB in
+size!</p>
+
+<p>Using the <a href="https://hub.docker.com/r/mhart/alpine-node/">alpine-node</a> base
+image, which provides an Alpine Linux environment with Node.js &amp; NPM, in our
+Dockerfiles reduces the resulting image file to under 50 MB.</p>
+
+<p>Alpine Linux does make it <a href="http://stackoverflow.com/questions/36202095/node-serialport-failing-on-alpine-linux">more difficult to install NPM modules with native dependencies</a>, due to missing common libraries and tools needed to build them.</p>
+
+<p>Therefore, we're publishing the Alpine Linux image as a seperate tag (<em>slim</em>), rather
+than using this base image throughout our Dockerfiles.</p>
+
+<p>This version should provide an extremely lightweight Node-RED image that works
+for most users.</p>
+
+<p><code>
+docker run -it -p 1880:1880 nodered/node-red-docker:slim
+</code></p>
+
+<h2>Raspberry Pi Image</h2>
+
+<p>Node-RED is an incredibly popular tool for hacking on the <a href="https://www.raspberrypi.org/">Raspberry Pi</a>. Using a
+<a href="http://blog.hypriot.com/getting-started-with-docker-on-your-arm-device/">custom Raspberry Pi image</a>, developers can also have a full Docker system
+running in the Linux environment on their device.</p>
+
+<p><strong>So, can we use Docker to start Node-RED on the Raspberry Pi?</strong></p>
+
+<p>Due to the platform architecture, ARM rather than x86/x64 by Intel or AMD,
+Docker images must be packaged specifically for that platform. The existing
+Docker images created for Node-RED will not work.</p>
+
+<p>Fortunately, there's an <a href="https://hub.docker.com/r/hypriot/rpi-node/">existing RPi-compatible Docker image</a>
+with Node.js and NPM.</p>
+
+<p>Using this base image to build a new Raspberry Pi-specific Node-RED image,
+published with the <em>rpi</em> tag, means users can now start Node-RED on the Raspberry Pi using Docker.</p>
+
+<p><code>
+docker run -it -p 1880:1880 nodered/node-red-docker:rpi
+</code></p>
+]]></content>
+  </entry>
+  
+</feed>

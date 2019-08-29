@@ -1,0 +1,715 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: watson | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/watson/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Cognitive Bots With IBM Watson]]></title>
+    <link href="http://jamesthom.as/blog/2016/05/10/bots-with-ibm-watson/"/>
+    <updated>2016-05-10T16:29:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/05/10/bots-with-ibm-watson</id>
+    <content type="html"><![CDATA[<p>Later this month, I'm speaking at Twilio's conference about
+<a href="https://www.twilio.com/signal/schedule/6L9DFzeXKg0OOIQW42eik2/building-cognitive-bots-with-ibm-watson">building cognitive bots with IBM Watson</a>.
+Preparing for this presentation, I've been experimenting with the IBM Watson
+services to build sample bots that can understand, and act on, natural language.</p>
+
+<p>IBM's artificial intelligence system, <a href="https://en.wikipedia.org/wiki/Watson_(computer">Watson</a>, now provides a
+series of <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/services-catalog.html">"cognitive" services</a>
+available through <a href="https://bluemix.net">IBM's Bluemix cloud platform</a>.
+Developers can integrate everything from natural language processing, image and
+speech recognition, emotion analysis and more into their applications using
+RESTful APIs.</p>
+
+<p>The <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">Watson Developer Cloud</a>
+site has numerous
+<a href="https://github.com/watson-developer-cloud/dialog-nodejs">sample</a>
+<a href="https://github.com/watson-developer-cloud/conversational-agent-application-starter-kit">apps</a>
+to help you understand how to integrate the services together to build "cognitive" bots.</p>
+
+<p>In one of the samples, the <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">Dialog service</a>
+is used to develop a <a href="http://dialog-demo.mybluemix.net/">pizza ordering bot</a>.
+Users can order a pizza, specifying the size, toppings and delivery method,
+using natural language.</p>
+
+<p>After understanding how this sample worked, I had an idea to enhance it with
+the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">tone analysis service</a>...</p>
+
+<h2>Where the heck is my pizza?</h2>
+
+<p>Let's imagine the customer has ordered a delivery using pizza-bot and the
+driver is being (even) slower than normal.</p>
+
+<p>If the customer asks</p>
+
+<p><strong>"Where is my pizza?"</strong></p>
+
+<p>We return the standard message all pizza takeaways use when calling to
+inquire where the driver is....</p>
+
+<p><strong>"The driver has just left, he'll be ten minutes."</strong></p>
+
+<p><em>An hour later...</em></p>
+
+<p>When the driver still hasn't arrived, the customer would probably ask again and
+with a bit less civility...</p>
+
+<p><strong>"Where the heck is my pizza? I ordered an hour ago! This is ridiculous."</strong></p>
+
+<p>At this point, the "just ten minutes" reply is not going to be well received!</p>
+
+<p>Building bots that can understand conversation tone will mean we can script a
+suitable response, rather than infuriating our hungry customers.</p>
+
+<p>Using the tone analyser service, I wanted to enhance the sample to use
+conversation sentiment to affect the dialogue.
+Bot responses should be generated based upon both user
+input and conversation sentiment.</p>
+
+<p><img src="/images/pizza_rage.gif"></p>
+
+<p>Let's review both services before looking at how to combine them to create the
+improved pizza bot...</p>
+
+<h2>IBM Watson Dialog</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">IBM Watson Dialog service</a>
+enables a developer to automate scripting
+conversations, using natural language, between a virtual agent and a user.
+Developers build up a <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml">decision tree for dialogue</a>,
+using a markup language to define the conversation paths.</p>
+
+<p>Developers can then utilise the pre-defined linguistic model to converse with
+users. The system will keep track of the conversation state when processing
+user input to generate a suitable response. It can also store
+<a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilevar">conversation properties</a>, either extracted from user input or manually updated through the
+API.</p>
+
+<p>These conversation properties can be used to <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilecheck">control the dialogue branching</a>.</p>
+
+<p>Documentation on the service is available <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/">here</a>.</p>
+
+<h2>IBM Watson Tone Analyser</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer Service</a>
+uses linguistic analysis to detect three types of tones from text: emotion, social tendencies, and language style.</p>
+
+<p>Emotions identified include things like anger, fear, joy, sadness, and disgust.
+Identified social tendencies include things from the Big Five personality
+traits used by some psychologists. These include openness, conscientiousness,
+extroversion, agreeableness, and emotional range. Identified language styles
+include confident, analytical, and tentative.</p>
+
+<p>Documentation on the service is available <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/tone-analyzer/">here</a>.</p>
+
+<h2>Extending Pizza Bot </h2>
+
+<p>Enhancing pizza bot to support dialogue about delivery times, we can start by
+identifying when the user is asking about the pizza delivery. At this point,
+unless the user is angry, we can return the default response. When sentiment
+analysis indicates this user is angry, we should branch to returning a more
+sympathetic message.</p>
+
+<h2>Matching User Input </h2>
+
+<p>Matching user input about delivery times, there a few common questions we want to capture.</p>
+
+<ul>
+<li><em>Where's my order?</em></li>
+<li><em>How long will it be until my pizza arrives?</em></li>
+<li><em>When will my takeout get here?</em></li>
+</ul>
+
+
+<p>Creating our <a href="https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L179-L207">new conversation branch</a>
+within a folder element will allow us to
+group the necessary <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">input</a>,
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_grammar">grammar</a> and
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_output">output</a> elements as a logical section.</p>
+
+<p>``` xml Order Queries http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input
+<folder label="Order">
+  <input></p>
+
+<pre><code>&lt;grammar&gt;
+  ...
+&lt;/grammar&gt;
+&lt;output&gt;
+  &lt;prompt selectionType="RANDOM"&gt;
+    ...
+  &lt;/prompt&gt;
+&lt;/output&gt;
+</code></pre>
+
+<p>  </input>
+</folder>
+```</p>
+
+<p>This structure will process the output element, to generate the bot reply, only
+if the input grammar matches user input. Adding item nodes under the input's
+grammar element will let us define the dialogue matching criteria, shown here.</p>
+
+<p><code>xml Query Grammar https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L181-L188
+&lt;grammar&gt;
+  &lt;item&gt;$where* order&lt;/item&gt;
+  &lt;item&gt;$where* pizza&lt;/item&gt;
+  &lt;item&gt;$how long* order&lt;/item&gt;
+  &lt;item&gt;$how long* pizza&lt;/item&gt;
+  &lt;item&gt;$when * order * here&lt;/item&gt;
+  &lt;item&gt;$when * pizza * here&lt;/item&gt;
+&lt;/grammar&gt;
+</code></p>
+
+<p>Using <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">wildcard matching characters</a>,
+$ and *, means the grammar ("$where * order") will match questions including "Where is my pizza?" and "Where's my
+pizza?" rather than having to manually define every permutation.</p>
+
+<p>People often use synonyms in natural language. Rather than manually defining
+grammar rules for all alternative words for pizza and order, we can add
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_concept">concept elements</a>
+to automatically match these. The sample already has a concept element defined for the pizza term, we only have to add elements for order.</p>
+
+<p>``` xml Concept Entities https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L1647-L1654
+<concept>
+  <grammar></p>
+
+<pre><code>&lt;item&gt;Order&lt;/item&gt;
+&lt;item&gt;Takeaway&lt;/item&gt;
+&lt;item&gt;Takeout&lt;/item&gt;
+&lt;item&gt;Delivery&lt;/item&gt;
+</code></pre>
+
+<p>  </grammar>
+</concept>
+```</p>
+
+<p>Grammar rules which include the <em>order</em> term which automatically match takeaway, takeout or delivery.</p>
+
+<h2>Adding Default Response</h2>
+
+<p>Having matched the user input, we want to return the default response from a pre-specified list.</p>
+
+<p>``` xml Bot Replies https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L198-L205
+<output>
+  <prompt selectionType="RANDOM"></p>
+
+<pre><code>&lt;item&gt;I've just checked and the driver is ten minutes away, is there anything else I can help with?&lt;/item&gt;
+&lt;item&gt;Hmmm the driver's running a bit late, they'll be about ten minutes. Is there anything else I can help with?&lt;/item&gt;
+&lt;item&gt;They should be with you in ten minutes. Is there anything else I can help with?&lt;/item&gt;
+</code></pre>
+
+<p>  </prompt>
+  <goto ref="getUserInput_2442994"/>
+</output>
+```</p>
+
+<h2>Handling Angry Customers</h2>
+
+<p>Within the dialog markup, <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_variables">profile variables</a>
+can be defined to store conversation entities. These variables can be referenced by
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_if">conditional branches</a>
+in the markup to control responses.</p>
+
+<p>Defining a new profile variable for the anger score, this value can be updated
+manually before the current user input is processed to return the dialogue
+response.</p>
+
+<p>``` xml Profile Variable https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L2062
+<variables>
+  <var_folder name="Home"></p>
+
+<pre><code>...
+&lt;var name="anger" type="NUMBER" initValue="0" description="Anger emotion score for conversation."/&gt;
+</code></pre>
+
+<p>  </var_folder>
+</variables>
+```</p>
+
+<p>Adding a child branch, for the conditional response, after the input grammar
+will allow us to return a custom response if the profile variable for the anger
+emotion is above a threshold.</p>
+
+<p>``` xml Anger Branching https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L189-L197
+<folder label="Order">
+  <input></p>
+
+<pre><code>&lt;grammar&gt;
+  &lt;item&gt;$where* order&lt;/item&gt;
+&lt;/grammar&gt;
+&lt;if matchType="ANY"&gt;
+  &lt;cond varName="anger" operator="GREATER_THEN"&gt;0.50&lt;/cond&gt;
+  &lt;output&gt;
+    &lt;prompt selectionType="RANDOM"&gt;
+      &lt;item&gt;Please accept our apologies for the delivery driver being very late. Could you call us on 0800 800 800 and we'll get this fixed?&lt;/item&gt;
+    &lt;/prompt&gt;
+  &lt;/output&gt;
+&lt;/if&gt;
+</code></pre>
+
+<p>```</p>
+
+<p>When we've detected the user is angry about the delivery delay, we direct
+them to ring the restaurant to find out what's happened to the driver.</p>
+
+<h2>Combining Watson Services</h2>
+
+<p>Modifying the backend service that calls the Watson services, we're now passing
+the user's input through the Tone Analyzer service and manually updating user's
+anger score in their profile, before calling the Dialog service.</p>
+
+<p>This anger score will be used to control the dialogue response in real-time.</p>
+
+<p>``` js Using Tone Analyser https://github.com/jthomas/dialog-nodejs/blob/master/app.js#L56-L85
+app.post('/conversation', function(req, res, next) {
+  tone_analyzer.tone({ text: req.body.input }, function(err, tone) {</p>
+
+<pre><code>var categories = tone.document_tone.tone_categories
+var emotion_tones = categories.find(function (tone) {
+  return tone.category_id === 'emotion_tone'
+})
+
+var anger_tone = emotion_tones.tones.find(function (tone) {
+  return tone.tone_id === 'anger'
+})
+
+var params = {client_id: req.body.client_id, dialog_id: dialog_id, name_values: [{name: 'anger', value: anger_tone.score}]}
+dialog.updateProfile(params, function (err, results) {
+  var params = extend({ dialog_id: dialog_id }, req.body);
+  dialog.conversation(params, function(err, results) {
+    else
+      res.json({ dialog_id: dialog_id, conversation: results});
+  });
+})
+</code></pre>
+
+<p>  });
+});
+```</p>
+
+<p>The <a href="https://github.com/jthomas/dialog-nodejs/commit/6d025040e005ef0d9aa976bfe20039db05f681fe">commit log</a>
+for the fork shows the full changes needed to integrate this feature.</p>
+
+<h2>Conclusion</h2>
+
+<p>Bots are a <a href="https://medium.com/chris-messina/2016-will-be-the-year-of-conversational-commerce-1586e85e3991#.524ovvaj8">huge trend for 2016</a>.
+One of the major challenges to developing your
+own bots is handling user input using natural language. How can you go beyond
+simple keyword matching and regular expressions to build solutions that
+actually understand what your user is asking?</p>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/overview.shtml">IBM Watson Dialog service</a> users can script natural language
+conversations. Defining a linguistic model for their dialogue using markup
+language, the system can use this to process natural language and return the
+appropriate response. Conversation entities are recognised and stored in a user
+profile.</p>
+
+<p>Combining this service with the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer</a>, users can script
+conversations that use the user's emotional tone to modify the response.</p>
+
+<p>Modifying the pizza sample, we incorporate the anger score to return a more
+appropriate response when the user is angry about their delivery being delayed.</p>
+
+<p>IBM Watson has <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">many other services</a>
+that can be integrated with the Dialog
+service using the same pattern to build "cognitive" bots. Using these services
+takes the hard work out of building bots that actually understand and respond
+with emotion to input using natural language.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Updated IBM Watson Nodes for Node-RED]]></title>
+    <link href="http://jamesthom.as/blog/2016/01/04/updated-ibm-watson-nodes/"/>
+    <updated>2016-01-04T15:45:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2016/01/04/updated-ibm-watson-nodes</id>
+    <content type="html"><![CDATA[<p><img src="/images/node-red-updates.png"></p>
+
+<p>Earlier this year, I made a <a href="http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered/">major upate</a> to the Node-RED nodes for the IBM
+Watson services available through IBM Bluemix. Since then, the IBM Watson team
+has been <a href="https://developer.ibm.com/watson/blog">busy</a>, with lots of changes to APIs. I've recently been working through
+these changes, updating the nodes, to ensure they work against the latest APIs.</p>
+
+<p><strong>Updates to these nodes have now been finished and are available through the
+<a href="https://console.ng.bluemix.net/catalog/starters/node-red-starter/">boilerplate</a> on IBM Bluemix or by installing the <a href="https://github.com/node-red/node-red-bluemix-nodes">IBM Bluemix Nodes</a> package
+locally.</strong></p>
+
+<p>If you have an existing Node-RED instance running in IBM Bluemix, please review
+the <a href="https://www.ng.bluemix.net/docs/#starters/Node-RED/nodered.html#nodered">documentation</a> for upgrade instructions.</p>
+
+<p>If you encounter any issues, please raise a <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issue on Github</a>.</p>
+
+<p><em>For full details on the changes are available in the <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/30">pull request</a>.</em></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[AlchemyAPI &amp; Updated Watson Nodes for Node-RED]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/15/alchemyapi-and-updated-watson-nodes-for-node-red/"/>
+    <updated>2015-07-15T16:07:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/15/alchemyapi-and-updated-watson-nodes-for-node-red</id>
+    <content type="html"><![CDATA[<p><img src="/images/node-red-updates.png"></p>
+
+<p>I've recently been working on a <a href="https://github.com/node-red/node-red-bluemix-nodes/commit/56007e60d3414da3eb5c1dac766b23bdd96dd149">number</a> of <a href="https://github.com/node-red/node-red-bluemix-nodes/commit/4d0bcfe34f5e107e3b9e0684cd26ae701f913253">updates</a> to the Node-RED <a href="https://github.com/node-red/node-red-bluemix-nodes">nodes</a> for the IBM Bluemix platform...</p>
+
+<p>Highlights below:</p>
+
+<h2>New AlchemyAPI Nodes</h2>
+
+<p>There are two new nodes (Feature Extract and Image Extract) in the package, allowing users to call services from the AlchemyAPI platform.</p>
+
+<ul>
+<li><p><em>Feature Extract.</em> This node will analyse external URLs, HTML or text content with features for text-based analysis
+from the AlchemyAPI service, e.g. keywords, sentiment, relationships, etc.</p></li>
+<li><p><em>Image Analysis.</em> This node will analyse images, passed in as external URLs or raw image bytes, to extract faces, content and URLs.</p></li>
+</ul>
+
+
+<p>Configuration for each node is available through the node editor panel.</p>
+
+<p>For full details on all the capabilities of the AlchemyAPI platform, please see their <a href="http://www.alchemyapi.com/api">documentation</a>.</p>
+
+<h2>Updated IBM Watson Nodes</h2>
+
+<p>With the <a href="https://developer.ibm.com/watson/blog/2015/07/06/ibm-watson-language-translation-and-speech-services-general-availability/">recent changes</a>
+to the IBM Watson services, there were a number of changes needed to support the API changes. All the IBM Watson nodes now work with the GA versions
+of the services.</p>
+
+<p><strong>Users must ensure they are using GA versions of the service with the nodes. Details on migration steps are available on the IBM Watson
+<a href="https://developer.ibm.com/watson/blog/2015/07/06/ibm-watson-language-translation-and-speech-services-general-availability/">blog post</a> about the updates.</strong></p>
+
+<h2>Running Locally</h2>
+
+<p>When running Node-RED on IBM Bluemix, credentials for the services bound to the application are automatically registered. Previously, running the nodes
+outside of IBM Bluemix required complex configuration to register service credentials. With this release, users will
+be prompted to input the service credentials in the node editor panel if the application isn't running on IBM Bluemix. Much easier!</p>
+
+<p><strong>If you have questions or encounter issues, please ask over on <a href="http://stackoverflow.com/questions/tagged/node-red">Stackoverflow</a> or raise <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issues</a> in Github</strong></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[IBM Watson Nodes For Node-RED]]></title>
+    <link href="http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered/"/>
+    <updated>2015-04-22T11:15:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/04/22/ibm-watson-nodes-for-nodered</id>
+    <content type="html"><![CDATA[<p><img src="/images/node-red.png"></p>
+
+<p>I've updated the IBM Watson Nodes for Node-RED to include seven extra services.</p>
+
+<p>Previously, the package only provided support for the following services:</p>
+
+<ul>
+<li>Language Identification.</li>
+<li>Machine Translation.</li>
+<li>Question &amp; Answers.</li>
+</ul>
+
+
+<p>With the recent <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/10">code changes</a>,
+users now have access to the additional services:</p>
+
+<ul>
+<li>Message Resonance.</li>
+<li>Personality Insights.</li>
+<li>Relationship Extraction.</li>
+<li>Speech to Text.</li>
+<li>Text to Speech.</li>
+<li>Tradeoff Analytics.</li>
+<li>Visual Recognition.</li>
+</ul>
+
+
+<p><strong>Using Node-RED through the <a href="https://bluemix.net">IBM Bluemix</a> boilerplate will
+automatically include the IBM Watson modules in the palette.</strong></p>
+
+<p>It is possible to use the IBM Watson nodes with Node-RED outside of IBM Bluemix
+provided you have the <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">local environment variables</a>
+configured to provide the service credentials.</p>
+
+<p>For information about the individual services, please see the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">IBM Watson Developer Cloud</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Doctor Watson]]></title>
+    <link href="http://jamesthom.as/blog/2015/02/27/doctor-watson/"/>
+    <updated>2015-02-27T15:01:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2015/02/27/doctor-watson</id>
+    <content type="html"><![CDATA[<p><img src="/images/doctor_watson.png"></p>
+
+<p><a href="http://doctor-watson.mybluemix.net/">Doctor Watson</a> is an IBM Bluemix application to answer medical questions over the phone, using IBM Watson and Twilio.</p>
+
+<p>Ringing an external phone number, the application will answer and ask for a medical question to help with. Translating your speech into text and using IBM Watson's Question and Answer service, Doctor Watson will query the medical corpus.</p>
+
+<p>Top rated answers will be converted to speech and used as a response over the phone. Users can continue to ask more questions for further information.</p>
+
+<p><em>Putting together this complex application, with voice recognition, telephony handling and a medical knowledge base, was incredibly simple using the IBM Bluemix platform.</em></p>
+
+<p>Source code for the application: <a href="https://github.com/jthomas/doctor-watson">https://github.com/jthomas/doctor-watson</a></p>
+
+<p>Fork and deploy the repository to have your own version of Doctor Watson!</p>
+
+<p><a href="https://bluemix.net/deploy?repository=https://github.com/jthomas/doctor-watson" target="_blank"><img src="http://bluemix.net/deploy/button.png" alt="Bluemix button" /></a></p>
+
+<p><strong>Want to know how the project was built? Read on...</strong></p>
+
+<h2>Overview</h2>
+
+<p>Doctor Watson is a NodeJS application using <a href="http://expressjs.com/">Express</a>, a framework for building web applications, to handle serving static content and creating REST APIs.</p>
+
+<p>The front page gives an overview of the application, served from static HTML files with templating to inject the phone number at runtime.</p>
+
+<p>HTTP endpoints handle the incoming messages from Twilio as users make new phone calls. The application's public URL will be bound to a phone number using Twilio's account administration.</p>
+
+<p>Services for IBM Watson are exposed for the application using the IBM Bluemix platform. Text to Speech and Question and Answer services are used during phone call handling.</p>
+
+<p>The application can be deployed on IBM Bluemix, IBM's public hosted Cloud Foundry platform.</p>
+
+<h2>Handling phone calls</h2>
+
+<p><a href="https://www.twilio.com/">Twilio</a> provides "telephony-as-a-service", making applications able to respond to telephone calls and text messages using a REST API.</p>
+
+<p>Twilio has been made available on the IBM Bluemix platform. Binding this service to your application will provide the authentication credentials to use with the Twilio <a href="http://twilio.github.io/twilio-node/">client library</a>.</p>
+
+<p>Users register external phone numbers through the service, which are bound to  external web addresses controlled by the user. When a person dials that number, the service makes a HTTP call with the details to the application. HTTP responses dictates how to handle the phone call, allowing you to record audio from the user, redirect to another number, play an audio file and much more.</p>
+
+<p>We're using ExpressJS to expose the HTTP endpoints used to handle incoming Twilio messages. Twilio's client libraries abstract the low-level network requests behind a JavaScript interface.</p>
+
+<p>This code snippet shows the outline for message processing.</p>
+
+<p>``` javascript
+app.post('/some/path', twilio.webhook(twilio_auth_token), function(req, res) {
+  // req.body -> XML body parsed to JS object
+  // do some processing</p>
+
+<p>  var twiml = new twilio.TwimlResponse();
+  twiml.command(...); // where command is a 'verb' from TwilML</p>
+
+<p>  res.send(twiml);<br/>
+});
+```</p>
+
+<p>TwilML is <a href="https://www.twilio.com/docs/api/twiml">Twilio Markup Language</a>, an XML message with instructions you can use to tell Twilio how to handle incoming phone calls and SMS messages.</p>
+
+<p>TwimlResponse instances generate the XML message responses. Primary verbs from the TwilML specification are available as chainable function calls on the class instance.</p>
+
+<h3>Doctor Watson Call Flow</h3>
+
+<p>When the user first calls the phone number, Twilio sends a TwilML message over a HTTP POST request to http://doctor-watson.mybluemix.net/calls.</p>
+
+<p>``` javascript
+router.post('/', twilio.webhook(twilio_auth_token), function(req, res) {
+  log.info(req.body.CallSid + "-> calls/");
+  log.debug(req.body);</p>
+
+<p>  var twiml = new twilio.TwimlResponse();
+  twiml.say('Hello this is Doctor Watson, how can I help you? Press any key after you have finished speaking')</p>
+
+<pre><code>.record({timeout: 60, action: "/calls/recording"});
+</code></pre>
+
+<p>  res.send(twiml);<br/>
+})
+```</p>
+
+<p>We're using the TwilML response to give the user information on asking a question. Recording their response, the audio file with their question will be sent in another request to the '/calls/recording' location.</p>
+
+<p>``` javascript
+router.post('/recording', twilio.webhook(twilio_auth_token), function(req, res) {
+  var twiml = new twilio.TwimlResponse();</p>
+
+<p>  enqueue_question(req.body);</p>
+
+<p>  twiml.say("Let me think about that.").redirect("/calls/holding");
+  res.send(twiml);
+})
+```</p>
+
+<p>Using the audio file with the user's question, available as the request body, we now schedule a call to the Watson services.</p>
+
+<p>With the question answering request in-progress, we redirect the user into a holding loop.</p>
+
+<p>``` javascript
+router.post('/holding', twilio.webhook(twilio_auth_token), function(req, res) {
+  var twiml = new twilio.TwimlResponse();
+  twiml.pause({length: 5})</p>
+
+<pre><code>.say("I'm still thinking")    
+.redirect("/calls/holding");
+</code></pre>
+
+<p>  res.send(twiml);<br/>
+});
+```</p>
+
+<p>Every five seconds, we relay a message over the phone call until the answer has been returned.</p>
+
+<p>Within the callback for the Question and Answer service, we have the following code.</p>
+
+<p><code>javascript
+var forward_to = cfenv.getAppEnv().url + "/calls/answer";
+client.calls(call_ssid).update({url: forward_to});    
+</code></p>
+
+<p>This uses the Twilio client to update the location for a live call, redirecting to the location which returns the answer.</p>
+
+<p>``` javascript
+router.post('/answer', twilio.webhook(twilio_auth_token), function(req, res) {
+  var twiml = new twilio.TwimlResponse();</p>
+
+<p>  twiml.say(answers[req.body.CallSid])</p>
+
+<pre><code>.say("Do you have another question?")
+.record({timeout: 60, action: "/calls/recording"});
+</code></pre>
+
+<p>  res.send(twiml);
+})
+```</p>
+
+<p>Now we've shown how to handle phone calls, let's dig into the Watson services...</p>
+
+<h2>Using the Watson Services</h2>
+
+<p>IBM Bluemix continues to roll out <a href="https://developer.ibm.com/watson/blog/2015/02/04/new-watson-services-available/">more services</a> to the Watson catalogue. There are now fifteen services to help you create cognitive applications.</p>
+
+<p>Doctor Watson uses <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/speech-to-text.html">Speech to Text</a> and <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/question-answer.html">Question and Answer</a>.</p>
+
+<p>All services come with <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">great documentationn</a> to get help get you started, with sample code, API definitions and client libraries for different languages.</p>
+
+<p>We're using the <a href="https://www.npmjs.com/package/watson-developer-cloud">NodeJS client library</a> in Doctor Watson.</p>
+
+<h3>Converting audio recording to text</h3>
+
+<p>When we have a new audio recording containing the user question, this needs converting into text to query the Watson Q&amp;A service.</p>
+
+<p>Twilio makes the recording available at any external URL as a WAV file with an 8Khz sample rate. Watson's Speech to Text services has a minimum sample rate for audio input for 16Khz.</p>
+
+<p>Before sending the file to the service, we need to up-sample the audio.</p>
+
+<p>Searching for a Node package that might help, uncovered this <a href="https://www.npmjs.com/package/sox">library</a>. Using the SOX audio processing library, we can easily convert audio files between sample rates.</p>
+
+<p>``` javascript
+var job = sox.transcode(input, output, {</p>
+
+<pre><code>sampleRate: 16000,
+format: 'wav',
+channelCount: 1
+</code></pre>
+
+<p>  });
+  job.on('error', function(err) {</p>
+
+<pre><code>log.error(err);
+</code></pre>
+
+<p>  });
+  job.on('progress', function(amountDone, amountTotal) {</p>
+
+<pre><code>log.debug("progress", amountDone, amountTotal);
+</code></pre>
+
+<p>  });</p>
+
+<p>  job.on('end', function() {</p>
+
+<pre><code>log.debug("Transcoding finished.");    
+</code></pre>
+
+<p>  });
+  job.start();
+```</p>
+
+<p>This package relies on the SOX C library, which isn't installed on the default host environment in IBM Bluemix. Overcoming this hurdle meant creating a <a href="https://github.com/jthomas/nodejs-buildpack">custom NodeJS buildpack</a> which installed the pre-built binaries into the application runtime. I'm saving the details of this for another blog post...</p>
+
+<p>Using the Watson client library, we can send this audio to the external service for converting to text.</p>
+
+<p>``` javascript
+var speech_to_text = watson.speech_to_text({
+  username: USERNAME,
+  password: PASSWORD,
+  version: 'v1'
+});</p>
+
+<p>var params = {<br/>
+  audio: fs.createReadStream(audio),
+  content_type: 'audio/l16; rate=16000'
+};</p>
+
+<p>speech_to_text.recognize(params, function(err, res) {
+  if (err) return;</p>
+
+<p>  var question = res.results[res.result_index],
+});
+```</p>
+
+<p>... which we can now use to query the healthcare corpus for the Watson Q&amp;A service.</p>
+
+<h3>Getting answers</h3>
+
+<p>When asking questions, we need to set the correct corpus to query for answers.</p>
+
+<p>``` javascript
+var question_and_answer_healthcare = watson.question_and_answer({
+  username: USERNAME,
+  password: PASSWORD,
+  version: 'v1',
+  dataset: 'healthcare'
+});</p>
+
+<p>exports.ask = function (question, cb) {
+  question_and_answer_healthcare.ask({ text: question}, function (err, response) {</p>
+
+<pre><code>  if (err) return ;
+
+  var first_answer = response[0].question.evidencelist[0].text;  
+  cb(first_answer);    
+</code></pre>
+
+<p>  });<br/>
+};
+```</p>
+
+<p>This triggers the callback we've registered with the first answer in the returned results. Answers are stored as values in a map, with the key as the call ssid, before triggering the redirect to the '/calls/answer' location shown above.</p>
+
+<h2>Deploying to Bluemix</h2>
+
+<p>Hosting the application on IBM Bluemix uses the following manifest file to configure the application at runtime.</p>
+
+<pre>
+---
+applications:
+- name: doctor-watson
+  memory: 256M 
+  buildpack: https://github.com/jthomas/nodejs-buildpack.git
+  command: node app.js
+  services:
+  - twilio
+  - speech_to_text
+  - question_and_answer
+</pre>
+
+
+<p>We're binding the services to the application and specifying the custom buildpack to expose the SOX library at runtime.</p>
+
+<p>Following this...</p>
+
+<p><code>sh
+$ cf push // and Doctor Watson is live!
+</code></p>
+
+<p>Check out the source code here for further details. You can even run your own version of the application, follow the instructions in the README.md</p>
+]]></content>
+  </entry>
+  
+</feed>

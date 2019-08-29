@@ -1,0 +1,389 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: terraform | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/terraform/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Provisioning IBM Cloud Services With Terraform]]></title>
+    <link href="http://jamesthom.as/blog/2019/01/25/provisioning-ibm-cloud-services-with-terraform/"/>
+    <updated>2019-01-25T10:09:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2019/01/25/provisioning-ibm-cloud-services-with-terraform</id>
+    <content type="html"><![CDATA[<p><strong>This blog post will teach you how to provision <a href="https://cloud.ibm.com/catalog">applications services</a> on <a href="https://cloud.ibm.com/">IBM Cloud</a> with <a href="https://www.terraform.io/">Terraform</a>.</strong></p>
+
+<p>Terraform is an open-source "<a href="https://en.wikipedia.org/wiki/Infrastructure_as_code">infrastructure-as-code</a>" tool. It allows cloud resources to be defined using a <a href="https://www.terraform.io/docs/configuration/syntax.html">declarative configuration file</a>. The <a href="https://www.terraform.io/docs/commands/index.html">Terraform CLI</a> then uses this file to automatically provision and maintain cloud infrastructure needed by your application. This allows the creation of reproducible environments in the cloud across your application life cycle.</p>
+
+<p>IBM Cloud created an <a href="https://github.com/IBM-Cloud/terraform-provider-ibm">official provider plugin</a> for Terraform. This allows IBM Cloud services to be <a href="https://ibm-cloud.github.io/tf-ibm-docs/">declared</a> in Terraform configuration files. This is a much better approach than using the CLI or IBM Cloud UI to create application services manually.</p>
+
+<p><strong>The following steps needed to set up Terraform with IBM Cloud will be explained.</strong></p>
+
+<ul>
+<li><em>Install Terraform CLI tools and IBM Cloud Provider Plugin.</em></li>
+<li><em>Create API keys for platform access.</em></li>
+<li><em>Terraform configuration for IBM Cloud services.</em></li>
+<li><em>Terraform CLI commands to provision IBM Cloud services.</em></li>
+</ul>
+
+
+<p>Ready? Let's go! 😎😎😎</p>
+
+<h2>Install Terraform</h2>
+
+<ul>
+<li><a href="https://www.terraform.io/intro/getting-started/install.html">Download and install</a> Terraform for your system.</li>
+</ul>
+
+
+<p>Once installed, the <code>terraform</code> command will be available.</p>
+
+<p><code>
+$ terraform
+Usage: terraform [-version] [-help] &lt;command&gt; [args]
+...
+</code></p>
+
+<h2>Install IBM Cloud Terraform Plugin</h2>
+
+<ul>
+<li>Download the IBM Cloud Terraform plugin binary from the <a href="https://github.com/IBM-Cloud/terraform-provider-ibm/releases">Github releases page</a>.</li>
+<li>Unzip the release archive to extract the plugin binary (<code>terraform-provider-ibm_vX.Y.Z</code>).</li>
+<li>Move the binary into the <a href="https://www.terraform.io/docs/configuration/providers.html#third-party-plugins">Terraform plugins directory</a> for the platform.
+
+<ul>
+<li><em>Linux/Unix/OS X:</em> <code>~/.terraform.d/plugins</code></li>
+<li><em>Windows:</em> <code>%APPDATA%\terraform.d\plugins</code></li>
+</ul>
+</li>
+</ul>
+
+
+<h2>IBM Cloud Authentication Credentials</h2>
+
+<p>IBM Cloud's Terraform provider plugin needs authentication credentials to interact with the platform. This is best handled by creating an API key and exporting as an environment variable. API keys can be created from the <a href="https://console.bluemix.net/docs/cli/reference/ibmcloud/download_cli.html#install_use">IBM Cloud CLI</a> or the <a href="https://cloud.ibm.com/iam#/users">web site</a>.</p>
+
+<h3>using the cli</h3>
+
+<ul>
+<li>Run the <a href="https://console.bluemix.net/docs/cli/reference/ibmcloud/cli_api_policy.html#ibmcloud_iam_api_key_create">following command</a> to generate an API key.</li>
+</ul>
+
+
+<p><code>
+ibmcloud iam api-key-create terraform-api-key
+</code></p>
+
+<p>The <code>apikey</code> property in the JSON output is the API key value.</p>
+
+<p>```
+{</p>
+
+<pre><code>"name": "terraform-api-key",
+"description": "...",
+"apikey": "xxx-yyy-zzz",
+"createdAt": "...",
+"locked": false,
+"uuid": "..."
+</code></pre>
+
+<p>}
+```</p>
+
+<p><em>Store this value securely. API keys cannot be retrieved after creation!</em></p>
+
+<h3>using the web site.</h3>
+
+<ul>
+<li>From the <a href="https://cloud.ibm.com/iam#/users">IAM Users page</a>, select a user account.</li>
+<li>Under the "<em>API keys</em>" table, click the "<em>Create an IBM Cloud API Key</em>" button.</li>
+<li>Give the key a name and (optional) description.</li>
+<li>Make a note of the API key value returned. API keys cannot be retrieved after creation.</li>
+</ul>
+
+
+<h3>exporting as an environment variable</h3>
+
+<ul>
+<li>Expose the API key as an environment variable to provide credentials to Terraform.</li>
+</ul>
+
+
+<p><code>
+export BM_API_KEY=API_KEY_VALUE
+</code></p>
+
+<h2>Terraform configuration</h2>
+
+<p>We can now start to write configuration files to describe IBM Cloud services we want to provision. Terraform configuration files are human-readable text files, ending with the <code>.tf</code> extension, which contain <a href="https://github.com/hashicorp/hcl">HashiCorp Configuration Language</a> (HCL) syntax.</p>
+
+<p>IBM Cloud platform services come in two flavours: IAM managed resource instances and older Cloud Foundry-based service instances. This is due to the history of IBM Cloud starting as Bluemix, a Cloud Foundry-based cloud platform. Both platform services types can be provisioned using Terraform.</p>
+
+<p>Most IBM Cloud platform services are available today as "<strong>resource instances</strong>".</p>
+
+<h3>create new configuration file</h3>
+
+<ul>
+<li>Create a new <code>infra.tf</code> file which contains the following syntax.</li>
+</ul>
+
+
+<p><code>
+provider "ibm" {}
+</code></p>
+
+<h3>add resource instances</h3>
+
+<p><a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/resource_instance.html">Resource instances</a> can be added to the configuration file as follows.</p>
+
+<p><code>
+resource "ibm_resource_instance" "resource_instance_name" {
+  name              = "test"
+  service           = "service-id"
+  plan              = "service-plan"
+  location          = "region-info"
+}
+</code></p>
+
+<ul>
+<li><code>resource_instance_name</code> - identifier for this service in the configuration, referenced by service keys.</li>
+<li><code>name</code> - user-provided service name used by the platform to identify service.</li>
+<li><code>service</code> - service identifier on the platform (can be found in the service documentation page).</li>
+<li><code>plan</code> - service plan used for billing.</li>
+<li><code>location</code> - cloud region used during service provisioning.</li>
+</ul>
+
+
+<p>Here is an example of provisioning a <a href="https://cloud.ibm.com/catalog/services/cloudant">Cloudant</a> database using the <code>ibm_resource_instance</code> configuration.</p>
+
+<p><code>
+resource "ibm_resource_instance" "cloudant" {
+  name              = "my-cloudant-db"
+  service           = "cloudantnosqldb"
+  plan              = "lite"
+  location          = "us-south"
+}
+</code></p>
+
+<p><em>Other parameters are supported for resource configuration, see the <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/resource_instance.html">docs</a> for more details...</em></p>
+
+<h3>add resource keys</h3>
+
+<p>Applications accessing resource instances need service credentials. Access keys can also be provisioned using <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/resource_key.html">Terraform configuration</a>.</p>
+
+<p><code>
+resource "ibm_resource_key" "resource_key_name" {
+  name                 = "my-key-name"
+  role                 = "&lt;IAM_ROLE&gt;"
+  resource_instance_id = "${ibm_resource_instance.resource_instance_name.id}"
+}
+</code></p>
+
+<ul>
+<li><code>name</code> - user-provided key name used by the platform to identify the credentials.</li>
+<li><code>role</code> - IBM Cloud <a href="https://cloud.ibm.com/docs/iam/users_roles.html#iamusermanrol">IAM roles</a> (as supported by the service, e.g. Writer or Reader).</li>
+</ul>
+
+
+<p>Here is an example of provisioning a resource key for the <a href="https://cloud.ibm.com/catalog/services/cloudant">Cloudant</a> example from above.</p>
+
+<p><code>
+resource "ibm_resource_key" "cloudant_key" {
+  name                  = "my-db-key"
+  role                  = "Manager"
+  resource_instance_id  = "${ibm_resource_instance.cloudant.id}"
+}
+</code></p>
+
+<h3>(optional) add services instances to configuration</h3>
+
+<p>Use the <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/service_instance.html">following configuration</a> to provision older Cloud Foundry services.</p>
+
+<p><code>
+resource "ibm_service_instance" "service_instance_name" {
+  name       = "test"
+  space_guid = "cf-space-guid"
+  service    = "service-id"
+  plan       = "service-plan"
+}
+</code></p>
+
+<ul>
+<li><code>service_instance_name</code> - identifier for this service in the configuration, referenced by service keys.</li>
+<li><code>name</code> - user-provided service name used by the platform to identify the service.</li>
+<li><code>service</code> - service identifier on the platform (can be found in the service documentation page).</li>
+<li><code>plan</code> - service plan used for billing.</li>
+</ul>
+
+
+<h3>(optional) add service instance keys</h3>
+
+<p>Applications accessing service instances need service credentials. Service keys can also be provisioned using <a href="https://ibm-cloud.github.io/tf-ibm-docs/v0.14.1/r/service_key.html">Terraform configuration</a>.</p>
+
+<p><code>
+resource "ibm_service_key" "service_key_name" {
+  name                 = "my-key-name"
+  service_instance_guid = "${ibm_service_instance.service_instance_name.id}"
+}
+</code></p>
+
+<ul>
+<li><code>name</code> - user-provided key name used by the platform to identify the credentials.</li>
+<li><code>service_instance_guid</code> - Service instance GUID.</li>
+</ul>
+
+
+<h3>add output configuration</h3>
+
+<p>Accessing service keys and other service details is handled with <code>output</code> <a href="https://www.terraform.io/docs/configuration/outputs.html">configuration</a> in Terraform files.</p>
+
+<p><code>
+output "app_credentials" {
+  value = "${ibm_resource_key.resource_key_name.credentials}"
+}
+</code></p>
+
+<p>Output values can be logged to the console using the <a href="https://www.terraform.io/docs/commands/output.html">Terraform CLI</a>.</p>
+
+<p>Here is an example of accessing Cloudant credentials provisioned in the example above.</p>
+
+<p><code>
+output "cloudant_credentials" {
+  value = "${ibm_resource_key.cloudant_key.credentials}"
+}
+</code></p>
+
+<h2>Run Terraform commands</h2>
+
+<p>Having finished the configuration file to describe our applications services, the Terraform CLI can now provision those services!</p>
+
+<ul>
+<li><a href="https://www.terraform.io/docs/commands/init.html">Initialise</a> the terraform project.</li>
+</ul>
+
+
+<p><code>
+terraform init
+</code></p>
+
+<ul>
+<li><a href="https://www.terraform.io/docs/commands/validate.html">Validate</a> the configuration file for syntax errors.</li>
+</ul>
+
+
+<p><code>
+terraform validate
+</code></p>
+
+<ul>
+<li><a href="https://www.terraform.io/docs/commands/plan.html">Display</a> the platform changes to be executed on the configuration file.</li>
+</ul>
+
+
+<p><code>
+terraform plan
+</code></p>
+
+<p><em>Here is the example output from running that command with the Cloudant database example.</em></p>
+
+<p>```
+Refreshing Terraform state in-memory prior to plan...
+The refreshed state will be used to calculate this plan, but will not be
+persisted to local or remote state storage.</p>
+
+<hr />
+
+<p>An execution plan has been generated and is shown below.
+Resource actions are indicated with the following symbols:
+  + create</p>
+
+<p>Terraform will perform the following actions:</p>
+
+<ul>
+<li><p>ibm_resource_instance.cloudant
+  id:                   <computed>
+  location:             "us-south"
+  name:                 "my-cloudant-db"
+  plan:                 "lite"
+  service:              "cloudantnosqldb"
+  status:               <computed></p></li>
+<li><p>ibm_resource_key.cloudant_key
+  id:                   <computed>
+  credentials.%:        <computed>
+  name:                 "my-db-key"
+  parameters.%:         <computed>
+  resource_instance_id: "${ibm_resource_instance.cloudant.id}"
+  role:                 "Manager"
+  status:               <computed></p></li>
+</ul>
+
+
+<p>Plan: 2 to add, 0 to change, 0 to destroy.</p>
+
+<hr />
+
+<p>```</p>
+
+<ul>
+<li><a href="https://www.terraform.io/docs/commands/apply.html">Execute</a> the planned changes using <code>apply</code>.</li>
+</ul>
+
+
+<p><code>
+terraform apply -auto-approve
+</code></p>
+
+<p>Terraform will now provision the platform services, resources keys and output credentials to the console.</p>
+
+<p><em>Here is the example output from running that command with the Cloudant database example.</em></p>
+
+<p>```
+ibm_resource_instance.cloudant: Creating...
+  location: "" => "us-south"
+  name:     "" => "my-cloudant-db"
+  plan:     "" => "lite"
+  service:  "" => "cloudantnosqldb"
+  status:   "" => "<computed>"
+ibm_resource_instance.cloudant: Still creating... (10s elapsed)
+ibm_resource_instance.cloudant: Still creating... (20s elapsed)
+ibm_resource_instance.cloudant: Creation complete after 21s (ID: ...)
+ibm_resource_key.cloudant_key: Creating...
+  credentials.%:        "" => "<computed>"
+  name:                 "" => "my-db-key"
+  parameters.%:         "" => "<computed>"
+  resource_instance_id: "" => "crn:v1:bluemix:public:cloudantnosqldb:us-south:a/...::"
+  role:                 "" => "Manager"
+  status:               "" => "<computed>"
+ibm_resource_key.cloudant_key: Creation complete after 8s (ID: ...)</p>
+
+<p>Apply complete! Resources: 2 added, 0 changed, 0 destroyed.</p>
+
+<p>Outputs:</p>
+
+<p>cloudant_credentials = {
+  apikey = <API_KEY_VALUE>
+  host = <DB_HOST>
+  ...
+}
+```</p>
+
+<p><strong>API keys from the <code>cloudant_credentials</code> output section can be used applications to interact with the provisioned database! 👏👏👏</strong></p>
+
+<h2>Conclusion</h2>
+
+<p>Provisioning cloud services using Terraform is a great way to manage application resources on IBM Cloud.</p>
+
+<p>Applications resources are defined in a declarative configuration file, following the "infrastructure-as-code" approach to managing cloud environments. This configuration is maintained in the application's source code repository to enable reproducible environments.</p>
+
+<p>IBM Cloud provides an official provider plugin for Terraform. This allows IBM Cloud services to be defined through custom configuration primitives. Developers can then use the Terraform CLI to provision new resources and extract service keys needed to access those services. 💯💯💯</p>
+]]></content>
+  </entry>
+  
+</feed>

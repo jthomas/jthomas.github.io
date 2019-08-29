@@ -1,0 +1,540 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Pluggable Event Providers for Apache OpenWhisk - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Building a generic trigger feed event soruce for Apache OpenWhisk with event source plugins.">
+  <meta name="keywords" content="apache openwhisk trigger feed events couchdb serverless">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Pluggable Event Providers for Apache OpenWhisk</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-02-20T11:53:00+00:00" pubdate data-updated="true">Feb 20<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Recently I presented my work building &#8221;<em><a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">pluggable event providers</a></em>&#8221; for <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> to the open-source community on the <a href="https://www.youtube.com/openwhisk">bi-weekly video meeting</a>.</p>
+
+<p>This was based on my experience building a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">new event provider</a> for Apache OpenWhisk, which led me to prototype an <strong>easier way to add event sources to platform</strong> whilst <strong>cutting down on the boilerplate code</strong> required.</p>
+
+<p>Slides from the talk are <a href="https://speakerdeck.com/jthomas/apache-openwhisk-pluggable-event-providers">here</a> and there&#8217;s also a video recording <a href="https://www.youtube.com/watch?v=krm7X5YpGy0">available</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/krm7X5YpGy0?start=89" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+
+
+<p>This blog post is overview of what I talked about on the call, explaining the background for the project and what was built. Based on positive feedback from the community, I have now open-sourced <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">both</a> <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">components</a> of the experiment and will be merging it back upstream into Apache OpenWhisk in future.</p>
+
+<h2>pluggable event providers - why?</h2>
+
+<p>At the end of last year, I was asked to prototype an <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">S3-compatible</a> Object Store event source for Apache OpenWhisk. Reviewing the <a href="https://github.com/search?q=incubator-openwhisk-package">existing event providers</a> helped me understand how they work and what was needed to build a new event source.</p>
+
+<p>This led me to an interesting question&#8230;</p>
+
+<blockquote><p>Why do we have relatively few community contributions for event sources?</p></blockquote>
+
+<p>Most of the existing event sources in the project were contributed by IBM. There hasn&#8217;t been a new event source from an external community member. This is in stark contrast to <a href="https://github.com/search?q=incubator-openwhisk-runtime">additional platform runtimes</a>. Support for PHP, Ruby, DotNet, Go and many more languages all came from community contributions.</p>
+
+<p><em>Digging into the source code for the existing feed providers, I came to the following conclusions&#8230;.</em></p>
+
+<ul>
+<li><strong>Trigger feed providers are not simple to implement.</strong></li>
+<li><strong>Documentation how existing providers work is lacking.</strong></li>
+</ul>
+
+
+<p>Feed providers can feel a bit like magic to users. You call the <code>wsk</code> CLI with a <code>feed</code> parameter and that&#8217;s it, the platform handles everything else. But what actually happens to bind triggers to external event sources?</p>
+
+<p><em>Let&#8217;s start by explaining how trigger feeds are implemented in Apache OpenWhisk, before moving onto my idea to make contributing new feed providers easier.</em></p>
+
+<h2>how trigger feeds work</h2>
+
+<p>Users normally interact with trigger feeds using the <code>wsk</code> CLI. Whilst creating a trigger, the <code>feed</code> parameter can be included to connect that trigger to an external event source. Feed provider options as provided as further CLI parameters.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>wsk trigger create periodic \
+</span><span class='line'>  --feed /whisk.system/alarms/alarm \
+</span><span class='line'>  --param cron "*/2 * * * *" \
+</span><span class='line'>  --param trigger_payload “{…}” \
+</span><span class='line'>  --param startDate "2019-01-01T00:00:00.000Z" \
+</span><span class='line'>  --param stopDate "2019-01-31T23:59:00.000Z"</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>But what are those trigger feed identifiers used with the <code>feed</code> parameter?</em></p>
+
+<p><strong>It turns out they are just normal actions which have been shared in a public package!</strong></p>
+
+<p>The CLI creates the trigger (using the platform API) and then invokes the referenced feed action. Invocation parameters include the following values used to manage the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">trigger feed lifecycle</a>.</p>
+
+<ul>
+<li><code>lifecycleEvent</code> - Feed operation (<code>CREATE</code>, <code>READ</code>, <code>UPDATE</code>, <code>DELETE</code>, <code>PAUSE</code>, or <code>UNPAUSE</code>).</li>
+<li><code>triggerName</code> - Trigger identifier.</li>
+<li><code>authKey</code> - API key provided to invoke trigger.</li>
+</ul>
+
+
+<p>Custom feed parameters from the user are also included in the event parameters.</p>
+
+<p><strong>This is the entire interaction of the platform with the feed provider.</strong></p>
+
+<p>Providers are responsible for the full management lifecycle of trigger feed event sources. They have to maintain the list of registered triggers and auth keys, manage connections to user-provided event sources, fire triggers upon external events, handle retries and back-offs in cases of rate-limiting and much more.</p>
+
+<p>Feed providers used with a trigger are stored as custom annotations. This allows the CLI to call the same feed action to stop the event binding when the trigger is deleted.</p>
+
+<h3>trigger management</h3>
+
+<p>Reading the source code for the <a href="https://github.com/search?q=incubator-openwhisk-package">existing feed providers</a>, nearly all of the code is responsible for handling the lifecycle of trigger management events, rather than integrating with the external event source.</p>
+
+<p>Despite this, all of the existing providers are in separate repositories and don&#8217;t share code explicitly, although the same source files have been replicated in different repos.</p>
+
+<p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB feed provider</a> is a good example of how feed providers can be implemented.</p>
+
+<h3>couchdb feed provider</h3>
+
+<p>The <a href="https://github.com/apache/incubator-openwhisk-package-cloudant">CouchDB trigger feed provider</a> uses a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">public action</a> to handle the lifecycle events from the <code>wsk</code> CLI.</p>
+
+<p><img src="/images/pluggable-providers/feeds-overview.png" title="" ></p>
+
+<p>This <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changes.js">action</a> just proxies the incoming requests to a separate <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/actions/event-actions/changesWebAction.js">web actio</a>n. The <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">web action</a> implements the logic to handle the trigger lifecycle event. The web action uses a CouchDB database used to store registered triggers. Based upon the lifecycle event details, the web action updates the database document for that trigger.</p>
+
+<p><img src="/images/pluggable-providers/feeds-provider.png" title="" ></p>
+
+<p>The feed provider also runs a <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/tree/master/provider">seperate Docker container</a>, which handles listening to CouchDB change feeds from user-provided credentials. It uses the changes feed from the trigger management database, modified from the web action, to listen for triggers being added, removed, disabled or re-enabled.</p>
+
+<p><img src="/images/pluggable-providers/feeds-fire-trigger.png" title="" ></p>
+
+<p>When database change events <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L78">occur</a>, the container <a href="https://github.com/apache/incubator-openwhisk-package-cloudant/blob/master/provider/lib/utils.js#L66-L76">fires triggers</a> on the platform with the event details.</p>
+
+<h2>building a new event provider?</h2>
+
+<p>Having understood how feed providers work (and how the existing providers were designed), I started to think about the new event source for an S3-compatible object store.</p>
+
+<p>Realising ~90% of the code between providers was the same, I wondered if there was a different approach to creating new event providers, rather than cloning an existing provider and changing the small amount of code used to interact with the event sources.</p>
+
+<p><strong>What about building a generic event provider which a pluggable event source?</strong></p>
+
+<p>This generic event provider would handle all the trigger management logic, which isn&#8217;t specific to individual event sources. The event source plugin would manage connecting to external event sources and then firing triggers as event occurred. Event source plugins would implement a standard interface and be registered dynamically during startup.</p>
+
+<p><img src="/images/pluggable-providers/generic-provider.png" title="" ></p>
+
+<h3>advantages</h3>
+
+<p>Using this approach would make it much easier to contribute and maintain new event sources.</p>
+
+<ul>
+<li><p>Users would be able to create new event sources with a few lines of custom integration code, rather than replicating all the generic trigger lifecycle management code.</p></li>
+<li><p>Maintaining a single repo for the generic event provider is easier than having the same code copied and pasted in multiple independent repositories.</p></li>
+</ul>
+
+
+<p>I started hacking away at the existing CouchDB event provider to replace the event source integration with a generic plugin interface. Having completed this, I then wrote a new S3-compatible event source using the plugin model. After a couple of weeks I had something working&#8230;.</p>
+
+<h2>generic event provider</h2>
+
+<p>The <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">generic event provider</a> is based on the exiting CouchDB feed provider source code. The project contains the stateful container code and feed package actions (public &amp; web). It uses the same platform services (CouchDB and Redis) as the existing provider to maintain trigger details.</p>
+
+<p>The event provider plugin is integrated through the <code>EVENT_PROVIDER</code> environment variable. The name should refer to a Node.js module from NPM with the following <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider#plugin-interface">interface</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// initialise plugin instance (must be a JS constructor)</span>
+</span><span class='line'><span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">trigger_manager</span><span class="p">,</span> <span class="nx">logger</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="c1">// register new trigger feed</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">add</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">trigger_id</span><span class="p">,</span> <span class="nx">trigger_params</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{}</span>
+</span><span class='line'>    <span class="c1">// remove existing trigger feed</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">remove</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">trigger_id</span> <span class="o">=&gt;</span> <span class="p">{}</span>
+</span><span class='line'>
+</span><span class='line'>   <span class="k">return</span> <span class="p">{</span> <span class="nx">add</span><span class="p">,</span> <span class="nx">remove</span> <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// valiate feed parameters</span>
+</span><span class='line'><span class="nx">module</span><span class="p">.</span><span class="nx">exports</span><span class="p">.</span><span class="nx">validate</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">trigger_params</span> <span class="o">=&gt;</span> <span class="p">{}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When a new trigger is added to the trigger feeds&#8217; database, the details will be passed to the <code>add</code> method. Trigger parameters will be used to set up listening to the external event source. When external events occur, the <code>trigger_manager</code> can be use to automatically fire triggers.</p>
+
+<p>When users delete triggers with feeds, the trigger will be removed from the database. This will lead to the <code>remove</code> method being called. Plugins should stop listening to messages for this event source.</p>
+
+<h3>firing trigger events</h3>
+
+<p>As event arrive from the external source, the plugin can use the <code>trigger_manager</code> instance, passed in through the constructor, to fire triggers with the identifier.</p>
+
+<p>The <code>trigger_manager</code> parameter exposes two async functions:</p>
+
+<ul>
+<li><code>fireTrigger(id, params)</code> - fire trigger given by id passed into <code>add</code> method with event parameters.</li>
+<li><code>disableTrigger(id, status_code, message)</code> - disable trigger feed due to external event source issues.</li>
+</ul>
+
+
+<p>Both functions handle the retry logic and error handling for those operations. These should be used by the event provider plugin to fire  triggers when events arrive from external sources and then disable triggers due to external event source issues.</p>
+
+<h3>validating event source parameters</h3>
+
+<p>This static function on the plugin constructor is used to validate incoming trigger feed parameters for correctness, e.g. checking  authentication credentials for an event source. It is passed the trigger  parameters from the user.</p>
+
+<h2>S3 event feed provider</h2>
+
+<p>Using this new generic event provider, I was able to create an event source for an <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">S3-compatible object store</a>. Most importantly, this new event source was implemented using just <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed/tree/master/lib">~300 lines</a> of JavaScript! This is much smaller than the 7500 lines of code in the generic event provider.</p>
+
+<p>The feed provider polls buckets on an interval using the <code>ListObjects</code> <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/v2-RESTBucketGET.html">API call</a>. Results are cached in Redis to allow comparison between intervals. Comparing the differences in bucket file name and etags, allows file change events to be detected.</p>
+
+<p>Users can call the feed provider with a bucket name, endpoint, API key and polling interval.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">trigger</span> <span class="nx">create</span> <span class="nx">test</span><span class="o">-</span><span class="nx">s3</span><span class="o">-</span><span class="nx">trigger</span> <span class="o">--</span><span class="nx">feed</span> <span class="o">/&lt;</span><span class="nx">PROVIDER_NS</span><span class="o">&gt;</span><span class="err">/s3-trigger-feed/changes --param bucket &lt;BUCKET_NAME&gt; --param interval &lt;MINS&gt; --param s3_endpoint &lt;S3_ENDPOINT&gt; --param s3_apikey &lt;COS_KEY&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>File events are fired as the bucket files change with the following trigger events.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="p">{</span>
+</span><span class='line'>  <span class="s2">&quot;file&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>    <span class="s2">&quot;ETag&quot;</span><span class="o">:</span> <span class="s2">&quot;\&quot;fb47672a6f7c34339ca9f3ed55c6e3a9\&quot;&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;Key&quot;</span><span class="o">:</span> <span class="s2">&quot;file-86.txt&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;LastModified&quot;</span><span class="o">:</span> <span class="s2">&quot;2018-12-19T08:33:27.388Z&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;Owner&quot;</span><span class="o">:</span> <span class="p">{</span>
+</span><span class='line'>      <span class="s2">&quot;DisplayName&quot;</span><span class="o">:</span> <span class="s2">&quot;80a2054e-8d16-4a47-a46d-4edf5b516ef6&quot;</span><span class="p">,</span>
+</span><span class='line'>      <span class="s2">&quot;ID&quot;</span><span class="o">:</span> <span class="s2">&quot;80a2054e-8d16-4a47-a46d-4edf5b516ef6&quot;</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="s2">&quot;Size&quot;</span><span class="o">:</span> <span class="mi">25</span><span class="p">,</span>
+</span><span class='line'>    <span class="s2">&quot;StorageClass&quot;</span><span class="o">:</span> <span class="s2">&quot;STANDARD&quot;</span>
+</span><span class='line'>  <span class="p">},</span>
+</span><span class='line'>  <span class="s2">&quot;status&quot;</span><span class="o">:</span> <span class="s2">&quot;deleted&quot;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Pssst - if you are using <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> - I actually have this deployed and running so you can try it out. Use the <code>/james.thomas@uk.ibm.com_dev/s3-trigger-feed/changes</code> feed action name. This package is only available in the London region.</em></p>
+
+<h2>next steps</h2>
+
+<p>Feedback on the call was overwhelming positive on my experiment. Based upon this, I&#8217;ve now open-sourced both the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider">generic event provider</a> and <a href="https://github.com/jthomas/openwhisk-s3-trigger-feed">s3 event source plugin</a> to allow the community to evaluate the project further.</p>
+
+<p>I&#8217;d like to build a few more example event providers to validate the approach further before moving towards contributing this code back upstream.</p>
+
+<p>If you want to try this generic event provider out with your own install of OpenWhisk, please see the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider/blob/master/README.md#running-the-provider--plugin">documentation</a> in the README for how to get started.</p>
+
+<p>If you want to build new event sources, please see the <a href="https://github.com/jthomas/openwhisk-pluggable-event-provider/blob/master/README.md#plugin-interface">instructions</a> in the generic feed provider repository and take a look at the S3 plugin for an example to follow.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-02-20T11:53:00+00:00" pubdate data-updated="true">Feb 20<span>th</span>, 2019</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2019/02/12/couchdb-filters-with-openwhisk-triggers/" title="Previous Post: CouchDB Filters with OpenWhisk Triggers">&laquo; CouchDB Filters with OpenWhisk Triggers</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2019/02/27/openwhisk-web-action-errors-with-sequences/" title="Next Post: OpenWhisk Web Action Errors With Sequences">OpenWhisk Web Action Errors With Sequences &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/08/28/faster-file-transfers-with-serverless/">Faster File Transfers With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/';
+        var disqus_url = 'http://jamesthom.as/blog/2019/02/20/pluggable-event-providers-for-apache-openwhisk/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

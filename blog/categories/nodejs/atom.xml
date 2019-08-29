@@ -1,0 +1,1912 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: nodejs | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/nodejs/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Using Cloud Object Storage from IBM Cloud Functions (Node.js)]]></title>
+    <link href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/"/>
+    <updated>2018-05-31T10:00:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js</id>
+    <content type="html"><![CDATA[<p>How do you manage files for a serverless application? 🤔</p>
+
+<p><a href="http://jamesthom.as/blog/2018/04/27/managing-serverless-files-with-ibm-cloud-object-storage/">Previous blog posts</a> discussed this common problem and introduced the most popular solution, using a <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">cloud-based object storage service</a>. 👏👏👏</p>
+
+<p>Object stores provide elastic storage in the cloud, with a billing model which charges for capacity used. These services are the storage solution for serverless applications, which do not have access to a traditional file system. 👍</p>
+
+<p><strong>I'm now going to demonstrate how to use <a href="https://console.bluemix.net/catalog/services/cloud-object-storage">IBM Cloud Object Storage</a> from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>.</strong></p>
+
+<p>This blog post will show you...</p>
+
+<ul>
+<li>How to provision IBM Cloud Object Storage and create authentication tokens.</li>
+<li>How use client libraries to access IBM Cloud Object Storage from IBM Cloud Functions.</li>
+<li>Example serverless functions for common use-cases, e.g uploading files.</li>
+</ul>
+
+
+<p><a href="https://github.com/jthomas/serverless-file-storage">Code examples</a> in this blog post will focus on the Node.js runtime.</p>
+
+<p><em>Instructions on service provisioning and authentication credentials are relevant for any runtime.</em></p>
+
+<h2>IBM Cloud Accounts and Storage Services</h2>
+
+<p>IBM Cloud Object Storage is available to all IBM Cloud users.</p>
+
+<p>IBM Cloud has <a href="https://console.bluemix.net/docs/account/index.html#accounts">three different account types</a>: <em>lite, pay-as-you-go</em> or <em>subscription</em>.</p>
+
+<h3>Lite Accounts</h3>
+
+<p><a href="https://www.ibm.com/blogs/bluemix/2017/11/introducing-ibm-cloud-lite-account/">Lite accounts</a> do not require a credit card to register and do not expire after a limited time period.</p>
+
+<p>Numerous platform services, including Cloud Object Storage, provide <a href="https://console.bluemix.net/catalog/?search=label:lite">free resources for lite account users</a>. IBM Cloud Object Storage's free resource tier comes the <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">following monthly limits</a>.</p>
+
+<ul>
+<li><em>Store 25GB of new data.</em></li>
+<li><em>Issue 20,000 GET and 2,000 PUT requests.</em></li>
+<li><em>Use 10GB of public bandwidth.</em></li>
+</ul>
+
+
+<p><em>Lite tier usage supports all resiliency and storage class options but are limited to a single service instance.</em></p>
+
+<p>Users can sign up for a free "Lite" account <a href="https://console.ng.bluemix.net/registration/free">here</a>. Please follow the instructions to <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">install the IBM Cloud CLI.</a></p>
+
+<h3>Pay-as-you-Go &amp; Subscription Accounts</h3>
+
+<p>Lite accounts can be upgraded to <a href="https://console.bluemix.net/docs/account/index.html#paygo">Pay-As-You-Go</a> or <a href="https://console.bluemix.net/docs/account/index.html#subscription-account">Subscription</a> accounts. Upgraded accounts still have access to the free tiers provided in Lite accounts. Users with Pay-As-You-Go or Subscriptions accounts can access services and tiers not included in the Lite account.</p>
+
+<p>Benefits of the additional service tiers for IBM Cloud Object Storage include unlimited instances of the object storage service. Costs are billed according to usage per month. See the pricing page for more details: <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api</a></p>
+
+<h2>Provisioning IBM Cloud Object Storage</h2>
+
+<p>IBM Cloud Object Storage can be provisioned through the <a href="https://console.bluemix.net/catalog/">IBM Cloud service catalog</a>.</p>
+
+<p><img src="/images/cos_storage/catalog.png"></p>
+
+<p>From the <em><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Service Details</a></em> page, follow these instructions to provision a new instance.</p>
+
+<ul>
+<li>Give the service an identifying name.</li>
+<li>Leave the resource group as "<em>default</em>".</li>
+<li>Click the "Create" button.</li>
+</ul>
+
+
+<p>Once the service has been provisioned, it will be shown under the "Services" section of the <a href="https://console.bluemix.net/dashboard/apps">IBM Cloud Dashboard</a>. <strong>IBM Cloud Object Storage services are global services and not bound to individual regions.</strong></p>
+
+<ul>
+<li>Click the service instance from the dashboard to visit the service management page.</li>
+</ul>
+
+
+<p><img src="/images/cos_storage/go-to-service-instance.gif"></p>
+
+<p><em>Once the service has been provisioned, we need to create authentication credentials for external access…</em></p>
+
+<h2>Service Credentials</h2>
+
+<p>Service credentials for IBM Cloud Object Storage use <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/overview.html#getting-started-with-iam">IBM Cloud's IAM service</a>.</p>
+
+<p>I'm just going to cover the basics of using IAM with Cloud Object Storage. Explaining all the <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">concepts and capabilities</a> of the IAM service would need a separate (and lengthy) blog post!</p>
+
+<h3>Auto-Binding Service Credentials</h3>
+
+<p>IBM Cloud Functions can <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">automatically provision and bind service credentials</a> to actions.</p>
+
+<p><em>This feature is supported through the IBM Cloud CLI command: <code>bx wsk service bind</code>.</em></p>
+
+<p>Bound service credentials are stored as default action parameters. Default parameters are automatically included as request parameters for each invocation.</p>
+
+<p><strong>Using this approach means users do not have to manually provision and manage service credentials.</strong> 👍</p>
+
+<p><em>Service credentials provisioned in this manner use the following configuration options:</em></p>
+
+<ul>
+<li><strong>IAM Role</strong>: <em>Manager</em></li>
+<li><strong>Optional Configuration Parameters</strong>: <em>None</em>.</li>
+</ul>
+
+
+<p>If you need to use different configuration options, you will have to manually provision service credentials.</p>
+
+<h3>Manually Creating Credentials</h3>
+
+<ul>
+<li>Select the "<em>Service Credentials</em>" menu item from the service management page.</li>
+<li>Click the "New credential" button.</li>
+</ul>
+
+
+<p><em>Fill in the details for the new credentials.</em></p>
+
+<ul>
+<li>Choose an identifying name for the credentials.</li>
+<li><p>Select an access role. Access roles define which operations applications using these credentials can perform. Permissions for each role are <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/buckets.html#bucket-permissions">listed in the documentation</a>.</p>
+
+<p><em>Note: If you want to make objects publicly accessible <a href="https://stackoverflow.com/questions/50007460/ibm-cloud-object-storage-cannot-modify-object-acl-permissions">make sure you use the manager permission</a>.</em></p></li>
+<li><p>Leave the <code>Service ID</code> unselected.</p></li>
+</ul>
+
+
+<p>If you need HMAC service keys, which are necessary for generating presigned URLs, use the following inline configuration parameters before. Otherwise, leave this field blank.</p>
+
+<p><code>json
+{"HMAC": true}
+</code></p>
+
+<ul>
+<li>Click the "Add" button.</li>
+</ul>
+
+
+<p><img src="/images/cos_storage/provision-credentials.gif"></p>
+
+<p>🔐 <em>Credentials shown in this GIF were deleted after the demo (before you get any ideas...)</em> 🔐</p>
+
+<p>Once created, new service credentials will be shown in the credentials table.</p>
+
+<h2>IBM Cloud Object Storage API</h2>
+
+<p>Cloud Object Storage exposes a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP API</a> for interacting with buckets and files.</p>
+
+<p>This API implements the same interface as <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">AWS S3 API</a>.</p>
+
+<p>Service credentials created above are used to authenticate requests to the API endpoints. Full details on the API operations are available in the <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">documentation</a>.</p>
+
+<h3>HTTP Endpoints</h3>
+
+<p>IBM Cloud Object Storage's HTTP API is available through <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">region-based endpoints</a>.</p>
+
+<p>When creating new buckets to store files, the data resiliency for the bucket (and therefore the files within it) is based upon the endpoint used for the bucket create operation.</p>
+
+<p>Current endpoints are listed in the <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">external documentation</a> and available through an external API: <a href="https://cos-service.bluemix.net/endpoints">https://cos-service.bluemix.net/endpoints</a></p>
+
+<h4>Choosing an endpoint</h4>
+
+<p>IBM Cloud Functions is available in the following regions: <em>US-South, United Kingdom and Germany.</em></p>
+
+<p>Accessing Cloud Object Storage using regional endpoints closest to the Cloud Functions application region will result in better application performance.</p>
+
+<p>IBM Cloud Object Storage lists public and private endpoints for each region (and resiliency) choice. <strong>IBM Cloud Functions only supports access using public endpoints.</strong></p>
+
+<p>In the following examples, IBM Cloud Functions applications will be hosted in the <code>US-South</code> region. Using the <code>US Regional</code> endpoint for Cloud Object Storage will minimise network latency when using the service from IBM Cloud Functions.</p>
+
+<p><em>This endpoint will be used in all our examples:</em> <code>s3-api.us-geo.objectstorage.softlayer.net</code></p>
+
+<h3>Client Libraries</h3>
+
+<p>Rather than manually creating HTTP requests to interact with the Cloud Object Storage API, <a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">client libraries</a> are available.</p>
+
+<p>IBM Cloud Object Storage publishes modified versions of the Node.js, Python and Java AWS S3 SDKs, enhanced with IBM Cloud specific features.</p>
+
+<ul>
+<li><code>ibm-cos-sdk-js</code> - <a href="https://github.com/IBM/ibm-cos-sdk-js">https://github.com/IBM/ibm-cos-sdk-js</a></li>
+<li><code>ibm-cos-sdk-python</code> - <a href="https://github.com/ibm/ibm-cos-sdk-python">https://github.com/ibm/ibm-cos-sdk-python</a></li>
+<li><code>ibm-cos-sdk-java</code> - <a href="https://github.com/ibm/ibm-cos-sdk-java">https://github.com/ibm/ibm-cos-sdk-java</a></li>
+</ul>
+
+
+<p>Both the Node.js and Python COS libraries are pre-installed in the IBM Cloud Functions <a href="https://github.com/ibm-functions">runtime environments</a> for those languages. They can be used without bundling those dependencies in the deployment package.</p>
+
+<p><em>We're going to look at using the JavaScript client library from the Node.js runtime in IBM Cloud Functions.</em></p>
+
+<h4>JavaScript Client Library</h4>
+
+<p>When using the JavaScript client library for IBM Cloud Object Storage, endpoint and authentication credentials need to be passed as configuration parameters.</p>
+
+<p>```javascript
+const COS = require('ibm-cos-sdk');</p>
+
+<p>const config = {</p>
+
+<pre><code>endpoint: '&lt;endpoint&gt;',
+apiKeyId: '&lt;api-key&gt;',    
+serviceInstanceId: '&lt;resource-instance-id&gt;',
+</code></pre>
+
+<p>};</p>
+
+<p>const cos = new COS.S3(config);
+```</p>
+
+<p>Hardcoding configuration values within source code is not recommended. IBM Cloud Functions allows <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> to be bound to actions. Default parameters are automatically passed into action invocations within the event parameters.</p>
+
+<p><em>Default parameters are recommended for managing application secrets for IBM Cloud Functions applications.</em></p>
+
+<p><strong>Having provisioned the storage service instance, learnt about service credentials, chosen an access endpoint and understood how to use the client library, there's one final step before we can start to creating functions…</strong></p>
+
+<h2>Creating Buckets</h2>
+
+<p>IBM Cloud Object Storage organises files into a flat hierarchy of named containers, called buckets. Buckets can be created <a href="https://console.bluemix.net/docs/services/cloud-object-storage/cli/curl.html#add-a-bucket">through the command-line</a>, <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/api-reference-buckets.html#new-bucket">using the API</a> or the web console.</p>
+
+<p>Let's create a new bucket, to store all files for our serverless application, using the web console.</p>
+
+<ul>
+<li>Open the "<em>Buckets</em>" page from the COS management page.</li>
+<li><p>Click the "<em>Create Bucket</em>" link.</p></li>
+<li><p>Create a bucket name.
+<em>Bucket names must be unique across the entire platform, rather than just your account.</em></p></li>
+<li>Select the following configuration options
+
+<ul>
+<li><strong>Resiliency</strong>: <code>Cross Region</code></li>
+<li><strong>Location</strong>: <code>us-geo</code></li>
+<li><strong>Storage class</strong>: <code>Standard</code></li>
+</ul>
+</li>
+<li>Click the "<em>Create</em>" button.</li>
+</ul>
+
+
+<p><img src="/images/cos_storage/creating-buckets.gif"></p>
+
+<p><em>Once the bucket has been created, you will be taken back to the bucket management page.</em></p>
+
+<h4>Test Files</h4>
+
+<p>We need to put some test files in our new bucket. Download the following images files.</p>
+
+<ul>
+<li><a href="https://cdn.pixabay.com/photo/2015/06/08/15/02/pug-801826_640.jpg">Pug Blanket</a></li>
+<li><a href="https://cdn.pixabay.com/photo/2016/07/07/15/35/swimming-1502563_640.jpg">Swimming Pug</a></li>
+<li><a href="https://cdn.pixabay.com/photo/2017/02/28/13/11/dog-2105686_640.jpg">Jumping Pug</a></li>
+</ul>
+
+
+<p><strong>Using the bucket management page, upload these files to the new bucket.</strong></p>
+
+<p><img src="/images/cos_storage/upload-files.png"></p>
+
+<h2>Using Cloud Object Storage from Cloud Functions</h2>
+
+<p>Having created a storage bucket containing test files, we can start to develop our <a href="https://github.com/jthomas/serverless-file-storage">serverless application</a>.</p>
+
+<p>Let's begin with a serverless function that returns a list of files within a bucket. Once this works, we will extend the application to support retrieving, removing and uploading files to a bucket. We can also show how to make objects publicly accessible and generate pre-signed URLs, allowing external clients to upload new content directly.</p>
+
+<p><a href="https://github.com/jthomas/serverless-file-storage">Separate IBM Cloud Functions actions</a> will be created for each storage operation.</p>
+
+<h3>Managing Default Parameters</h3>
+
+<p>Serverless functions will need the bucket name, service endpoint and authentication parameters to access the object storage service. Configuration parameters will be bound to actions as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a>.</p>
+
+<p>Packages can be used to share configuration values across multiple actions. Actions created within a package inherit all <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-package">default parameters stored on that package</a>. This removes the need to manually configure the same default parameters for each action.</p>
+
+<p>Let's create a new package (<code>serverless-files</code>) for our serverless application.</p>
+
+<p><code>sh
+$ bx wsk package create serverless-files
+ok: created package serverless-files
+</code></p>
+
+<p>Update the package with default parameters for the bucket name (<code>bucket</code>) and service endpoint (<code>cos_endpoint</code>).</p>
+
+<p><code>sh
+$ bx wsk package update serverless-files -p bucket &lt;MY_BUCKET_NAME&gt; -p cos_endpoint s3-api.us-geo.objectstorage.softlayer.net
+ok: updated package serverless-files
+</code></p>
+
+<p><strong><em>Did you notice we didn't provide authentication credentials as default parameters?</em></strong></p>
+
+<p>Rather than manually adding these credentials, the CLI can <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">automatically provision and bind them</a>. Let's do this now for the <code>cloud-object-storage</code> service...</p>
+
+<ul>
+<li>Bind service credentials to the <code>serverless-files</code> package using the <code>bx wsk service bind</code> command.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk service bind cloud-object-storage serverless-files
+Credentials 'cloud-fns-key' from 'cloud-object-storage' service instance 'object-storage' bound to 'serverless-files'.
+</code></p>
+
+<ul>
+<li>Retrieve package details to check default parameters contain expected configuration values.</li>
+</ul>
+
+
+<p>```
+$ bx wsk package get serverless-files
+ok: got package serverless-files
+{</p>
+
+<pre><code>...    
+"parameters": [
+    {
+        "key": "bucket",
+        "value": "&lt;MY_BUCKET_NAME&gt;"
+    },
+    {
+        "key": "cos_endpoint",
+        "value": "s3-api.us-geo.objectstorage.softlayer.net"
+    },
+    {
+        "key": "__bx_creds",
+        "value": {
+            "cloud-object-storage": {
+                ...
+            }
+        }
+    }
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>List Objects Within the Bucket</h3>
+
+<ul>
+<li>Create a new file (<code>action.js</code>) with the following contents.</li>
+</ul>
+
+
+<p>```javascript
+const COS = require('ibm-cos-sdk')</p>
+
+<p>function cos_client (params) {
+  const bx_creds = params['<strong>bx_creds']
+  if (!bx_creds) throw new Error('Missing </strong>bx_creds parameter.')</p>
+
+<p>  const cos_creds = bx_creds['cloud-object-storage']
+  if (!cos_creds) throw new Error('Missing cloud-object-storage parameter.')</p>
+
+<p>  const endpoint = params['cos_endpoint']
+  if (!endpoint) throw new Error('Missing cos_endpoint parameter.')</p>
+
+<p>  const config = {</p>
+
+<pre><code>endpoint: endpoint,
+apiKeyId: cos_creds.apikey,
+serviceInstanceId: cos_creds.resource_instance_id
+</code></pre>
+
+<p>  }</p>
+
+<p>  return new COS.S3(config);
+}</p>
+
+<p>function list (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  const client = cos_client(params)</p>
+
+<p>  return client.listObjects({ Bucket: params.bucket }).promise()</p>
+
+<pre><code>.then(results =&gt; ({ files: results.Contents }))
+</code></pre>
+
+<p>}
+```</p>
+
+<p>This action retrieves the bucket name, service endpoint and authentication credentials from invocation parameters. Errors are returned if those parameters are missing.</p>
+
+<ul>
+<li>Create a new package action from this source file with the following command.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/list-files actions.js --main list --kind nodejs:8
+ok: created action list-files
+</code></p>
+
+<p><em>The <code>—main</code> flag set the function name to call for each invocation. This defaults to <code>main</code>. Setting this to an explicit value allows us to use a single source file for multiple actions.</em></p>
+
+<p><em>The <code>—kind</code> sets the action runtime. This optional flag ensures we use the <a href="https://github.com/ibm-functions/runtime-nodejs">Node.js 8 runtime</a> rather than <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">Node.js 6</a>, which is the default for JavaScript actions. The IBM Cloud Object Storage client library is only included in the <a href="https://github.com/ibm-functions/runtime-nodejs">Node.js 8 runtime</a>.</em></p>
+
+<ul>
+<li>Invoke the new action to verify it works.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/list-files -r
+{</p>
+
+<pre><code>"files": [
+    { "Key": "jumping pug.jpg", ... },
+    { "Key": "pug blanket.jpg", ... },
+    { "Key": "swimming pug.jpg", ... }
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>The action response should contain a list of the files uploaded before. 💯💯💯</p>
+
+<h3>Retrieve Object Contents From Bucket</h3>
+
+<p>Let's add another action for retrieving object contents from a bucket.</p>
+
+<ul>
+<li>Add a new function (<code>retrieve</code>) to the existing source file (<code>action.js</code>) with the following source code.</li>
+</ul>
+
+
+<p>```javascript
+function retrieve (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  const client = cos_client(params)</p>
+
+<p>  return client.getObject({ Bucket: params.bucket, Key: params.name }).promise()</p>
+
+<pre><code>.then(result =&gt; ({ body: result.Body.toString('base64') }))
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Retrieving files needs a file name in addition to the bucket name. File contents <a href="https://stackoverflow.com/questions/47653181/return-binary-http-response-from-openwhisk-ibm-cloud-function-action">needs encoding as a Base64 string</a> to support returning in the JSON response returned by IBM Cloud Functions.</p>
+
+<ul>
+<li>Create an additional action from this updated source file with the following command.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/retrieve-file actions.js --main retrieve --kind nodejs:8
+ok: created action serverless-files/retrieve-file
+</code></p>
+
+<ul>
+<li>Invoke this action to test it works, passing the parameter name for the file to retrieve.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/retrieve-file -r -p name "jumping pug.jpg"
+{</p>
+
+<pre><code>"body": "&lt;BASE64 ENCODED STRING&gt;"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>If this is successful, a (very long) response body containing a base64 encoded image should be returned. 👍</p>
+
+<h3>Delete Objects From Bucket</h3>
+
+<p>Let's finish this section by adding a final action that removes objects from our bucket.</p>
+
+<ul>
+<li>Update the source file (<code>actions.js</code>) with this additional function.</li>
+</ul>
+
+
+<p>```javascript
+function remove (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  const client = cos_client(params)</p>
+
+<p>  return client.deleteObject({ Bucket: params.bucket, Key: params.name }).promise()
+}
+```</p>
+
+<ul>
+<li>Create a new action (<code>remove-file</code>) from the updated source file.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/remove-file actions.js --main remove --kind nodejs:8
+ok: created action serverless-files/remove-file
+</code></p>
+
+<ul>
+<li>Test this new action using it to remove a file from the bucket.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action invoke serverless-files/remove-file -r -p name "jumping pug.jpg"
+{}
+</code></p>
+
+<ul>
+<li>Listing bucket files should now return two files, rather than three.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/list-files -r
+{</p>
+
+<pre><code>"files": [
+    { "Key": "pug blanket.jpg", ... },
+    { "Key": "swimming pug.jpg", ... }
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Listing, retrieving and removing files using the client library is relatively simple. Functions just need to call the correct method passing the bucket and object name.</p>
+
+<p><em>Let's move onto a more advanced example, creating new files in the bucket from our action…</em></p>
+
+<h3>Create New Objects Within Bucket</h3>
+
+<p>File content will be passed into our action as Base64 encoded strings. JSON does not support binary data.</p>
+
+<p>When creating new objects, we should <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTCommonRequestHeaders.html">set the MIME type</a>. This is necessary for public access from web browsers, something we'll be doing later on. <a href="https://www.npmjs.com/package/mime-types">Node.js libraries</a> can calculate the correct MIME type value, rather than requiring this as an invocation parameter.</p>
+
+<ul>
+<li>Update the source file (<code>action.js</code>) with the following additional code.</li>
+</ul>
+
+
+<p>```javascript
+const mime = require('mime-types');</p>
+
+<p>function upload (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  if (!params.body) throw new Error("Missing object parameter.")</p>
+
+<p>  const client = cos_client(params)
+  const body = Buffer.from(params.body, 'base64')</p>
+
+<p>  const ContentType = mime.contentType(params.name) || 'application/octet-stream'
+  const object = {</p>
+
+<pre><code>Bucket: params.bucket,
+Key: params.name,
+Body: body,
+ContentType
+</code></pre>
+
+<p>  }</p>
+
+<p>  return client.upload(object).promise()
+}</p>
+
+<p>exports.upload = upload;
+```</p>
+
+<p><strong>As this code uses an external NPM library, we need to create the action from a zip file containing source files and external dependencies.</strong></p>
+
+<ul>
+<li>Create a <code>package.json</code> file with the following contents.</li>
+</ul>
+
+
+<p>```json
+{
+  "name": "upload-files",
+  "main": "actions.js",
+  "dependencies": {</p>
+
+<pre><code>"mime-types": "^2.1.18"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<ul>
+<li>Install external libraries in local environment.</li>
+</ul>
+
+
+<p><code>sh
+$ npm install
+added 2 packages in 0.804s
+</code></p>
+
+<ul>
+<li>Bundle source file and dependencies into zip file.</li>
+</ul>
+
+
+<p><code>bash
+$ zip -r upload.zip package.json actions.js node_modules
+  adding: actions.js (deflated 72%)
+  adding: node_modules/ (stored 0%)
+  ...
+</code></p>
+
+<ul>
+<li>Create a new action from the zip file.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action create serverless-files/upload-file upload.zip --main upload --kind nodejs:8
+ok: created action serverless-files/upload-file
+</code></p>
+
+<ul>
+<li>Create the Base64-encoded string used to pass the new file's content.</li>
+</ul>
+
+
+<p><code>
+$ wget http://www.pugnow.com/wp-content/uploads/2016/04/fly-pug-300x300.jpg
+$ base64 fly-pug-300x300.jpg &gt; body.txt
+</code></p>
+
+<ul>
+<li>Invoke the action with the file name and content as parameters.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action invoke serverless-files/upload-file -r -p body $(cat body.txt) -p name "flying pug.jpg"
+</code></p>
+
+<p>Object details should be returned if the file was uploaded correctly.</p>
+
+<p>```json
+{</p>
+
+<pre><code>"Bucket": "my-serverless-files",
+"ETag": "\"b2ae0fb61dc827c03d6920dfae58e2ba\"",
+"Key": "flying pug.jpg",
+"Location": "https://&lt;MY_BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg",
+"key": "flying pug.jpg"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Accessing the <a href="https://console.bluemix.net/objectstorage/">object storage dashboard</a> shows the new object in the bucket, with the correct file name and size.</p>
+
+<p><img src="/images/cos_storage/upload-file-display.png"></p>
+
+<p><em>Having actions to create, delete and access objects within a bucket, what's left to do?</em> 🤔</p>
+
+<h3>Expose Public Objects From Buckets</h3>
+
+<p>Users can also choose to make certain <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">objects within a bucket public</a>. Public objects can be retrieved, using the external HTTP API, without any further authentication.</p>
+
+<p>Public file access allows external clients to access files directly. It removes the need to invoke (and pay for) a serverless function to serve content. This is useful for serving static assets and media files.</p>
+
+<p>Objects have an explicit property (<code>x-amz-acl</code>) which controls access rights. Files default to having this value set as <code>private</code>, meaning all operations require authentication. Setting this value to <code>public-read</code> will enable <code>GET</code> operations without authentication.</p>
+
+<p><strong><em>Files can be created with an explicit ACL property using credentials with the <code>Writer</code> or <code>Manager</code> role. Modifying ACL values for existing files is only supported using credentials with the <code>Manager</code> role.</em></strong></p>
+
+<ul>
+<li>Add the following source code to the existing actions file (<code>action.js</code>).</li>
+</ul>
+
+
+<p>```javascript
+function make_public (params) {
+  return update_acl(params, 'public-read')
+}</p>
+
+<p>function make_private (params) {
+  return update_acl(params, 'private')
+}</p>
+
+<p>function update_acl (params, acl) => {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")
+  const client = cos_client(params)</p>
+
+<p>  const options = {</p>
+
+<pre><code>Bucket: params.bucket,
+Key: params.name,
+ACL: acl
+</code></pre>
+
+<p>  }</p>
+
+<p>  return client.putObjectAcl(options).promise()
+}
+```</p>
+
+<ul>
+<li>Create two new actions with the update source file.</li>
+</ul>
+
+
+<p><code>sh
+$ bx wsk action create serverless-files/make-public actions.js --main make_public --kind nodejs:8
+ok: created action serverless-files/make-public
+$ bx wsk action create serverless-files/make-private actions.js --main make_private --kind nodejs:8
+ok: created action serverless-files/make-private
+</code></p>
+
+<p><em>Bucket objects use the following URL scheme</em>: <em>https://<BUCKET_NAME>.<ENDPOINT_HOST>/<OBJECT_NAME></em></p>
+
+<p>We have been using the following endpoint hostname:  <code>s3-api.us-geo.objectstorage.softlayer.net</code>.</p>
+
+<ul>
+<li>Checking the status code returned when accessing an existing object confirms it defaults to private.</li>
+</ul>
+
+
+<p><code>bash
+$ curl -I https://&lt;BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg
+HTTP/1.1 403 Forbidden
+...
+</code></p>
+
+<ul>
+<li>Invoke the <code>make-public</code> action to allow GET requests without authentication.</li>
+</ul>
+
+
+<p><code>
+$ bx wsk action invoke serverless-files/make-public -r -p name "flying pug.jpg"
+</code></p>
+
+<ul>
+<li>Retry file access using the external HTTP API. This time a <code>200</code> response is returned with the content.</li>
+</ul>
+
+
+<p><code>
+$ curl -I https://&lt;BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg
+HTTP/1.1 200 OK
+Content-Type: image/jpeg
+...
+</code></p>
+
+<p>Having set an explicit content type for the file, opening this URL in a web browser will show the image.</p>
+
+<p><img src="http://www.pugnow.com/wp-content/uploads/2016/04/fly-pug-300x300.jpg"></p>
+
+<ul>
+<li>Disable public access using the other new action.</li>
+</ul>
+
+
+<p><code>
+bx wsk action invoke serverless-files/make-private -r -p name "flying pug.jpg"
+</code></p>
+
+<ul>
+<li>Re-issue the <code>curl</code> request to the file location.</li>
+</ul>
+
+
+<p><code>
+$ curl -I https://&lt;BUCKET_NAME&gt;.s3-api.us-geo.objectstorage.softlayer.net/flying%20pug.jpg
+HTTP/1.1 403 Forbidden
+...
+</code></p>
+
+<p>HTTP requests to this file now return a <code>403</code> status. Authentication is required again. 🔑</p>
+
+<p><em>In addition to allowing public read access we can go even further in allowing clients to interact with buckets…</em></p>
+
+<h3>Provide Direct Upload Access To Buckets</h3>
+
+<p>Cloud Object Storage provides a mechanism (<a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url"><em>presigned URLs</em></a>) to generate temporary links that allow clients to interact with buckets without further authentication. Passing these links to clients means they can access to private objects or upload new files to buckets. Presigned URLs expire after a configurable time period.</p>
+
+<p><strong>Generating presigned URLs is only supported from <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/credentials.html#using-hmac-credentials">HMAC authentication keys</a>.</strong></p>
+
+<p>HMAC service credentials must be manually provisioned, rather than using the <code>bx wsk service bind</code> command. See above for instructions on how to do this.</p>
+
+<ul>
+<li>Save provisioned HMAC keys into a file called <code>credentials.json</code>.</li>
+</ul>
+
+
+<p>Let's create an action that returns presigned URLs, allowing users to upload files directly. Users will call the action with a new file name. Returned URLs will support an unauthenticated PUT request for the next five minutes.</p>
+
+<ul>
+<li>Create a new file called <code>presign.js</code></li>
+</ul>
+
+
+<p>```javascript
+'use strict';</p>
+
+<p>const COS = require('ibm-cos-sdk');
+const mime = require('mime-types');</p>
+
+<p>function cos_client (params) {
+  const creds = params.cos_hmac_keys
+  if (!creds) throw new Error('Missing cos_hmac_keys parameter.')</p>
+
+<p>  const endpoint = params.cos_endpoint
+  if (!endpoint) throw new Error('Missing cos_endpoint parameter.')</p>
+
+<p>  const config = {</p>
+
+<pre><code>endpoint: endpoint,
+accessKeyId: creds.access_key_id, 
+secretAccessKey: creds.secret_access_key
+</code></pre>
+
+<p>  }</p>
+
+<p>  return new COS.S3(config);
+}</p>
+
+<p>function presign (params) {
+  if (!params.bucket) throw new Error("Missing bucket parameter.")
+  if (!params.name) throw new Error("Missing name parameter.")</p>
+
+<p>  const client = cos_client(params)</p>
+
+<p>  const options = {</p>
+
+<pre><code>Bucket: params.bucket,
+Key: params.name,
+Expires: 300,
+ContentType: mime.contentType(params.name) || 'application/octet-stream'
+</code></pre>
+
+<p>  }</p>
+
+<p>  return { url: client.getSignedUrl('putObject', options) }
+}</p>
+
+<p>exports.presign = presign;
+```</p>
+
+<ul>
+<li>Update the <code>package.json</code> file with the following contents.</li>
+</ul>
+
+
+<p>```json
+{
+  "name": "presign",
+  "main": "presign.js",
+  "dependencies": {</p>
+
+<pre><code>"mime-types": "^2.1.18"
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<ul>
+<li>Bundle source file and dependencies into zip file.</li>
+</ul>
+
+
+<p><code>sh
+$ zip -r presign.zip package.json presign.js node_modules
+  adding: actions.js (deflated 72%)
+  adding: node_modules/ (stored 0%)
+  ...
+</code></p>
+
+<ul>
+<li>Create a new action from the zip file.</li>
+</ul>
+
+
+<p><code>sh
+$ bx wsk action create serverless-files/presign presign.zip --main presign --kind nodejs:8 -P credentials.json
+ok: created action serverless-files/presign
+</code></p>
+
+<ul>
+<li>Invoke the action to return a presigned URL for a new file.</li>
+</ul>
+
+
+<p>```
+$ bx wsk action invoke serverless-files/presign -r -p name pug.jpg
+{</p>
+
+<pre><code>"url": "https://&lt;BUCKET&gt;.s3-api.us-geo.objectstorage.softlayer.net/pug.jpg?AWSAccessKeyId=&lt;SECRET&gt;&amp;Content-Type=image%2Fjpeg&amp;Expires=&lt;TIME&gt;&amp;Signature=&lt;KEY&gt;"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Using this URL we can upload a new image without providing authentication credentials.</p>
+
+<ul>
+<li>This curl command <code>—upload-file</code> will send a HTTP PUT, with image file as request body, to that URL.</li>
+</ul>
+
+
+<p><code>
+$ curl --upload-file "my pug.jpg" &lt;URL&gt; --header "Content-Type: image/jpeg"
+</code></p>
+
+<p><em>The HTTP request must include the correct "Content-Type" header. Use the value provided when creating the presigned URL. If these values do not match, the request will be rejected.</em></p>
+
+<p>Exploring the objects in our bucket confirms we have uploaded a file! 🕺💃</p>
+
+<p><img src="/images/cos_storage/uploaded-my-pug.png"></p>
+
+<p>Presigned URLs are a brilliant feature of Cloud Object Storage. Allowing users to upload files directly overcomes the payload limit for cloud functions. It also reduces the cost for uploading files, removing the cloud functions' invocation cost.</p>
+
+<h2>conclusion</h2>
+
+<p>Object storage services are the solution for managing files with serverless applications.</p>
+
+<p>IBM Cloud provides both a serverless runtime (<a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>) and an object storage service (<a href="https://console.bluemix.net/catalog/services/cloud-object-storage">IBM Cloud Object Store</a>). In this blog post, we looked at how integrate these services to provide a file storage solution for serverless applications.</p>
+
+<p>We showed you how to provision new COS services, create and manage authentication credentials, access files using a client library and even allow external clients to interact directly with buckets. Sample serverless functions using the Node.js runtime were also provided.</p>
+
+<p><em>Do you have any questions, comments or issues about the content above? Please leave a comment below, find me on the <a href="http://openwhisk.incubator.apache.org/slack.html">openwhisk slack</a> or send me a <a href="https://twitter.com/thomasj">tweet</a>.</em></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Node.js v4 in Cloud Foundry]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry/"/>
+    <updated>2015-09-18T17:33:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/18/node-dot-js-v4-in-cloud-foundry</id>
+    <content type="html"><![CDATA[<p>Last week, Node.js <a href="https://nodejs.org/en/blog/release/v4.0.0/">released the latest version</a>
+of their project, v4.0.0. This release, representing the convergence of io.js with the original Node.js
+project, came with lots of exciting features like <a href="http://apmblog.dynatrace.com/2015/09/05/all-you-need-to-know-about-node-js-4-0/">improved ES6 support</a>.</p>
+
+<p>Cloud Foundry already <a href="https://docs.cloudfoundry.org/buildpacks/node/node-tips.html">supports multiple versions</a> of the Node.js runtime.
+Developers select the desired runtime version using a parameter in their
+application's <a href="http://browsenpm.org/package.json">package descriptor</a>.</p>
+
+<p><em>So, we just update package.json to include "4.0.0" and re-deploy our application?</em></p>
+
+<p>Not yet.</p>
+
+<p>There is an <a href="https://github.com/nodejs/node/issues/2783">unresolved technical issue</a>
+delaying the <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">release</a> of "official"
+Node.js v4 support for the platform. 😿</p>
+
+<p><em>Can we add support ourselves?</em></p>
+
+<p><strong>Yes!</strong></p>
+
+<p>To do this, we need to explore how Cloud Foundry configures the runtime
+environment for applications.</p>
+
+<h2>Buildpacks</h2>
+
+<p>Rather than hardcoding supported runtimes and frameworks into the platform,
+Cloud Foundry borrowed the <a href="https://docs.cloudfoundry.org/buildpacks/"><em>buildpack model</em></a> from Heroku. Buildpacks are a
+<a href="https://docs.cloudfoundry.org/buildpacks/custom.html#custom-buildpacks">set of scripts</a>, run by the platform during deployment, to configure the runtime
+environment.</p>
+
+<p>Users can set an explicit buildpack for an application, <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#buildpack">using the manifest</a>, or let
+the platform decide. Buildpacks for <a href="https://docs.cloudfoundry.org/buildpacks/">common runtimes</a> are pre-installed with the platform.
+Buildpacks set through the manifest can point to external URLs, allowing users to create
+new buildpacks supporting custom runtimes.</p>
+
+<p>Each buildpack must contain the following files as executable scripts.</p>
+
+<ul>
+<li><strong>bin/detect</strong> - <em>determine whether a buildpack is suitable for an application.</em></li>
+<li><strong>bin/compile</strong> - <em>install and configure the runtime environment on the DEA.</em></li>
+<li><strong>bin/release</strong> - <em>provide metadata with information on executing application.</em></li>
+</ul>
+
+
+<p>Full details on existing buildpacks for the platform are available <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">here</a>.</p>
+
+<p>Node.js is supported as an "official" buildpack by the platform. This will be
+the one we will modify to add support for the latest version of the runtime.</p>
+
+<h2>Node.js Buildpack </h2>
+
+<p><a href="https://github.com/cloudfoundry/nodejs-buildpack">This</a> is the Node.js
+buildpack for Cloud Foundry. Applications using this buildpack can select the
+version of Node.js to install using the engine parameter in the package
+descriptor.</p>
+
+<p>Looking at the <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile"><em>bin/compile</em></a>
+script will show us how the Node.js runtime is installed during deployment.</p>
+
+<p>This <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile#L66-L88">snippet</a> handles
+accessing the Node.js version configured, using the node.engine parameter from package.json, before calling
+<em>install_nodejs</em> to install the correct runtime package.</p>
+
+<pre>
+install_bins() {
+  local node_engine=$(read_json "$BUILD_DIR/package.json" ".engines.node")
+  local npm_engine=$(read_json "$BUILD_DIR/package.json" ".engines.npm")
+
+  echo "engines.node (package.json):  ${node_engine:-unspecified}"
+  echo "engines.npm (package.json):   ${npm_engine:-unspecified (use default)}"
+  echo ""
+
+  warn_node_engine "$node_engine"
+  install_nodejs "$node_engine" "$BUILD_DIR/.heroku/node"
+  install_npm "$npm_engine" "$BUILD_DIR/.heroku/node"
+  warn_old_npm
+}
+</pre>
+
+
+<p>Searching through the buildpack for this function, it's in the
+<a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/lib/binaries.sh">lib/binaries.sh</a>
+file.  Looking at the <a href="https://github.com/heroku/heroku-buildpack-nodejs/blob/master/lib/binaries.sh#L10-L25">function code</a>, it translates the version number into a
+URL pointing to an archive with the pre-compiled Node.js binary. This archive
+file is downloaded, extracted and installed into the runtime environment.</p>
+
+<p>Translating Node.js version identifiers into archive URLs uses a special file
+in the buildpack, <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/manifest.yml">manifest.yml</a>. This file maps every supported version to a
+pre-built binary location.</p>
+
+<p>Looking at <a href="https://github.com/cloudfoundry/nodejs-buildpack/commit/8536a85cd69c867dc797c9586839a1373da4fd9d">previous commits</a> to the Node.js buildpack, adding support for additional
+versions of Node.js simply requires updating this file with the extra version
+identifier and archive URL.</p>
+
+<p>Until the Cloud Foundry team updates the buildpack to support Node.js v4, they won't
+provide an external archive containing the pre-built runtime environment.</p>
+
+<p><em>Where can we find a suitable build of the Node.js binary?</em></p>
+
+<h2>Node.js Runtime Binaries </h2>
+
+<p>Cloud Foundry borrowed the <strong>buildpack</strong> concept from <a href="https://devcenter.heroku.com/articles/buildpacks">Heroku</a> and still
+maintains backwards compatibility with their platform. Heroku buildpacks will
+work with Cloud Foundry applications. The Node.js buildpack for Cloud Foundry
+is actually still a fork of <a href="https://github.com/heroku/heroku-buildpack-nodejs">Heroku's</a>.</p>
+
+<p>Looking back through the original buildpack source, this URL template is used to translate
+Node.js versions to archive URLs being built by Heroku.</p>
+
+<p><em>http://s3pository.heroku.com/node/v$version/node-v$version-$os-$cpu.tar.gz</em></p>
+
+<p>Combining the correct version identifier and platform parameters with this
+template gave the following location for a potential build of the Node.js v4
+runtime.</p>
+
+<p><a href="">http://s3pository.heroku.com/node/v4.0.0/node-v4.0.0-linux-x64.tar.gz</a></p>
+
+<p>Running curl against the location successfully downloaded the Node.js v4 binary archive!</p>
+
+<h2>Custom v4 Buildpack</h2>
+
+<p>Forking the Cloud Foundry Node.js buildpack on Github, we can update the
+<a href="https://github.com/jthomas/nodejs-v4-buildpack/blob/master/manifest.yml#L57-L62">manifest.yml</a> with the Node.js v4 identifier pointing to the Heroku runtime
+archive. This <a href="https://github.com/jthomas/nodejs-v4-buildpack">external Git repository</a> will be used as the buildpack identifier
+in the application manfest.</p>
+
+<h2>Deploying with v4</h2>
+
+<p>Having updated our application manifest with the custom buildpack location and
+set the updated node version flag, re-deploying our application will start it
+running on Node.js v4.</p>
+
+<p>``` sh
+[20:02:29 ~]$ cf app sample-demo-app
+Showing health and status for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>requested state: started
+instances: 1/1
+usage: 256M x 1 instances
+urls: sample-demo-app.mybluemix.net
+last uploaded: Fri Sep 18 18:33:56 UTC 2015
+stack: lucid64
+buildpack: SDK for Node.js(TM) (node.js-4.0.0)</p>
+
+<pre><code> state     since                    cpu    memory          disk        details
+</code></pre>
+
+<h1>0   running   2015-09-18 07:35:01 PM   0.0%   65.3M of 256M   59M of 1G</h1>
+
+<p>[20:03:13 ~]$
+```</p>
+
+<p>Looking at the logs from the deployment we can see the latest Node.js
+runtime has been downloaded and installed within our runtime environment.</p>
+
+<h2>Conclusion</h2>
+
+<p>Buildpacks are a brilliant feature of Cloud Foundry.</p>
+
+<p>Understanding how buildpacks are structured and used by the platform means we
+can start customising existing buildpacks and even start creating our own.</p>
+
+<p><strong>If you want to run Node.js applications using v4 on Cloud Foundry today, you
+can use the <a href="https://github.com/jthomas/nodejs-v4-buildpack">following buildpack</a>
+created using the instructions above.</strong></p>
+
+<p>Cloud Foundry is currently adding support for the version to
+the official buildpack, follow their progress <a href="https://www.pivotaltracker.com/n/projects/1042066/stories/102941608">here</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[running one-off tasks in cloud foundry]]></title>
+    <link href="http://jamesthom.as/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry/"/>
+    <updated>2015-09-01T16:07:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry</id>
+    <content type="html"><![CDATA[<p>Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often administrative
+tasks that needed to be carried out for an application to run correctly.</p>
+
+<p>These tasks usually need finishing before starting the application and should not be
+executed more than once.</p>
+
+<p>Previously, the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> provided commands, <em>tunnel</em> and <em>console</em>, to help running
+one-off tasks manually. These commands were
+<a href="http://stackoverflow.com/questions/32332319/exposing-ports-502-and-1002-from-nodejs-using-bluemix/32333386#32333386">deprecated</a>
+with the upgrade from <em>v5</em> to <em>v6</em>
+to discourage <a href="http://martinfowler.com/bliki/SnowflakeServer.html">snowflake environments</a>.</p>
+
+<p>It is still possible, with a bit of hacking, to run one-off tasks manually from the application
+container.</p>
+
+<p>A better way is to describe <em>tasks as code</em> and run them automatically during normal
+deployments. This results in applications that can be recreated without
+manual intervention.</p>
+
+<p>We'll look at both options before introducing a new library, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a>, that automates
+running administration tasks for Node.js applications.</p>
+
+<h2>Running Tasks Manually</h2>
+
+<h2>Local Environment</h2>
+
+<p>Rather than running administrative tasks from the application console, we can
+run them from a local development environment by remotely connecting to
+the bound services.</p>
+
+<p>This will be dependent on the provisioned services allowing remote access.
+Many "built-in" platform services, e.g. MySQL, Redis, do not allow this.</p>
+
+<p>Third-party services generally do.</p>
+
+<p>Using the <em>cf env</em> command we can list service credentials for an application.
+These authentication details can often be used locally by connecting through a client
+library running in a local development environment.</p>
+
+<p>For example, to access a provisioned Cloudant instance locally, we can grab the credentials
+and use with a Node.js client library.</p>
+
+<p>``` sh
+[15:48:22 ~/code/sample]$ cf env sample-demo-app
+Getting env variables for app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK</p>
+
+<p>System-Provided:
+{
+ "VCAP_SERVICES": {
+  "cloudantNoSQLDB": [
+   {</p>
+
+<pre><code>"credentials": {
+ "host": "1234-bluemix.cloudant.com",
+ "password": "sample_password",
+ "port": 443,
+ "url": "https://1234-bluemix:sample_password@1234-bluemix.cloudant.com",
+ "username": "1234-bluemix"
+}
+</code></pre>
+
+<p>....</p>
+
+<p>[15:48:22 ~/code/sample]$ cat connect.js
+var Cloudant = require('cloudant');</p>
+
+<p>var me = '1234-bluemix';
+var password = 'sample_password';</p>
+
+<p>// Initialize the library with my account.
+var cloudant = Cloudant({account:me, password:password});</p>
+
+<p>cloudant.db.list(function(err, allDbs) {
+  console.log('All my databases: %s', allDbs.join(', '))
+  // Run administrative tasks
+});
+[15:48:22 ~/code/sample]$ node connect.js
+All my databases: example_db, jasons_stuff, scores
+```</p>
+
+<h2>Remote Environment</h2>
+
+<p>When provisioned services don't allow external access, the
+<a href="https://github.com/cloudfoundry-community/cf-ssh">cf-ssh</a> project creates SSH
+access to application containers running within Cloud Foundry.</p>
+
+<p><strong>How does this work?!</strong></p>
+
+<p><blockquote><p>cf-ssh deploys a new Cloud Foundry application, containing the same bits as your target application, with the same bound services.<br/>This new application's container does not start your web application as per normal. Instead, it starts an outbound reverse SSH tunnel to a public proxy.<br/>The local cf-ssh client then launches an interactive ssh connect to the public proxy, which tunnels through to the application container.</p><footer><strong>Dr. Nic</strong> <cite><a href='https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/'>blog.starkandwayne.com/2014/10/&hellip;</a></cite></footer></blockquote></p>
+
+<p>See the explanation <a href="https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/">here</a> for full details.</p>
+
+<p>This approach will let you connect to services from within the Cloud Foundry platform environment.</p>
+
+<p>This video from <a href="https://starkandwayne.com/">Stark &amp; Wayne's</a> <a href="http://drnicwilliams.com/">Dr. Nic</a> shows the command in action...</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/eWJCfAa1_x8" frameborder="0" allowfullscreen></iframe>
+
+
+<h2>IBM Bluemix Console (Java and Node.js)</h2>
+
+<p><em>This technique is only for the IBM Bluemix platform.</em></p>
+
+<p>If you are deploying Node.js and Java applications on <a href="https://bluemix.net">IBM Bluemix</a>, the platform provides
+the following tools to assist with <a href="https://www.ng.bluemix.net/docs/#manageapps/app_management.html#appmanagement">application management</a>.</p>
+
+<ul>
+<li><em>proxy</em>: Minimal application management that serves as a proxy between your application and Bluemix.</li>
+<li><em>devconsole</em>: Enables the development console utility.</li>
+<li><em>shell</em>: Enables a web-based shell.</li>
+<li><em>trace</em>: (Node.js only) Dynamically set trace levels if your application is using log4js, ibmbluemix, or bunyan logging modules.</li>
+<li><em>inspector</em>: (Node.js only) Enables node inspector debugger.</li>
+<li><em>debug</em>: (Liberty only) Enables clients to establish a remote debugging session with the application.</li>
+<li><em>jmx</em>: (Liberty only) Enables the JMX REST Connector to allow connections from remote JMX clients</li>
+</ul>
+
+
+<p>The tools are enabled by setting the environment variable (<em>BLUEMIX_APP_MGMT_ENABLE</em>) with the
+desired utilities.</p>
+
+<p><code>sh
+$ cf set-env myApp BLUEMIX_APP_MGMT_ENABLE devconsole+shell+trace
+</code></p>
+
+<p>Applications must be restarted for the changes to take effect.</p>
+
+<p>If we enable the <em>shell</em> utility, the following web-based console will be available at https://your-app-name.mybluemix.net/bluemix-debug/shell.</p>
+
+<p><img src="https://developer.ibm.com/bluemix/wp-content/uploads/sites/20/2015/06/shell.jpg"></p>
+
+<h2>Cloud Foundry Diego Runtime</h2>
+
+<p><a href="http://www.activestate.com/blog/2014/09/cloud-foundry-diego-explained-onsi-fakhouri">Diego</a> is the next-generation
+runtime that will power upcoming versions of Cloud Foundry. Diego will provide many benefits
+over the existing runtime, e.g. Docker support, including enabling SSH access to containers without the workarounds needed above.</p>
+
+<p><strong>Yay!</strong></p>
+
+<p>Follow the instructions <a href="https://github.com/cloudfoundry-incubator/diego-design-notes/blob/master/ssh-access-and-policy.md">here</a>
+for details on SSH access to applications running on the new runtime.</p>
+
+<p><em>Access to this feature will be dependent on your Cloud Foundry provider migrating to the new runtime.</em></p>
+
+<h2>Running Tasks Automatically </h2>
+
+<p>Manually running one-off administrative tasks for Cloud Foundry applications is a <a href="http://martinfowler.com/bliki/SnowflakeServer.html">bad idea</a>.</p>
+
+<p>It affects your ability to do continuous delivery and encourages snowflake environments.</p>
+
+<p>Alternatively, defining <em>tasks as code</em> means they can run automatically during normal deployments.
+No more manual steps are required to deploy applications.</p>
+
+<p>There are <a href="http://flywaydb.org/">many</a> <a href="https://github.com/ruby/rake">different</a> <a href="https://github.com/seomoz/shovel">libraries</a>
+for <a href="https://phinx.org/">every</a> <a href="https://github.com/mattes/migrate">language</a> to help you programmatically define, manage and run tasks.</p>
+
+<p>With <em>tasks defined as code</em>, you need to configure your <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html">application manifest</a>
+to run these automatically during deployments.</p>
+
+<p>Cloud Foundry uses the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#start-commands"><em>command</em> parameter</a>,
+set in the manifest or through the
+command-line, to allow applications to specify a custom start command. We can
+use this parameter to execute the task library command during deployment.</p>
+
+<p>The Cloud Foundry documentation also details these approaches, with slightly different
+implementations <a href="https://docs.cloudfoundry.org/devguide/services/migrate-db.html">here</a>
+and specifically for Ruby developers <a href="https://docs.cloudfoundry.org/buildpacks/ruby/ruby-tips.html#rake">here</a>.</p>
+
+<h2>Temporary Task Deploy</h2>
+
+<p>For applications which only need occasional administrative tasks, it's often
+easier to push a temporary deploy with a custom start command. This deploy
+runs your tasks without then starting your application. Once the tasks have
+completed, redeploy your application normally, destroying the task instance.</p>
+
+<p>The following command will deploy a temporary instance for this purpose:</p>
+
+<p><code>sh
+$ cf push -c 'YOUR_TASK_LIB_COMMAND &amp;&amp; sleep infinity' -i 1 --no-route
+</code></p>
+
+<p>We're overriding the default start command, setting it to run the command for
+our task library, e.g. rake db:migrate.</p>
+
+<p>The <em>sleep infinity</em> command stops the application exiting once the task runner
+has finished. If this happens, the platform will assume that application has
+crashed and restart it.</p>
+
+<p>Also, the task runner will not be binding to a port so
+we need to use the <em>--no-route</em> argument to stop the platform assuming the
+deploy has timed out.</p>
+
+<p>Setting the deploy to a single instance stops the command being executed more than once.</p>
+
+<p>Checking the logs to verify the task runner has finished correctly, we can now
+redeploy our application. Using the <em>null</em> start command will force the platform to use the buildpack default
+rather than our previous option.</p>
+
+<p><code>sh
+$ cf push -c 'null'
+</code></p>
+
+<h2>Running Tasks Before Startup</h2>
+
+<p>If we're regularly running administrative tasks, we should incorporate the
+task execution into our normal application startup. Once the
+task command has finished successfully, we start the application as normal.</p>
+
+<p>Applications may have multiple instances running, we need to ensure
+the tasks are only executed by one instance.</p>
+
+<p>The following custom start command will execute tasks during startup,
+using the CF_INSTANCE_ID environment variable to enforce execution at most-once.</p>
+
+<pre>
+[ $CF_INSTANCE_INDEX -eq 0 ]] && node lib/tasks/runner.js; node app.js
+</pre>
+
+
+<p>With this approach, tasks will be automatically executed during regular deployments
+without any manual intervention.</p>
+
+<p><strong>Hurrah!</strong></p>
+
+<h2>Managing tasks for Node.js applications</h2>
+
+<p>If you're running Node.js applications on Cloud Foundry, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a> is a task library that helps
+you define <em>tasks as code</em> and integrates with the Cloud Foundry runtime. The module handles
+all the complexities with automating tasks during deployments across multi-instance applications.</p>
+
+<p><blockquote><p>oneoff provides the following features...</p></p><p><ul><br/><li>ensure tasks are completed before application startup</li><br/><li>coordinating app instances to ensure at-most once task execution</li><br/><li>automagically discovering tasks from the task directory</li><br/><li>dependency ordering, ensure task a completes before task b starts</li><br/><li>parallel task execution</li><br/><li>ignore completed tasks in future deployments</p></blockquote></li>
+</ul>
+
+
+<p>Check it out to help make writing <em>tasks as code</em> for Node.js applications much easier!</p>
+
+<p>Full details on usage are available in the <a href="https://github.com/IBM-Bluemix/oneoff/blob/master/README.md">README</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>Running one-off tasks for application configuration is a normal part of any development project.</p>
+
+<p>Carrying out these tasks manually used to be the norm, but with the devops movement we now prefer
+automated configuration rather manual intervention. Relying on manual configuration steps to deploy applications restricts
+our ability to implement continuous delivery.</p>
+
+<p>Cloud Foundry is an opinionated platform, actively discouraging the creation of snowflake environments.</p>
+
+<p>Whilst it is still possible to manually run administrative tasks, either by connecting to bound services locally or using
+a remote console, it's preferable to describe our tasks as code and let the platform handle it.</p>
+
+<p>Using custom start commands, we can deploy applications which run tasks automatically during their normal startup procedure.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Server Side Dijit]]></title>
+    <link href="http://jamesthom.as/blog/2013/01/15/server-side-dijit/"/>
+    <updated>2013-01-15T10:08:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2013/01/15/server-side-dijit</id>
+    <content type="html"><![CDATA[<p>Modern Dojo applications often use declarative programming, annotating HTML
+elements with custom attributes containing module identifiers, to declare widgets
+and use client-side rendering with HTML templates to convert web pages into
+JavaScript applications.</p>
+
+<p><strong>Client-side rendering often comes with a major complaint, the dreaded
+"pop-up effect".</strong></p>
+
+<p><img src="/images/white_screen.png"></p>
+
+<p>This happens because the HTML initially displayed
+does not contain widget templates until after client-side rendering has
+finished. Essentially, the application has to load twice, once to download all
+the JS, CSS and HTML resources, then again, to render widgets client-side.</p>
+
+<p>Usually this is hidden behind an overlay screen, which becomes especially
+annoying in multi-page applications.</p>
+
+<p><strong>So, what can we do?</strong></p>
+
+<p>Templated widgets provide a good pattern for building re-usable application modules but client-side rendering can
+provide a less ideal user experience.</p>
+
+<p>Reading an article about the <a href="http://anyasq.com/79-im-a-technical-lead-on-the-google+-team">technology stack behind Google+</a>, Google
+were using page widgets with templates supported by the <a href="https://developers.google.com/closure/library/">Closure framework</a>. However, they had
+an interesting idea to overcome the client-side rendering issue...</p>
+
+<p><blockquote><p>We often render our Closure templates server-side<br/>so the page renders before any JavaScript is loaded, then the JavaScript finds<br/>the right DOM nodes and hooks up event handlers, etc. to make it responsive.</p><footer><strong>Joseph Smarr</strong> <cite><a href='http://anyasq.com/79-im-a-technical-lead-on-the-google+-team'>anyasq.com/&hellip;</a></cite></footer></blockquote></p>
+
+<p><strong>Could we use the same server-side rendering technique in Dojo applications?</strong></p>
+
+<p>Doing a little investigation, Dojo's abstractions around widget rendering made it perfect
+for server-side rendering.</p>
+
+<p><strong>Tl;DR? Project source code is available on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.</strong></p>
+
+<h2>Dijit Widget Lifecycle</h2>
+
+<p>Dojo widgets inherit from the following base class,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetBase.html">dijit/_WidgetBase</a>,
+which provides the widget lifecycle, which can be extended with custom implementations.</p>
+
+<ul>
+<li><strong>constructor</strong></li>
+<li><strong>parameters</strong> are mixed into the widget instance</li>
+<li><strong>postMixInProperties</strong> - Invoked before rendering occurs, and before any DOM nodes are created.</li>
+<li><strong>buildRendering</strong> - Used to define the widget's DOM nodes</li>
+<li><strong>setters are called</strong> - Custom attribute setters are called</li>
+<li><strong>postCreate</strong> - Widget has been rendered.</li>
+<li><strong>startup</strong> - Parsing and creation of any child widgets completed.</li>
+</ul>
+
+
+<p>All lifecycle methods are executed in linear order for each new widget instance.
+Having clear abstractions around where and when the widget rendering
+occurs in the lifecycle (buildRendering) makes extending simple.</p>
+
+<p>Rendering widget templates is provided by an additional mixin,
+<a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_TemplatedMixin.html">dijit/_TemplatedMixin</a>.</p>
+
+<p>There's also a further extension, <a href="http://dojotoolkit.org/reference-guide/1.8/dijit/_WidgetsInTemplateMixin.html">dijit/_WidgetsInTemplateMixin</a>,
+for ensuring child widgets within the template are instantiated correctly during rendering.</p>
+
+<p>If we provide a pre-rendered template within the page, the client-side
+renderer will hook up that DOM node as the widget's DOM node, using a
+custom lifecycle extension, rather than attempting to construct the HTML
+template client-side.</p>
+
+<p>We only need to modify the <em>buildRendering</em> phase, every
+other lifecycle phase will run normally.</p>
+
+<h2>Rendering Templates Server-Side</h2>
+
+<p>Now we know where to hook up a pre-rendered template, how would we render the templates server-side?</p>
+
+<p>We want to support server-side rendering with only minimal changes to an application.</p>
+
+<h3> Running Dojo on NodeJS</h3>
+
+<p>With the recent popularity of NodeJS, we have an excellent server-side
+JavaScript environment. If we configure Dojo to run within this platform, we
+should be able to construct page widgets server-side, delegating template
+rendering to the same lifecycle used client-side.</p>
+
+<p>This code below shows how to configure Dojo on NodeJS.</p>
+
+<p>``` javascript Loading Dojo on NodeJS</p>
+
+<pre><code>dojoConfig = {
+    packages: [
+        {name: "dojo", location: "./lib/dojo"},
+        {name: "dijit", location: "./lib/dijit"}
+    ],
+};
+
+require("./lib/dojo/dojo.js");
+</code></pre>
+
+<p>```</p>
+
+<p>Once we've evaluated the dojo.js file within NodeJS, the AMD loader (<em>require/define</em>) is available through properties on the
+<em>global</em> object. We can use these functions to load additional DTK or custom AMD modules. Accessing
+page widgets using the AMD loader, we can execute the lifecycle methods to trigger template rendering, read the
+rendered template and include the output within the application's HTML pages.</p>
+
+<p><strong>Unfortunately, there's one thing missing... access to the DOM!</strong></p>
+
+<h3>Simulating a Browser </h3>
+
+<p>Dojo widgets need access to the <a href="http://en.wikipedia.org/wiki/Document_Object_Model">DOM</a> when rendering the static HTML template into live DOM nodes.
+Running inside a NodeJS instance, rather than a browser, this API is missing.</p>
+
+<p>Luckily, there's a pure-JavaScript implementation of a DOM, which can be executed within NodeJS, called <a href="https://github.com/tmpvar/jsdom">JSDOM</a>.</p>
+
+<p>Importing this package within our application simulates those APIs, allowing page widgets to render normally and, more importantly, letting
+us access the live DOM nodes which result from widget rendering.</p>
+
+<p>Finally, creating Dojo widgets within our fake browser environment triggered a
+few issues, due to the configuration used with the NodeJS loader.</p>
+
+<p>The code snippet below shows how we initialise a server-side DOM and fix those configuration issues.</p>
+
+<p>``` javascript Server-Side DOM with Dojo
+var jsdom = require("jsdom").jsdom,</p>
+
+<pre><code>document = jsdom("&lt;html&gt;&lt;/html&gt;"),
+window = document.createWindow();
+</code></pre>
+
+<p>var has = global.require("dojo/has"),</p>
+
+<pre><code>win = global.require("dojo/_base/window"),
+</code></pre>
+
+<p>// Manually add event listener test as this was only included in
+// the "host-browser" profile.
+has.add("dom-addeventlistener", !!document.addEventListener);
+has.add("dom-attributes-explicit", true);</p>
+
+<p>// Fix global property to point to "window"
+win.global = window;
+```</p>
+
+<p><em>Now we can successfully create widgets on the server-side, how do we know which
+widgets to create for an application?</em></p>
+
+<h3>Declarative Dojo Applications</h3>
+
+<p>Dojo provides a mechanism to convert HTML elements, annotated with module identifiers, into page widgets at runtime.</p>
+
+<p>Using the <a href="http://dojotoolkit.org/reference-guide/1.8/dojo/parser.html">dojo/parser</a>
+module, once the page has loaded, it will automatically instantiate the widgets, passing in
+parameters and other attributes defined in the markup.</p>
+
+<p>An example of declarative widget declaration is shown below.</p>
+
+<p>``` html Declarative widgets
+<select name="state" data-dojo-type="dijit/form/Select"></p>
+
+<pre><code>&lt;option value="TN"&gt;Tennessee&lt;/option&gt;
+&lt;option value="VA" selected="selected"&gt;Virginia&lt;/option&gt;
+&lt;option value="WA"&gt;Washington&lt;/option&gt;
+&lt;option value="FL"&gt;Florida&lt;/option&gt;
+&lt;option value="CA"&gt;California&lt;/option&gt;
+</code></pre>
+
+<p></select>
+```</p>
+
+<p>Application pages using declarative markup can easily be scanned to find application widgets that are needed. As we're able to
+run AMD modules server-side, we can simply use the existing Dojo parser with our server-side DOM to do the hard work for us!</p>
+
+<h3>Server-side Parsing</h3>
+
+<p>For a sample page we want to pre-render, we inject the HTML source into our DOM and run the parser over the current instance. Once the parser
+has finished, the server-side DOM will contain the rendered templates for each widget.</p>
+
+<p>``` javascript Using dojo/parser with JSDOM
+var parser = global.require("dojo/parser"),</p>
+
+<pre><code>source = "... page html goes here ...";
+</code></pre>
+
+<p>// Overwrite finished document contents
+// with new source and run parser over the DOM.
+document.write(source);
+parser.parse(document);</p>
+
+<p>source = document.innerHTML;
+```</p>
+
+<p>Using JSDOM like this, script tags within the page aren't evaluated, letting us handle the module loading
+and parsing externally in NodeJS.</p>
+
+<p>However, this presented a challenge as module dependencies declared in these
+script tags were ignored, leaving the parser to instantiate declarative widgets from modules which hadn't been loaded.</p>
+
+<p><em>Luckily, in the Dojo 1.8 release, the parser was enhanced to automatically load any missing module dependencies during the parsing phase.
+Phew...</em></p>
+
+<p>Finally, once a widget's template has been rendered, any other operations
+performed by the parser are unnecessary.  Creating a "lite" parser which
+removed these code paths, which also provided a place for the extensions
+described later, was started from a copy of the existing parser.</p>
+
+<p>Using the AMD "aliases" configuration, this module transparently replaced the existing parser during server-side rendering.</p>
+
+<h3>Mixins For Pre-Rendering</h3>
+
+<p>Rendering widgets server-side, using NodeJS and JSDOM, works for simple widgets but what happens when you use
+layout widgets, which rely on accessing the browser's layout properties? What if you have separate code paths for different browsers
+which affect the template string?</p>
+
+<p>There are numerous scenarios where we rely on data that's impractical to simulate
+within our fake browser.</p>
+
+<p><em>So, how do we pre-render these widgets? We don't!</em></p>
+
+<p>Ignoring these widgets, which leaves them to render normally client-side.</p>
+
+<p>Identifying widgets to render server-side takes advantage of a new declarative
+parameter used by the parser since 1.8, <em>data-dojo-mixins</em>. This parameter
+allows additional modules to be mixed into the declarative class instance by
+the parser.</p>
+
+<p>Using this parameter with a custom module,
+<em>server_side/_TemplatedMixin</em>, on widgets to be pre-rendered, as shown below,
+make identification easy. Additionally, this class
+will contain the lifecycle extensions that modifies client-side rendering.</p>
+
+<p>``` html Custom Declarative Mixins</p>
+
+<div data-dojo-type="dijit/CalendarLite" data-dojo-mixins="server_side/_TemplatedMixin"></div>
+
+
+<p>```</p>
+
+<h3>Automating Rendering</h3>
+
+<p><strong>Now we've identified the mechanism for server-side rendering, how can we automate this process
+for all application pages?</strong></p>
+
+<p><a href="https://github.com/senchalabs/connect">Connect</a> is <em>"an extensible HTTP server framework for
+node, providing high performance plugins known as middleware"</em>.</p>
+
+<p>Using this framework as our HTTP server means we can write a custom middleware plugin
+that will automatically parse, pre-render and serve all our application pages.</p>
+
+<p>Connect plugins are functions that accept three parameters, the request and
+response objects, along with a callback to signal this plugin's work has
+finished. Each registered plugin will be executed for each request.</p>
+
+<p>We've decomposed the library into two files, server_side.js, which exposes a
+valid express plugin, and render.js, which provides a simple interface for the
+server-side rendering, described above. The complete version of the code for both modules is included below.</p>
+
+<p>``` javascript server_side.js
+var render = require('./render.js');</p>
+
+<p>module.exports = function (config) {</p>
+
+<pre><code>// Create AMD packages from module configuration.
+var page = render({
+    dojo: config.dojo + "/dojo",
+    dijit: config.dojo + "/dijit",
+    server_side: __dirname + "/../public/js/server_side"
+});
+
+return function (req, res, next) {
+    var ignore = function (accept) {
+        return accept.indexOf("text/html") === -1;
+    };
+
+    // Only hook into text/html requests....
+    if (ignore(req.headers.accept)) {
+        return next();
+    }
+
+    var write = res.write,
+        end = res.end,
+        buffer = "";
+
+    // We need entire page contents, not just the chunks.
+    // Proxy original methods while we're buffering.
+    res.write = function (chunk, encoding) {
+        buffer = buffer.concat(chunk);
+        return true;
+    };
+
+    res.end = function (chunk, encoding) {
+        if (chunk) {
+            res.write(chunk);
+        }
+
+        // Fix content-length, we now have more data to send.
+        var rendered = page(buffer);
+        res.setHeader("Content-Length", rendered.length);
+
+        return end.call(res, rendered, encoding);
+    };
+
+    next();
+};
+</code></pre>
+
+<p>};
+```</p>
+
+<p>``` javascript render.js
+var jsdom = require("jsdom").jsdom,</p>
+
+<pre><code>document = jsdom("&lt;html&gt;&lt;/html&gt;"),
+window = document.createWindow();
+</code></pre>
+
+<p>module.exports = function (packages) {</p>
+
+<pre><code>// Fix window objects in global scope.
+global.document = document;
+global.navigator = window.navigator;
+global.window = window;
+
+var amd_packages = Object.keys(packages).map(function (key) {
+    return { name: key, location: packages[key] };
+});
+
+// Deliberately create global "dojoConfig" variable.
+dojoConfig = {
+    packages: amd_packages,
+    // _WidgetsInTemplateMixin call parser directly to instantiate children. 
+    // We need it to use our custom parser so use AMD-remapping magic!
+    aliases: [["dojo/parser", "server_side/parser"]],
+    deps: ["server_side/parser", "dojo/has", "dojo/_base/window", "server_side/registry"]
+};
+
+require(packages.dojo + "/dojo.js");
+
+// Once Dojo has been evalulated, require &amp; define methods 
+// from AMD API as exposed as properties on "global" object.
+
+var has = global.require("dojo/has"),
+    win = global.require("dojo/_base/window"),
+    registry = global.require("server_side/registry"),
+    parser = global.require("server_side/parser");
+
+// Now we need to manually fix a few things to make Dojo 
+// simulate running in a browser.
+
+// Manually add event listener test as this was only included in 
+// the "host-browser" profile.
+has.add("dom-addeventlistener", !!document.addEventListener);
+has.add("dom-attributes-explicit", true);
+
+// Fix global property to point to "window" 
+win.global = window;
+
+return function (source) {
+    // Clear any previously rendered widgets from registry,
+    // simulate fresh page load.
+    registry.reset();
+
+    // Overwrite finished document contents
+    // with new source and run parser over the DOM.
+    document.write(source);
+    parser.parse(document);
+
+    return document.innerHTML;
+};
+</code></pre>
+
+<p>};
+```</p>
+
+<p>Using this new plugin in an application is demonstrated in the code below, which
+serves the "public" directory as the application's source root.</p>
+
+<p>``` javascript Server-side Rendering Application
+var connect = require('connect'),</p>
+
+<pre><code>server_side = require('../lib/server_side');
+</code></pre>
+
+<p>var app = connect()
+  .use(connect.directory(<strong>dirname + '/public', { icons: true }))
+  .use(server_side({dojo: process.env.DOJO_SOURCE}))
+  .use("/dojo", connect.static(process.env.DOJO_SOURCE))
+  .use("/server_side", connect.static(</strong>dirname + '/../public/js/server_side'))
+  .use(connect.static(__dirname + '/public'))
+  .listen(3000);
+```</p>
+
+<h2>Using Server-Side Rendered Templates</h2>
+
+<p>Once the pre-rendered page has been returned to the browser, the normal client-side
+parsing will take place to instantiate the page widgets. For widgets whose templates are
+included within the page, we need to ensure the normal client-side rendering is bypassed.</p>
+
+<p>In this scenario, we connect the widget's <em>domNode</em> property to the DOM node that the
+declarative widget was instantiated from.</p>
+
+<h3>Extending buildRendering</h3>
+
+<p>Adding a HTML template to your widget is achieved by inheriting from
+<em>dijit/_TemplatedMixin</em>, which provides the "buildRendering" implementation to
+convert a HTML string stored under "templateString" into live DOM nodes.</p>
+
+<p>Although we want to skip creating DOM nodes from the template, there are other steps, e.g. attaching event handlers, which must be ran normally.
+Using a custom mixin to identify declarative widgets for server-side rendering, <em>server_side/_TemplatedMixin</em>, also provides
+the extension point to modify the rendering process.</p>
+
+<p>Overwriting the default implementation of "buildRendering" through this mixin led
+to unresolvable issues.</p>
+
+<p>We're forced to call any super-class "buildRendering" implementations, through
+"this.inherited(arguments)", to ensure any custom code paths that also extend this method are executed.
+However, this will reach the original <em>dijit/_TemplatedMixin</em> module, which we need to skip.</p>
+
+<p>Monkey-patching the _TemplatedMixin prototype became the easiest solution.</p>
+
+<p>Once our custom mixin is loaded,
+we overwrite "buildRendering" which a new implementation. Using a custom flag, provided by our mixin, we check
+whether to continue with the normal code path for client-side rendering, otherwise we run our stripped down version.</p>
+
+<p>``` javascript Monkey-patching _TemplatedMixin</p>
+
+<pre><code>var br = _TemplatedMixin.prototype.buildRendering,
+    fc = _TemplatedMixin.prototype._fillContent;
+
+// Stripped down of the original function source below.
+_TemplatedMixin.prototype.buildRendering = function () {
+    if (!this.serverSide) {
+        return br.call(this);
+    }
+
+    // Source DOM node already the pre-rendered template nodes.
+    var node = this.srcNodeRef;
+
+    node.removeAttribute("data-dojo-type");
+
+    // Call down to _Widget.buildRendering() to get base classes assigned
+    _WidgetBase.prototype.buildRendering.call(this);
+
+    this._attachTemplateNodes(node, function(n,p){ return n.getAttribute(p); });
+
+    this._beforeFillContent();      // hook for _WidgetsInTemplateMixin
+
+    // Don't pass srcRefNode reference as it doesn't exist.
+    this._fillContent();
+};
+
+// Override to turn into a no-op, we don't want to attach source
+// ref nodes client side as it's been done on the server.
+_TemplatedMixin.prototype._fillContent = function () {
+    if (!this.serverSide) {
+        return fc.apply(this, arguments);
+    }
+};
+</code></pre>
+
+<p>```</p>
+
+<p>We performed the same trick for the <em>fillContent</em> method due to similar issues, along with a new implementation
+of <em>attachTemplateNodes</em> in the mixin.</p>
+
+<p>With this minimal change to the client-side rendering process, widgets pick up their templates from the existing page and are
+instantiated normally. Hooking up template nodes as properties on the parent, attaching event handlers and setting data bindings
+behaves as expected.</p>
+
+<h3>Putting It Together</h3>
+
+<p><strong>Using our custom middleware for server-side rendering, along with our client-side rendering modifications,
+users accessing pages will see the templated widgets straight away, removing the "double-rendering" effect
+and the need for loading screens.</strong></p>
+
+<p><img src="/images/pre_rendered.png"></p>
+
+<p><em>This image above the same widgets rendered client-side and server-side when the page loads, but before
+client-side rendering has finished.</em></p>
+
+<p>Server-side rendering also comes with client-side performance benefits,
+reducing the number of costly DOM operations performed during application loading.
+This may be especially useful for low-power devices with mobile browsers.</p>
+
+<p>Extending, rather than replacing, the normal Dojo rendering lifecycle allows us to transparently delegate rendering
+to the client-side for unsupported widgets. Excellent abstractions already provided for the lifecycle in the toolkit make
+the extension conceptually simple.</p>
+
+<p>There are restrictions that come with this implementation, discussed below, but working within these
+constraints it is possible for the majority of templated widgets to be rendered server-side.</p>
+
+<h2>Source Code</h2>
+
+<p>All source code for the project lives on Github <a href="https://github.com/jthomas/server_side_dijit">here</a>.
+Feel free to file issues, patches and comments at the project home page.</p>
+
+<p>Once you have checked out the project code, run the following command to
+start a test application comparing client-side and server-side rendering side
+by side.</p>
+
+<p><code>sh
+$ export DOJO_SOURCE=/path/to/dojo-release-1.8.0-src
+$ npm start
+</code></p>
+
+<p>Once the server has started, visit <a href="http://localhost:3000">http://localhost:3000</a>.</p>
+
+<p>You can also install the module as an NPM package, <a href="https://npmjs.org/package/server_side_dijit">server_side_dijit</a>,
+and use the plugin within your existing Connect application.</p>
+
+<h2>Issues</h2>
+
+<p>We've already mentioned potential pitfalls which restrict server-side
+rendering. These include widgets that use browser dimensions to dynamically
+calculate sizing e.g. layout managers, use client-side resources to construct
+templates e.g. reading cookie data, expect access to remote resources e.g
+XHR'ing session details, and many, many more.</p>
+
+<p>Letting those widgets default to client-side template rendering provides a safe fallback.</p>
+
+<p>Discovering which existing Dojo widgets can support server-side rendering requires manual
+testing. Within the project directory, under the "/test/public" location, we've started
+collecting test pages which demonstrate those widgets which are known to work. Looking at those
+pages should provide a good indication of the current level of support.</p>
+]]></content>
+  </entry>
+  
+</feed>

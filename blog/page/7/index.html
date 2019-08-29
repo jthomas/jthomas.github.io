@@ -1,0 +1,2982 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/page/7/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div class="blog-index">
+  
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/09/01/running-one-off-tasks-in-cloud-foundry/">Running One-off Tasks in Cloud Foundry</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-09-01T16:07:00+01:00" pubdate data-updated="true">Sep 1<span>st</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often administrative
+tasks that needed to be carried out for an application to run correctly.</p>
+
+<p>These tasks usually need finishing before starting the application and should not be
+executed more than once.</p>
+
+<p>Previously, the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> provided commands, <em>tunnel</em> and <em>console</em>, to help running
+one-off tasks manually. These commands were
+<a href="http://stackoverflow.com/questions/32332319/exposing-ports-502-and-1002-from-nodejs-using-bluemix/32333386#32333386">deprecated</a>
+with the upgrade from <em>v5</em> to <em>v6</em>
+to discourage <a href="http://martinfowler.com/bliki/SnowflakeServer.html">snowflake environments</a>.</p>
+
+<p>It is still possible, with a bit of hacking, to run one-off tasks manually from the application
+container.</p>
+
+<p>A better way is to describe <em>tasks as code</em> and run them automatically during normal
+deployments. This results in applications that can be recreated without
+manual intervention.</p>
+
+<p>We&#8217;ll look at both options before introducing a new library, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a>, that automates
+running administration tasks for Node.js applications.</p>
+
+<h2>Running Tasks Manually</h2>
+
+<h2>Local Environment</h2>
+
+<p>Rather than running administrative tasks from the application console, we can
+run them from a local development environment by remotely connecting to
+the bound services.</p>
+
+<p>This will be dependent on the provisioned services allowing remote access.
+Many &#8220;built-in&#8221; platform services, e.g. MySQL, Redis, do not allow this.</p>
+
+<p>Third-party services generally do.</p>
+
+<p>Using the <em>cf env</em> command we can list service credentials for an application.
+These authentication details can often be used locally by connecting through a client
+library running in a local development environment.</p>
+
+<p>For example, to access a provisioned Cloudant instance locally, we can grab the credentials
+and use with a Node.js client library.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>15:48:22 ~/code/sample<span class="o">]</span><span class="nv">$ </span>cf env sample-demo-app
+</span><span class='line'>Getting env variables <span class="k">for </span>app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>System-Provided:
+</span><span class='line'><span class="o">{</span>
+</span><span class='line'> <span class="s2">&quot;VCAP_SERVICES&quot;</span>: <span class="o">{</span>
+</span><span class='line'>  <span class="s2">&quot;cloudantNoSQLDB&quot;</span>: <span class="o">[</span>
+</span><span class='line'>   <span class="o">{</span>
+</span><span class='line'>    <span class="s2">&quot;credentials&quot;</span>: <span class="o">{</span>
+</span><span class='line'>     <span class="s2">&quot;host&quot;</span>: <span class="s2">&quot;1234-bluemix.cloudant.com&quot;</span>,
+</span><span class='line'>     <span class="s2">&quot;password&quot;</span>: <span class="s2">&quot;sample_password&quot;</span>,
+</span><span class='line'>     <span class="s2">&quot;port&quot;</span>: 443,
+</span><span class='line'>     <span class="s2">&quot;url&quot;</span>: <span class="s2">&quot;https://1234-bluemix:sample_password@1234-bluemix.cloudant.com&quot;</span>,
+</span><span class='line'>     <span class="s2">&quot;username&quot;</span>: <span class="s2">&quot;1234-bluemix&quot;</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>....
+</span><span class='line'>
+</span><span class='line'><span class="o">[</span>15:48:22 ~/code/sample<span class="o">]</span><span class="nv">$ </span>cat connect.js
+</span><span class='line'>var <span class="nv">Cloudant</span> <span class="o">=</span> require<span class="o">(</span><span class="s1">&#39;cloudant&#39;</span><span class="o">)</span>;
+</span><span class='line'>
+</span><span class='line'>var <span class="nv">me</span> <span class="o">=</span> <span class="s1">&#39;1234-bluemix&#39;</span>;
+</span><span class='line'>var <span class="nv">password</span> <span class="o">=</span> <span class="s1">&#39;sample_password&#39;</span>;
+</span><span class='line'>
+</span><span class='line'>// Initialize the library with my account.
+</span><span class='line'>var <span class="nv">cloudant</span> <span class="o">=</span> Cloudant<span class="o">({</span>account:me, password:password<span class="o">})</span>;
+</span><span class='line'>
+</span><span class='line'>cloudant.db.list<span class="o">(</span><span class="k">function</span><span class="o">(</span>err, allDbs<span class="o">)</span> <span class="o">{</span>
+</span><span class='line'>  console.log<span class="o">(</span><span class="s1">&#39;All my databases: %s&#39;</span>, allDbs.join<span class="o">(</span><span class="s1">&#39;, &#39;</span><span class="o">))</span>
+</span><span class='line'>  // Run administrative tasks
+</span><span class='line'><span class="o">})</span>;
+</span><span class='line'><span class="o">[</span>15:48:22 ~/code/sample<span class="o">]</span><span class="nv">$ </span>node connect.js
+</span><span class='line'>All my databases: example_db, jasons_stuff, scores
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Remote Environment</h2>
+
+<p>When provisioned services don&#8217;t allow external access, the
+<a href="https://github.com/cloudfoundry-community/cf-ssh">cf-ssh</a> project creates SSH
+access to application containers running within Cloud Foundry.</p>
+
+<p><strong>How does this work?!</strong></p>
+
+<blockquote><p>cf-ssh deploys a new Cloud Foundry application, containing the same bits as your target application, with the same bound services.<br/>This new application&#8217;s container does not start your web application as per normal. Instead, it starts an outbound reverse SSH tunnel to a public proxy.<br/>The local cf-ssh client then launches an interactive ssh connect to the public proxy, which tunnels through to the application container.</p><footer><strong>Dr. Nic</strong> <cite><a href='https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/'>blog.starkandwayne.com/2014/10/&hellip;</a></cite></footer></blockquote>
+
+
+<p></p>
+
+<p>See the explanation <a href="https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/">here</a> for full details.</p>
+
+<p>This approach will let you connect to services from within the Cloud Foundry platform environment.</p>
+
+<p>This video from <a href="https://starkandwayne.com/">Stark &amp; Wayne&#8217;s</a> <a href="http://drnicwilliams.com/">Dr. Nic</a> shows the command in action&#8230;</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/eWJCfAa1_x8" frameborder="0" allowfullscreen></iframe>
+
+
+<h2>IBM Bluemix Console (Java and Node.js)</h2>
+
+<p><em>This technique is only for the IBM Bluemix platform.</em></p>
+
+<p>If you are deploying Node.js and Java applications on <a href="https://bluemix.net">IBM Bluemix</a>, the platform provides
+the following tools to assist with <a href="https://www.ng.bluemix.net/docs/#manageapps/app_management.html#appmanagement">application management</a>.</p>
+
+<ul>
+<li><em>proxy</em>: Minimal application management that serves as a proxy between your application and Bluemix.</li>
+<li><em>devconsole</em>: Enables the development console utility.</li>
+<li><em>shell</em>: Enables a web-based shell.</li>
+<li><em>trace</em>: (Node.js only) Dynamically set trace levels if your application is using log4js, ibmbluemix, or bunyan logging modules.</li>
+<li><em>inspector</em>: (Node.js only) Enables node inspector debugger.</li>
+<li><em>debug</em>: (Liberty only) Enables clients to establish a remote debugging session with the application.</li>
+<li><em>jmx</em>: (Liberty only) Enables the JMX REST Connector to allow connections from remote JMX clients</li>
+</ul>
+
+
+<p>The tools are enabled by setting the environment variable (<em>BLUEMIX_APP_MGMT_ENABLE</em>) with the
+desired utilities.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf <span class="nb">set</span>-env myApp BLUEMIX_APP_MGMT_ENABLE devconsole+shell+trace
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Applications must be restarted for the changes to take effect.</p>
+
+<p>If we enable the <em>shell</em> utility, the following web-based console will be available at https://your-app-name.mybluemix.net/bluemix-debug/shell.</p>
+
+<p><img src="https://developer.ibm.com/bluemix/wp-content/uploads/sites/20/2015/06/shell.jpg"></p>
+
+<h2>Cloud Foundry Diego Runtime</h2>
+
+<p><a href="http://www.activestate.com/blog/2014/09/cloud-foundry-diego-explained-onsi-fakhouri">Diego</a> is the next-generation
+runtime that will power upcoming versions of Cloud Foundry. Diego will provide many benefits
+over the existing runtime, e.g. Docker support, including enabling SSH access to containers without the workarounds needed above.</p>
+
+<p><strong>Yay!</strong></p>
+
+<p>Follow the instructions <a href="https://github.com/cloudfoundry-incubator/diego-design-notes/blob/master/ssh-access-and-policy.md">here</a>
+for details on SSH access to applications running on the new runtime.</p>
+
+<p><em>Access to this feature will be dependent on your Cloud Foundry provider migrating to the new runtime.</em></p>
+
+<h2>Running Tasks Automatically </h2>
+
+<p>Manually running one-off administrative tasks for Cloud Foundry applications is a <a href="http://martinfowler.com/bliki/SnowflakeServer.html">bad idea</a>.</p>
+
+<p>It affects your ability to do continuous delivery and encourages snowflake environments.</p>
+
+<p>Alternatively, defining <em>tasks as code</em> means they can run automatically during normal deployments.
+No more manual steps are required to deploy applications.</p>
+
+<p>There are <a href="http://flywaydb.org/">many</a> <a href="https://github.com/ruby/rake">different</a> <a href="https://github.com/seomoz/shovel">libraries</a>
+for <a href="https://phinx.org/">every</a> <a href="https://github.com/mattes/migrate">language</a> to help you programmatically define, manage and run tasks.</p>
+
+<p>With <em>tasks defined as code</em>, you need to configure your <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html">application manifest</a>
+to run these automatically during deployments.</p>
+
+<p>Cloud Foundry uses the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#start-commands"><em>command</em> parameter</a>,
+set in the manifest or through the
+command-line, to allow applications to specify a custom start command. We can
+use this parameter to execute the task library command during deployment.</p>
+
+<p>The Cloud Foundry documentation also details these approaches, with slightly different
+implementations <a href="https://docs.cloudfoundry.org/devguide/services/migrate-db.html">here</a>
+and specifically for Ruby developers <a href="https://docs.cloudfoundry.org/buildpacks/ruby/ruby-tips.html#rake">here</a>.</p>
+
+<h2>Temporary Task Deploy</h2>
+
+<p>For applications which only need occasional administrative tasks, it&#8217;s often
+easier to push a temporary deploy with a custom start command. This deploy
+runs your tasks without then starting your application. Once the tasks have
+completed, redeploy your application normally, destroying the task instance.</p>
+
+<p>The following command will deploy a temporary instance for this purpose:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -c <span class="s1">&#39;YOUR_TASK_LIB_COMMAND &amp;&amp; sleep infinity&#39;</span> -i 1 --no-route
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>We&#8217;re overriding the default start command, setting it to run the command for
+our task library, e.g. rake db:migrate.</p>
+
+<p>The <em>sleep infinity</em> command stops the application exiting once the task runner
+has finished. If this happens, the platform will assume that application has
+crashed and restart it.</p>
+
+<p>Also, the task runner will not be binding to a port so
+we need to use the <em>&#8211;no-route</em> argument to stop the platform assuming the
+deploy has timed out.</p>
+
+<p>Setting the deploy to a single instance stops the command being executed more than once.</p>
+
+<p>Checking the logs to verify the task runner has finished correctly, we can now
+redeploy our application. Using the <em>null</em> start command will force the platform to use the buildpack default
+rather than our previous option.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -c <span class="s1">&#39;null&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Running Tasks Before Startup</h2>
+
+<p>If we&#8217;re regularly running administrative tasks, we should incorporate the
+task execution into our normal application startup. Once the
+task command has finished successfully, we start the application as normal.</p>
+
+<p>Applications may have multiple instances running, we need to ensure
+the tasks are only executed by one instance.</p>
+
+<p>The following custom start command will execute tasks during startup,
+using the CF_INSTANCE_ID environment variable to enforce execution at most-once.</p>
+
+<pre>
+[ $CF_INSTANCE_INDEX -eq 0 ]] && node lib/tasks/runner.js; node app.js
+</pre>
+
+
+<p>With this approach, tasks will be automatically executed during regular deployments
+without any manual intervention.</p>
+
+<p><strong>Hurrah!</strong></p>
+
+<h2>Managing tasks for Node.js applications</h2>
+
+<p>If you&#8217;re running Node.js applications on Cloud Foundry, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a> is a task library that helps
+you define <em>tasks as code</em> and integrates with the Cloud Foundry runtime. The module handles
+all the complexities with automating tasks during deployments across multi-instance applications.</p>
+
+<blockquote><p>oneoff provides the following features&#8230;</p><p>* ensure tasks are completed before application startup<br/>* coordinating app instances to ensure at-most once task execution<br/>* automagically discovering tasks from the task directory<br/>* dependency ordering, ensure task a completes before task b starts<br/>* parallel task execution<br/>* ignore completed tasks in future deployments</p></blockquote>
+
+
+<p>Check it out to help make writing <em>tasks as code</em> for Node.js applications much easier!</p>
+
+<p>Full details on usage are available in the <a href="https://github.com/IBM-Bluemix/oneoff/blob/master/README.md">README</a>.</p>
+
+<h2>Conclusion</h2>
+
+<p>Running one-off tasks for application configuration is a normal part of any development project.</p>
+
+<p>Carrying out these tasks manually used to be the norm, but with the devops movement we now prefer
+automated configuration rather manual intervention. Relying on manual configuration steps to deploy applications restricts
+our ability to implement continuous delivery.</p>
+
+<p>Cloud Foundry is an opinionated platform, actively discouraging the creation of snowflake environments.</p>
+
+<p>Whilst it is still possible to manually run administrative tasks, either by connecting to bound services locally or using
+a remote console, it&#8217;s preferable to describe our tasks as code and let the platform handle it.</p>
+
+<p>Using custom start commands, we can deploy applications which run tasks automatically during their normal startup procedure.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/16/geopix-live-photos/">GeoPix Live Photos</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-16T13:26:00+01:00" pubdate data-updated="true">Jul 16<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+
+
+<blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online. </p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote>
+
+
+<p>I&#8217;ve been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement&#8230;</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features&#8230;</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: &#8220;now&#8221;</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">Cloudant</span><span class="p">({</span><span class="nx">account</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">username</span><span class="p">,</span> <span class="nx">password</span><span class="o">:</span><span class="nx">credentials</span><span class="p">.</span><span class="nx">password</span><span class="p">},</span> <span class="kd">function</span><span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">cloudant</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">geopix</span> <span class="o">=</span> <span class="nx">cloudant</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">database</span><span class="p">);</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">feed</span> <span class="o">=</span> <span class="nx">geopix</span><span class="p">.</span><span class="nx">follow</span><span class="p">({</span><span class="nx">include_docs</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="nx">since</span><span class="o">:</span> <span class="s2">&quot;now&quot;</span><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>      <span class="c1">// ....we can now send this data to the web pages</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">feed</span><span class="p">.</span><span class="nx">follow</span><span class="p">();</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>&#8230;</p>
+
+<blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote>
+
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">express</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;express&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">express</span><span class="p">();</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">server</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;http&#39;</span><span class="p">).</span><span class="nx">Server</span><span class="p">(</span><span class="nx">app</span><span class="p">);</span>
+</span><span class='line'><span class="kd">var</span> <span class="nx">io</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;socket.io&#39;</span><span class="p">)(</span><span class="nx">server</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// ...snipped out the app routes for express</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">io</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connection&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">socket</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;New Client WSS Connection.&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="p">});</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">var</span> <span class="nx">port</span> <span class="o">=</span> <span class="p">(</span><span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">VCAP_APP_PORT</span> <span class="o">||</span> <span class="mi">3000</span><span class="p">);</span>
+</span><span class='line'><span class="nx">server</span><span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="nx">port</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">feed</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">change</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">io</span><span class="p">.</span><span class="nx">sockets</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="nx">change</span><span class="p">);</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Now we&#8217;re sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we&#8217;ve included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We&#8217;re sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">socket</span> <span class="o">=</span> <span class="nx">io</span><span class="p">();</span> <span class="c1">// TIP: io() with no args does auto-discovery</span>
+</span><span class='line'><span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;WSS Connected&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">socket</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;image&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">image</span><span class="p">)</span> <span class="p">{</span> <span class="c1">// TIP: you can avoid listening on `connect` and listen on events directly too!</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">attachment</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_attachments</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span class='line'>        <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s2">&quot;/image/&quot;</span> <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">_id</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="nx">attachment</span><span class="p">;</span>
+</span><span class='line'>        <span class="nx">add_new_image</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">clientDate</span><span class="p">,</span> <span class="s1">&#39;latitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">latitude</span> <span class="o">+</span> <span class="s1">&#39;, longitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">longitude</span> <span class="o">+</span> <span class="s1">&#39;, altitude: &#39;</span>
+</span><span class='line'>            <span class="o">+</span> <span class="nx">image</span><span class="p">.</span><span class="nx">doc</span><span class="p">.</span><span class="nx">altitude</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">});</span>
+</span><span class='line'><span class="p">});</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<p>&#8230;and that&#8217;s it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB&#8217;s <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/15/alchemyapi-and-updated-watson-nodes-for-node-red/">AlchemyAPI &amp; Updated Watson Nodes for Node-RED</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-15T16:07:00+01:00" pubdate data-updated="true">Jul 15<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/node-red-updates.png"></p>
+
+<p>I&#8217;ve recently been working on a <a href="https://github.com/node-red/node-red-bluemix-nodes/commit/56007e60d3414da3eb5c1dac766b23bdd96dd149">number</a> of <a href="https://github.com/node-red/node-red-bluemix-nodes/commit/4d0bcfe34f5e107e3b9e0684cd26ae701f913253">updates</a> to the Node-RED <a href="https://github.com/node-red/node-red-bluemix-nodes">nodes</a> for the IBM Bluemix platform&#8230;</p>
+
+<p>Highlights below:</p>
+
+<h2>New AlchemyAPI Nodes</h2>
+
+<p>There are two new nodes (Feature Extract and Image Extract) in the package, allowing users to call services from the AlchemyAPI platform.</p>
+
+<ul>
+<li><p><em>Feature Extract.</em> This node will analyse external URLs, HTML or text content with features for text-based analysis
+from the AlchemyAPI service, e.g. keywords, sentiment, relationships, etc.</p></li>
+<li><p><em>Image Analysis.</em> This node will analyse images, passed in as external URLs or raw image bytes, to extract faces, content and URLs.</p></li>
+</ul>
+
+
+<p>Configuration for each node is available through the node editor panel.</p>
+
+<p>For full details on all the capabilities of the AlchemyAPI platform, please see their <a href="http://www.alchemyapi.com/api">documentation</a>.</p>
+
+<h2>Updated IBM Watson Nodes</h2>
+
+<p>With the <a href="https://developer.ibm.com/watson/blog/2015/07/06/ibm-watson-language-translation-and-speech-services-general-availability/">recent changes</a>
+to the IBM Watson services, there were a number of changes needed to support the API changes. All the IBM Watson nodes now work with the GA versions
+of the services.</p>
+
+<p><strong>Users must ensure they are using GA versions of the service with the nodes. Details on migration steps are available on the IBM Watson
+<a href="https://developer.ibm.com/watson/blog/2015/07/06/ibm-watson-language-translation-and-speech-services-general-availability/">blog post</a> about the updates.</strong></p>
+
+<h2>Running Locally</h2>
+
+<p>When running Node-RED on IBM Bluemix, credentials for the services bound to the application are automatically registered. Previously, running the nodes
+outside of IBM Bluemix required complex configuration to register service credentials. With this release, users will
+be prompted to input the service credentials in the node editor panel if the application isn&#8217;t running on IBM Bluemix. Much easier!</p>
+
+<p><strong>If you have questions or encounter issues, please ask over on <a href="http://stackoverflow.com/questions/tagged/node-red">Stackoverflow</a> or raise <a href="https://github.com/node-red/node-red-bluemix-nodes/issues">issues</a> in Github</strong></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/10/debugging-cloud-foundry-stack-issues/">Debugging Cloud Foundry Stack Issues</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-10T15:27:00+01:00" pubdate data-updated="true">Jul 10<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Recent <a href="https://groups.google.com/a/cloudfoundry.org/forum/#!topic/vcap-dev/gU7rpD8MSC4">changes</a> to the Cloud Foundry stacks supported by IBM Bluemix have led to a number of <a href="http://stackoverflow.com/questions/31057357/static-buildpack-deploy-now-failing-due-to-unsupported-stack">issues</a> <a href="http://stackoverflow.com/questions/31085626/fail-to-push-static-site-to-bluemix-using-third-party-buildpack/31089127#31089127">for</a> <a href="http://stackoverflow.com/questions/31268155/bluemix-libstdc-so-6-version-glibcxx-3-4-20-not-found/31288182#31288182">users</a>. I&#8217;ve helped users diagnose and fix issues
+that have occurred due to a mistmatches between the platform stack, applications and the buildpack. Learning a number of techniques for helping to discover and resolve these
+issues and I wanted to share them with everyone else.</p>
+
+<p>Running on Cloud Foundry&#8217;s <em>Platform-as-a-Service</em> solution, we take for granted that low-level concepts like operating systems are abstracted away from the developer.</p>
+
+<p>However, when we
+run into issues it can be necessary to jump into the weeds and find out what&#8217;s going on under the hood&#8230;</p>
+
+<h2>What are Cloud Foundry &#8220;stacks&#8221;?</h2>
+
+<p>According to the <a href="https://docs.cloudfoundry.org/concepts/stacks.html">documentation</a>&#8230;</p>
+
+<blockquote><p>A stack is a prebuilt root filesystem (rootfs) which works in tandem with a buildpack and is used to support running applications.</p><footer><strong>Cloud Foundry Concepts</strong> <cite><a href='https://docs.cloudfoundry.org/concepts/stacks.html'>docs.cloudfoundry.org/concepts/&hellip;</a></cite></footer></blockquote>
+
+
+<p>Think of the <em>stack</em> as the underlying operating-system running your application. This will be combined with the buildpack to instantiate the runtime
+environment.</p>
+
+<p>Most users don&#8217;t have to care which <em>stack</em> they are running on.</p>
+
+<p>However, if your application needs a specific version of a system library or you want to verify a specific command line application is installed, you
+may need to dig deeper&#8230;</p>
+
+<h2>What &#8220;stacks&#8221; does my platform support?</h2>
+
+<p>Using the Cloud Foundry CLI, issue the following command to see what <em>stacks</em> are available on the platform.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>16:27:30 ~<span class="o">]</span><span class="nv">$ </span>cf stacks
+</span><span class='line'>Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>name         description
+</span><span class='line'>lucid64      Ubuntu 10.04
+</span><span class='line'>seDEA        private
+</span><span class='line'>cflinuxfs2   Ubuntu 14.04.2 trusty
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Stack information contains the unique name for each stack and the underlying operating system version.</p>
+
+<h2>Which &#8220;stack&#8221; is my application running on?</h2>
+
+<p>Since <a href="https://github.com/cloudfoundry/cli/releases/tag/v6.11.0">v6.11.0</a>, the <em>stack</em> for an application has been shown in the CLI application info output.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>16:34:39 ~<span class="o">]</span><span class="nv">$ </span>cf app debug-testing
+</span><span class='line'>Showing health and status <span class="k">for </span>app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>requested state: started
+</span><span class='line'>instances: 1/1
+</span><span class='line'>usage: 512M x 1 instances
+</span><span class='line'>urls: debug-testing.mybluemix.net
+</span><span class='line'>last uploaded: Tue Jun 16 15:47:21 UTC 2015
+</span><span class='line'>stack: lucid64
+</span><span class='line'>buildpack: SDK <span class="k">for </span>Node.js<span class="o">(</span>TM<span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'>     state     since                    cpu    memory           disk           details
+</span><span class='line'><span class="c">#0   running   2015-06-30 08:53:57 PM   0.0%   242.5M of 512M   196.8M of 1G</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How can I choose the &#8220;stack&#8221; my application runs on?</h2>
+
+<p>Users can set the <em>stack</em> for an application using the <em>-s</em> command-line parameter during deployment.
+The stack identifier should match one of the names shown in the output from the <em>cf stacks</em> command.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf push -s stack_identifier
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How are the &#8220;stacks&#8221; defined?</h2>
+
+<p>This <a href="https://github.com/cloudfoundry/stacks">Github repository</a> contains the source files for building the <em>stacks</em>. There&#8217;s a
+<a href="https://docs.docker.com/reference/builder/">Dockerfile</a> for the current <a href="https://github.com/cloudfoundry/stacks/blob/master/cflinuxfs2/Dockerfile">cflinuxfs2</a> stack
+to build the image used in Cloud Foundry.</p>
+
+<h2>How can I poke around inside a &#8220;stack&#8221; locally?</h2>
+
+<p>Using Docker, we can easily pull down the same &#8220;base&#8221; operating system used for a specifc &#8220;stack&#8221; and run locally.</p>
+
+<p>For the <em>cflinuxfs2</em> stack, we can pull down the <a href="http://releases.ubuntu.com/14.04/">Ubuntu Trusty</a> image and run a terminal inside it.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull ubuntu:trusty
+</span><span class='line'><span class="nv">$ </span>docker run -i -t ubuntu:trusty /bin/bash
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>How can I easily migrate existing applications to a new stack?</h2>
+
+<p>Rather than having to re-deploy each application separately, there&#8217;s a great <a href="https://github.com/simonleung8/cli-stack-changer">CF CLI plugin</a> to automatically migrate all your applications from <em>lucid64</em> to <em>cflinuxfs2</em>.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">Making Logs Awesome - Elasticsearch in the Cloud Using Docker</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-07-08T10:34:00+01:00" pubdate data-updated="true">Jul 8<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/Logs.png"></p>
+
+<h3><strong>Logs are boring.</strong></h3>
+
+<p>It used to be the only time you&#8217;d be looking at your application logs was when something went wrong.</p>
+
+<p>Logs filled up disk space until they rotated out of existence.</p>
+
+<p>&#8230;but now businesses are increasingly focused on using data to <a href="http://www.slideshare.net/mikebrittain/metrics-driven-engineering-at-etsy">drive decisions</a>.</p>
+
+<p><em>Which advert leads to the highest click-through rates?</em></p>
+
+<p><em>How did that last website change affect user retention?</em></p>
+
+<p><em>What customer devices should our website support?</em></p>
+
+<p>Guess where the answers lie?</p>
+
+<h4><strong>Logs.</strong></h4>
+
+<p>Storing, processing and querying logs effectively is <a href="http://www.slideshare.net/mikebrittain/take-my-logs-please">helping businesses succeed</a>.</p>
+
+<h2>Introducing the ELK (Elasticsearch, Logstash, Kibana) stack&#8230;</h2>
+
+<p><img src="https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png"></p>
+
+<p>Five years ago, <a href="https://www.elastic.co/products/elasticsearch">Elasticsearch</a>, an open-source full-text search engine, was
+released. It&#8217;s now the second most popular enterprise search engine.
+Complementing this project were <a href="https://www.elastic.co/products/logstash">Logstash</a> and <a href="https://www.elastic.co/products/kibana">Kibana</a>.
+Logstash was a log
+processing pipeline that could normalize streaming logs into a centralised
+Elasticsearch cluster. Kibana was an analytics and visualisation platform for
+turning those logs into actionable insights.</p>
+
+<p>These tools were commonly used together, now known as the ELK stack, to deliver&#8230;</p>
+
+<blockquote><p>&#8220;an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source.&#8221;</p></blockquote>
+
+
+<h4><strong>ELK, making logs awesome!</strong></h4>
+
+<p><em><em>Manually installing and configuring Elasticsearch, Logstash and Kibana is not a <a href="https://gist.github.com/ashrithr/c5c03950ef631ac63c43">trivial task</a>.</em></em></p>
+
+<p>Luckily, there is a better way&#8230;</p>
+
+<h2>Docker </h2>
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/7/79/Docker_(container_engine)_logo.png"></p>
+
+<blockquote><p>&#8220;Docker allows you to pack, ship and run any application as a lightweight container&#8221;.</p></blockquote>
+
+
+<p><a href="https://www.docker.com/">Docker</a> <em>images</em> define pre-configured environments that containers
+are started from.  <a href="https://hub.docker.com/">Docker Hub</a> is the public image registry, where anyone can
+publish, search and retrieve new images.</p>
+
+<p><img src="/images/Docker%20Hub.png"></p>
+
+<p>Rather than having to install and configure individual software packages, we
+can pull down one of the many existing Docker images for the <a href="https://registry.hub.docker.com/search?q=elk">ELK stack</a>.</p>
+
+<p><em>With one command, we can spin up an entire ELK instance on any platform with no extra configuration needed.</em></p>
+
+<p>Magic.</p>
+
+<h2>IBM Containers</h2>
+
+<p>IBM recently announced <a href="https://developer.ibm.com/bluemix/2015/06/22/ibm-containers-on-bluemix/">Docker support</a> for their Platform-as-a-Service cloud service, <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>. Developers can now deploy and manage Docker containers on a scalable cloud platform.</p>
+
+<p><a href="https://developer.ibm.com/bluemix/2015/06/22/ibm-containers-on-bluemix/">IBM Containers</a> provides the following services:</p>
+
+<ul>
+<li>Private image registry</li>
+<li>Elastic scaling and auto-recovery</li>
+<li>Persistent storage and advanced networking configuration</li>
+<li>Automated security scans</li>
+<li>Integration with the IBM Bluemix cloud services.</li>
+</ul>
+
+
+<p><em>Using this service, we can build and test a custom ELK container in our local
+development environment and &#8220;web-scale&#8221; it by pushing to the IBM Bluemix cloud platform.</em></p>
+
+<h2>Manging Application Logs</h2>
+
+<p>Once our ELK instance is running, we can then start to push application logs
+from other applications running on IBM Bluemix into the service. We&#8217;ll look at
+automatically setting up a log drain to forward all applications logs into a
+centralised Elasticsearch service. We can then start to drive business
+decisions using data rather than intuition using Kibana, the visualisation
+dashboard.</p>
+
+<p><strong><em>This blog post will explain the technical details of using Docker to create a
+customised ELK service that can be hosted on a scalable cloud platform.</em></strong></p>
+
+<h2>Running ELK instances Using Docker </h2>
+
+<p>Docker Hub has over forty five thousands public images available. There are multiple public images we can pull
+down with a pre-configured ELK stack. Looking at the options, we&#8217;re going to use the <a href="https://registry.hub.docker.com/u/sebp/elk/">sebp/elk</a>
+repository because it&#8217;s popular and easily modifiable with a custom configuration.</p>
+
+<p>We&#8217;re going to start by pulling the image into our local machine and running a container to check it&#8217;s working&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker pull sebp/elk
+</span><span class='line'><span class="nv">$ </span>docker run -p 5601:5601 -p 9200:9200 -p 5000:5000 -it --name elk sebp/elk
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>That last command will start a new container from the <em>sebp/elk</em> image,
+exposing the ports for Kibana (5601), Elasticsearch (9200) and Logstash (5000)
+for external access. The container has been started with the <em>-i</em> flag,
+interactive mode, allowing us to monitor the container logs in the console.
+When the instance has started, we can view the status output from command line.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker ps
+</span><span class='line'>CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                                                                              NAMES
+</span><span class='line'>42d40d1fb59c        sebp/elk:latest     <span class="err">&quot;</span>/usr/local/bin/star   27 seconds ago      Up 26 seconds       0.0.0.0:5000-&gt;5000/tcp, 0.0.0.0:5601-&gt;5601/tcp, 0.0.0.0:9200-&gt;9200/tcp, 9300/tcp   elk
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using Mac OS X for local development, we&#8217;re using the <a href="http://boot2docker.io/">Boot2Docker project</a> to host a Linux VM for deploying Docker containers locally.
+With the following command, we can discover the virtual IP address for the ELK container.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>boot2docker ip
+</span><span class='line'>192.168.59.103
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Opening a web browser, we can now visit <em>http://192.168.59.103:5601</em> to show the Kibana application.
+For now, this isn&#8217;t very useful because Elasticsearch has no logs!</p>
+
+<p>Let&#8217;s fix that&#8230;</p>
+
+<h2>Draining Logs from Cloud Foundry</h2>
+
+<p><a href="https://www.cloudfoundry.org">Cloud Foundry</a>, the open-source project powering IBM Bluemix, supports <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">setting up a syslog drain</a>
+to forward all applications logs to a third-party logging service. Full details on configuring this will be <a href="#config">shown later</a>.</p>
+
+<p>Scott Frederick has already written an <a href="http://scottfrederick.cfapps.io/blog/2014/02/20/cloud-foundry-and-logstash">amazing blog post</a> about configuring Logstash
+to support the log format used by the Cloud Foundry. Logstash expects the older RFC3164 syslog formatting by default, whilst Cloud Foundry emits log lines that follow
+the newer RFC5424 standard.</p>
+
+<p>Scott provides the following configuration file that sets up the syslog input channels, running on port 5000, along with a custom filter that converts the incoming RFC5424 logs into
+an acceptable format.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'>input <span class="o">{</span>
+</span><span class='line'>  tcp <span class="o">{</span>
+</span><span class='line'>    <span class="nv">port</span> <span class="o">=</span>&gt; 5000
+</span><span class='line'>    <span class="nb">type</span> <span class="o">=</span>&gt; syslog
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'>  udp <span class="o">{</span>
+</span><span class='line'>    <span class="nv">port</span> <span class="o">=</span>&gt; 5000
+</span><span class='line'>    <span class="nb">type</span> <span class="o">=</span>&gt; syslog
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>filter <span class="o">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="o">[</span><span class="nb">type</span><span class="o">]</span> <span class="o">==</span> <span class="s2">&quot;syslog&quot;</span> <span class="o">{</span>
+</span><span class='line'>    grok <span class="o">{</span>
+</span><span class='line'>      <span class="nv">match</span> <span class="o">=</span>&gt; <span class="o">{</span> <span class="s2">&quot;message&quot;</span> <span class="o">=</span>&gt; <span class="s2">&quot;%{SYSLOG5424PRI}%{NONNEGINT:syslog5424_ver} +(?:%{TIMESTAMP_ISO8601:syslog5424_ts}|-) +(?:%{HOSTNAME:syslog5424_host}|-) +(?:%{NOTSPACE:syslog5424_app}|-) +(?:%{NOTSPACE:syslog5424_proc}|-) +(?:%{WORD:syslog5424_msgid}|-) +(?:%{SYSLOG5424SD:syslog5424_sd}|-|) +%{GREEDYDATA:syslog5424_msg}&quot;</span> <span class="o">}</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>    syslog_pri <span class="o">{</span> <span class="o">}</span>
+</span><span class='line'>    date <span class="o">{</span>
+</span><span class='line'>      <span class="nv">match</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;syslog_timestamp&quot;</span>, <span class="s2">&quot;MMM  d HH:mm:ss&quot;</span>, <span class="s2">&quot;MMM dd HH:mm:ss&quot;</span> <span class="o">]</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>    <span class="k">if</span> !<span class="o">(</span><span class="s2">&quot;_grokparsefailure&quot;</span> in <span class="o">[</span>tags<span class="o">])</span> <span class="o">{</span>
+</span><span class='line'>      mutate <span class="o">{</span>
+</span><span class='line'>        <span class="nv">replace</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;@source_host&quot;</span>, <span class="s2">&quot;%{syslog_hostname}&quot;</span> <span class="o">]</span>
+</span><span class='line'>        <span class="nv">replace</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;@message&quot;</span>, <span class="s2">&quot;%{syslog_message}&quot;</span> <span class="o">]</span>
+</span><span class='line'>      <span class="o">}</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>    mutate <span class="o">{</span>
+</span><span class='line'>      <span class="nv">remove_field</span> <span class="o">=</span>&gt; <span class="o">[</span> <span class="s2">&quot;syslog_hostname&quot;</span>, <span class="s2">&quot;syslog_message&quot;</span>, <span class="s2">&quot;syslog_timestamp&quot;</span> <span class="o">]</span>
+</span><span class='line'>    <span class="o">}</span>
+</span><span class='line'>  <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'>output <span class="o">{</span>
+</span><span class='line'>  elasticsearch <span class="o">{</span> <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Using this configuration, Logstash will accept and index our application logs into Elasticsearch.</p>
+
+<p><em>Note: There is also a <a href="https://www.elastic.co/guide/en/logstash/current/plugins-outputs-syslog.html">custom plugin</a> to enable RFC5424 support.</em></p>
+
+<h2>Building Custom Docker Images</h2>
+
+<p>Using the custom Logstash configuration relies on building a new Docker image
+with this configuration baked in. We could download the Git repository
+containing the image <a href="https://github.com/spujadas/elk-docker">source files</a>, modify those and rebuild from scratch.
+However, an easier way uses the existing image as a <em>base</em>, applies our
+modifications on top and then generates a brand new image.</p>
+
+<p><strong>So, how do we build our own Docker images? Using a Dockerfile.</strong></p>
+
+<blockquote><p>A Dockerfile is a text document that contains all the commands you would <br/>normally execute manually in order to build a Docker image.</p></blockquote>
+
+
+<p></p>
+
+<p>Reviewing the <a href="https://registry.hub.docker.com/u/sebp/elk/dockerfile/">Dockerfile</a> for the <em>sebp/elk</em> image, configuration for logstash is
+stored in the <em>/etc/logstash/conf.d/</em> directory. All we need to do is replace these files with our custom configuration.</p>
+
+<p>Creating the custom configuration locally, we define a Dockerfile with instructions for building our image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ls
+</span><span class='line'>01-syslog-input.conf 10-syslog.conf       Dockerfile
+</span><span class='line'><span class="nv">$ </span>cat Dockerfile
+</span><span class='line'>FROM sebp/elk
+</span><span class='line'>RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+</span><span class='line'>ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+</span><span class='line'>ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The Dockerfile starts with the &#8220;sebp/elk&#8221; image as a base layer. Using the RUN command, we execute a command to remove existing input configuration. After this
+the ADD command copies files from our local directory into the image.</p>
+
+<p>We can now run the Docker build system to generate our new image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker build -t jthomas/elk .
+</span><span class='line'>Sending build context to Docker daemon 4.608 kB
+</span><span class='line'>Sending build context to Docker daemon
+</span><span class='line'>Step 0 : FROM sebp/elk
+</span><span class='line'> ---&gt; 2b71e915297f
+</span><span class='line'>Step 1 : RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; f196b6833121
+</span><span class='line'>Step 2 : ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 522ba2c76b00
+</span><span class='line'>Step 3 : ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 79256ffaac3b
+</span><span class='line'>Successfully built 79256ffaac3b
+</span><span class='line'><span class="nv">$ </span>docker images jthomas/elk
+</span><span class='line'>REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>jthomas/elk         latest              79256ffaac3b        26 hours ago        1.027 GB
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>&#8230;and that&#8217;s it! We have a customised Docker image with our configuration changes ready for running.</em></p>
+
+<h2>Testing Our Custom Image</h2>
+
+<p>Before pushing this image to the cloud, we need to check it&#8217;s working correctly.
+Let&#8217;s start by starting a new container from our custom image locally.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker run -p 5601:5601 -p 9200:9200 -p 5000:5000 -it --name elk jthomas/elk
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now, use the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> to access recent logs for a sample application and paste the output into
+a telnet connection to port 5000 on our container.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf logs APP_NAME --recent
+</span><span class='line'>Connected, dumping recent logs <span class="k">for </span>app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>
+</span><span class='line'>2015-07-02T17:14:47.58+0100 <span class="o">[</span>RTR/1<span class="o">]</span>      OUT nodered-app.mybluemix.net - <span class="o">[</span>02/07/2015:16:14:47 +0000<span class="o">]</span> <span class="s2">&quot;GET / HTTP/1.1&quot;</span> 200 0 7720 <span class="s2">&quot;-&quot;</span> <span class="s2">&quot;Java/1.7.0&quot;</span> 75.126.70.42:56147 x_forwarded_for:<span class="s2">&quot;-&quot;</span> vcap_request_id:1280fe18-e53a-4bd4-40a9-2aaf7c53cc54 response_time:0.003247100 app_id:f18c2dea-7649-4567-9532-473797b0818d
+</span><span class='line'>2015-07-02T17:15:44.56+0100 <span class="o">[</span>RTR/2<span class="o">]</span>      OUT nodered-app.mybluemix.net - <span class="o">[</span>02/07/2015:16:15:44 +0000<span class="o">]</span> <span class="s2">&quot;GET / HTTP/1.1&quot;</span> 200 0 7720 <span class="s2">&quot;-&quot;</span> <span class="s2">&quot;Java/1.7.0&quot;</span> 75.126.70.43:38807 x_forwarded_for:<span class="s2">&quot;-&quot;</span> vcap_request_id:4dd96d84-c61d-45ec-772a-289ab2f37c67 response_time:0.003848360 app_id:f18c2dea-7649-4567-9532-473797b0818d
+</span><span class='line'>2015-07-02T17:16:29.61+0100 <span class="o">[</span>RTR/2<span class="o">]</span>      OUT nodered-app.mybluemix.net - <span class="o">[</span>02/07/2015:16:14:29 +0000<span class="o">]</span> <span class="s2">&quot;GET /red/comms HTTP/1.1&quot;</span> 101 0 0 <span class="s2">&quot;-&quot;</span> <span class="s2">&quot;Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.130 Safari/537.36&quot;</span> 75.126.70.42:54826 x_forwarded_for:<span class="s2">&quot;75.126.70.42&quot;</span> vcap_request_id:15c2d4f8-e6ba-4a20-77b7-345aafd32e95 response_time:MissingFinishedAt app_id:f18c2dea-7649-4567-9532-473797b0818d
+</span><span class='line'><span class="nv">$ </span>telnet 192.168.59.103 5000
+</span><span class='line'>Trying 192.168.59.103...
+</span><span class='line'>Connected to 192.168.59.103.
+</span><span class='line'>Escape character is <span class="s1">&#39;^]&#39;</span>.
+</span><span class='line'>// PASTE LOG LINES....
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Starting a web browser and opening the Kibana page, port 5601, the log lines are now available in the dashboard. Success!</p>
+
+<h2>Pushing Docker Images To The Cloud </h2>
+
+<p>Having successfully built and tested our custom Docker image locally, we want
+to push this image to our cloud platform to allow us to start new containers
+based on this image.</p>
+
+<p>Docker supports pushing local images to the <a href="http://hub.docker.com">public registry</a> using the <em>docker push</em> command.
+We can choose to use a <a href="https://blog.docker.com/2013/07/how-to-use-your-own-registry/">private registry</a>
+by creating a new image tag which prefixes the repository location in the name.</p>
+
+<p><em>IBM Containers&#8217; private registry is available at the following address, <strong>registry.ng.bluemix.net</strong>.</em></p>
+
+<p>Let&#8217;s push our custom image to the IBM Containers private registry&#8230;</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>docker tag jthomas/elk registry.ng.bluemix.net/jthomas/elk
+</span><span class='line'><span class="nv">$ </span>docker images
+</span><span class='line'>REPOSITORY                                     TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>jthomas/elk                                   latest              79256ffaac3b        43 hours ago        1.027 GB
+</span><span class='line'>registry.ng.bluemix.net/jthomas/elk           latest              79256ffaac3b        43 hours ago        1.027 GB
+</span><span class='line'><span class="nv">$ </span>docker push registry.ng.bluemix.net/jthomas/elk
+</span><span class='line'>The push refers to a repository <span class="o">[</span>registry.ng.bluemix.net/jthomas/elk<span class="o">]</span> <span class="o">(</span>len: 1<span class="o">)</span>
+</span><span class='line'>Sending image list
+</span><span class='line'>Pushing repository registry.ng.bluemix.net/jthomas/elk <span class="o">(</span>1 tags<span class="o">)</span>
+</span><span class='line'>511136ea3c5a Image successfully pushed
+</span><span class='line'>...
+</span><span class='line'>79256ffaac3b: Image successfully pushed
+</span><span class='line'>Pushing tag <span class="k">for </span>rev <span class="o">[</span>79256ffaac3b<span class="o">]</span> on <span class="o">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/elk/tags/latest<span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Pushing custom images from a local environment can be a slow process. For the <em>elk</em> image, this means transferring over one gigabyte of data
+to the external registry.</p>
+
+<p><em>We can speed this up by using IBM Containers to create our image from the Dockerfile, rather than uploading the built image.</em></p>
+
+<p>Doing this from the command line requires the use of the IBM Containers command-line application.</p>
+
+<h2>Managing IBM Containers</h2>
+
+<p>IBM Containers enables you to manage your containers from the command-line with <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html">two options</a>&#8230;</p>
+
+<ul>
+<li><em><a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#installcontainercfplugin">IBM Containers Plug-in</a> for the Cloud Foundry CLI.</em></li>
+<li><em><a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov_ice.html">IBM Containers Extension</a>, standalone command-line application.</em></li>
+</ul>
+
+
+<p>Both approaches handle the interactions between the local and remote Docker hosts, while providing
+extra functionality not supported natively by Docker.</p>
+
+<p><em>Full details on the differences and installation procedures
+for the two applications are available <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html">here</a>.</em></p>
+
+<h2>Building Images Using IBM Containers</h2>
+
+<p>Building our image using the IBM Containers service uses the same syntax as <a href="https://docs.docker.com/reference/commandline/build/">Docker build</a>. Local files
+from the current directory will be sent with the Dockerfile to the remote service. Once the image has
+been built, we can verify it&#8217;s available in the remote repository.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>ice build -t registry.ng.bluemix.net/jthomas/elk .
+</span><span class='line'>zipped tar size: 706
+</span><span class='line'>Posting 706 bytes... It may take a <span class="k">while</span>...
+</span><span class='line'>Step 0 : FROM sebp/elk
+</span><span class='line'> ---&gt; 2b71e915297f
+</span><span class='line'>Step 1 : RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; ed13d91e0197
+</span><span class='line'>Step 2 : ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 808a4c7410c7
+</span><span class='line'>Step 3 : ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</span><span class='line'> ---&gt; Using cache
+</span><span class='line'> ---&gt; 117e4454b015
+</span><span class='line'>Successfully built 117e4454b015
+</span><span class='line'>The push refers to a repository <span class="o">[</span>registry.ng.bluemix.net/jthomas/elk<span class="o">]</span> <span class="o">(</span>len: 1<span class="o">)</span>
+</span><span class='line'>Sending image list
+</span><span class='line'>Pushing repository registry.ng.bluemix.net/jthomas/elk <span class="o">(</span>1 tags<span class="o">)</span>
+</span><span class='line'>Image 117e4454b015 already pushed, skipping
+</span><span class='line'>Pushing tag <span class="k">for </span>rev <span class="o">[</span>117e4454b015<span class="o">]</span> on <span class="o">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/elk/tags/latest<span class="o">}</span>
+</span><span class='line'><span class="nv">$ </span>ice images
+</span><span class='line'>REPOSITORY                                TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+</span><span class='line'>registry.ng.bluemix.net/jthomas/elk       latest              5454d3ec-0f3        44 hours ago        0 B
+</span><span class='line'>registry.ng.bluemix.net/ibmliberty        latest              3724d2e0-06d        9 days ago          0 B
+</span><span class='line'>registry.ng.bluemix.net/ibmnode           latest              9435349e-8b4        9 days ago          0 B
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>All private repositories on IBM Bluemix have two official images for supported versions of <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#container_images_node">NodeJS</a> and <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#container_images_liberty">Websphere Liberty</a>.</p>
+
+<p><em>We can now see the third image is the custom ELK stack that was built.</em></p>
+
+<h2>Starting ELK Containers</h2>
+
+<p>Starting containers from images in the IBM Containers registry can be done using the command-line applications or through the <a href="http://bluemix.net">IBM Bluemix UI</a>.
+In this example, we&#8217;ll be using the IBM Bluemix UI to start and configure a new ELK container from our pre-configured image.</p>
+
+<p>Logging into the IBM Bluemix, the <em>Catalogue</em> page shows the list of available images used to create new containers. We have both the official
+images from IBM Containers and our custom ELK service.</p>
+
+<p><img src="/images/Container%20Images.png"></p>
+
+<p>Selecting the <em>ELK</em> image, we can configure and run a new container from this
+image. Setting up a new container with a public IP address,
+memory limit to 1GB and expose the same ports as running locally (5000, 5601
+and 9200).</p>
+
+<p><img src="/images/Create%20Container.png"></p>
+
+<p>Clicking the <em>Create</em> button, IBM Bluemix will provision and start our
+new container.</p>
+
+<p>Once the container has started, we can view the <em>Dashboard</em> page for this instance. Here we can view
+details about the container instance, modify the running state and access monitoring and logs tools.</p>
+
+<p><img src="/images/Container%20Overview.png">
+<img src="/images/Container%20Monitoring.png"></p>
+
+<p><em>&#8230;and that&#8217;s it! We now have our ELK service running using IBM Containers
+ready to start processing logs from our applications.</em></p>
+
+<p>Visiting the external IP address assigned to the container on the Kibana
+application port (5601) shows the Kibana web interface demonstrating our
+container has started correctly.</p>
+
+<h2><a name="config"></a>Draining Cloud Foundry Logs</h2>
+
+<p>Cloud Foundry supports draining applications logs to a <a href="http://docs.cloudfoundry.org/devguide/services/log-management.html">third-party syslog service</a>.
+The ELK container has a syslog drain configured on port 5000 of the public IP address bound to the instance.</p>
+
+<p>Binding this custom syslog drain to Cloud Foundry applications uses a <a href="https://docs.cloudfoundry.org/devguide/services/user-provided.html">custom user-provided service</a>.
+Creating user-provided services using the CF CLI, there is a special flag, <em>-l</em>, that notifies the platform this service is a syslog drain. Binding this special syslog
+drain service to an application will automatically set up log forwarding. Once the application has been restarted, logs will start to flow into the external service.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf cups logstash-drain -l syslog://<span class="o">[</span>CONTAINER_IP<span class="o">]</span>:5000
+</span><span class='line'><span class="nv">$ </span>cf <span class="nb">bind</span>-service <span class="o">[</span>app-name<span class="o">]</span> logstash-drain
+</span><span class='line'><span class="nv">$ </span>cf restart <span class="o">[</span>app-name<span class="o">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Cloud Foundry supports multiple syslog drains for the same application.</em></p>
+
+<p>Testing this out is as simple as visiting our application to generate sample logs and then looking at the Kibana page to see they are showing up.
+Here is a screenshot of the expected output when our ELK container is successfully processing logs from a Cloud Foundry application.</p>
+
+<p><img src="/images/Kibana.png"></p>
+
+<h2>Conclusion</h2>
+
+<p>Elastic Search, Kibana and Logstash is the modern log processing framework.
+Using Docker, we&#8217;ve been able to create a custom ELK service without manually
+installing and configuring a multitude of different software packages. Pushing
+this image to the IBM Containers platform means we can spin up new ELK
+containers on-demand within minutes!</p>
+
+<blockquote><p>Elasticsearch, Docker and IBM Containers&#8230; Making Logs Awesome.</p></blockquote>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/06/11/continuous-delivery-for-phonebot/">Continuous Delivery for Phonebot</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-06-11T16:08:00+01:00" pubdate data-updated="true">Jun 11<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/Phonebot_Pipeline.png"></p>
+
+<p>Since creating <a href="http://jamesthom.as/blog/2015/05/29/phonebot/">Phonebot</a> last month,
+I&#8217;ve been working on setting up a fully-automated build and deploy for the project.
+Using <a href="http://hub.jazz.net">IBM DevOps Services</a>, Phonebot now has
+&#8221;<a href="http://en.wikipedia.org/wiki/Continuous_delivery">Continuous Delivery</a>&#8221; enabled.</p>
+
+<p><strong>When new code is commited to the <a href="https://github.com/IBM-Bluemix/phonebot">external Github repository</a>,
+the build service will perform the following tasks.</strong></p>
+
+<ul>
+<li><em>Run Unit Tests and Code Lint Tools</em></li>
+<li><em>Deploy To Test Server</em></li>
+<li><em>Run Integration Tests Against Test Server</em></li>
+<li><em>Deploy To Production</em></li>
+</ul>
+
+
+<p>Each stage will only be executed if the following stage passes.</p>
+
+<p>In the following post, I&#8217;ll explain how to set up each stage and share tips making it easy to
+replicate this setup for your projects&#8230;</p>
+
+<h2>Writing Tests for Phonebot</h2>
+
+<p>Phonebot comes with a comprehensive <a href="https://github.com/IBM-Bluemix/phonebot/tree/master/test">test suite</a>.
+I&#8217;ve used the <a href="http://mochajs.org">Mocha</a> test framework for creating unit and integration tests. Test
+assertions use NodeJS&#8217; <a href="https://nodejs.org/api/assert.html">built-in library</a>. The <a href="https://github.com/mfncooper/mockery">mockery</a>
+library is used to replace module dependencies with mock objects.</p>
+
+<p>Setting up the <a href="https://docs.npmjs.com/misc/scripts"><em>scripts</em></a> field in
+<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/package.json"><em>package.json</em></a> allows us to use NPM to run our tests.</p>
+
+<p>NPM will look into the &#8221;<em>node_modules/.bin</em>&#8221; directory for binaries when running scripts. This means we don&#8217;t need Mocha installed
+on the deployment host to run tests. The &#8221;<em>devDependencies</em>&#8221; field includes modules we rely on during development
+but not production.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>"devDependencies": {
+</span><span class='line'>    "mocha": "^2.2.5",
+</span><span class='line'>    "mocha-eslint": "^0.1.7",
+</span><span class='line'>    "mockery": "^1.4.0"
+</span><span class='line'>},
+</span><span class='line'>"scripts": {
+</span><span class='line'>    "test": "mocha test/unit",
+</span><span class='line'>    "integration-test": "mocha test/integration",
+</span><span class='line'>    "start": "node app.js"
+</span><span class='line'>  },</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Running the following commands will run the unit and integration tests.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ npm test  // defaults to 'run test'
+</span><span class='line'>$ npm run integration-test</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Running Code Linters</h3>
+
+<p>Along with unit tests, we want to run &#8216;code linters&#8217; to catch any errors in our JavaScript code.
+We&#8217;re using the <a href="https://github.com/eslint/eslint">eslint</a> tool with the following
+<a href="https://github.com/IBM-Bluemix/phonebot/blob/master/.eslintrc">configuration</a>. Using this <a href="https://www.npmjs.com/package/mocha-eslint">module</a>,
+we&#8217;re setting up the eslint tool as a <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/test/unit/eslint.js">test case</a>.</p>
+
+<p>This test will
+be automatically run in the unit test phase and errors incorporated into the test report.</p>
+
+<h3>Mocking Services In Integration Tests</h3>
+
+<p>When the unit tests have passed, we&#8217;re going to deploy a test instance of the application.
+Integration tests will make HTTP requests to simulate user activity, capture the responses
+and then verify the application is behaving as expected.</p>
+
+<p>Phonebot uses external services, provisioned through IBM Bluemix, to make phone calls, translate
+speech to text and communicate with Slack channels. Services configuration parameters, e.g. username, password, host,
+are passed into the application using <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">environment variables</a>.</p>
+
+<p><strong><em>During integration tests, we want to capture all requests to external services and provide hardcoded HTTP responses to be returned.
+With service parameters coming from environment properties, rather than hardcoded in the application, we can simply replace
+the bound services configuration with our own values. This application will pick up these new values, pointing to our stub server, at runtime
+without any changes needed to the code.</em></strong></p>
+
+<p>This <a href="https://gist.github.com/jthomas/f573cb94de20b0e95940">stub server</a> has
+been created to capture all incoming HTTP requests and make them available at a
+custom HTTP endpoint. We&#8217;re also configured HTTP routes to simulate each of the
+external services and return hardcoded responses.</p>
+
+<p>Deploying our test server in a different <a href="http://docs.cloudfoundry.org/concepts/roles.html#spaces">space</a> to production means we can have custom
+credentials set up without having to modify the service configuration in the production environment.</p>
+
+<p>The following commands will show the existing configuration values that we can replicate in the test environment.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cf env phonebot
+</span><span class='line'>$ cf create-space test
+</span><span class='line'>$ cf target -s test
+</span><span class='line'>$ cf cups twilio -p "accountSID, authToken, url"
+</span><span class='line'>$ cf cups speech_to_text -p "username, password, url"
+</span><span class='line'>$ cf cups slack_webhooks -p "slackbot-testing"</span></code></pre></td></tr></table></div></figure>
+
+
+<p>With the test credentials created, we can deploy the application to the &#8220;test&#8221; space without modifications.</p>
+
+<h2>Setting up Build and Deploy Pipeline</h2>
+
+<p>We&#8217;re going to use <a href="http://hub.jazz.net">IBM DevOps Services</a> to build and manage the &#8220;Continuous Delivery&#8221; pipeline.
+From the home page, click the <em>&#8220;Create Project&#8221;</em> button to import our existing Github project into the workspace.</p>
+
+<p><img src="/images/create_project.png"></p>
+
+<p>The <em>&#8220;Create Project&#8221;</em> page allows us to link an existing project from Github to the new project.
+Changes to the external repository will be automatically pushed through to our project.</p>
+
+<p><img src="/images/create_phonebot.png"></p>
+
+<p>Selecting the <em>&#8220;Make a Bluemix project&#8221;</em> option will automatically configure deploying to the Bluemix platform.</p>
+
+<p><img src="/images/import_phonebot_bm.png"></p>
+
+<p>When the project has finished importing, we can access the &#8220;Build and Deploy&#8221; pipeline&#8230;</p>
+
+<p><img src="/images/build_and_deploy.png"></p>
+
+<p>&#8230; which will currently be empty. Clicking the <em>&#8220;Add Stage&#8221;</em> button will allow
+us to start configuring the build, test and deploy jobs for our pipeline.</p>
+
+<p><img src="/images/add_stage.png"></p>
+
+<h3>Running Unit Tests and Code Lint Tools</h3>
+
+<p>The first stage in our pipeline will run the unit tests when a new commit is published
+to the Phonebot repository on Github.</p>
+
+<p>Using the <em>&#8220;Input&#8221;</em> tab, we&#8217;re configuring the stage to pick up all changes in the <em>&#8220;master&#8221;</em> branch
+of the <a href="https://github.com/jthomas/phonebot.git">https://github.com/jthomas/phonebot.git</a> repository.
+The input for a stage can also be the build artifacts from a previous stage.</p>
+
+<p><img src="/images/unit_test_input.png"></p>
+
+<p>On the <em>&#8220;Jobs&#8221;</em> tab, we can configure multiple tasks to be executed when triggered by the stage input.
+For the unit tests, we&#8217;re using a simple shell script to install the project dependencies and run
+the NPM task.</p>
+
+<p><img src="/images/unit_tests.png"></p>
+
+<h3>Deploy Test Server</h3>
+
+<p>Adding a second stage to the pipeline after the unit tests, we will use it to deploy our test server.
+This stage will only be executed if the first stage completes successfully.</p>
+
+<p>Using the <em>&#8220;Deploy&#8221;</em> rather than <em>&#8220;Test&#8221;</em> job, presents us with a configuration
+panel to set up the deployment parameters. The <em>&#8220;test&#8221;</em> space which contains our
+test configuration for our mock services. Choosing a different application name
+means our test server won&#8217;t clash with the existing production host already
+deployed.</p>
+
+<p><img src="/images/deploy_test.png"></p>
+
+<h3>Running Integration Tests Against Test Server</h3>
+
+<p>Once the test server has been deployed, we can trigger the pipeline stage to run
+integration tests against this host.</p>
+
+<p>Using Mocha to run out integration tests means we can follow the setup
+as the unit test stage. Defining a &#8220;test&#8221; job, we install the project dependencies
+and then run the test harness.</p>
+
+<p><img src="/images/integration_tests.png"></p>
+
+<p>Phonebot&#8217;s integration tests use environment variables to define the test
+and stub server locations. We can define these through the stage setup page, as
+shown below.</p>
+
+<p><img src="/images/environment_props.png"></p>
+
+<h3>Deploy To Production</h3>
+
+<p>Finally, provided all the previous stages were successfully, the last stage will
+deploy our application into production.</p>
+
+<p>Configuring a <em>&#8220;Deploy&#8221;</em> task, this time we use the production space <em>&#8220;dev&#8221;</em> and use the
+proper application name.</p>
+
+<p><img src="/images/deploy_production.png"></p>
+
+<h2>&#8230;and that&#8217;s it!</h2>
+
+<p>With our &#8220;Continuous Delivery&#8221; pipeline now configured, new versions of
+Phonebot will be automatically deployed to production without any manual work.</p>
+
+<p><img src="/images/deploy_success.png"></p>
+
+<p>For testing, each stage can be triggered manually. Logs are available in to diagnose any issues that may occur.</p>
+
+<p><strong>Using IBM DevOps Services, we rapidly created a build and deploy pipeline linked to a project on Github without having to manually
+configure build systems, test servers or anything else you would expect.</strong></p>
+
+<p>Our example was relatively simple, the service can be configured for far more complicated build and deploy tasks. The <a href="https://hub.jazz.net/docs">documentation</a>
+gives full details on the capabilities of that platform. If you have any issues, please use the <a href="https://developer.ibm.com/answers/smartspace/devops-services/">IBM Answers support forum</a> to post questions and get answers from the development team.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/05/29/phonebot/">Phonebot</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-05-29T09:37:00+01:00" pubdate data-updated="true">May 29<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/Phonebot.png"></p>
+
+<p>Last month, a colleague was explaining he was not looking forward to an afternoon of long-distance conference
+calls. Having recently started using Slack for collaboration with their remote team, they lamented&#8230;</p>
+
+<blockquote><p>I wish I could do my conference calls using Slack!</p></blockquote>
+
+
+<p></p>
+
+<p>&#8230;which got us thinking.</p>
+
+<p><a href="jamesthom.as/blog/2015/02/27/doctor-watson/">Recent experiments</a> with IBM Watson Speech To Text and Twilio on IBM Bluemix had shown how easy it was
+to create telephony applications. Slack publishes multiple APIs to help developers build custom &#8220;bots&#8221; that respond to channel content.</p>
+
+<p><strong>Could we create a new Slackbot that let users make phone calls using channel messages?</strong></p>
+
+<p>One month later, <a href="https://github.com/IBM-Bluemix/phonebot">Phonebot</a> was born!</p>
+
+<blockquote><p>Slackbot that lets users make phone calls within a Slack channel. <br/>Users can dial a phone number, with the phone call audio converted to text and sent to the channel. <br/>Channel message replies are converted to speech and sent over the phone call.</p><footer><strong>Phonebot</strong> <cite><a href='https://github.com/IBM-Bluemix/phonebot'>github.com/IBM-Bluemix/phonebot/&hellip;</a></cite></footer></blockquote>
+
+
+<p></p>
+
+<p><strong>tl;dr</strong> Full source code for the project is available <a href="https://github.com/IBM-Bluemix/phonebot">here</a>.
+Follow the <a href="https://github.com/IBM-Bluemix/phonebot#deployment-instructions">deployment instructions</a> to run your own version.</p>
+
+<p>Read on to find out how we put IBM Watson, Twilio and IBM Bluemix to develop our custom Slackbot&#8230;</p>
+
+<h2>Custom Slackbots</h2>
+
+<p>Slack publishes <a href="https://api.slack.com/">numerous APIs</a> for integrating custom services. These APIs provide everything from
+<a href="https://api.slack.com/slackbot">sending simple messages as Slackbot</a> to creating a <a href="https://api.slack.com/rtm">real-time messaging service</a>.</p>
+
+<p>Phonebot will listen to messages starting with <em>@phonebot</em> and which contain user commands e.g. dial, hangup. It will create new
+channel messages with the translated speech results along with status messages. Users can issue the following commands to control
+Phonebot.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>@phonebot call PHONE_NUMBER &lt;-- Dials the phone number
+</span><span class='line'>@phonebot say TEXT &lt;-- Sends text as speech to the call 
+</span><span class='line'>@phonebot hangup &lt;-- Ends the active call
+</span><span class='line'>@phonebot verbose {on|off}&lt;-- Toggle verbose mode
+</span><span class='line'>@phonebot duration NUMBER &lt;-- Set recording duration
+</span><span class='line'>@phonebot help &lt;-- Show all commands usage information </span></code></pre></td></tr></table></div></figure>
+
+
+<p>We use the <a href="https://api.slack.com/incoming-webhooks">Incoming Webhooks API</a> to
+post new channel messages and the <a href="https://api.slack.com/outgoing-webhooks">Outgoing Webhook API</a>
+to notify the application about custom channel commands.</p>
+
+<h3>Listening for custom commands</h3>
+
+<p>Creating a new <a href="https://my.slack.com/services/new/outgoing-webhook">Outgoing Webhook</a>,
+messages from the registered channels which begin with the &#8220;@phonebot&#8221; prefix
+will be posted to HTTP URL for the IBM Bluemix application handling the incoming messages.</p>
+
+<p>We can create Outgoing Webhooks for every channel we want to register Phonebot in.</p>
+
+<p>For each registered channel, we need to allow Phonebot to post new messages.</p>
+
+<p><img src="/images/outgoing_wh.png"></p>
+
+<h3>Sending new channel messages</h3>
+
+<p><a href="https://my.slack.com/services/new/incoming-webhook">Incoming Webhooks</a> provide an obfuscated HTTP URL that allows unauthenticated HTTP requests to create new channel messages.
+Creating a new Incoming obfuscated for each channel we are listening to will allow Phonebot to post responses.</p>
+
+<p>Each Incoming Webhook URL will be passed to Phonebot application using configuration via environment variables.</p>
+
+<p><img src="/images/incoming_wh.png"></p>
+
+<h2>Making Phone Calls</h2>
+
+<p><a href="https://www.twilio.com/">Twilio</a> provides &#8220;telephony-as-a-service&#8221;, allowing applications to make telephone calls using a REST API.</p>
+
+<p>Twilio has been made available on the IBM Bluemix platform. Binding this service to your application will provide the authentication credentials to use with the Twilio <a href="http://twilio.github.io/twilio-node/">client library</a>.</p>
+
+<p>When users issue the &#8220;call&#8221; command with a phone number, the channel bot listening to user commands emits a custom event.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">bot</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;call&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">number</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">phone</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">phone</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">phone</span><span class="p">.</span><span class="nx">call_active</span><span class="p">())</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;The line is busy, you have to hang up first...!&#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">phone</span><span class="p">.</span><span class="nx">call</span><span class="p">(</span><span class="nx">number</span><span class="p">,</span> <span class="k">this</span><span class="p">.</span><span class="nx">base_url</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="nx">channel</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Within the &#8220;phone&#8221; object, the &#8220;call&#8221; method triggers the following code.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="k">this</span><span class="p">.</span><span class="nx">client</span><span class="p">.</span><span class="nx">makeCall</span><span class="p">({</span>
+</span><span class='line'>  <span class="nx">to</span><span class="o">:</span> <span class="nx">number</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">from</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">from</span><span class="p">,</span>
+</span><span class='line'>  <span class="nx">url</span><span class="o">:</span> <span class="nx">route</span>
+</span><span class='line'><span class="p">},</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">responseData</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">that</span><span class="p">.</span><span class="nx">request_fail</span><span class="p">(</span><span class="s1">&#39;Failed To Start Call: &#39;</span> <span class="o">+</span> <span class="nx">number</span> <span class="o">+</span> <span class="s1">&#39;(&#39;</span> <span class="o">+</span> <span class="nx">route</span> <span class="o">+</span> <span class="s1">&#39;) &#39;</span><span class="p">,</span> <span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">that</span><span class="p">.</span><span class="nx">request_success</span><span class="p">(</span><span class="s1">&#39;New Call Started: &#39;</span> <span class="o">+</span> <span class="nx">number</span> <span class="o">+</span> <span class="s1">&#39; (&#39;</span> <span class="o">+</span> <span class="nx">route</span> <span class="o">+</span> <span class="s1">&#39;): &#39;</span> <span class="o">+</span> <span class="nx">responseData</span><span class="p">.</span><span class="nx">sid</span><span class="p">,</span> <span class="nx">responseData</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The URL parameter provides a HTTP URL which Twilio will use to POST updated <a href="https://www.twilio.com/docs/api/twiml/twilio_request">call status information</a>.
+HTTP responses from this location will tell Twilio how to handle the ongoing call, e.g. play an audio message, press the following digits, record phone line audio.</p>
+
+<p>If the phone call connects successfully, we need the phone line audio stream to translate the speech into text.
+<em>Unfortunately, Twilio does not support directly accessing the real-time audio stream. However, can record a batch
+of audio, i.e five seconds, and download the resulting file.</em></p>
+
+<p>Therefore, we will tell Twilio to record a short section of audio and post the results back to our application. When this message is received,
+our response will contain the request to record another five seconds. This approach will provide a semi-realtime stream of phone call audio for processing.</p>
+
+<p>Here is the code snippet to construct the TwiML response to record the audio snippet. Any channel messages that are queued for
+sending as speech will be added to the outgoing response.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">twiml</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">twilio</span><span class="p">.</span><span class="nx">TwimlResponse</span><span class="p">()</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// Do we have text to send down the active call?</span>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">user_speech</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">outgoing</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>    <span class="nx">twiml</span><span class="p">.</span><span class="nx">say</span><span class="p">(</span><span class="nx">user_speech</span><span class="p">)</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">twiml</span><span class="p">.</span><span class="nx">record</span><span class="p">({</span><span class="nx">playBeep</span><span class="o">:</span> <span class="kc">false</span><span class="p">,</span> <span class="nx">trim</span><span class="o">:</span> <span class="s1">&#39;do-not-trim&#39;</span><span class="p">,</span> <span class="nx">maxLength</span><span class="o">:</span> <span class="k">this</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">duration</span><span class="p">,</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mi">60</span><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When we have the audio files containing the phone call audio, we can schedule these for translation with the IBM Watson Speech To Text service.</p>
+
+<h2>Translating Speech To Text</h2>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/speech-to-text.html">IBM Watson Speech To Text</a>
+service, we can simply transcribe phone calls by posting the audio file to the REST API. Using the <a href="">client library</a>
+handles making the actual API requests behind a simple JavaScript interface.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">params</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">audio</span><span class="o">:</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">createReadStream</span><span class="p">(</span><span class="nx">file_name</span><span class="p">),</span>
+</span><span class='line'>  <span class="nx">content_type</span><span class="o">:</span> <span class="s1">&#39;audio/l16; rate=16000&#39;</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">this</span><span class="p">.</span><span class="nx">speech_to_text</span><span class="p">.</span><span class="nx">recognize</span><span class="p">(</span><span class="nx">params</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">return</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">res</span><span class="p">.</span><span class="nx">results</span><span class="p">[</span><span class="nx">res</span><span class="p">.</span><span class="nx">result_index</span><span class="p">]</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">transcript</span> <span class="o">=</span> <span class="nx">result</span><span class="p">.</span><span class="nx">alternatives</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="nx">transcript</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">&#39;available&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="s1">&#39;Missing speech recognition result.&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having <a href="http://jamesthom.as/blog/2015/02/27/doctor-watson/">previously</a> handling converting the audio
+file from the format created by Twilio to that needed by the Watson API, we were able to reuse
+the <a href="https://github.com/IBM-Bluemix/phonebot/blob/master/lib/translate.js">translate.js</a> class
+between projects.</p>
+
+<p>This module relies on the SOX library being installed in the native runtime. We used a
+<a href="http://jamesthom.as/blog/2015/03/04/cloud-foundry-custom-buildpacks/">custom buildpack</a> to support this.</p>
+
+<h3>Managing Translation Tasks</h3>
+
+<p>When a new Twilio message with audio recording details is received, we schedule a translation request. As this background task returns, the results are
+posted into the corresponding Slack channel.</p>
+
+<p>If a translation request takes longer than expected, additional requests may be scheduled before the first has finished. We still want to maintain the order
+when posting new channel messages, even if later requests finishing translating first.</p>
+
+<p>Using the <a href="https://github.com/caolan/async">async</a> library, a single-worker <a href="https://github.com/caolan/async#queue">queue</a>
+is created to schedule the translation tasks.</p>
+
+<p>Each time the phone object for a channel emits a &#8216;recording&#8217; event, we start the translation
+request and post the worker to the channel queue.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">phone</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;recording&#39;</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">location</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">phone</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">verbose</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;:speech_balloon: _waiting for translation_&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">req</span> <span class="o">=</span> <span class="nx">translate</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">watson</span><span class="p">,</span> <span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">req</span><span class="p">.</span><span class="nx">start</span><span class="p">()</span>
+</span><span class='line'>  <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">queue</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When a task reaches the front of the queue, the worker function is called to process the result.</p>
+
+<p>If translation task has finished, we signal to the queue this task
+has completed. Otherwise, we wait for completion events being emitted.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">var</span> <span class="nx">queue</span> <span class="o">=</span> <span class="nx">async</span><span class="p">.</span><span class="nx">queue</span><span class="p">(</span><span class="kd">function</span> <span class="p">(</span><span class="nx">task</span><span class="p">,</span> <span class="nx">callback</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">done</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="nx">message</span><span class="p">)</span> <span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">bot</span><span class="p">.</span><span class="nx">post</span><span class="p">(</span><span class="s1">&#39;:speech_balloon: &#39;</span> <span class="o">+</span> <span class="nx">message</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">callback</span><span class="p">()</span>
+</span><span class='line'>    <span class="k">return</span> <span class="kc">true</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">process</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">done</span><span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">transcript</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="kd">var</span> <span class="nx">failed</span> <span class="o">=</span> <span class="kd">function</span> <span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">done</span><span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">channels</span><span class="p">[</span><span class="nx">channel</span><span class="p">].</span><span class="nx">phone</span><span class="p">.</span><span class="nx">defaults</span><span class="p">.</span><span class="nx">verbose</span> <span class="o">?</span> <span class="s1">&#39;_unable to recognise speech_&#39;</span> <span class="o">:</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">transcript</span> <span class="o">&amp;&amp;</span> <span class="nx">process</span><span class="p">())</span> <span class="k">return</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">task</span><span class="p">.</span><span class="nx">failed</span> <span class="o">&amp;&amp;</span> <span class="nx">failed</span><span class="p">())</span> <span class="k">return</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">task</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;available&#39;</span><span class="p">,</span> <span class="nx">process</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">task</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;failed&#39;</span><span class="p">,</span> <span class="nx">failed</span><span class="p">)</span>
+</span><span class='line'><span class="p">},</span> <span class="mi">1</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Deploying Phonebot</h2>
+
+<p>Now we&#8217;ve finished the code, we can configure the application to deploy on the IBM Bluemix cloud platform.</p>
+
+<h3>Configuring Webhooks</h3>
+
+<p>Phonebot must be passed the configured incoming webhooks URLs, allowing it to send
+channel messages. Following the <a href="http://12factor.net/config">standard Platform-as-a-Service convention</a> for passing configuration, we store the channel webhooks as environment variables.</p>
+
+<p>Using the CF CLI, we run the following command to set up the local environment parameters.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf cups slack_webhooks -p <span class="s1">&#39;{&quot;channel_name&quot;:&quot;incoming_webhook_url&quot;,...}&#39;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Application Manifest</h3>
+
+<p>Application manifests configure deployment parameters for Cloud Foundry applications.
+Phonebot will need to be bound to Twilio, IBM watson and custom services, along with configuring the runtime environment.</p>
+
+<pre>
+---
+applications:
+- name: phonebot 
+  memory: 256M 
+  command: node app.js
+  buildpack: https://github.com/jthomas/nodejs-buildpack.git
+  services:
+  - twilio
+  - speech_to_text
+  - slack_webhooks
+declared-services:
+  twilio:
+    label: Twilio
+    plan: 'user-provided'
+  twilio:
+    label: slack_webhooks
+    plan: 'user-provided'
+  speech_to_text:
+    label: speech_to_text
+    plan: free
+</pre>
+
+
+<p><em>&#8230;with this manifest, we can just use the <em>cf push</em> command to deploy our application!</em></p>
+
+<h2>Using Phonebot</h2>
+
+<p>Phonebot will post the following message to each channel successfully registered on startup.</p>
+
+<p><img src="/images/phonebot_is_here.png"></p>
+
+<p>Users can issue <strong>@phonebot COMMAND</strong> messages to control phone calls directly from the slack channel.</p>
+
+<p>For further information about the project, follow the <a href="https://github.com/IBM-Bluemix/phonebot">project on Github</a>.
+Upcoming features are listed in the <a href="https://github.com/IBM-Bluemix/phonebot/issues">issues page</a>.
+<strong>Please feel free to ask for new features, report bugs and leave feedback on Github.</strong></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/22/ibm-watson-nodes-for-nodered/">IBM Watson Nodes for Node-RED</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-04-22T11:15:00+01:00" pubdate data-updated="true">Apr 22<span>nd</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><img src="/images/node-red.png"></p>
+
+<p>I&#8217;ve updated the IBM Watson Nodes for Node-RED to include seven extra services.</p>
+
+<p>Previously, the package only provided support for the following services:</p>
+
+<ul>
+<li>Language Identification.</li>
+<li>Machine Translation.</li>
+<li>Question &amp; Answers.</li>
+</ul>
+
+
+<p>With the recent <a href="https://github.com/node-red/node-red-bluemix-nodes/pull/10">code changes</a>,
+users now have access to the additional services:</p>
+
+<ul>
+<li>Message Resonance.</li>
+<li>Personality Insights.</li>
+<li>Relationship Extraction.</li>
+<li>Speech to Text.</li>
+<li>Text to Speech.</li>
+<li>Tradeoff Analytics.</li>
+<li>Visual Recognition.</li>
+</ul>
+
+
+<p><strong>Using Node-RED through the <a href="https://bluemix.net">IBM Bluemix</a> boilerplate will
+automatically include the IBM Watson modules in the palette.</strong></p>
+
+<p>It is possible to use the IBM Watson nodes with Node-RED outside of IBM Bluemix
+provided you have the <a href="http://docs.run.pivotal.io/devguide/deploy-apps/environment-variable.html">local environment variables</a>
+configured to provide the service credentials.</p>
+
+<p>For information about the individual services, please see the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/">IBM Watson Developer Cloud</a>.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/04/16/creating-cf-cli-plugins/">Creating CF CLI Plugins</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-04-16T09:53:00+01:00" pubdate data-updated="true">Apr 16<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Since the v.6.7 release of the Cloud Foundry Command Line Interface (CF CLI), users have been to create and install plugins to provide custom commands.</p>
+
+<p>There&#8217;s now a whole community of <a href="http://plugins.cloudfoundry.org/ui/">third-party plugins</a> to help make you more productive developing Cloud Foundry applications.</p>
+
+<h2>Installing Plugins</h2>
+
+<p>Plugins can be installed directly from the platform binary.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ go get github.com/sample_user/sample_plugin
+</span><span class='line'>$ cf install-plugin $GOPATH/bin/sample_plugin</span></code></pre></td></tr></table></div></figure>
+
+
+<p>&#8230;or discovered and installed directly from plugin repositories.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cf add-plugin-repo cf-plugins http://plugins.cloudfoundry.org/
+</span><span class='line'>$ cf list-plugin-repos
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>Repo Name    Url
+</span><span class='line'>cf-plugins   http://plugins.cloudfoundry.org/
+</span><span class='line'>
+</span><span class='line'>$ cf repo-plugins
+</span><span class='line'>Getting plugins from all repositories ...
+</span><span class='line'>
+</span><span class='line'>Repository: cf-plugins
+</span><span class='line'>name                   version   description
+</span><span class='line'>CLI-Recorder           1.0.1     Records and playbacks CLI commands.
+</span><span class='line'>Live Stats             1.0.0     Monitor CPU and Memory usage on an app via the browser.
+</span><span class='line'>Console                1.0.0     Start a tmate session on an application container
+</span><span class='line'>Diego-Beta             1.3.0     Enables Diego-specific commands and functionality
+</span><span class='line'>Open                   1.1.0     Open app url in browser
+</span><span class='line'>autopilot              0.0.1     zero downtime deploy plugin for cf applications
+</span><span class='line'>Brooklyn               0.1.1     Interact with Service Broker for Apache Brooklyn
+</span><span class='line'>kibana-me-logs         0.3.0     Launches the Kibana UI (from kibana-me-logs) for an application.
+</span><span class='line'>Buildpack Usage        1.0.0     View all buildpacks used in the current CLI target context.
+</span><span class='line'>CF App Stack Changer   1.0.0     Allows admins to list and update applications with outdated lucid64 stacks.</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once a repository has been registered, we can search and install the available plugins.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>$ cf install-plugin open -r cf-plugins
+</span><span class='line'>Looking up 'open' from repository 'cf-plugins'
+</span><span class='line'>  7998292 bytes downloaded...
+</span><span class='line'>Installing plugin /var/folders/db/9y12sh3n0kdg4v3zxnn8dbg80000gn/T/ filename=cf-plugin-open_darwin_amd64...
+</span><span class='line'>OK
+</span><span class='line'>Plugin open v1.1.0 successfully installed.
+</span><span class='line'>
+</span><span class='line'>$ cf plugins
+</span><span class='line'>Listing Installed Plugins...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>Plugin Name   Version   Command Name   Command Help
+</span><span class='line'>open          1.1.0     open           open app url in browser
+</span><span class='line'>
+</span><span class='line'>$ cf open
+</span><span class='line'>NAME:
+</span><span class='line'>   open - open app url in browser
+</span><span class='line'>
+</span><span class='line'>USAGE:
+</span><span class='line'>   open &lt;appname&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>How about creating your own plugins? Here I&#8217;ll show you how by walking through the steps used to create my first plugin, <a href="https://github.com/jthomas/copyenv">copyenv</a>.</strong></p>
+
+<h2>Creating New Plugins</h2>
+
+<p>Plugins are <a href="http://golang.org">Go</a> binaries, implenting a <a href="https://github.com/cloudfoundry/cli/blob/master/plugin/plugin.go">common interface</a>
+defined by the CF CLI project.</p>
+
+<p>There&#8217;s a Run() function to implement that acts as a callback when the user issues the plugin command along
+with a GetMetadata() function to provide the metadata for the new command.</p>
+
+<p>There&#8217;s a list of <a href="https://github.com/cloudfoundry/cli/tree/master/plugin_examples">example plugins</a>
+to start with in the CF CLI repository.</p>
+
+<p>For our plugin, we&#8217;re starting with the
+<a href="https://github.com/cloudfoundry/cli/blob/master/plugin_examples/basic_plugin.go">basic_plugin</a>
+code. This file contains a skeleton outline for a basic plugin implementation
+that you can modify.</p>
+
+<h3>Plugin Structure</h3>
+
+<p>Reviewing the basic_plugin example, plugins follow a simple structure.</p>
+
+<p>First, we declare the Go package &#8220;main&#8221; as this code will be compiled into an executable command.
+Application dependencies are registered with the &#8220;import&#8221; definition. We link to the CF
+CLI Plugin package to access the common interface that defines a runnable plugin. BasicPlugin is the
+name of our struct that will implement the Plugin Interface.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kn">package</span> <span class="nx">main</span>
+</span><span class='line'>
+</span><span class='line'><span class="kn">import</span> <span class="p">(</span>
+</span><span class='line'>  <span class="s">&quot;fmt&quot;</span>
+</span><span class='line'>  <span class="s">&quot;github.com/cloudfoundry/cli/plugin&quot;</span>
+</span><span class='line'><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">type</span> <span class="nx">BasicPlugin</span> <span class="kd">struct</span><span class="p">{}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The &#8220;Run&#8221; function will be executed each time a user calls our custom plugin command. We are passed
+a reference to the CF CLI, for running additional commands, along with the command line arguments.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="p">(</span><span class="nx">c</span> <span class="o">*</span><span class="nx">BasicPlugin</span><span class="p">)</span> <span class="nx">Run</span><span class="p">(</span><span class="nx">cliConnection</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">CliConnection</span><span class="p">,</span> <span class="nx">args</span> <span class="p">[]</span><span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="c1">// Ensure that we called the command basic-plugin-command</span>
+</span><span class='line'>  <span class="k">if</span> <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&quot;basic-plugin-command&quot;</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;Running the basic-plugin-command&quot;</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Returning metadata to install the plugin is implemented via the &#8220;GetMetadata&#8221; function. We can specify the
+plugin version number, help documentation and command identifiers.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="p">(</span><span class="nx">c</span> <span class="o">*</span><span class="nx">BasicPlugin</span><span class="p">)</span> <span class="nx">GetMetadata</span><span class="p">()</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">PluginMetadata</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">PluginMetadata</span><span class="p">{</span>
+</span><span class='line'>    <span class="nx">Name</span><span class="p">:</span> <span class="s">&quot;MyBasicPlugin&quot;</span><span class="p">,</span>
+</span><span class='line'>    <span class="nx">Version</span><span class="p">:</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">VersionType</span><span class="p">{</span>
+</span><span class='line'>      <span class="nx">Major</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>      <span class="nx">Minor</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>      <span class="nx">Build</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>    <span class="nx">Commands</span><span class="p">:</span> <span class="p">[]</span><span class="nx">plugin</span><span class="p">.</span><span class="nx">Command</span><span class="p">{</span>
+</span><span class='line'>      <span class="nx">plugin</span><span class="p">.</span><span class="nx">Command</span><span class="p">{</span>
+</span><span class='line'>        <span class="nx">Name</span><span class="p">:</span>     <span class="s">&quot;basic-plugin-command&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="nx">HelpText</span><span class="p">:</span> <span class="s">&quot;Basic plugin command&#39;s help text&quot;</span><span class="p">,</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="c1">// UsageDetails is optional</span>
+</span><span class='line'>        <span class="c1">// It is used to show help of usage of each command</span>
+</span><span class='line'>        <span class="nx">UsageDetails</span><span class="p">:</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">Usage</span><span class="p">{</span>
+</span><span class='line'>          <span class="nx">Usage</span><span class="p">:</span> <span class="s">&quot;basic-plugin-command\n   cf basic-plugin-command&quot;</span><span class="p">,</span>
+</span><span class='line'>        <span class="p">},</span>
+</span><span class='line'>      <span class="p">},</span>
+</span><span class='line'>    <span class="p">},</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Finally, the &#8220;main&#8221; function will the entry point when executing the compiled binary.
+Calling &#8220;plugin.Start&#8221; with a pointer to the struct implementing the Plugin interace will
+register our plugin.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">plugin</span><span class="p">.</span><span class="nx">Start</span><span class="p">(</span><span class="nb">new</span><span class="p">(</span><span class="nx">BasicPlugin</span><span class="p">))</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>CopyEnv Plugin</h2>
+
+<blockquote><p>Cloud Foundry CLI plugin to export application VCAP_SERVICES onto the local machine.</p></blockquote>
+
+
+<p>Applications running on Cloud Foundry rely on the VCAP_SERVICES environment
+variable to provide service credentials.</p>
+
+<p>When running applications locally for development and testing, it&#8217;s useful to
+have the same VCAP_SERVICES values available in the local environment to
+simulate running on the host platform.</p>
+
+<p>This plugin will export the remote application environment variables, available
+using cf env, into a format that makes it simple to expose those same values
+locally.</p>
+
+<h3>Modifying the Sample Plugin</h3>
+
+<p>For the new plugin, we will need to get an application name from the user,
+access the remote VCAP_SERVICES environment variable and then export this into
+the user&#8217;s local environment.</p>
+
+<p>Accessing an application&#8217;s environment variables can be retrieved using the existing cf env command.
+The &#8220;plugin.CliConnection&#8221; reference passed into the Run function has <a href="https://github.com/cloudfoundry/cli/blob/master/plugin/plugin.go#L14-L17">methods for executing CLI commands</a> from within the plugin.</p>
+
+<p>We&#8217;re following the convention of the &#8220;cf env&#8221; command by having the application name as a command line argument.
+This means we can modify the existing &#8220;args&#8221; value to set up the CLI command to retrieve the VCAP_SERVICES value.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="kd">func</span> <span class="p">(</span><span class="nx">c</span> <span class="o">*</span><span class="nx">CopyEnv</span><span class="p">)</span> <span class="nx">Run</span><span class="p">(</span><span class="nx">cliConnection</span> <span class="nx">plugin</span><span class="p">.</span><span class="nx">CliConnection</span><span class="p">,</span> <span class="nx">args</span> <span class="p">[]</span><span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nx">args</span><span class="p">)</span> <span class="p">&lt;</span> <span class="mi">2</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="s">&quot;ERROR: Missing application name&quot;</span><span class="p">)</span>
+</span><span class='line'>     <span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">=</span> <span class="s">&quot;env&quot;</span>
+</span><span class='line'>  <span class="nx">output</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">cliConnection</span><span class="p">.</span><span class="nx">CliCommandWithoutTerminalOutput</span><span class="p">(</span><span class="nx">args</span><span class="o">...</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we have an array of strings, output, containing the text output from cf env APP_NAME command.
+Iterating through this list, we search for the line which contains the VCAP_SERVICES definition.
+This value will be a JSON object with a VCAP_SERVICES attribute defining the service credentials.</p>
+
+<p>Exporting this JSON object to the local environment, we need to convert the VCAP_SERVICES object
+into a shell environment variable definition. Go has built in support for the JSON language. We
+decode the parent JSON to a Map interface and then export the VCAP_SERVICES attribute as JSON. This
+text is then wrapped within a shell variable definition.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">val</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">output</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="nx">strings</span><span class="p">.</span><span class="nx">Contains</span><span class="p">(</span><span class="nx">val</span><span class="p">,</span> <span class="s">&quot;VCAP_SERVICES&quot;</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kd">var</span> <span class="nx">f</span> <span class="kd">interface</span><span class="p">{}</span>
+</span><span class='line'>    <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Unmarshal</span><span class="p">([]</span><span class="nb">byte</span><span class="p">(</span><span class="nx">val</span><span class="p">),</span> <span class="o">&amp;</span><span class="nx">f</span><span class="p">)</span>
+</span><span class='line'>    <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+</span><span class='line'>      <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>      <span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">m</span> <span class="o">:=</span> <span class="nx">f</span><span class="p">.(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">interface</span><span class="p">{})</span>
+</span><span class='line'>    <span class="nx">b</span><span class="p">,</span> <span class="nx">err</span> <span class="o">:=</span> <span class="nx">json</span><span class="p">.</span><span class="nx">Marshal</span><span class="p">(</span><span class="nx">m</span><span class="p">[</span><span class="s">&quot;VCAP_SERVICES&quot;</span><span class="p">])</span>
+</span><span class='line'>    <span class="k">if</span> <span class="nx">err</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+</span><span class='line'>      <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span>
+</span><span class='line'>      <span class="nx">os</span><span class="p">.</span><span class="nx">Exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">vcap_services</span> <span class="o">:=</span> <span class="s">&quot;export VCAP_SERVICES=&#39;&quot;</span> <span class="o">+</span> <span class="nb">string</span><span class="p">(</span><span class="nx">b</span><span class="p">[:])</span> <span class="o">+</span> <span class="s">&quot;&#39;;&quot;</span>
+</span><span class='line'>    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Println</span><span class="p">(</span><span class="nx">vcap_services</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once we&#8217;ve finished the code, install the compiled binary using the CF CLI.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">build</span> <span class="nx">copyenv</span><span class="p">.</span><span class="k">go</span>
+</span><span class='line'><span class="err">$</span> <span class="nx">cf</span> <span class="nx">install</span><span class="o">-</span><span class="nx">plugin</span> <span class="nx">copyenv</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Making plugin available for other users</h3>
+
+<p>Exporting out plugin into an external Git repository will allow users to use the Go package manager
+to retrieve and compile the plugin for installation with the CF CLI.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="k">go</span> <span class="nx">get</span> <span class="nx">github</span><span class="p">.</span><span class="nx">com</span><span class="o">/</span><span class="nx">sample_user</span><span class="o">/</span><span class="nx">sample_plugin</span>
+</span><span class='line'><span class="err">$</span> <span class="nx">cf</span> <span class="nx">install</span><span class="o">-</span><span class="nx">plugin</span> <span class="err">$</span><span class="nx">GOPATH</span><span class="o">/</span><span class="nx">bin</span><span class="o">/</span><span class="nx">sample_plugin</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>We can also include the plugin in the official Cloud Foundry <a href="plugins.cloudfoundry.org">Plugin Repository</a>
+by forking the <a href="https://github.com/cloudfoundry-incubator/cli-plugin-repo">source project</a>,
+adding their plugin definition to the <a href="https://github.com/cloudfoundry-incubator/cli-plugin-repo/blob/master/repo-index.yml">repo-index.yml</a>
+file and submitting a pull request.</p>
+
+<p>For maximum compatibility, plugin authors are encouraged to include <a href="https://github.com/jthomas/copyenv/tree/master/bin">platform binaries</a>
+for their plugins.</p>
+
+<p>Go makes it extremely easy to cross-compile your source code for different platforms.</p>
+
+<p>On Mac OS X, if you used Brew to install Go, you can set up cross-compilation with the following commands:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='go'><span class='line'><span class="err">$</span> <span class="nx">brew</span> <span class="nx">reinstall</span> <span class="k">go</span> <span class="o">--</span><span class="nx">with</span><span class="o">-</span><span class="nx">cc</span><span class="o">-</span><span class="nx">common</span>
+</span><span class='line'><span class="err">$</span> <span class="nx">GOOS</span><span class="p">=</span><span class="nx">windows</span> <span class="nx">GOARCH</span><span class="p">=</span><span class="mi">386</span> <span class="k">go</span> <span class="nx">build</span> <span class="nx">appname</span><span class="p">.</span><span class="k">go</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For the full list of supported platforms, see the <a href="https://golang.org/doc/install/source#environment">Go documentation</a></p>
+
+<h2>Using the Plugin</h2>
+
+<p>With the CopyEnv plugin installed, we can now run the following command to export an application&#8217;s VCAP_SERVICES into our local environment.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="nv">$ </span>cf copyenv APP_NAME
+</span><span class='line'><span class="nb">export </span><span class="nv">VCAP_SERVICES</span><span class="o">=</span><span class="s1">&#39;{...}&#39;</span>;
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Writing a new plugin for the CF CLI was extremely straightforward. It&#8217;s a
+great feature to that enables people to contribute new plugins with minimal effort.
+I&#8217;m looking forward to seeing what plugins the community comes up with!</strong></p>
+
+<p>You can see the plugin in action below&#8230;</p>
+
+<p><img src="/images/copyenv.gif"></p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2015/03/04/cloud-foundry-custom-buildpacks/">Cloud Foundry Custom Buildpacks</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2015-03-04T13:25:00+00:00" pubdate data-updated="true">Mar 4<span>th</span>, 2015</time>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Cloud Foundry <a href="http://docs.cloudfoundry.org/buildpacks/">Buildpacks</a> provide runtime and framework support for applications. Users can rely on the built-in selection for Java, NodeJS, Python, etc. or additional <a href="https://github.com/cloudfoundry-community/cf-docs-contrib/wiki/Buildpacks">community buildpacks</a> from Github.</p>
+
+<p>Buildpacks are open-source, making them simple to customise and include  libraries needed by your application.</p>
+
+<p><a href="https://github.com/jthomas/doctor-watson">Doctor Watson</a> uses an <a href="https://www.npmjs.com/package/sox">NPM module</a> that relies on a command-line application, <a href="sox.sourceforge.net">SOX</a>, being installed in the runtime environment.</p>
+
+<p>Making this command-line application available on the platform required the project to create a <a href="https://github.com/jthomas/nodejs-buildpack">custom NodeJS buildpack</a>.</p>
+
+<p>This was the first time I&#8217;ve needed to create a custom buildpack. Documenting the steps below will hopefully provide a guide for other people wanting to do the same.</p>
+
+<p>Overall, the process was straightforward and left me with a greater understanding of how buildpacks works.</p>
+
+<h2>SOX Audio Processing Library</h2>
+
+<p>We&#8217;re using the SOX package within Doctor Watson to up-sample an audio file.
+This module depends on the command-line SOX audio processing utility being installed and available on the command line. SOX is an open-source C application.</p>
+
+<h2>Buildpack Internals</h2>
+
+<p>Cloud Foundry Buildpacks are Git repositories which must contain three shell scripts under the &#8220;bin&#8221; directory.</p>
+
+<ul>
+<li>detect - Does this buildpack apply to this application?</li>
+<li>compile - Build the runtime used to execute the application</li>
+<li>release - Controls how the application should be executed</li>
+</ul>
+
+
+<p>These shell scripts can be modified to perform any task necessary for an application runtime.</p>
+
+<p>We&#8217;re starting with the <a href="https://github.com/cloudfoundry/nodejs-buildpack">default NodeJS buildpack</a>.</p>
+
+<p>The <a href="https://github.com/cloudfoundry/nodejs-buildpack/blob/master/bin/compile">&#8220;bin/compile&#8221;</a> script installs the correct NodeJS version, NPM modules and sets up the runtime environment to start the application. When the script is ran, a command line argument will give a directory path to place files needed at runtime.</p>
+
+<p>We will need to install the SOX binary and dependent libraries under this directory path.</p>
+
+<p>One method for doing this would be downloading the SOX source code and compiling during deployment, before installing the created binaries into the correct location.</p>
+
+<p>Unfortunately, compiling from source during each deployment would add an unacceptable delay.</p>
+
+<p><em>Therefore, most buildpacks use pre-built binaries, which are downloaded and moved to the build directory during deployment, saving a huge amount of time.</em></p>
+
+<h2>Creating the pre-built binary archive</h2>
+
+<p>Rather than manually creating our binaries from source, we can pull them from the Ubuntu package manager which already maintains a pre-built set of binaries for the <a href="https://packages.debian.org/unstable/sound/sox">SOX package</a>.</p>
+
+<p>Packaging the binary and any dynamic libraries dependencies into an archive file, this can be stored in the buildpack repository for extraction during deployment.</p>
+
+<p>We need to ensure the pre-built binaries were compiled for the same host environment that Cloud Foundry will use to run our application.</p>
+
+<p>Using the cf stacks command, we can see the platforms details.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>13:51:45 ~<span class="o">]</span><span class="nv">$ </span>cf stacks
+</span><span class='line'>Getting stacks in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+</span><span class='line'>OK
+</span><span class='line'>
+</span><span class='line'>name      description
+</span><span class='line'>lucid64   Ubuntu 10.04
+</span><span class='line'>seDEA     private
+</span><span class='line'><span class="o">[</span>13:53:10 ~<span class="o">]</span><span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we just need access to the same platform to run the package manager on&#8230;</p>
+
+<p>Docker to the rescue!</p>
+
+<h2>Using Docker</h2>
+
+<p>We&#8217;re going to use Docker to run a new container with the same operating system as the Cloud Foundry environment. Using this we can install the SOX package using &#8216;apt-get&#8217; and extract all the installed files.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>13:56:46 ~<span class="o">]</span><span class="nv">$ </span>docker run -t -i  ubuntu:10.04 /bin/bash
+</span><span class='line'>root@7fdb1e9047e1:/#
+</span><span class='line'>root@7fdb1e9047e1:/# apt-get install sox
+</span><span class='line'>root@7fdb1e9047e1:/# which sox
+</span><span class='line'>/usr/bin/sox
+</span><span class='line'>root@7fdb1e9047e1:/# ldd /usr/bin/sox
+</span><span class='line'>    linux-vdso.so.1 <span class="o">=</span>&gt;  <span class="o">(</span>0x00007fff2819f000<span class="o">)</span>
+</span><span class='line'>    libsox.so.1 <span class="o">=</span>&gt; /usr/lib/libsox.so.1 <span class="o">(</span>0x00007f0f32a94000<span class="o">)</span>
+</span><span class='line'>    libltdl.so.7 <span class="o">=</span>&gt; /usr/lib/libltdl.so.7 <span class="o">(</span>0x00007f0f3288a000<span class="o">)</span>
+</span><span class='line'>    libdl.so.2 <span class="o">=</span>&gt; /lib/libdl.so.2 <span class="o">(</span>0x00007f0f32685000<span class="o">)</span>
+</span><span class='line'>    libpng12.so.0 <span class="o">=</span>&gt; /lib/libpng12.so.0 <span class="o">(</span>0x00007f0f3245e000<span class="o">)</span>
+</span><span class='line'>    libmagic.so.1 <span class="o">=</span>&gt; /usr/lib/libmagic.so.1 <span class="o">(</span>0x00007f0f32242000<span class="o">)</span>
+</span><span class='line'>    libz.so.1 <span class="o">=</span>&gt; /lib/libz.so.1 <span class="o">(</span>0x00007f0f3202a000<span class="o">)</span>
+</span><span class='line'>    libgomp.so.1 <span class="o">=</span>&gt; /usr/lib/libgomp.so.1 <span class="o">(</span>0x00007f0f31e1c000<span class="o">)</span>
+</span><span class='line'>    libgsm.so.1 <span class="o">=</span>&gt; /usr/lib/libgsm.so.1 <span class="o">(</span>0x00007f0f31c0e000<span class="o">)</span>
+</span><span class='line'>    libm.so.6 <span class="o">=</span>&gt; /lib/libm.so.6 <span class="o">(</span>0x00007f0f3198a000<span class="o">)</span>
+</span><span class='line'>    libpthread.so.0 <span class="o">=</span>&gt; /lib/libpthread.so.0 <span class="o">(</span>0x00007f0f3176d000<span class="o">)</span>
+</span><span class='line'>    libc.so.6 <span class="o">=</span>&gt; /lib/libc.so.6 <span class="o">(</span>0x00007f0f313eb000<span class="o">)</span>
+</span><span class='line'>    /lib64/ld-linux-x86-64.so.2 <span class="o">(</span>0x00007f0f32d28000<span class="o">)</span>
+</span><span class='line'>    librt.so.1 <span class="o">=</span>&gt; /lib/librt.so.1 <span class="o">(</span>0x00007f0f311e2000<span class="o">)</span>
+</span><span class='line'>root@7fdb1e9047e1:/#
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Now we have the location of the SOX binary along with a list of the dynamic libraries it depends on.</p>
+
+<p><em>How do we know which of those libraries were already available in the operating system and those the package manager installed?</em></p>
+
+<p>Using Docker diff, we can compare the container to the base image.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>14:02:43 ~<span class="o">]</span><span class="nv">$ </span>docker diff 7fdb1e9047e1 | grep <span class="s1">&#39;\.so\.&#39;</span>
+</span><span class='line'>C /etc/ld.so.cache
+</span><span class='line'>C /etc/ld.so.conf.d
+</span><span class='line'>A /etc/ld.so.conf.d/libasound2.conf
+</span><span class='line'>C /lib/libgcc_s.so.1
+</span><span class='line'>A /usr/lib/libFLAC.so.8
+</span><span class='line'>A /usr/lib/libFLAC.so.8.2.0
+</span><span class='line'>A /usr/lib/libasound.so.2
+</span><span class='line'>A /usr/lib/libasound.so.2.0.0
+</span><span class='line'>A /usr/lib/libgomp.so.1
+</span><span class='line'>A /usr/lib/libgomp.so.1.0.0
+</span><span class='line'>....
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This command will output list of files that have been modified. Grepping this for the list of dependencies we have, it&#8217;s easy to extract those which are new.</p>
+
+<p>We can now copy the files needed from the container filesystem to our local host and bundle into an <a href="https://github.com/jthomas/nodejs-buildpack/blob/master/vendor/sox.tar.gz">archive in the &#8220;vendor&#8221; directory</a>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="o">[</span>14:02:43 ~<span class="o">]</span><span class="nv">$ </span>docker cp 7fdb1e9047e1:/usr/bin/sox .
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Modifying the &#8220;bin/compile&#8221; script</h2>
+
+<p>With the pre-built binary package available in the buildpack repository, we just need to extract this during deployment from the vendor directory into the build directory.</p>
+
+<p>Modifying the PATH and LD_LIBRARY_PATH variables will expose the binary during runtime and ensure the dynamic libraries are recognised.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='sh'><span class='line'><span class="c"># Add SOX binary and libraries to path</span>
+</span><span class='line'>status <span class="s2">&quot;Adding SOX library support&quot;</span>
+</span><span class='line'>tar xzf <span class="nv">$bp_dir</span>/vendor/sox.tar.gz -C <span class="nv">$build_dir</span>/vendor/
+</span><span class='line'>
+</span><span class='line'><span class="c"># Update the PATH</span>
+</span><span class='line'>status <span class="s2">&quot;Building runtime environment&quot;</span>
+</span><span class='line'>mkdir -p <span class="nv">$build_dir</span>/.profile.d
+</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;export PATH=\&quot;\$HOME/vendor/node/bin:\$HOME/bin:\$HOME/node_modules/.bin:\$HOME/vendor/:\$PATH\&quot;;&quot;</span> &gt; <span class="nv">$build_dir</span>/.profile.d/nodejs.sh
+</span><span class='line'><span class="nb">echo</span> <span class="s2">&quot;export LD_LIBRARY_PATH=\&quot;\$HOME/vendor/libs/\&quot;;&quot;</span> &gt;&gt; <span class="nv">$build_dir</span>/.profile.d/nodejs.sh
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Using the custom buildpack</h2>
+
+<p>Once the buildpack modifications have been committed to the <a href="https://github.com/jthomas/nodejs-buildpack">external Github repository</a>, the application manifest can be modified to point to this new location.</p>
+
+<pre>
+---
+applications:
+- name: doctor-watson
+  memory: 256M 
+  buildpack: https://github.com/jthomas/nodejs-buildpack.git
+  command: node app.js
+  services:
+  - twilio
+  - speech_to_text
+  - question_and_answer
+</pre>
+
+
+<p>&#8230; at this point all we have to do is deploy our application again to take advantage of the modified runtime.</p>
+
+<h2>Conclusion</h2>
+
+<p>Buildpacks are a fantastic feature of the Cloud Foundry, allowing the platform to support for almost any runtime. Using open-source Git repositories means you can build on any existing buildpack.</p>
+
+<p>For Doctor Watson, we were able to add a command line binary, built in another language, to the NodeJS runtime. Docker was a great tool when developing our custom buildpack.</p>
+
+<p>If you want more information on customising buildpacks, check out the Cloud Foundary <a href="http://docs.cloudfoundry.org/buildpacks/custom.html">documentation</a>.</p>
+
+<p>Source code for the custom buildpack we created is available <a href="https://github.com/jthomas/nodejs-buildpack">here</a>.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  <div class="pagination">
+    
+      <a class="prev" href="/blog/page/8/">&larr; Older</a>
+    
+    <a href="/blog/archives">Blog Archives</a>
+    
+    <a class="next" href="/blog/page/6/">Newer &rarr;</a>
+    
+  </div>
+</div>
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/08/28/faster-file-transfers-with-serverless/">Faster File Transfers With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating&#8230;</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll&#8230;</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        var disqus_script = 'count.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

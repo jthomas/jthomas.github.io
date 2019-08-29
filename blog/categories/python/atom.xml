@@ -1,0 +1,755 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: python | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/python/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless APIs for MAX models]]></title>
+    <link href="http://jamesthom.as/blog/2019/07/02/serverless-max-models/"/>
+    <updated>2019-07-02T10:25:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/07/02/serverless-max-models</id>
+    <content type="html"><![CDATA[<p>IBM's <a href="https://developer.ibm.com/exchanges/models/">Model Asset eXchange</a> provides a <a href="https://developer.ibm.com/exchanges/models/all/">curated list</a> of free Machine Learning models for developers. Models currently published include detecting <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">emotions</a> or <a href="https://developer.ibm.com/exchanges/models/all/max-facial-age-estimator/">ages</a> in faces from images, <a href="https://developer.ibm.com/exchanges/models/all/max-weather-forecaster/">forecasting the weather</a>, converting <a href="https://developer.ibm.com/exchanges/models/all/max-speech-to-text-converter/">speech to text</a> and more. Models are pre-trained and ready for use in the cloud.</p>
+
+<p>Models are published as series of <a href="https://hub.docker.com/search?q=codait&amp;type=image">public Docker images</a>. Images automatically expose a HTTP API for model predictions. Documentation in the model repositories explains how to run images locally (using Docker) or deploy to the cloud (using Kubernetes). This got me thinking…</p>
+
+<p><strong>Could MAX models be used from serverless functions?</strong> 🤔</p>
+
+<p>Running machine learning models on serverless platforms can take advantage of the horizontal scalability to process large numbers of computationally intensive classification tasks in parallel. Coupled with the serverless pricing structure ("<em>no charge for idle</em>"), this can be an extremely cheap and effective way to perform model classifications in the cloud.</p>
+
+<p><strong>CHALLENGE ACCEPTED!</strong> 🦸‍♂️🦸‍♀️</p>
+
+<p>After a couple days of experimentation, I had worked out an easy way to <a href="https://github.com/jthomas/serverless-max-models">automatically expose MAX models as Serverless APIs</a> on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.  🎉🎉🎉</p>
+
+<p><em>I've given instructions below on how to create those APIs from the models using a simple script. If you just want to use the models, follow those instructions. If you are interested in understanding how this works, keep reading as I explain afterwards what I did...</em></p>
+
+<h2>Running MAX models on IBM Cloud Functions</h2>
+
+<p><a href="https://github.com/jthomas/serverless-max-models">This repository</a> contains a <a href="https://github.com/jthomas/serverless-max-models/blob/master/build.sh">bash script</a> which builds custom Docker runtimes with MAX models for usage on <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>. Pushing these images to Docker Hub allows IBM Cloud Functions to use them as <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom runtimes</a>. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> created from these custom runtime images expose the same Prediction API described in the model documentation. They can be used with no further changes or custom code needed.</p>
+
+<h3>prerequisites</h3>
+
+<p>Please follow the links below to set up the following tools before proceeding.</p>
+
+<ul>
+<li><a href="https://www.docker.com/">Docker</a></li>
+<li><a href="https://hub.docker.com/">Docker Hub account</a></li>
+<li><a href="https://cloud.ibm.com/registration">IBM Cloud account</a></li>
+<li><a href="https://cloud.ibm.com/openwhisk/learn/cli">IBM Cloud Functions CLI installed</a></li>
+</ul>
+
+
+<p><strong>Check out the "<a href="https://github.com/jthomas/serverless-max-models">Serverless MAX Models</a> repository. Run all the following commands from that folder.</strong></p>
+
+<p><code>
+git clone https://github.com/jthomas/serverless-max-models
+cd serverless-max-models
+</code></p>
+
+<h3>build custom runtime images</h3>
+
+<ul>
+<li>Set the following environment variables (<code>MODELS</code>) with <a href="https://hub.docker.com/search?q=codait&amp;type=image">MAX model names</a> and run build script.
+
+<ul>
+<li><code>MODELS</code>: MAX model names, e.g. <code>max-facial-emotion-classifier</code></li>
+<li><code>USERNAME</code>: Docker Hub username.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><code>
+MODELS="..." USERNAME="..." ./build.sh
+</code></p>
+
+<p>This will create Docker images locally with the MAX model names and push to Docker Hub for usage in IBM Cloud Functions. <strong>IBM Cloud Functions only supports public Docker images as custom runtimes.</strong></p>
+
+<h3>create actions using custom runtimes</h3>
+
+<ul>
+<li>Create a Web Action using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker runtime</a>.</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512
+</code></p>
+
+<ul>
+<li>Retrieve the Web Action URL (<code>https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/&lt;ACTION&gt;</code>)</li>
+</ul>
+
+
+<p><code>
+ibmcloud wsk action get &lt;MODEL_IMAGE&gt; --url
+</code></p>
+
+<h3>invoke web action url with prediction api parameters</h3>
+
+<p>Use the same API request parameters as defined in the Prediction API specification with the Web Action URL. This will invoke model predictions and return the result as the HTTP response, e.g.</p>
+
+<p><code>
+curl -F "image=@assets/happy-baby.jpeg" -XPOST &lt;WEB_ACTION_URL&gt;
+</code></p>
+
+<p><em>NOTE: The first invocation after creating an action may incur long cold-start delays due to the platform pulling the remote image into the local registry. Once the image is available in the platform, both further cold and warm invocations will be much faster.</em></p>
+
+<h2>Example</h2>
+
+<p>Here is an example of creating a serverless API using the <code>max-facial-emotion-classifier</code> <a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">MAX model</a>. Further examples of models which have been tested are available <a href="https://github.com/jthomas/serverless-max-models/blob/master/README.md#models">here</a>. If you encounter problems, please <a href="https://github.com/jthomas/serverless-max-models/issues">open an issue</a> on Github.</p>
+
+<h3>max-facial-emotion-classifier</h3>
+
+<ul>
+<li><a href="https://developer.ibm.com/exchanges/models/all/max-facial-emotion-classifier/">Facial Emotion Classifier (<code>max-facial-emotion-classifier</code>)</a></li>
+</ul>
+
+
+<p>Start by creating the action using the custom runtime and then retrieve the Web Action URL.</p>
+
+<p><code>
+$ ibmcloud wsk action create max-facial-emotion-classifier --docker &lt;DOCKERHUB_NAME&gt;/max-facial-emotion-classifier --web true -m 512
+ok: created action max-facial-emotion-classifier
+$ ibmcloud wsk action get max-facial-emotion-classifier --url
+ok: got action max-facial-emotion-classifier
+https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier
+</code></p>
+
+<p>According to the <a href="http://max-facial-emotion-classifier.max.us-south.containers.appdomain.cloud/">API definition</a> for this model, the prediction API expects a form submission with an image file to classify. Using a <a href="https://github.com/IBM/MAX-Facial-Emotion-Classifier/blob/master/assets/happy-baby.jpeg">sample image</a> from the model repo, the model can be tested using curl.</p>
+
+<p><code>
+$ curl -F "image=@happy-baby.jpeg" -XPOST https://&lt;REGION&gt;.functions.cloud.ibm.com/api/v1/web/&lt;NS&gt;/default/max-facial-emotion-classifier
+</code></p>
+
+<p>```json
+{
+  "status": "ok",
+  "predictions": [</p>
+
+<pre><code>{
+  "detection_box": [
+    0.15102639296187684,
+    0.3828125,
+    0.5293255131964809,
+    0.5830078125
+  ],
+  "emotion_predictions": [
+    {
+      "label_id": "1",
+      "label": "happiness",
+      "probability": 0.9860254526138306
+    },
+    ...
+  ]
+}
+</code></pre>
+
+<p>  ]
+}
+```</p>
+
+<h4>performance</h4>
+
+<p><em>Example Invocation Duration (Cold):</em> ~4.8 seconds</p>
+
+<p><em>Example Invocation Duration (Warm):</em> ~ 800 ms</p>
+
+<h2>How does this work?</h2>
+
+<h3>background</h3>
+
+<p>Running machine learning classifications using pre-trained models from serverless functions has historically been challenging due to the following reason…</p>
+
+<blockquote><p>Developers do not control runtime environments in (most) serverless cloud platforms. Libraries and dependencies needed by the functions must be provided in the deployment package. Most platforms limit deployment package sizes (~50MB compressed &amp; ~250MB uncompressed).</p></blockquote>
+
+<p>Machine Learning libraries and models can be much larger than those deployment size limits. This stops them being included in deployment packages. Loading files dynamically during invocations may be possible but incurs extremely long cold-start delays and additional costs.</p>
+
+<p>Fortunately, <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is based on the open-source serverless project, <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. This platform supports bespoke function runtimes using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker images</a>. Machine learning libraries and models can therefore be provided in custom runtimes. This removes the need to include them in deployment packages or be loaded at runtime.</p>
+
+<p><em>Interested in reading other blog posts about using machine learning libraries and toolkits with IBM Cloud Functions? See <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">these posts</a> for <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">more details</a>.</em></p>
+
+<h3>MAX model images</h3>
+
+<p>IBM's <a href="https://developer.ibm.com/exchanges/models/all/">Model Asset eXchange</a> publishes Docker images for each model, alongside the pre-trained model files. Images expose a <a href="https://github.com/IBM/MAX-Text-Sentiment-Classifier#3-use-the-model">HTTP API for predictions</a> using the model on port 5000, built using Python and Flask. <a href="http://max-text-sentiment-classifier.max.us-south.containers.appdomain.cloud/">Swagger files</a> for the APIs describe the available operations, input parameters and response bodies.</p>
+
+<p>These images use a custom application framework (<a href="https://pypi.org/project/maxfw/">maxfw</a>), based on Flask, to standardise exposing MAX models as HTTP APIs. This framework handles input parameter validation, response marshalling, CORS support, etc. This allows model runtimes to just implement the prediction API handlers, rather than the entire HTTP application.</p>
+
+<p>Since the framework already handles exposing the model as a HTTP API, I started looking for a way to simulate an external HTTP request coming into the framework. If this was possible, I could trigger this fake request from a Python Web Action to perform the model classification from input parameters. The Web Action would then covert the HTTP response returned into the valid Web Action response parameters.</p>
+
+<h3>flask test client</h3>
+
+<p>Reading through the Flask <a href="http://flask.pocoo.org/docs/1.0/testing/">documentation</a>, I came across the perfect solution! 👏👏👏</p>
+
+<blockquote><p>Flask provides a way to test your application by exposing the Werkzeug test Client and handling the context locals for you. You can then use that with your favourite testing solution.</p></blockquote>
+
+<p>This allows application routes to be executed with the <a href="https://werkzeug.palletsprojects.com/en/0.15.x/test/#werkzeug.test.Client">test client</a>, without actually running the HTTP server.</p>
+
+<p><code>python
+max_app = MAXApp(API_TITLE, API_DESC, API_VERSION)
+max_app.add_api(ModelPredictAPI, '/predict')
+test_client = max_app.app.test_client()
+r = test_client.post('/model/predict', data=content, headers=headers)
+</code></p>
+
+<p>Using this code within a serverless Python function allows function invocations to trigger the prediction API.  The serverless function only has to convert input parameters to the fake HTTP request and then serialise the response back to JSON.</p>
+
+<h3>python docker action</h3>
+
+<p>The custom MAX model runtime image needs to implement the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">HTTP API expected</a> by Apache OpenWhisk. This API is used to instantiate the runtime environment and then pass in invocation parameters on each request. Since the runtime image contains all files and code need to process requests, the <code>/init</code> handler becomes a <a href="https://english.stackexchange.com/questions/25993/what-does-no-op-mean">no-op</a>. The <code>/run</code> handler converts <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#http-context">Web Action HTTP parameters</a> into the fake HTTP request.</p>
+
+<p>Here is the Python script used to proxy incoming Web Actions requests to the framework model service.</p>
+
+<p>```python
+from maxfw.core import MAXApp
+from api import ModelPredictAPI
+from config import API_TITLE, API_DESC, API_VERSION
+import json
+import base64
+from flask import Flask, request, Response</p>
+
+<p>max_app = MAXApp(API_TITLE, API_DESC, API_VERSION)
+max_app.add_api(ModelPredictAPI, '/predict')</p>
+
+<h1>Use flask test client to simulate HTTP requests for the prediction APIs</h1>
+
+<h1>HTTP request data will come from action invocation parameters, neat huh? :)</h1>
+
+<p>test_client = max_app.app.test_client()
+app = Flask(<strong>name</strong>)</p>
+
+<h1>This implements the Docker runtime API used by Apache OpenWhisk</h1>
+
+<h1>https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md</h1>
+
+<h1>/init is a no-op as everything is provided in the image.</h1>
+
+<p>@app.route("/init", methods=['POST'])
+def init():</p>
+
+<pre><code>return ''
+</code></pre>
+
+<h1>Action invocation requests will be received as the <code>value</code> parameter in request body.</h1>
+
+<h1>Web Actions provide HTTP request parameters as <code>__ow_headers</code> &amp; <code>__ow_body</code> parameters.</h1>
+
+<p>@app.route("/run", methods=['POST'])
+def run():</p>
+
+<pre><code>body = request.json
+form_body = body['value']['__ow_body']
+headers = body['value']['__ow_headers']
+
+# binary image content provided as base64 strings
+content = base64.b64decode(form_body)
+
+# send fake HTTP request to prediction API with invocation data
+r = test_client.post('/model/predict', data=content, headers=headers)
+r_headers = dict((x, y) for x, y in r.headers)
+
+# binary data must be encoded as base64 strings to return in JSON response
+is_image = r_headers['Content-Type'].startswith('image')
+r_data = base64.b64encode(r.data) if is_image else r.data
+body = r_data.decode("utf-8")
+
+response = {'headers': r_headers, 'status': r.status_code, 'body': body }
+print (r.status)
+return Response(json.dumps(response), status=200, mimetype='application/json')
+</code></pre>
+
+<p>app.run(host='0.0.0.0', port=8080)
+```</p>
+
+<h3>building into an image</h3>
+
+<p>Since the MAX models already exist as public Docker images, those images can be used as base images when building custom runtimes. Those base images handle adding model files and all dependencies needed to execute them into the image.</p>
+
+<p>This is the <code>Dockerfile</code> used by the build script to create the custom model image. The <code>model</code> parameter refers to the build argument containing the model name.</p>
+
+<p>```bash
+ARG model
+FROM codait/${model}:latest</p>
+
+<p>ADD openwhisk.py .</p>
+
+<p>EXPOSE 8080</p>
+
+<p>CMD python openwhisk.py
+```</p>
+
+<p>This is then used from the following build script to create a custom runtime image for the model.</p>
+
+<p>```bash</p>
+
+<h1>!/bin/bash</h1>
+
+<p>set -e -u</p>
+
+<p>for model in $MODELS; do
+  echo "Building $model runtime image"
+  docker build -t $model --build-arg model=$model .
+  echo "Pushing $model to Docker Hub"
+  docker tag $model $USERNAME/$model
+  docker push $USERNAME/$model
+done
+```</p>
+
+<p>Once the image is published to Docker Hub, it can be referenced when creating new Web Actions (using the <code>—docker</code> parameter). 😎</p>
+
+<p><code>
+ibmcloud wsk action create &lt;MODEL_IMAGE&gt; --docker &lt;DOCKERHUB_NAME&gt;/&lt;MODEL_IMAGE&gt; --web true -m 512
+</code></p>
+
+<h2>Conclusion</h2>
+
+<p>IBM's Model Asset eXchange is a curated collection of Machine Learning models, ready to deploy to the cloud for a variety of tasks. All models are available as a series of public Docker images. Models images automatically expose HTTP APIs for classifications.</p>
+
+<p>Documentation in the model repositories explains how to run them locally and deploy using Kubernetes, but what about using on serverless cloud platforms? Serverless platforms are becoming a popular option for deploying Machine Learning models, due to horizontal scalability and cost advantages.</p>
+
+<p>Looking through the source code for the model images, I discovered a mechanism to hook into the custom model framework used to export the model files as HTTP APIs. This allowed me write a simple wrapper script to proxy serverless function invocations to the model prediction APIs. API responses would be serialised back into the Web Action response format.</p>
+
+<p>Building this script into a new Docker image, using the existing model image as the base image, created a new runtime which could be used on the platform. Web Actions created from this runtime image would automatically expose the same HTTP APIs as the existing image!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Large Applications on OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/"/>
+    <updated>2017-08-04T09:48:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
+
+<p><blockquote><p>The maximum code size for the action is 48MB.</p><footer><strong>OpenWhisk system details,</strong> <cite><a href='https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb'>github.com/apache/blob/master/&hellip;</a></cite></footer></blockquote></p>
+
+<p>Applications with lots of third-party modules, native libraries or external tools may be soon find themselves running into this limit. Node.js libraries are <a href="https://medium.com/friendship-dot-js/i-peeked-into-my-node-modules-directory-and-you-wont-believe-what-happened-next-b89f63d21558">notorious for having large amounts of dependencies</a>.</p>
+
+<p><em>What if you need to deploy an application larger than this limit to OpenWhisk?</em></p>
+
+<p><a href="https://github.com/apache/incubator-openwhisk/tree/master/sdk/docker">Previous solutions</a> used Docker support in OpenWhisk to build a custom Docker image per action. Source files and dependencies are built into a public image hosted on Docker Hub.</p>
+
+<p>This approach overcomes the limit on deployment size but means application source files will be accessible on Docker Hub. This is not an issue for building samples or open-source projects but not realistic for most applications.</p>
+
+<p><em>So, using an application larger than this limit requires me to make my source files public?</em> 🤔</p>
+
+<p><strong>There's now a better solution!</strong> 👏👏👏</p>
+
+<p><strong>OpenWhisk supports creating actions from an archive file AND a custom Docker image.</strong></p>
+
+<p>If we build a custom Docker runtime which includes shared libraries, those dependencies don't need including in the archive file. Private source files will still be bundled in the archive and injected at runtime.</p>
+
+<p>Reducing archive file sizes also improves deployment times.</p>
+
+<p><em>Let's look at an example…</em></p>
+
+<h2>Using Machine Learning Libraries on OpenWhisk</h2>
+
+<p>Python is a popular language for machine learning and data science. Libraries like <a href="http://pandas.pydata.org/">pandas</a>, <a href="http://scikit-learn.org/stable/">scikit-learn</a> and <a href="http://www.numpy.org/">numpy</a> provide all the tools. Serverless computing is becoming a <a href="https://blog.alexcasalboni.com/serverless-computing-machine-learning-baf52b89e1b0">good choice for machine learning microservices</a>.</p>
+
+<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-python-actions">Python 2 and 3 runtimes</a>.</p>
+
+<p>Popular libraries like flask, requests and beautifulsoup <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#python-actions">are available as global packages</a>. Additional packages can be imported using <code>virutalenv</code> during invocations.</p>
+
+<h3>Python Machine Learning Libraries</h3>
+
+<p>Python packages can be <a href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/">used in OpenWhisk using virtualenv</a>. Developers install the packages locally and include the <code>virutalenv</code> folder in the archive for deployment.</p>
+
+<p>Machine Learning libraries often use numerous shared libraries and compile native dependencies for performance. <strong>This can lead to hundreds of megabytes of dependencies.</strong></p>
+
+<p>Setting up a new <code>virtualenv</code> folder and installing <code>pandas</code> leads to an environment with nearly 100MB of dependencies.</p>
+
+<p><code>
+$ virtualenv env
+$ source env/bin/activate
+$ pip install pandas
+...
+Installing collected packages: numpy, six, python-dateutil, pytz, pandas
+Successfully installed numpy-1.13.1 pandas-0.20.3 python-dateutil-2.6.1 pytz-2017.2 six-1.10.0
+$ du -h
+...
+84M . &lt;-- FOLDER SIZE 😱
+</code></p>
+
+<p><strong>Bundling these libraries within an archive file will not be possible due to the file size limit.</strong></p>
+
+<h3>Custom OpenWhisk Runtime Images</h3>
+
+<p>Overcoming this limit can be achieved using a custom runtime image. The runtime will pre-install additional libraries during the build process and make them available during invocations.</p>
+
+<p>OpenWhisk uses <a href="https://www.docker.com/">Docker</a> for the runtime containers. <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Source files for the images</a> are available on Github under the <code>core</code> folder. Here's the <code>Dockerfile</code> for the Python runtime: <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile">https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile</a>.</p>
+
+<p>Images for OpenWhisk runtimes are also available on Docker Hub under the <a href="https://hub.docker.com/r/openwhisk/">OpenWhisk organisation</a>.</p>
+
+<p><em>Docker supports building new images from a parent image using the <code>FROM</code> directive. Inheriting from the existing runtime images means the <code>Dockerfile</code> for the new runtime only has to contain commands for installing extra dependencies.</em></p>
+
+<p>Let's build a new Python runtime which includes those libraries as shared packages.</p>
+
+<h3>Building Runtimes</h3>
+
+<p>Let's create a new <code>Dockerfile</code> which installs additional packages into the OpenWhisk Python runtime.</p>
+
+<p>```
+FROM openwhisk/python3action</p>
+
+<h1>lapack-dev is available in community repo.</h1>
+
+<p>RUN echo "http://dl-4.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories</p>
+
+<h1>add package build dependencies</h1>
+
+<p>RUN apk add --no-cache \</p>
+
+<pre><code>    g++ \
+    lapack-dev \
+    gfortran
+</code></pre>
+
+<h1>add python packages</h1>
+
+<p>RUN pip install \</p>
+
+<pre><code>numpy \
+pandas \
+scipy \
+sklearn
+</code></pre>
+
+<p>```</p>
+
+<p>Running the <a href="https://docs.docker.com/engine/reference/commandline/build/">Docker build command</a> will create a new image with these extra dependencies.</p>
+
+<p><code>
+$ docker build -t python_ml_runtime .
+Sending build context to Docker daemon  83.01MB
+Step 1/4 : FROM openwhisk/python3action
+ ---&gt; 46388e726fae
+...
+Successfully built cfc14a93863e
+Successfully tagged python_ml_runtime:latest
+</code></p>
+
+<p><em>Hosting images on Docker Hub requires registering a (free) account @ https://hub.docker.com/</em></p>
+
+<p>Create a new tag from the <code>python_ml_runtime</code> image containing the Docker Hub username.</p>
+
+<p><code>
+$ docker tag python_ml_runtime &lt;YOUR_USERNAME&gt;/python_ml_test
+</code></p>
+
+<p>Push the image to Docker Hub to make it available to OpenWhisk.</p>
+
+<p><code>
+$ docker push &lt;YOUR_USERNAME&gt;/python_ml_test
+</code></p>
+
+<h3>Testing It Out</h3>
+
+<p>Create a new Python file (<code>main.py</code>) with the following contents:</p>
+
+<p>```python
+import numpy
+import pandas
+import sklearn
+import scipy</p>
+
+<p>def main(params):</p>
+
+<pre><code>return {
+    "numpy": numpy.__version__,
+    "pandas": pandas.__version__,
+    "sklearn": sklearn.__version__,
+    "scipy": scipy.__version__
+}
+</code></pre>
+
+<p>```</p>
+
+<p>Create a new OpenWhisk action using the Docker image from above and source file.</p>
+
+<p><code>sh
+$ wsk action create lib-versions --docker &lt;YOUR_USERNAME&gt;/openwhisk_python_ml main.py
+ok: created action lib-versions
+</code></p>
+
+<p> Invoke the action to verify the modules are available and return the versions.</p>
+
+<p>```
+$ wsk action invoke lib-versions --result
+{</p>
+
+<pre><code>"numpy": "1.13.1",
+"pandas": "0.20.3",
+"scipy": "0.19.1",
+"sklearn": "0.18.2"
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Yass. It works. 💃🕺</p>
+
+<p>Serverless Machine Learning here we come…. 😉</p>
+
+<h2>Conclusions</h2>
+
+<p>Using custom runtimes with private source files is an amazing feature of OpenWhisk. It enables developers to run larger applications on the platform but also enables lots of other use cases. <strong>Almost any runtime, library or tool can now be used from the platform.</strong></p>
+
+<p>Here are some examples of where this approach could be used…</p>
+
+<ul>
+<li><em>Installing global libraries to reduce archive file size under 48MB and speed up deployments.</em></li>
+<li><em>Upgrading language runtimes, i.e. using Node.js 8 instead of 6.</em></li>
+<li><em>Adding native dependencies or command-line tools to the environment, e.g. ffmpeg.</em></li>
+</ul>
+
+
+<p>Building new runtimes is really simple using pre-existing base images published on Dockerhub.</p>
+
+<p><strong>The possibilities are endless!</strong></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Python Packages in OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/"/>
+    <updated>2017-04-27T17:15:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk</id>
+    <content type="html"><![CDATA[<p>OpenWhisk's Python runtime <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#python-actions">includes popular third-party libraries</a> like requests, scrapy and simplejson. Developers don't have to manually install packages to use those libraries.</p>
+
+<p><em>Great, but what about using other libraries that aren't pre-installed?</em></p>
+
+<p>In a <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">previous blog post</a>, we showed how to deploy Node.js actions from zip files containing third-party modules. These modules are then made available in the Node.js runtime.</p>
+
+<p><strong><a href="https://github.com/openwhisk/openwhisk/pull/1940">Recent updates</a> to OpenWhisk allow us to use the same approach with the Python runtime!</strong></p>
+
+<h2>Python Packages</h2>
+
+<p>Python packages can be installed using the <a href="https://pypi.python.org/pypi/pip">pip tool</a>. This can be used to install individual packages or a series of dependencies from an external file.</p>
+
+<p><code>
+$ pip install blah
+$ pip install -r requirements.txt
+</code></p>
+
+<p>pip defaults to installing packages in a global location (<a href="http://stackoverflow.com/questions/31384639/what-is-pythons-site-packages-directory">site-packages</a>) which is shared between all users. This can cause issues when different projects require different versions of the same package.</p>
+
+<h3>virtualenv</h3>
+
+<p><a href="http://python-guide-pt-br.readthedocs.io/en/latest/dev/virtualenvs/">virtualenv</a> is a tool that solves this issue by creating virtual python environments for projects. The virtual environment includes a custom <code>site-packages</code> folder to install packages into.</p>
+
+<p><code>
+$ virtualenv env
+Using base prefix '/Library/Frameworks/Python.framework/Versions/3.6'
+New python executable in /private/tmp/env/bin/python3.6
+Also creating executable in /private/tmp/env/bin/python
+Installing setuptools, pip, wheel...done.
+</code></p>
+
+<p>OpenWhisk <a href="https://github.com/openwhisk/openwhisk/pull/1940">recently added support</a> for using virtualenv in the Python runtime.</p>
+
+<h3>custom packages on openwhisk</h3>
+
+<p>OpenWhisk actions can be created from a zip file <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">containing source files and other resources</a>.</p>
+
+<p>If the archive includes a virtual Python environment folder, the platform runs the <code>./bin/activate_this.py</code> script before executing Python actions. This script modifies the module search path to include the local <code>site-packages</code> folder.</p>
+
+<p><em>This will only happen during "cold" activations.</em></p>
+
+<p><strong>This feature comes with the following restrictions.</strong></p>
+
+<ul>
+<li>Virtual Python environment must be in a folder called <code>virtualenv</code> under the top-level directory.</li>
+<li>Packages must be available for the Python runtime being used in OpenWhisk (2.7 or 3.6).</li>
+</ul>
+
+
+<p>Let's look at an example of building an OpenWhisk Python action which uses an external Python package.</p>
+
+<h3>Python Package Example</h3>
+
+<p>The <a href="https://pypi.python.org/pypi/pyjokes">pyjokes</a> package provides a library for generating (terrible) jokes for programmers. Let's turn this package into an API (Jokes-as-a-Service!) using the Python runtime on OpenWhisk.</p>
+
+<p>Start by creating a new directory for your project and set up the virtual Python environment.</p>
+
+<p><code>sh
+$ mkdir jokes; cd jokes
+$ virtualenv virtualenv
+Using base prefix '/Library/Frameworks/Python.framework/Versions/3.6'
+New python executable in /tmp/jokes/virtualenv/bin/python3.6
+Also creating executable in /tmp/jokes/virtualenv/bin/python
+Installing setuptools, pip, wheel...done.
+$ source virtualenv/bin/activate
+(virtualenv) $ pip install pyjokes
+Collecting pyjokes
+  Using cached pyjokes-0.5.0-py2.py3-none-any.whl
+Installing collected packages: pyjokes
+Successfully installed pyjokes-0.5.0
+(virtualenv) $
+</code></p>
+
+<p>In the project directory, create a new file (<code>__main__.py</code>) and paste the following code.</p>
+
+<p>```python
+import pyjokes</p>
+
+<p>def joke(params):</p>
+
+<pre><code>return {"joke": pyjokes.get_joke()}
+</code></pre>
+
+<p>```</p>
+
+<p>Check the script works with the Python intepreter.</p>
+
+<p>```sh
+(virtualenv) $ python -i .</p>
+
+<blockquote><blockquote><blockquote><p>joke({})
+{'joke': 'What do you call a programmer from Finland? Nerdic.'}</p>
+
+<p>```</p></blockquote></blockquote></blockquote>
+
+<p>Add the <code>virtualenv</code> folder and Python script to a new zip file.</p>
+
+<p><code>
+$ zip -r jokes.zip virtualenv __main__.py
+  adding: virtualenv/ (stored 0%)
+  adding: virtualenv/.Python (deflated 65%)
+  adding: virtualenv/bin/ (stored 0%)
+  adding: virtualenv/bin/activate (deflated 63%)
+  ...
+$ ls
+__main__.py  jokes.zip   virtualenv
+</code></p>
+
+<p>Create a new OpenWhisk action for the Python runtime using the <code>wsk</code> cli.</p>
+
+<p><code>
+$ wsk action create jokes --kind python:3 --main joke jokes.zip
+ok: created action jokes
+</code></p>
+
+<p>Invoking our new action will return (bad) jokes on-demand using the third-party Python package.</p>
+
+<p>```
+$ wsk action invoke jokes --blocking --result
+{</p>
+
+<pre><code>"joke": "Software salesmen and used-car salesmen differ in that the latter know when they are lying."
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>Installing Packages With Docker</h3>
+
+<p>In the example above, the Python runtime used in development (v3.6) matched the OpenWhisk runtime environment. Packages installed using <code>virtualenv</code> must be for the same major and minor versions of the Python runtime used by OpenWhisk.</p>
+
+<p>OpenWhisk publishes the runtime environments as <a href="https://hub.docker.com/u/openwhisk/">Docker images on Docker Hub</a>.</p>
+
+<p>Running containers from <a href="https://hub.docker.com/r/openwhisk/python3action/">those runtime images</a> provides a way to download packages for the correct environment.</p>
+
+<p><code>
+$ docker run --rm -v "$PWD:/tmp" openwhisk/python3action sh \
+  -c "cd tmp; virtualenv virtualenv; source virtualenv/bin/activate; pip install pyjokes;"
+Using base prefix '/usr/local'
+New python executable in /tmp/virtualenv/bin/python3.6
+Also creating executable in /tmp/virtualenv/bin/python
+Installing setuptools, pip, wheel...done.
+Collecting pyjokes
+  Downloading pyjokes-0.5.0-py2.py3-none-any.whl
+Installing collected packages: pyjokes
+Successfully installed pyjokes-0.5.0
+$
+</code></p>
+
+<p>This will leave you a <code>virtualenv</code> folder in the current directory with packages for the correct Python runtime.</p>
+
+<h3>Speeding Up Deployments</h3>
+
+<p>Peeking inside the <code>virtualenv</code> folder reveals a huge number of files to set up the virtual Python environment. If we just want to use a third-party package from the local <code>site-packages</code> folder, most of those files are unnecessary.</p>
+
+<p><em>Adding this entire folder to the zip archive will unnecessarily inflate the file size. This will slow down deployments and increase execution time for cold activations. OpenWhisk also has a maximum size for action source code of 48MB.</em></p>
+
+<p>Manually including individual <code>site-packages</code> folders, rather than the entire <code>virtualenv</code> directory, will ensure the archive file only contains packages being used. We must also add the Python script (<code>virtualenv/bin/activate_this.py</code>) executed by OpenWhisk to modify the module search path.</p>
+
+<p><code>
+$ zip -r jokes_small.zip virtualenv/bin/activate_this.py virtualenv/lib/python3.6/site-packages/pyjokes __main__.py
+updating: virtualenv/bin/activate_this.py (deflated 54%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/ (stored 0%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/__init__.py (deflated 20%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_de.py (deflated 29%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_en.py (deflated 61%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_es.py (deflated 40%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/pyjokes.py (deflated 68%)
+updating: __main__.py (deflated 18%)
+$ ls -lh
+total 40984
+-rw-r--r--  1 james  wheel    74B 21 Apr 11:01 __main__.py
+-rw-r--r--  1 james  wheel    20M 21 Apr 11:07 jokes.zip
+-rw-r--r--  1 james  wheel   9.3K 21 Apr 13:36 jokes_small.zip
+drwxr-xr-x  6 james  wheel   204B 21 Apr 11:25 virtualenv
+</code></p>
+
+<p>The archive file is now less than ten kilobytes! 🏃</p>
+
+<h4>With The Serverless Framework</h4>
+
+<p><a href="https://serverless.com/">The Serverless Framework</a> is a popular open-source framework for building serverless applications. This framework handles the configuration, packaging and deployment of your serverless application.</p>
+
+<p>OpenWhisk is supported through a <a href="https://www.npmjs.com/package/serverless-openwhisk">provider plugin</a>. <a href="https://medium.com/openwhisk/serverless-framework-and-openwhisk-plugin-update-v0-6-1339cfdcd2d2">Recent versions</a> of the plugin added support for the Python runtime environment.</p>
+
+<p>Using the <a href="https://serverless.com/framework/docs/providers/openwhisk/guide/serverless.yml/">application configuration file</a> for the framework, users can add <code>include</code> and <code>exclude</code> parameters to control the contents of the archive file before deployment.</p>
+
+<p>Here's an example of the configuration needed to only include the necessary files for the application above.</p>
+
+<p>```yaml
+service: pyjokes</p>
+
+<p>provider:
+  name: openwhisk
+  runtime: python:3</p>
+
+<p>functions:
+  jokes:</p>
+
+<pre><code>handler: handler.joke
+</code></pre>
+
+<p>plugins:
+  - serverless-openwhisk</p>
+
+<p>package:
+  exclude:</p>
+
+<pre><code>- virtualenv/**
+- '!virtualenv/bin/activate_this.py'
+- '!virtualenv/lib/python3.6/site-packages/pyjokes/**'
+</code></pre>
+
+<p>```</p>
+
+<h3>conclusion</h3>
+
+<p>Python has a huge community of third-party packages for everything from parsing JSON, making HTTP requests and even generating jokes. OpenWhisk already provided a number of the most popular packages within the Python runtime.</p>
+
+<p>Users can install additional packages locally using the <code>pip</code> and <code>virtualenv</code> tools. Bundling those files within the deployment archive means they are extracted into the OpenWhisk Python runtime environment.</p>
+
+<p>Recent changes to the Python runtime allows the platform to automatically add local package folders to the module search path.</p>
+
+<p><strong>This means Python functions running on OpenWhisk can now use any third-party library as if it was installed globally.</strong></p>
+
+<p>Hurrah 👌!</p>
+]]></content>
+  </entry>
+  
+</feed>

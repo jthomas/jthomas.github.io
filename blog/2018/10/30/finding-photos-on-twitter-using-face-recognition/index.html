@@ -1,0 +1,896 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Finding photos on Twitter using face recognition with TensorFlow.js - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Using face recognition to find unlabelled photos on twitter with machine learning. TensorFlow.js and Serverless Cloud Platforms used to search for &hellip;">
+  <meta name="keywords" content="serverless openwhisk node.js machine learning twitter tensorflow javascript">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Finding Photos on Twitter Using Face Recognition With TensorFlow.js</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-10-30T09:34:00+00:00" pubdate data-updated="true">Oct 30<span>th</span>, 2018</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>As a developer advocate, I spend a lot of time at developer conferences (talking about serverless 😎). Upon returning from each trip, I need to compile a &#8220;trip report&#8221; on the event for my bosses. This helps demonstrate the value in attending events and that I&#8217;m not just accruing air miles and hotel points for fun&#8230; 🛫🏨</p>
+
+<p>I always include any social media content people post about my talks in the trip report. This is usually tweets with photos of me on stage. If people are tweeting about your session, I assume they enjoyed it and wanted to share with their followers.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">&quot;Servers kill your productivity&quot; <a href="https://twitter.com/thomasj?ref_src=twsrc%5Etfw">@thomasj</a> at <a href="https://twitter.com/hashtag/CodeMobileUK?src=hash&amp;ref_src=twsrc%5Etfw">#CodeMobileUK</a> <a href="https://t.co/Y4NsiBBSxT">pic.twitter.com/Y4NsiBBSxT</a></p>&mdash; Mihai Cîrlănaru (@MCirlanaru) <a href="https://twitter.com/MCirlanaru/status/981170555834441729?ref_src=twsrc%5Etfw">April 3, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p><strong>Finding tweets with photos about your talk from attendees is surprisingly challenging.</strong></p>
+
+<p>Attendees often forget to include your twitter username in their tweets. This means the only way to find those photos is to manually scroll through all the results from the conference hashtag. This is problematic at conferences with thousands of attendees all tweeting during the event. <em>#devrelproblems</em>.</p>
+
+<p>Having become bored of manually trawling through all the tweets for each conference, I had a thought&#8230;</p>
+
+<blockquote><p><em>&#8220;Can&#8217;t I write some code to do this for me?&#8221;</em></p></blockquote>
+
+<p>This didn&#8217;t seem like too ridiculous an idea. Twitter has <a href="https://developer.twitter.com/en/docs/tweets/search/overview">an API</a>, which would allow me to retrieve all tweets for a conference hashtag. Once I had all the tweet photos, couldn&#8217;t I run some magic AI algorithm over the images to tell me if I was in them? 🤔</p>
+
+<p>After a couple of weeks of hacking around (and overcoming numerous challenges) I had (to my own amazement) managed to <a href="https://github.com/jthomas/findme">build a serverless application</a> which can find unlabelled photos of a person on twitter using machine learning with <a href="https://github.com/tensorflow/tfjs">TensorFlow.js</a>.</p>
+
+<p><img src="/images/face-recog/find-me-demo.gif" alt="FindMe Example" /></p>
+
+<p><em>If you just want to try this application yourself, follow the instructions in the Github repo: <a href="https://github.com/jthomas/findme">https://github.com/jthomas/findme</a></em></p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/face-recog/architecture.png" alt="FindMe Architecture Diagram" /></p>
+
+<p>This application has four <a href="https://github.com/jthomas/findme/blob/master/serverless.yml">serverless functions</a> (two API handlers and two backend services) and a client-side application from a static web page. Users log into the <a href="https://github.com/jthomas/findme/tree/master/public">client-side application</a> using Auth0 with their Twitter account. This provides the backend application with the user&#8217;s profile image and Twitter API credentials.</p>
+
+<p>When the user invokes a search query, the client-side application invokes the API endpoint for the <code>register_search</code> <a href="https://github.com/jthomas/findme/blob/master/schedule_search.js">function</a> with the query terms and twitter credentials. This function registers a new search job in Redis and fires a new <code>search_request</code> trigger event with the query and job id. This job identifier is returned to the client to poll for real-time status updates.</p>
+
+<p>The <code>twitter_search</code> <a href="https://github.com/jthomas/findme/blob/master/twitter_search.js">function</a> is connected to the <code>search_request</code> trigger and invoked for each event. It uses the Twitter Search API to retrieve all tweets for the search terms. If tweets retrieved from the API contain photos, those tweet ids (with photo urls) are fired as new <code>tweet_image</code> trigger events.</p>
+
+<p>The <code>compare_images</code> <a href="https://github.com/jthomas/findme/blob/master/compare_images.js">function</a> is connected to the <code>tweet_image</code> trigger. When invoked, it downloads the user&#8217;s twitter profile image along with the tweet image and runs face detection against both images, using the <code>face-api.js</code> <a href="https://github.com/justadudewhohacks/face-api.js">library</a>. If any faces in the tweet photo match the face in the user&#8217;s profile image, tweet ids are written to Redis before exiting.</p>
+
+<p>The client-side web page polls for real-time search results by polling the API endpoint for the <code>search_status</code>  <a href="https://github.com/jthomas/findme/blob/master/search_status.js">function</a> with the search job id. Tweets with matching faces are displayed on the web page using the <a href="https://developer.twitter.com/en/docs/twitter-for-websites/embedded-tweets/overview">Twitter JS library</a>.</p>
+
+<h2>challenges</h2>
+
+<p>Since I had found an <a href="https://github.com/justadudewhohacks/face-api.js">NPM library to handle face detection</a>, I could just use this on a serverless platform by including the library within the zip file used to create my serverless application? Sounds easy, right?!</p>
+
+<p><strong>ahem - not so faas-t&#8230;. ✋</strong></p>
+
+<p>As discussed in <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">previous blog posts</a>, there are numerous challenges in using TF.js-based libraries on serverless platforms. Starting with making the packages available in the runtime and loading model files to converting images for classification, these libraries are not like using normal NPM modules.</p>
+
+<p><em>Here are the main challenges I had to overcome to make this serverless application work&#8230;</em></p>
+
+<h3>using tf.js libraries on a serverless platform</h3>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-node">Node.js backend drivers</a> for TensorFlow.js use a native shared C++ library  (<code>libtensorflow.so</code>) to execute models on the CPU or GPU. This native dependency is compiled for the platform during the <code>npm install</code> process. The shared library file is around 142MB, which is too large to include in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">deployment package</a> for most serverless platforms.</p>
+
+<p>Normal workarounds for this issue store large dependencies in an object store. These files are dynamically retrieved during cold starts and stored in the runtime filesystem, as shown in this pseudo-code. This workaround does add an additional delay to cold start invocations.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kd">let</span> <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">library</span> <span class="o">=</span> <span class="s1">&#39;libtensorflow.so&#39;</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">cold_start</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">data</span> <span class="o">=</span> <span class="nx">from_object_store</span><span class="p">(</span><span class="nx">library</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">write_to_fs</span><span class="p">(</span><span class="nx">library</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">cold_start</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// rest of function code…</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>Fortunately, I had a better solution using Apache OpenWhisk&#8217;s support for custom Docker runtimes!</strong></p>
+
+<p>This feature allows serverless applications to use <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md#creating-native-actions">custom Docker images</a> as the runtime environment. Creating custom images with <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">large libraries pre-installed</a> means they can be excluded from deployment packages. 💯</p>
+
+<p>Apache OpenWhisk publishes all existing <a href="https://hub.docker.com/r/openwhisk/">runtime images</a> on Docker Hub. Using existing runtime images as base images means Dockerfiles for custom runtimes are minimal. Here&#8217;s the Dockerfile needed to build a custom runtime with the TensorFlow.js Node.js backend drivers pre-installed.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Once this image has been built and published on Dockerhub, you can use it when creating new functions.</p>
+
+<p><em>I used this approach to build a <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/tags/">custom TensorFlow.js runtime</a> which is available on Docker Hub: <code>jamesthomas/action-nodejs-v8:tfjs-faceapi</code></em></p>
+
+<p>OpenWhisk actions created using the <code>wsk</code> command-line use a configuration flag (<code>--docker</code>) to specify custom runtime images.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">wsk</span> <span class="nx">action</span> <span class="nx">create</span> <span class="nx">classify</span> <span class="nx">source</span><span class="p">.</span><span class="nx">js</span> <span class="o">--</span><span class="nx">docker</span> <span class="nx">jamesthomas</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">faceapi</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The OpenWhisk provider plugin for The Serverless Framework also supports <a href="https://github.com/serverless/serverless-openwhisk#custom-runtime-images">custom runtime images</a> through a configuration parameter (<code>image</code>) under the function configuration.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">service</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">machine-learning</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">provider</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">name</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">openwhisk</span>
+</span><span class='line'>
+</span><span class='line'><span class="l-Scalar-Plain">functions</span><span class="p-Indicator">:</span>
+</span><span class='line'>  <span class="l-Scalar-Plain">classify</span><span class="p-Indicator">:</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">handler</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">source.main</span>
+</span><span class='line'>    <span class="l-Scalar-Plain">image</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">jamesthomas/action-nodejs-v8:tfjs-faceapi</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having fixed the issue of library loading on serverless platforms, I could move onto the next problem, loading the pre-trained models&#8230; 💽</p>
+
+<h3>loading pre-trained models</h3>
+
+<p>Running the <a href="https://github.com/justadudewhohacks/face-api.js#usage-loading-models">example code</a> to load the pre-trained models for face recognition gave me this error:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='yaml'><span class='line'><span class="l-Scalar-Plain">ReferenceError</span><span class="p-Indicator">:</span> <span class="l-Scalar-Plain">fetch is not defined</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I discovered how to manually load TensorFlow.js models from the filesystem using the <code>file://</code> URI prefix. Unfortunately, the <code>face-api.js</code> library doesn&#8217;t support this feature. Models are <a href="https://github.com/justadudewhohacks/tfjs-image-recognition-base/blob/4a7d981dbb37e0d3dabc962e1cbfb6122e535263/src/dom/loadWeightMap.ts#L12">automatically loaded</a> using the <code>fetch</code> HTTP client. This HTTP client is available into modern browsers but not in the Node.js runtime.</p>
+
+<p>Overcoming this issue relies on providing an instance of a compatible HTTP client in the runtime. The <code>node-fetch</code> library is a <a href="https://www.npmjs.com/package/node-fetch">implementation of the fetch client</a> API for the Node.js runtime. By manually installing this module and exporting as a global variable, the library can then use the HTTP client as expected.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="c1">// Make HTTP client available in runtime</span>
+</span><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;node-fetch&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Model configuration and weight files can then be loaded from the library&#8217;s Github repository using this URL:</p>
+
+<p>https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='js'><span class='line'><span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="s1">&#39;&lt;GITHUB_URL&gt;&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>face detection in images</h3>
+
+<p>The <code>face-api.js</code> library has a <a href="https://github.com/justadudewhohacks/face-api.js#detecting-faces">utility function</a> (<code>models.allFaces</code>) to automatically detect and calculate descriptors for all faces found in an image. Descriptors are a feature vector (of 128 32-bit float values) which uniquely describes the characteristics of a persons face.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">results</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">allFaces</span><span class="p">(</span><span class="nx">input</span><span class="p">,</span> <span class="nx">minConfidence</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>The input to this function is the input tensor with the RGB values from an image. In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I explained how to convert an image from the filesystem in Node.js to the input tensor needed by the model.</em></p>
+
+<p>Finding a user by comparing their twitter profile against photos from tweets starts by running face detection against both images. By comparing computed descriptor values, a measure of similarity can be established between faces from the images.</p>
+
+<h3>face comparison</h3>
+
+<p>Once the face descriptors have been calculated the library provides a utility function to compute the euclidian distance between two descriptors vectors. If the difference between two face descriptors is less than a threshold value, this is used to identify the same person in both images.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">distance</span> <span class="o">=</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">euclideanDistance</span><span class="p">(</span><span class="nx">descriptor1</span><span class="p">,</span> <span class="nx">descriptor2</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">if</span> <span class="p">(</span><span class="nx">distance</span> <span class="o">&lt;</span> <span class="mf">0.6</span><span class="p">)</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;match&#39;</span><span class="p">)</span>
+</span><span class='line'><span class="k">else</span>
+</span><span class='line'>  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;no match&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I&#8217;ve no idea why 0.6 is chosen as the threshold value but this seemed to work for me! Even small changes to this value dramatically reduced the precision and recall rates for my test data. I&#8217;m calling it the Goldilocks value, just use it&#8230;</p>
+
+<h2>performance</h2>
+
+<p>Once I had the end to end application working, I wanted to make it was fast as possible. By optimising the performance, I could improve the application responsiveness and reduce compute costs for my backend. Time is literally money with serverless platforms.</p>
+
+<h3>baseline performance</h3>
+
+<p>Before attempting to optimise my application, I needed to understand the baseline performance. Setting up experiments to record invocation durations gave me the following average test results.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~5 seconds</li>
+<li><em>Cold invocations</em>: ~8 seconds</li>
+</ul>
+
+
+<p>Instrumenting the code with <code>console.time</code> statements revealed execution time was comprised of five main sections.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       3200 ms       </td>
+<td>       2000 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 8 seconds</strong>   </td>
+<td>   <strong>~ 5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p><em>Initialisation</em> was the delay during cold starts to create the runtime environment and load all the library files and application code. <em>Model Loading</em> recorded the time spent instantiating the TF.js models from the source files. <em>Image Loading</em> was the time spent converting the RGB values from images into input tensors, this happened twice, once for the twitter profile picture and again for the tweet photo. <em>Face Detection</em> is the elapsed time to execute the <code>models.allFaces</code> method and <code>faceapi.euclideanDistance</code> methods for all the detected faces. <em>Everything else</em> is well&#8230; everything else.</p>
+
+<p>Since model loading was the largest section, this seemed like an obvious place to start optimising. 📈📉</p>
+
+<h3>loading model files from disk</h3>
+
+<p>Overcoming the initial model loading issue relied on manually exposing the expected HTTP client in the Node.js runtime. This allowed models to be dynamically loaded (over HTTP) from the external Github repository. Models files were about 36MB.</p>
+
+<p>My first idea was to load these model files from the filesystem, which should be much faster than downloading from Github. Since I was already building a custom Docker runtime, it was a one-line change to include the model files within the runtime filesystem.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">FROM</span> <span class="nx">openwhisk</span><span class="o">/</span><span class="nx">action</span><span class="o">-</span><span class="nx">nodejs</span><span class="o">-</span><span class="nx">v8</span><span class="o">:</span><span class="nx">latest</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">RUN</span> <span class="nx">npm</span> <span class="nx">install</span> <span class="err">@</span><span class="nx">tensorflow</span><span class="o">/</span><span class="nx">tfjs</span><span class="o">-</span><span class="nx">node</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">COPY</span> <span class="nx">weights</span> <span class="nx">weights</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Having re-built the image and pushed to Docker Hub, the classification function&#8217;s runtime environment now included models files in the filesystem.</p>
+
+<p><strong>But how do we make the <code>face-api.js</code> library load models files from the filesystem when it is using a HTTP client?</strong></p>
+
+<p>My solution was to write a <code>fetch</code> client that proxied calls to retrieve files from a HTTP endpoint to the local filesystem. 😱 I&#8217;d let you decide whether this is a brilliant or terrible idea!</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">global</span><span class="p">.</span><span class="nx">fetch</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">file</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">return</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">json</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">JSON</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">,</span> <span class="s1">&#39;utf8&#39;</span><span class="p">)),</span>
+</span><span class='line'>    <span class="nx">arrayBuffer</span><span class="o">:</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">fs</span><span class="p">.</span><span class="nx">readFileSync</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">model</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">models</span><span class="p">.</span><span class="nx">load</span><span class="p">(</span><span class="s1">&#39;/weights&#39;</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>face-api.js</code> library only used two methods (<code>json()</code> &amp; <code>arrayBuffer()</code>) from the HTTP client. Stubbing out these methods to proxy <code>fs.readFileSync</code> meant files paths were loaded from the filesystem. Amazingly, this seemed to just work, hurrah!</p>
+
+<p><strong>Implementing this feature and re-running performance tests revealed this optimisation saved about 500 ms from the Model Loading section.</strong></p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       1500 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 4.5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>This was less of an improvement than I&#8217;d expected. Parsing all the model files and instantiating the internal objects was more computationally intensive than I realised. This performance improvement did improve both cold and warm invocations, which was a bonus.</p>
+
+<p><em>Despite this optimisation, model loading was still the largest section in the classification function&#8230;</em></p>
+
+<h3>caching loaded models</h3>
+
+<p>There&#8217;s a good strategy to use when optimising serverless functions&#8230;</p>
+
+<p><img src="/images/face-recog/cache-all-the-things.jpg" alt="CACHE ALL THE THINGS" /></p>
+
+<p>Serverless runtimes re-use runtime containers for consecutive requests, known as warm environments. Using local state, like global variables or the runtime filesystem, to cache data between requests can be used to improve performance during those invocations.</p>
+
+<p>Since model loading was such an expensive process, I wanted to cache initialised models. Using a global variable, I could control whether to trigger model loading or return the pre-loaded models. Warm environments would re-use pre-loaded models and remove model loading delay.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">faceapi</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;face-api.js&#39;</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="kd">let</span> <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'>
+</span><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">load</span> <span class="o">=</span> <span class="nx">async</span> <span class="nx">location</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">LOADED</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceDetectionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceRecognitionModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">await</span> <span class="nx">faceapi</span><span class="p">.</span><span class="nx">loadFaceLandmarkModel</span><span class="p">(</span><span class="nx">location</span><span class="p">)</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="nx">LOADED</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">faceapi</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><strong>This performance improvement had a significant impact of the performance for warm invocations. Model loading became &#8220;free&#8221;.</strong> 👍</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>caching face descriptors</h3>
+
+<p>In the initial implementation, the face comparison function was executing face detection against both the user&#8217;s twitter profile image and tweet photo for comparison. Since the twitter profile image was the same in each search request, running face detection against this image would always return the same results.</p>
+
+<p>Rather than having this work being redundantly computed in each function, caching the results of the computed face descriptor for the profile image meant it could re-used across invocations. This would reduce by 50% the work necessary in the Image &amp; Model Loading sections.</p>
+
+<p>The <code>face-api.js</code> library returns the face descriptor as a typed array with 128 32-bit float values. Encoding this values as a hex string allows them to be stored and retrieved from Redis. This code was used to convert float values to hex strings, whilst maintaining the exact precision of those float values.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">encode</span> <span class="o">=</span> <span class="nx">typearr</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">encoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">typearr</span><span class="p">.</span><span class="nx">buffer</span><span class="p">).</span><span class="nx">toString</span><span class="p">(</span><span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">encoded</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">decode</span> <span class="o">=</span> <span class="nx">encoded</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">decoded</span> <span class="o">=</span> <span class="nx">Buffer</span><span class="p">.</span><span class="nx">from</span><span class="p">(</span><span class="nx">encoded</span><span class="p">,</span> <span class="s1">&#39;hex&#39;</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">uints</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Uint8Array</span><span class="p">(</span><span class="nx">decoded</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">floats</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Float32Array</span><span class="p">(</span><span class="nx">uints</span><span class="p">.</span><span class="nx">buffer</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">floats</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This optimisation improves the performance of most cold invocations and all warm invocations, removing over 1200 ms of computation time to compute the results.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>                    </th>
+<th align="center"> Cold Starts (Cached) </th>
+<th align="center">    Warm Starts    </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td> Initialisation     </td>
+<td align="center">       1200 ms        </td>
+<td align="center">       0 ms        |</td>
+</tr>
+<tr>
+<td></td>
+<td> Model Loading      </td>
+<td align="center">       2700 ms        </td>
+<td align="center">      1500 ms      |</td>
+</tr>
+<tr>
+<td></td>
+<td> Image Loading      </td>
+<td align="center">        500 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> Face Detection     </td>
+<td align="center">   700 ms - 900 ms    </td>
+<td align="center">  700 ms - 900 ms  |</td>
+</tr>
+<tr>
+<td></td>
+<td> Everything Else    </td>
+<td align="center">       1000 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> <strong>Total Duration</strong> </td>
+<td align="center">   <strong>~ 6 seconds</strong>    </td>
+<td align="center"> <strong>~ 2.5 seconds</strong> |</td>
+</tr>
+</tbody>
+</table>
+
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms      </td>
+<td>     500 ms       </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms  </td>
+<td> 700 ms - 900 ms </td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>final results + cost</h3>
+
+<p>Application performance was massively improved with all these optimisations. As demonstrated in the video above, the application could process tweets in real-time, returning almost instant results. Average invocation durations were now.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~2.5 seconds</li>
+<li><em>Cold invocations (Cached)</em>: ~6 seconds</li>
+</ul>
+
+
+<p>Serverless platforms charge for compute time by the millisecond, so these improvements led to cost savings of 25% for cold invocations (apart the first classification for a user) and 50% for warm invocations.</p>
+
+<p>Classification functions used 512MB of RAM which meant IBM Cloud Functions would provide 320,000 &#8220;warm&#8221; classifications or 133,333 &#8220;cold&#8221; classifications within the free tier each month. Ignoring the free tier, 100,000 &#8220;warm&#8221; classifications would cost $5.10 and 100,000 &#8220;cold&#8221; classifications $2.13.</p>
+
+<h2>conclusion</h2>
+
+<p>Using TensorFlow.js with serverless cloud platforms makes it easy to build scalable machine learning applications in the cloud. Using the horizontal scaling capabilities of serverless platforms, thousands of model classifications can be ran in parallel. This can be more performant than having dedicated hardware with a GPU, especially with compute costs for serverless applications being so cheap.</p>
+
+<p>TensorFlow.js is ideally suited to serverless application due to the JS interface, (relatively) small library size and availability of pre-trained models. Despite having no prior experience in Machine Learning, I was able to use the library to build a face recognition pipeline, processing 100s of images in parallel, for real-time results. This amazing library opens up machine learning to a whole new audience!</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2018-10-30T09:34:00+00:00" pubdate data-updated="true">Oct 30<span>th</span>, 2018</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/javascript/'>javascript</a>, <a class='category' href='/blog/categories/machine-learning/'>machine learning</a>, <a class='category' href='/blog/categories/node-js/'>node.js</a>, <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>, <a class='category' href='/blog/categories/tensorflow/'>tensorflow</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/" title="Previous Post: Serverless Machine Learning With TensorFlow.js">&laquo; Serverless Machine Learning With TensorFlow.js</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2018/12/03/custom-domains-with-ibm-cloud-functions/" title="Next Post: Using Custom Domains With IBM Cloud Functions">Using Custom Domains With IBM Cloud Functions &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/08/28/faster-file-transfers-with-serverless/">Faster File Transfers With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/';
+        var disqus_url = 'http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

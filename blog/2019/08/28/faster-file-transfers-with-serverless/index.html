@@ -1,0 +1,568 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Faster File Transfers With Serverless - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Transferring files between object stores using massive parallelism with serverless functions. Using HTTP Range headers and Multi-Part Transfers to &hellip;">
+  <meta name="keywords" content="serverless cloud functions object-stores performance">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2019/08/28/faster-file-transfers-with-serverless/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Faster File Transfers With Serverless</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-08-28T10:08:00+01:00" pubdate data-updated="true">Aug 28<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>This week I&#8217;ve been helping a client speed up file transfers between cloud object stores using serverless.</p>
+
+<p>They had a 120GB file on a cloud provider&#8217;s object store. This needed copying into a different cloud object store for integration with platform services. Their current file transfer process was to download the file locally and then re-upload using a development machine. This was taking close to three hours due to bandwidth issues.</p>
+
+<p><em>Having heard about the capabilities of serverless cloud platforms, they were wondering if they could use the massive parallelism that serverless provides to speed up that process?</em> 🤔</p>
+
+<p>After some investigating, I worked out a way to use serverless to implement concurrent file transfers. <strong>Transfer time was reduced from THREE HOURS to just FOUR MINUTES!</strong> This was a decrease in total transfer time of 98%. 👏👏👏</p>
+
+<p><em>In this blog post, I&#8217;ll outlined the simple steps I used to make this happen. I&#8217;ve been using <a href="https://cloud.ibm.com/functions">IBM Cloud Functions</a> as the serverless platform. Two different <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">S3-compatible</a> Object Stores were used for the file transfers. The approach should work for any object store with the features outlined below.</em></p>
+
+<h2>S3-Compatible API Features</h2>
+
+<p>Both object stores being used for the file transfers provided an <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html">S3-compatible API</a>. The S3 API has two features that, when combined, enable concurrent file transfers: <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests">Range Reads</a> and <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/mpuoverview.html">Multi-Part Transfers</a>.</p>
+
+<h3>Range Reads</h3>
+
+<p>The HTTP/1.1 protocol defines a <code>Range</code> <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests">header</a> which allows the client to retrieve part of a document. The client specifies a byte range using the header value, e.g. <code>Range: bytes=0-499</code>. The byte values are then returned in the HTTP response with a <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/206">HTTP 206</a> status code. If the byte range is invalid, a <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/416">HTTP 416</a> response is returned.</p>
+
+<p><strong>The S3 API supports <code>Range</code> request headers on <code>GET</code> HTTP requests for object store files.</strong></p>
+
+<p>Sending a HTTP HEAD request for an object store file will return the file size (using the <code>Content-Length</code> header value). Creating ranges for fixed byte chunks up to this file size  (<code>0-1023</code>, <code>1024-2047</code>,<code>2048-3072</code> &#8230;) allows all sections of a file to be retrieve in parallel.</p>
+
+<h3>Multi-Part Transfers</h3>
+
+<p>Files are uploaded to buckets using HTTP PUT requests. These operations supports a maximum file size of 5GB. Uploading larger files is only possible using &#8220;Multi-Part&#8221; transfers.</p>
+
+<p>Clients <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadInitiate.html">initiate a multi-part transfer</a> using the API and are returned an upload identifier. The large file is then split into parts which are uploaded using <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadUploadPart.html">individual HTTP PUT requests</a>. The upload identifier is used to tags individual requests as belonging to the same file. Once all parts have been uploaded, the API is used to <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/mpUploadComplete.html">confirm the file is finished</a>.</p>
+
+<p>File parts do not have to be uploaded in consecutive order and multiple parts can be uploaded simultaneously.</p>
+
+<h2>Serverless File Transfers</h2>
+
+<p>Combing these two features, I was able to create a serverless function to copy a part of a file between source and destination buckets. By invoking thousands of these functions in parallel, the entire file could be simultaneously copied in parallel streams between buckets. This was controlled by a local script used to manage the function invocations, monitor progress and complete the multi-part transfer once invocations had finished.</p>
+
+<h3>Serverless Function</h3>
+
+<p>The serverless function copies a file part between object stores. It is invoked with all the parameters needed to access both bucket files, byte range to copy and multi-part transfer identifier.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="nx">exports</span><span class="p">.</span><span class="nx">main</span> <span class="o">=</span> <span class="nx">async</span> <span class="kd">function</span> <span class="nx">main</span> <span class="p">(</span><span class="nx">params</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="p">{</span> <span class="nx">src_bucket</span><span class="p">,</span> <span class="nx">src_file</span><span class="p">,</span> <span class="nx">range</span><span class="p">,</span> <span class="nx">dest_bucket</span><span class="p">,</span> <span class="nx">dest_file</span><span class="p">,</span> <span class="nx">mpu</span><span class="p">,</span> <span class="nx">index</span><span class="p">}</span> <span class="o">=</span> <span class="nx">params</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">byte_range</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">read_range</span><span class="p">(</span><span class="nx">src_bucket</span><span class="p">,</span> <span class="nx">src_file</span><span class="p">,</span> <span class="nx">range</span><span class="p">)</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">upload_result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">upload_part</span><span class="p">(</span><span class="nx">dest_bucket</span><span class="p">,</span> <span class="nx">dest_file</span><span class="p">,</span> <span class="nx">mpu</span><span class="p">,</span> <span class="nx">index</span><span class="p">,</span> <span class="nx">byte_range</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">upload_result</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Read Source File Part</h4>
+
+<p>The S3-API JS client can create a &#8221;<em>Range Read</em>&#8221; request by passing the <code>Range</code> parameter with the byte range value, e.g. <code>bytes=0-NN</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">read_range</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">,</span> <span class="nx">Range</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">file_range</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">s3</span><span class="p">.</span><span class="nx">getObject</span><span class="p">({</span><span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">,</span> <span class="nx">Range</span><span class="p">}).</span><span class="nx">promise</span><span class="p">()</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">file_range</span><span class="p">.</span><span class="nx">Body</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Upload File Part</h4>
+
+<p>The <code>uploadPart</code> method is used to complete a part of a multi-part transfer. The method needs the <code>UploadID</code> created when initiating the multi-part transfer and the <code>PartNumber</code> for the chunk index. ETags for the uploaded content will be returned.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">upload_part</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">,</span> <span class="nx">UploadId</span><span class="p">,</span> <span class="nx">PartNumber</span><span class="p">,</span> <span class="nx">Body</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">s3</span><span class="p">.</span><span class="nx">uploadPart</span><span class="p">({</span><span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">,</span> <span class="nx">UploadId</span><span class="p">,</span> <span class="nx">PartNumber</span><span class="p">,</span> <span class="nx">Body</span><span class="p">}).</span><span class="nx">promise</span><span class="p">()</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">result</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>Note: The <code>uploadPart</code> method does not support streaming <code>Body</code> values unless they come from the filesystem. This means the entire part has to be read into memory before uploading. The serverless function must have enough memory to handle this.</em></p>
+
+<h3>Local Script</h3>
+
+<p>The local script used to invoke the functions has to do the following things&#8230;</p>
+
+<ul>
+<li>Create and complete the multi-part transfer</li>
+<li>Calculate file part byte ranges for function input parameters</li>
+<li>Copy file parts using concurrent functions invocations.</li>
+</ul>
+
+
+<h4>Create Multi-Part Transfers</h4>
+
+<p>The S3-API JS client can be used to create a new Multi-Part Transfer.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="p">{</span> <span class="nx">UploadId</span> <span class="p">}</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">s3</span><span class="p">.</span><span class="nx">createMultipartUpload</span><span class="p">({</span><span class="nx">Bucket</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">Key</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">}).</span><span class="nx">promise</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>UploadId</code> can then be used as an input parameter to the serverless function.</p>
+
+<h4>Create Byte Ranges</h4>
+
+<p>Source file sizes can be retrieved using the client library.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">file_size</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">(</span><span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="p">{</span> <span class="nx">ContentLength</span> <span class="p">}</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">s3</span><span class="p">.</span><span class="nx">headObject</span><span class="p">({</span><span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">}).</span><span class="nx">promise</span><span class="p">()</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">ContentLength</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This file size needs splitting into consecutive byte ranges of fixed size chunks. This function will return an array of the HTTP Range header values (<code>bytes=N-M</code>) needed.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">split_into_ranges</span> <span class="o">=</span> <span class="p">(</span><span class="nx">bytes</span><span class="p">,</span> <span class="nx">range_mbs</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">range_size</span> <span class="o">=</span> <span class="nx">range_mbs</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">ranges</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span class='line'>  <span class="kd">let</span> <span class="nx">range_offset</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">last_byte_range</span> <span class="o">=</span> <span class="nx">bytes</span> <span class="o">-</span> <span class="mi">1</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">while</span><span class="p">(</span><span class="nx">range_offset</span> <span class="o">&lt;</span> <span class="nx">last_byte_range</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">start</span> <span class="o">=</span> <span class="nx">range_offset</span>
+</span><span class='line'>    <span class="c1">// Last byte range may be less than chunk size where file size</span>
+</span><span class='line'>    <span class="c1">// is not an exact multiple of the chunk size.</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">end</span> <span class="o">=</span> <span class="nx">start</span> <span class="o">+</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">min</span><span class="p">((</span><span class="nx">range_size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="nx">last_byte_range</span> <span class="o">-</span> <span class="nx">start</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">ranges</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="err">`</span><span class="nx">bytes</span><span class="o">=</span><span class="nx">$</span><span class="p">{</span><span class="nx">start</span><span class="p">}</span><span class="o">-</span><span class="nx">$</span><span class="p">{</span><span class="nx">end</span><span class="p">}</span><span class="err">`</span><span class="p">)</span>
+</span><span class='line'>    <span class="nx">range_offset</span> <span class="o">+=</span> <span class="nx">range_size</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">ranges</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Invoke Concurrent Functions</h4>
+
+<p>Serverless functions need to be invoked for each byte range calculated above. Depending on the file and chunk sizes used, the number of invocations needed could be larger than the platform&#8217;s concurrency rate limit (defaults to 1000 on <a href="https://cloud.ibm.com/functions/">IBM Cloud Functions</a>). In the example above (120GB file in 100MB chunks), 1229 invocations would be needed.</p>
+
+<p>Rather than executing all the byte ranges at once, the script needs to use a maximum of 1000 concurrent invocations. When initial invocations finish, additional functions can be invoked until all the byte ranges have been processed. This code snippet shows a solution to this issue (using <a href="https://github.com/apache/openwhisk-client-js">IBM Cloud Functions JS SDK</a>).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">parallel</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;async-await-parallel&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">retry</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;async-retry&#39;</span><span class="p">);</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">openwhisk</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;openwhisk&#39;</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">concurrent</span> <span class="o">=</span> <span class="mi">1000</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">retries</span> <span class="o">=</span> <span class="mi">3</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">chunk_size</span> <span class="o">=</span> <span class="mi">100</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">static_params</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">source_bucket</span><span class="p">,</span> <span class="nx">dest_bucket</span><span class="p">,</span> <span class="nx">source_filename</span><span class="p">,</span> <span class="nx">dest_filename</span><span class="p">,</span> <span class="nx">mpu</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">ow</span> <span class="o">=</span> <span class="nx">openwhisk</span><span class="p">({...});</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">bucket_file_size</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">file_size</span><span class="p">(</span><span class="nx">source_bucket</span><span class="p">,</span> <span class="nx">source_filename</span><span class="p">);</span>
+</span><span class='line'><span class="kr">const</span> <span class="nx">ranges</span> <span class="o">=</span> <span class="nx">split_into_ranges</span><span class="p">(</span><span class="nx">bucket_file_size</span><span class="p">,</span> <span class="nx">chunk_size</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">uploads</span> <span class="o">=</span> <span class="nx">ranges</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">range</span><span class="p">,</span> <span class="nx">index</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="kr">const</span> <span class="nx">invoke</span> <span class="o">=</span> <span class="nx">async</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">params</span> <span class="o">=</span> <span class="nb">Object</span><span class="p">.</span><span class="nx">assign</span><span class="p">({</span><span class="nx">range</span><span class="p">,</span> <span class="nx">index</span><span class="o">:</span> <span class="nx">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">},</span> <span class="nx">static_params</span><span class="p">)</span>
+</span><span class='line'>    <span class="kr">const</span> <span class="nx">upload_result</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">ow</span><span class="p">.</span><span class="nx">actions</span><span class="p">.</span><span class="nx">invoke</span><span class="p">({</span>
+</span><span class='line'>      <span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">blocking</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="nx">result</span><span class="o">:</span> <span class="kc">true</span><span class="p">,</span> <span class="nx">params</span>
+</span><span class='line'>    <span class="p">})</span>
+</span><span class='line'>    <span class="k">return</span> <span class="nx">upload_result</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">async</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="nx">retry</span><span class="p">(</span><span class="nx">invoke</span><span class="p">,</span> <span class="nx">retries</span><span class="p">)</span>
+</span><span class='line'><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="nx">finished</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">parallel</span><span class="p">(</span><span class="nx">uploads</span><span class="p">,</span> <span class="nx">concurrent</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>uploads</code> value is an array of lazily evaluated serverless function invocations. The code snippet uses the <code>async-await-parallel</code> <a href="https://www.npmjs.com/package/async-await-parallel">library</a> to limit the number of concurrent invocations. Handling intermittent or erroneous invocation errors is managed using the <code>async-retry</code> <a href="https://www.npmjs.com/package/async-retry">library</a>. Failed invocations will be retried three times.</p>
+
+<h4>Finish Multi-Part Transfer</h4>
+
+<p>Once all parts have been uploaded, ETags (returned from the serverless invocations) and the Part Numbers are used to complete the multi-part transfer.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='javascript'><span class='line'><span class="kr">const</span> <span class="nx">parts</span> <span class="o">=</span> <span class="nx">finished</span><span class="p">.</span><span class="nx">map</span><span class="p">((</span><span class="nx">part</span><span class="p">,</span> <span class="nx">idx</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+</span><span class='line'>  <span class="nx">part</span><span class="p">.</span><span class="nx">PartNumber</span> <span class="o">=</span> <span class="nx">idx</span> <span class="o">+</span> <span class="mi">1</span>
+</span><span class='line'>  <span class="k">return</span> <span class="nx">part</span>
+</span><span class='line'><span class="p">})</span>
+</span><span class='line'>
+</span><span class='line'><span class="kr">const</span> <span class="p">{</span> <span class="nx">Location</span><span class="p">,</span> <span class="nx">Bucket</span><span class="p">,</span> <span class="nx">Key</span><span class="p">,</span> <span class="nx">ETag</span> <span class="p">}</span> <span class="o">=</span> <span class="nx">await</span> <span class="nx">s3</span><span class="p">.</span><span class="nx">completeMultipartUpload</span><span class="p">({</span>
+</span><span class='line'>  <span class="nx">Bucket</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">Key</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">UploadId</span><span class="o">:</span> <span class="s1">&#39;...&#39;</span><span class="p">,</span> <span class="nx">MultipartUpload</span><span class="o">:</span> <span class="p">{</span> <span class="nx">Parts</span> <span class="p">}</span>
+</span><span class='line'><span class="p">}).</span><span class="nx">promise</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Results</h2>
+
+<p>The previous file transfer process (download locally and re-upload from development machine) was taking close to <strong>three hours</strong>. This was an average throughput rate of 1.33MB/s ((120GB * 2) / 180).</p>
+
+<p>Using serverless functions, the entire process was completed in <strong>FOUR MINUTES</strong>. File chunks of 100MB were transferred in parallel using 1229 function invocations. This was an average throughput rate of 60MB/s. <strong>That was a reduction in total transfer time of ~98%.</strong> 💯💯💯</p>
+
+<p>Serverless makes it incredibly easy to run <a href="https://en.wikipedia.org/wiki/Embarrassingly_parallel">embarrassingly parallel</a> workloads in the cloud. With just a few lines of code, the file transfer process can be parallelised using 1000s of concurrent functions. The client was rather impressed as you can imagine&#8230; 😎</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-08-28T10:08:00+01:00" pubdate data-updated="true">Aug 28<span>th</span>, 2019</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/openwhisk/'>openwhisk</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2019/08/28/faster-file-transfers-with-serverless/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2019/08/28/faster-file-transfers-with-serverless/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2019/08/06/serverless-and-webassembly-modules/" title="Previous Post: Serverless Functions with WebAssembly Modules">&laquo; Serverless Functions with WebAssembly Modules</a>
+      
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/08/28/faster-file-transfers-with-serverless/">Faster File Transfers With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2019/08/28/faster-file-transfers-with-serverless/';
+        var disqus_url = 'http://jamesthom.as/blog/2019/08/28/faster-file-transfers-with-serverless/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

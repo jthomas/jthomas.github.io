@@ -1,0 +1,1228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: apache | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/apache/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Accessing Long-Running Apache OpenWhisk Actions Results]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results/"/>
+    <updated>2019-05-14T11:35:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/14/accessing-long-running-openwhisk-actions-results</id>
+    <content type="html"><![CDATA[<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> actions are invoked by sending HTTP POST requests to the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. Invocation requests have two <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md#actions">different modes</a>: <strong>blocking</strong> and <strong>non-blocking</strong>.</p>
+
+<p><strong>Blocking invocations</strong> mean the platform won't send the HTTP response until the action finishes. This allows it to include the action result in the response.  Blocking invocations are used when you want to invoke an action and wait for the result.</p>
+
+<p>```
+$ wsk action invoke my_action --blocking
+ok: invoked /_/my_action with id db70ef682fae4f8fb0ef682fae2f8fd5
+{</p>
+
+<pre><code>"activationId": "db70ef682fae4f8fb0ef682fae2f8fd5",
+...
+"response": {
+    "result": { ... },
+    "status": "success",
+    "success": true
+},
+...
+</code></pre>
+
+<p>}
+```</p>
+
+<p><strong>Non-blocking invocations</strong> return as soon as the platform processes the invocation request. This is before the action has finished executing. HTTP responses from non-blocking invocations only include activation identifiers, as the action result is not available.</p>
+
+<p><code>
+$ wsk action invoke my_action
+ok: invoked /_/my_action with id d2728aaa75394411b28aaa7539341195
+</code></p>
+
+<p><strong>HTTP responses from a blocking invocation will only wait for a limited amount of time before returning.</strong> This defaults to 65 seconds in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/resources/application.conf#L21">platform configuration file</a>. If an action invocation has not finished before this timeout limit, a HTTP 5xx status response is returned.</p>
+
+<p>Hmmm… 🤔</p>
+
+<p><strong><em>"So, how can you invoke an action and wait for the result when actions take longer than this limit?"</em></strong></p>
+
+<p>This question comes up regularly from developers building applications using the platform. I've decided to turn my answer into a blog post to help others struggling with this issue (after answering this question again this week 😎).</p>
+
+<h3>solution</h3>
+
+<ul>
+<li><em>Invoke the action using a <a href="https://github.com/apache/incubator-openwhisk-client-js#invoke-action">non-blocking invocation</a>.</em></li>
+<li><em>Use the returned activation identifier to poll the <a href="https://github.com/apache/incubator-openwhisk-client-js#retrieve-resource">activation result API</a>.</em></li>
+<li><em>The HTTP response for the activation result will return a HTTP 404 response until the action finishes.</em></li>
+</ul>
+
+
+<p>When polling for activation results from non-blocking invocations, you should enforce a limit on the maximum polling time allowed. This is because HTTP 404s can be returned due to other scenarios (e.g. invalid activation identifiers). Enforcing a time limit ensures that, in the event of issues in the application code or the platform, the polling loop with eventually stop!</p>
+
+<p><em>Setting the maximum polling time to the action timeout limit (plus a small offset) is a good approach.</em></p>
+
+<p>An action cannot run for longer than its timeout limit. If the activation record is not available after this duration has elapsed (plus a small offset to handle internal platform delays), something has gone wrong. Continuing to poll after this point runs the risk of turning the polling operation into an infinite loop...</p>
+
+<h3>example code</h3>
+
+<p>This example provides an implementation of this approach for Node.js using the <a href="https://github.com/apache/incubator-openwhisk-client-js">JavaScript Client SDK</a>.</p>
+
+<p>```javascript
+"use strict";</p>
+
+<p>const openwhisk = require('openwhisk')</p>
+
+<p>const options = { apihost: <API_HOST>, api_key: <API_KEY> }
+const ow = openwhisk(options)</p>
+
+<p>// action duration limit (+ small offset)
+const timeout_ms = 85000
+// delay between polling requests
+const polling_delay = 1000
+// action to invoke
+const action = 'delay'</p>
+
+<p>const now = () => (new Date().getTime())
+const max_polling_time = now() + timeout_ms</p>
+
+<p>const delay = async ms => new Promise(resolve => setTimeout(resolve, ms))</p>
+
+<p>const activation = await ow.actions.invoke({name: action})
+console.log(<code>new activation id: ${activation.activationId}</code>)</p>
+
+<p>let result = null</p>
+
+<p>do {
+  try {</p>
+
+<pre><code>result = await ow.activations.get({ name: activation.activationId })
+console.log(`activation result (${activation.activationId}) now available!`)
+</code></pre>
+
+<p>  } catch (err) {</p>
+
+<pre><code>if (err.statusCode !== 404) {
+  throw err
+}
+console.log(`activation result (${activation.activationId}) not available yet`)
+</code></pre>
+
+<p>  }</p>
+
+<p>  await delay(polling_delay)
+} while (!result &amp;&amp; now() &lt; max_polling_time)</p>
+
+<p>console.log(<code>activation result (${activation.activationId})</code>, result)
+```</p>
+
+<h3>testing it out</h3>
+
+<p>Here is the source code for an action which will not return until 70 seconds have passed. Blocking invocations firing this action will result in a HTTP timeout before the response is returned.</p>
+
+<p>```javascript
+const delay = async ms => new Promise(resolve => setTimeout(resolve, ms))</p>
+
+<p>function main() {
+  return delay(70*1000)
+}
+```</p>
+
+<p>Using the script above, the action result will be retrieved from a non-blocking invocation.</p>
+
+<ul>
+<li><em>Create an action from the source file in the example above.</em></li>
+</ul>
+
+
+<p><code>
+wsk action create delay delay.js --timeout 80000 --kind nodejs:10
+</code></p>
+
+<ul>
+<li><em>Run the Node.js script to invoke this action and poll for the activation result.</em></li>
+</ul>
+
+
+<p><code>
+node script.js
+</code></p>
+
+<p>If the script runs correctly, log messages will display the polling status and then the activation result.</p>
+
+<p><code>
+$ node script.js
+new activation id: d4efc4641b544320afc4641b54132066
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+...
+activation result (d4efc4641b544320afc4641b54132066) now available!
+activation result (d4efc4641b544320afc4641b54132066) { ... }
+</code></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Saving Money and Time With Node.js Worker Threads in Serverless Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions/"/>
+    <updated>2019-05-08T12:17:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/05/08/node-dot-js-worker-threads-with-serverless-functions</id>
+    <content type="html"><![CDATA[<p>Node.js v12 was <a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">released last month</a>. This new version includes support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that are enabled by default. Node.js <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a> make it simple to execute JavaScript code in parallel using threads. 👏👏👏</p>
+
+<p>This is useful for Node.js applications with CPU-intensive workloads. Using Worker Threads, JavaScript code can be executed code concurrently using multiple CPU cores. This reduces execution time compared to a non-Worker Threads version.</p>
+
+<p>If serverless platforms provide Node.js v12 on multi-core environments, functions can use this feature to reduce execution time and, therefore, lower costs. Depending on the workload, functions can utilise all available CPU cores to parallelise work, rather than executing more functions concurrently. 💰💰💰</p>
+
+<p><strong>In this blog post, I'll explain how to use Worker Threads from a serverless function. I'll be using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) as the example platform but this approach is applicable for any serverless platform with Node.js v12 support and a multi-core CPU runtime environment.</strong></p>
+
+<h2>Node.js v12 in IBM Cloud Functions (Apache OpenWhisk)</h2>
+
+<p><em>This section of the blog post is specifically about using the new <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js v12 runtime</a> on IBM Cloud Functions (powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>). If you are using a different serverless platform, feel free to skip ahead to the next section…</em></p>
+
+<p>I've recently <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">been working</a> on adding the Node.js v12 runtime to Apache OpenWhisk.</p>
+
+<p>Apache OpenWhisk uses <a href="https://hub.docker.com/u/openwhisk">Docker containers</a> as runtime environments for serverless functions. All runtime images are maintained in separate repositories for each supported language, e.g. <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-java">Java</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-python">Python</a>, etc. Runtime images are automatically built and pushed to <a href="https://hub.docker.com/r/openwhisk/">Docker Hub</a> when the repository is updated.</p>
+
+<h3>node.js v12 runtime image</h3>
+
+<p>Here is <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">the PR</a> used to add the new Node.js v12 runtime image to Apache OpenWhisk. This led to the following <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">runtime image</a> being exported to Docker Hub: <code>openwhisk/action-nodejs-v12</code>.</p>
+
+<p>Having this image available as a native runtime in Apache OpenWhisk requires <a href="https://github.com/apache/incubator-openwhisk/pull/4472">upstream changes</a> to the project's runtime manifest. After this happens, developers will be able to use the <code>--kind</code> CLI flag to select this runtime version.</p>
+
+<p><code>
+ibmcloud wsk action create action_name action.js --kind nodejs:12
+</code></p>
+
+<p><a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. It will eventually pick up the upstream project changes to include this new runtime version. Until that happens, Docker support allows usage of this new runtime before it is built-in the platform.</p>
+
+<p><code>
+ibmcloud wsk action create action_name action.js --docker openwhisk/action-nodejs-v12
+</code></p>
+
+<h3>example</h3>
+
+<p>This Apache OpenWhisk action returns the version of Node.js used in the runtime environment.</p>
+
+<p>```javascript
+function main () {
+  return {</p>
+
+<pre><code>version: process.version
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<p>Running this code on IBM Cloud Functions, using the Node.js v12 runtime image, allows us to confirm the new Node.js version is available.</p>
+
+<p>```
+$ ibmcloud wsk action create nodejs-v12 action.js --docker openwhisk/action-nodejs-v12
+ok: created action nodejs-v12
+$ ibmcloud wsk action invoke nodejs-v12 --result
+{</p>
+
+<pre><code>"version": "v12.1.0"
+</code></pre>
+
+<p>}
+```</p>
+
+<h2>Worker Threads in Serverless Functions</h2>
+
+<p><a href="https://medium.com/@Trott/using-worker-threads-in-node-js-80494136dbb6">This is a great introdution blog post</a> to Workers Threads. It uses an example of generating prime numbers as the CPU intensive task to benchmark. Comparing the performance of the single-threaded version to multiple-threads - the performance is improved as a factor of the threads used (up to the number of CPU cores available).</p>
+
+<p>This code can be ported to run in a serverless function. Running with different input values and thread counts will allow benchmarking of the performance improvement.</p>
+
+<h3>non-workers version</h3>
+
+<p>Here is the <a href="https://gist.github.com/jthomas/71c76d62ddfd146c4bf763f5b2f0eec1">sample code</a> for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+
+<p>```javascript
+'use strict';</p>
+
+<p>const min = 2</p>
+
+<p>function main(params) {
+  const { start, end } = params
+  console.log(params)
+  const primes = []
+  let isPrime = true;
+  for (let i = start; i &lt; end; i++) {</p>
+
+<pre><code>for (let j = min; j &lt; Math.sqrt(end); j++) {
+  if (i !== j &amp;&amp; i%j === 0) {
+    isPrime = false;
+    break;
+  }
+}
+if (isPrime) {
+  primes.push(i);
+}
+isPrime = true;
+</code></pre>
+
+<p>  }</p>
+
+<p>  return { primes }
+}
+```</p>
+
+<h3>porting the code to use worker threads</h3>
+
+<p>Here is the prime number calculation code which uses Worker Threads. Dividing the total input range by the number of Worker Threads generates individual thread input values. Worker Threads are spawned and passed chunked input ranges. Threads calculate primes and then send the result back to the parent thread.</p>
+
+<script src="https://gist.github.com/Trott/7bb7ee55c247047d030b4c427434ef51.js"></script>
+
+
+<p>Reviewing the code to start converting it to a serverless function, I realised there were two issues running this code in serverless environment: <strong>worker thread initialisation</strong> and <strong>optimal worker thread counts</strong>.</p>
+
+<h4>How to initialise Worker Threads?</h4>
+
+<p>This is how the existing source code <a href="https://nodejs.org/dist/latest-v12.x/docs/api/worker_threads.html#worker_threads_new_worker_filename_options">initialises the Worker Threads</a>.</p>
+
+<p><code>javascript
+ threads.add(new Worker(__filename, { workerData: { start: myStart, range }}));
+</code></p>
+
+<p> <em><code>__filename</code> is a special global variable in Node.js which contains the currently executing script file path.</em></p>
+
+<p>This means the Worker Thread will be initialised with a copy of the currently executing script. Node.js provides a special variable to indicate whether the script is executing in the parent or child thread. This can be used to branch script logic.</p>
+
+<p><strong>So, what's the issue with this?</strong></p>
+
+<p>In the Apache OpenWhisk Node.js runtime, action source files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61-L79">dynamically imported</a> into the runtime environment. The script used to start the Node.js runtime process is for the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js">platform handler</a>, not the action source files. This means the <code>__filename</code> variable does not point to the action source file.</p>
+
+<p>This issue is fixed by separating the serverless function handler and worker thread code into separate files. Worker Threads can be started with a reference to the worker thread script source file, rather than the currently executing script name.</p>
+
+<p><code>javascript
+ threads.add(new Worker("./worker.js", { workerData: { start: myStart, range }}));
+</code></p>
+
+<h4>How Many Worker Threads?</h4>
+
+<p>The next issue to resolve is how many Worker Threads to use. In order to maximise parallel processing capacity, there should be a Worker Thread for each CPU core. This is the maximum number of threads that can run concurrently.</p>
+
+<p>Node.js provides CPU information for the runtime environment using the <code>os.cpus()</code> <a href="https://nodejs.org/api/os.html#os_os_cpus">function</a>. The result is an array of objects (one per logical CPU core), with model information, processing speed and elapsed processing times. The length of this array will determine number of Worker Threads used. This ensures the number of Worker Threads will always match the CPU cores available.</p>
+
+<p><code>javascript
+const threadCount = os.cpus().length
+</code></p>
+
+<h3>workers threads version</h3>
+
+<p>Here is the serverless version of the prime number generation algorithm which uses Worker Threads.</p>
+
+<p>The code is split over two files - <code>primes-with-workers.js</code> and <code>worker.js</code>.</p>
+
+<h4>primes-with-workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
+
+<p>```javascript
+'use strict';</p>
+
+<p>const { Worker } = require('worker_threads');
+const os = require('os')
+const threadCount = os.cpus().length</p>
+
+<p>const compute_primes = async (start, range) => {
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>let primes = []
+console.log(`adding worker (${start} =&gt; ${start + range})`)
+const worker = new Worker('./worker.js', { workerData: { start, range }})
+
+worker.on('error', reject)
+worker.on('exit', () =&gt; resolve(primes))
+worker.on('message', msg =&gt; {
+  primes = primes.concat(msg)
+})
+</code></pre>
+
+<p>  })
+}</p>
+
+<p>async function main(params) {
+  const { min, max } = params
+  const range = Math.ceil((max - min) / threadCount)
+  let start = min &lt; 2 ? 2 : min
+  const workers = []</p>
+
+<p>  console.log(<code>Calculating primes with ${threadCount} threads...</code>);</p>
+
+<p>  for (let i = 0; i &lt; threadCount - 1; i++) {</p>
+
+<pre><code>const myStart = start
+workers.push(compute_primes(myStart, range))
+start += range
+</code></pre>
+
+<p>  }</p>
+
+<p>  workers.push(compute_primes(start, max - start))</p>
+
+<p>  const primes = await Promise.all(workers)
+  return { primes: primes.flat() }
+}</p>
+
+<p>exports.main = main
+```</p>
+
+<h4>workers.js</h4>
+
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
+
+<p>```javascript
+'use strict';
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');</p>
+
+<p>const min = 2</p>
+
+<p>function generatePrimes(start, range) {
+  const primes = []
+  let isPrime = true;
+  let end = start + range;
+  for (let i = start; i &lt; end; i++) {</p>
+
+<pre><code>for (let j = min; j &lt; Math.sqrt(end); j++) {
+  if (i !== j &amp;&amp; i%j === 0) {
+    isPrime = false;
+    break;
+  }
+}
+if (isPrime) {
+  primes.push(i);
+}
+isPrime = true;
+</code></pre>
+
+<p>  }</p>
+
+<p>  return primes
+}</p>
+
+<p>const primes = generatePrimes(workerData.start, workerData.range);
+parentPort.postMessage(primes)
+```</p>
+
+<h4>package.json</h4>
+
+<p>Source files deployed from a zip file also need to include a <code>package.json</code> file in the archive. The <code>main</code> property is used to determine the script to import as the exported package module.</p>
+
+<p><code>json
+{
+  "name": "worker_threads",
+  "version": "1.0.0",
+  "main": "primes-with-workers.js",
+}
+</code></p>
+
+<h2>Performance Comparison</h2>
+
+<p>Running both functions with the same input parameters allows execution time comparison. The Worker Threads version should improve performance by a factor proportional to available CPU cores. Reducing execution time also means reduced costs in a serverless platform.</p>
+
+<h3>non-workers performance</h3>
+
+<p>Creating a new serverless function (<code>primes</code>) from the non-worker threads source code, using the Node.js v12 runtime, I can test with small values to check correctness.</p>
+
+<p>```sh
+$ ibmcloud wsk action create primes primes.js --docker openwhisk/action-nodejs-v12
+ok: created action primes
+$ ibmcloud wsk action invoke primes --result -p start 2 -p end 10
+{</p>
+
+<pre><code>"primes": [ 2, 3, 5, 7 ]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Playing with sample input values, 10,000,000 seems like a useful benchmark value. This takes long enough with the single-threaded version to benefit from parallelism.</p>
+
+<p>```sh
+$ time ibmcloud wsk action invoke primes --result -p start 2 -p end 10000000 > /dev/null</p>
+
+<p>real    0m35.151s
+user    0m0.840s
+sys 0m0.315s
+```</p>
+
+<p><strong>Using the simple single-threaded algorithm it takes the serverless function around ~35 seconds to calculate primes up to ten million.</strong></p>
+
+<h3>workers threads performance</h3>
+
+<p>Creating a new serverless function, from the worker threads-based source code using the Node.js v12 runtime, allows me to verify it works as expected for small input values.</p>
+
+<p>```
+$ ibmcloud wsk action create primes-workers action.zip --docker openwhisk/action-nodejs-v12
+ok: created action primes-workers
+$ ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10
+{</p>
+
+<pre><code>"primes": [ 2, 3, 5, 7 ]
+</code></pre>
+
+<p>}
+```</p>
+
+<p>Hurrah, it works.</p>
+
+<p>Invoking the function with an <code>max</code> parameter of 10,000,000 allows us to benchmark against the non-workers version of the code.</p>
+
+<p>```sh
+$ time ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10000000 --result > /dev/null</p>
+
+<p>real    0m8.863s
+user    0m0.804s
+sys 0m0.302s
+```</p>
+
+<p><strong>The workers versions only takes ~25% of the time of the single-threaded version!</strong></p>
+
+<p>This is because IBM Cloud Functions' runtime environments provide access to four CPU cores. Unlike other platforms, CPU cores are not tied to memory allocations. Utilising all available CPU cores concurrently allows the algorithm to run 4x times as fast. Since serverless platforms charge based on execution time, reducing execution time also means reducing costs.</p>
+
+<p><strong>The worker threads version also costs 75% less than the single-threaded version!</strong></p>
+
+<h2>Conclusion</h2>
+
+<p><a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">Node.js v12</a> was released in April 2019. This version included support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that were enabled by default (rather than needing an optional runtime flag). Using multiple CPU cores in Node.js applications has never been easier!</p>
+
+<p>Node.js applications with CPU-intensive workloads can utilise this feature to reduce execution time. Since serverless platforms charge based upon execution time, this is especially useful for Node.js serverless functions. Utilising multiple CPU cores leads, not only to improved performance, but also lower bills.</p>
+
+<p>PRs have been <a href="https://github.com/apache/incubator-openwhisk/pull/4472">opened</a> to enable Node.js v12 as a built-in runtime to the Apache OpenWhisk project. This Docker <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">image</a> for the new runtime version is already available on Docker Hub. This means it can be used with any Apache OpenWhisk instance straight away!</p>
+
+<p>Playing with Worker Threads on IBM Cloud Functions allowed me to demonstrate how to speed up performance for CPU-intensive workloads by utilising multiple cores concurrently. Using <a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">an example of prime number generation</a>, calculating all primes up to ten million took ~35 seconds with a single thread and ~8 seconds with four threads. This represents a reduction in execution time and cost of 75%!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Apache OpenWhisk Web Action HTTP Proxy]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy/"/>
+    <updated>2019-04-29T10:29:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/29/apache-openwhisk-web-action-http-proxy</id>
+    <content type="html"><![CDATA[<p><em>What if you could take an existing web application and run it on a serverless platform with no changes?</em> 🤔</p>
+
+<p>Lots of existing (simple) stateless web applications are perfect candidates for serverless, but use web  frameworks that don't know how to integrate with those platforms. People have started to develop a <a href="https://github.com/IBM/expressjs-openwhisk">number</a> <a href="https://github.com/claudiajs/claudia">of</a> <a href="https://github.com/logandk/serverless-wsgi">custom</a> <a href="https://github.com/Miserlou/Zappa">plugins</a> for those frameworks to try and bridge this gap.</p>
+
+<p>These plugins can provide an easier learning curve for developers new to serverless. They can still use familiar web application frameworks whilst learning about the platforms. It also provides a path to "lift and shift" existing (simple) web applications to serverless platforms.</p>
+
+<p>This approach relies on custom framework plugins being available, for every web app framework and serverless platform, which is not currently the case. <strong>Is there a better solution?</strong></p>
+
+<p>Recently, I've been experimenting with <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk's</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">Docker support</a> to prototype a <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy">different approach</a>. This solution allows any web application to run on the platform, without needing bespoke framework plugins, with minimal changes. <em>Sounds interesting? Read about how I did this below…</em> 👍</p>
+
+<h2>Apache OpenWhisk Web Action HTTP Proxy</h2>
+
+<p><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy">This project</a> provides a static binary which proxies HTTP traffic from <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md">Web Actions</a> to existing web applications. <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#http-context">HTTP events</a> received by the Web Action Proxy are forwarded as HTTP requests to the web application. HTTP responses from the web application are returned as Web Action <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/webactions.md#handling-http-requests-with-actions">responses</a>.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-web-action-http-proxy/master/web-action-proxy.png" alt="Apache OpenWhisk Web Action HTTP Proxy" /></p>
+
+<p>Both the proxy and web application needed to be started inside the serverless runtime environment. The proxy uses port 8080 and the web application can use any other port. An environment variable or action parameter can be used to configure the local port to proxy.</p>
+
+<p>Running both HTTP processes on the platform is possible due to custom runtime support in Apache OpenWhisk. This allows using <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">custom Docker images</a> as the runtime environment. Custom runtimes images can be built which include the proxy binary and (optionally) the web application source files.</p>
+
+<p>Two different options are available for getting web application source files into the runtime environment.</p>
+
+<ul>
+<li><strong>Build source files directly into the container image alongside proxy binary.</strong></li>
+<li><strong>Dynamically inject source files into container runtime during initialisation.</strong></li>
+</ul>
+
+
+<p>Building source files into the container is simpler and incurs lower cold-starts delays, but means source code will be publicly available on Docker Hub. Injecting source files through action zips means the public container image can exclude all private source files and secrets. The extra initialisation time for dynamic injection does increase cold-start delays.</p>
+
+<p><em><strong>Please note: This is an alpha-stage experiment!</strong> Don't expect everything to work. This project is designed to run small simple stateless web applications on Apache OpenWhisk. Please don't attempt to "lift 'n' shift" a huge stateful enterprise app server onto the platform!</em></p>
+
+<h3>Node.js + Express Example</h3>
+
+<p>This is an <a href="https://github.com/jthomas/express_example">example Node.js web application</a>, built using the <a href="https://expressjs.com/">Express web application framework</a>:</p>
+
+<p><img src="https://camo.githubusercontent.com/2aa43809d8d8a9f9ccb906c1028d81f1ba1913d9/687474703a2f2f7368617065736865642e636f6d2f696d616765732f61727469636c65732f657870726573735f6578616d706c652e6a7067" alt="https://camo.githubusercontent.com/2aa43809d8d8a9f9ccb906c1028d81f1ba1913d9/687474703a2f2f7368617065736865642e636f6d2f696d616765732f61727469636c65732f657870726573735f6578616d706c652e6a7067" /></p>
+
+<p>The web application renders static HTML content for three routes (<code>/</code>,  <code>/about</code> and <code>/contact</code>). CSS files and fonts are also served by the backend.</p>
+
+<p><strong>Use these steps to run this web application on Apache OpenWhisk using the Web Action Proxy...</strong></p>
+
+<ul>
+<li>Clone project repo.</li>
+</ul>
+
+
+<p><code>
+git clone https://github.com/jthomas/express_example
+</code></p>
+
+<ul>
+<li>Install project dependencies in the <code>express_example</code> directory.</li>
+</ul>
+
+
+<p><code>
+npm install
+</code></p>
+
+<ul>
+<li>Bundle web application and libraries into zip file.</li>
+</ul>
+
+
+<p><code>
+zip -r action.zip *
+</code></p>
+
+<ul>
+<li>Create the Web Action (using a custom runtime image) with the following command.</li>
+</ul>
+
+
+<p><code>
+wsk action create --docker jamesthomas/generic_node_proxy --web true --main "npm start" -p "__ow_proxy_port" 3000 web_app action.zip
+</code></p>
+
+<ul>
+<li>Retrieve the Web Action URL for the new action.</li>
+</ul>
+
+
+<p><code>
+wsk action get web_app --url
+</code></p>
+
+<ul>
+<li>Open the Web Action URL in a HTTP web browser. <em>(Note: Web Action URLs must end with a forward-slash to work correctly, e.g. <code>https://&lt;OW_HOST&gt;/api/v1/web/&lt;NAMESPACE&gt;/default/web_app/</code>).</em></li>
+</ul>
+
+
+<p><img src="/images/express-js-web-action-proxy.gif" alt="Web Action Proxy Express JS" /></p>
+
+<p>If this works, the web application should load as above. Clicking links in the menu will navigate to different pages in the application.</p>
+
+<h4>custom runtime image</h4>
+
+<p>This example Web Action uses my own pre-built custom runtime image for Node.js web applications (<code>jamesthomas/generic_node_proxy</code>). This was created from the following Dockerfile to support dynamic runtime injection of web application source files.</p>
+
+<p>```
+FROM node:10</p>
+
+<p>ADD proxy /app/
+WORKDIR /app
+EXPOSE 8080</p>
+
+<p>CMD ./proxy
+```</p>
+
+<h3>More Examples</h3>
+
+<p>See the <code>examples</code> directory in the project repository for sample applications with build instructions for the following runtimes.</p>
+
+<ul>
+<li><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/examples/nodejs+express">Node.js with Express.js</a></li>
+<li><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/examples/python+flask">Python with Flask</a></li>
+<li><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/examples/java+openliberty">Java with OpenLiberty</a></li>
+</ul>
+
+
+<h3>Usage &amp; Configuration</h3>
+
+<p>Web application source files can be either be <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy#usage-dynamic-runtime-injection">dynamically injected</a> (as in the example above) or <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy#usage-sources-files-in-image">built into</a> the custom runtime image.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#usage-dynamic-runtime-injection">Dynamic injection</a> uses a custom runtime image with just the proxy binary and runtime dependencies. Web application source files are provided in the action zip file and extracted into the runtime upon initialisation. The proxy will start the app server during cold-starts.</p>
+
+<p>Alternatively, source files for the web application <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#usage-sources-files-in-image">can be included directly</a> in the runtime image. The container start command will start both processes concurrently. No additional files are provided when creating the web action.</p>
+
+<p><a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#configuration">Configuration</a> for values such as the proxy port, can be provided using <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#environment-variables">environment variables</a> or <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#action-parameters">default action parameters</a>.</p>
+
+<p><em>Please see the <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md">project documentation</a> for more details on both these approaches, how to use them and configuration parameters.</em></p>
+
+<h2>Challenges</h2>
+
+<p>This experiment is still in the alpha-stage and comes with many restrictions at the moment...</p>
+
+<ul>
+<li>HTTP request and responses sizes are limited to the maximum sizes allowed by Apache OpenWhisk for input parameters and activation results. This defaults to 1MB in the open-source project and 5MB on IBM Cloud Functions.</li>
+<li>Page links must use URLs with relative paths to the Web Action URL rather than the host root, e.g. <code>href="home"</code> rather than <code>href="/home"</code>. This is due to the Web Actions being served from a sub-path of the platform (<code>/api/v1/web/&lt;NAMESPACE&gt;/default/&lt;ACTION&gt;</code>) rather than the host root.</li>
+<li>Docker images will be pulled from the public registry on the first invocation. This will lead to long cold-start times for the first request after the action has been created. Large image sizes = longer delays. This only occurs on the first invocation.</li>
+<li>Web app startup times affect cold start times. The proxy blocks waiting for the web application to start before responding. This delay is included in each cold start. Concurrent HTTP requests from a web  browser for static page assets will (initially) result in multiple cold starts.</li>
+<li>Web Sockets and other complex HTTP features, e.g. server-side events, cannot be supported.</li>
+<li>Web applications will run in ephemeral container environments that  are paused between requests and destroyed without warning. This is not a traditional web application environment, e.g. running background tasks will not work.</li>
+</ul>
+
+
+<p>Lots of things haven't been tested. Don't expect complex stateful web applications to work.</p>
+
+<h2>Conclusion</h2>
+
+<p>Being able to run existing web applications on serverless platforms opens up a huge opportunity for moving simple (and stateless) web application over to those platforms. These applications can then benefit from the scaling, cost and operational benefits serverless platforms provide.</p>
+
+<p>Previous attempts to support traditional web applications on serverless platforms relied on custom framework plugins. This approach was limited by the availability of custom plugins for each web application framework and serverless platform.</p>
+
+<p>Playing around with Apache OpenWhisk's custom runtime support, I had an idea… <strong>could a generic HTTP proxy be used to support any framework without needing any plugins?</strong> This led to the <a href="https://github.com/jthomas/openwhisk-web-action-http-proxy/blob/master/README.md#usage-sources-files-in-image">Apache OpenWhisk Web Action HTTP Proxy</a> project.</p>
+
+<p>By building a custom runtime, the HTTP proxy and web application can both be started within the same serverless environment. HTTP events received by the Web Action Proxy are forwarded as HTTP requests to the web application. HTTP responses from the web application are returned as Web Action responses.</p>
+
+<p>Web application sources files can be injected into the runtime environment during initialisation or built straight into the custom runtime image. No significant changes are required in the web application and it does not need custom framework plugins.</p>
+
+<p>Apache OpenWhisk's support for custom Docker runtimes opens up a huge range of opportunities for running more varied workloads on serverless platforms - and this is a great example of that!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless CI/CD with Travis CI, Serverless Framework and IBM Cloud Functions]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions/"/>
+    <updated>2019-04-23T15:08:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/23/serverless-ci-slash-cd-with-travis-ci-serverless-framework-and-ibm-cloud-functions</id>
+    <content type="html"><![CDATA[<p>How do you set up a <a href="https://dzone.com/articles/what-is-cicd">CI/CD pipeline</a> for serverless applications?</p>
+
+<p>This blog post will explain how to use <a href="https://travis-ci.org/">Travis CI</a>, <a href="https://github.com/serverless/serverless">The Serverless Framework</a> and the <a href="https://github.com/avajs/ava">AVA testing framework</a> to set up a fully-automated build, deploy and test pipeline for a serverless application. It will use a real example of a production <a href="https://github.com/jthomas/openwhisk-release-verification">serverless application</a>, built using <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> and running on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. The CI/CD pipeline will execute the following tasks...</p>
+
+<ul>
+<li><strong>Run project unit tests.</strong></li>
+<li><strong>Deploy application to test environment.</strong></li>
+<li><strong>Run acceptance tests against test environment.</strong></li>
+<li><strong>Deploy application to production environment.</strong></li>
+<li><strong>Run smoke tests against production environment.</strong></li>
+</ul>
+
+
+<p>Before diving into the details of the CI/CD pipeline setup, let's start by showing the example serverless application being used for this project...</p>
+
+<h2>Serverless Project - <a href="http://apache.jamesthom.as/">http://apache.jamesthom.as/</a></h2>
+
+<p>The "<a href="https://github.com/jthomas/openwhisk-release-verification">Apache OpenWhisk Release Verification</a>" project is a serverless web application to help committers verify release candidates for the open-source project. It automates running the verification steps from the <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">ASF release checklist</a> using serverless functions. Automating release candidate validation makes it easier for  committers to participate in release voting.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p>The project consists of a static web assets (HTML, JS, CSS files) and HTTP APIs. Static web assets are hosted by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>. HTTP APIs are implemented as Apache OpenWhisk <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md">actions</a> and exposed using the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/apigateway.md">API Gateway</a> service. <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> is used to host the Apache OpenWhisk application.</p>
+
+<p>No other cloud services, like databases, are needed by the backend. Release candidate information is retrieved in real-time by parsing the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">HTML page</a> from the ASF website.</p>
+
+<p><img src="http://jamesthom.as/images/ow_release_verifier/architecture.png" alt="Serverless Architecture" /></p>
+
+<h3>Configuration</h3>
+
+<p><a href="https://github.com/serverless/serverless">The Serverless Framework</a> (with the <a href="https://github.com/serverless/serverless-openwhisk">Apache OpenWhisk provider plugin</a>) is used to define the serverless functions used in the application. HTTP endpoints are also defined in the YAML configuration file.</p>
+
+<p>```yaml
+service: release-verfication</p>
+
+<p>provider:
+  name: openwhisk
+  runtime: nodejs:10</p>
+
+<p>functions:
+  versions:</p>
+
+<pre><code>handler: index.versions
+events:
+  - http: GET /api/versions
+</code></pre>
+
+<p>  version_files:</p>
+
+<pre><code>handler: index.version_files
+events:
+  - http:
+      method: GET
+      path: /api/versions/{version}
+      resp: http
+</code></pre>
+
+<p>...</p>
+
+<p>plugins:
+  - serverless-openwhisk
+```</p>
+
+<p>The framework handles all deployment and configuration tasks for the application. Setting up the application in a new environment is as simple as running the <code>serverless deploy</code> <a href="https://github.com/serverless/serverless">command</a>.</p>
+
+<h3>Environments</h3>
+
+<p>Apache OpenWhisk uses <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#fully-qualified-names">namespaces</a> to group individual packages, actions, triggers and rules. Different namespaces can be used to provide isolated environments for applications.</p>
+
+<p>IBM Cloud Functions automatically creates <a href="https://cloud.ibm.com/docs/openwhisk?topic=cloud-functions-cloudfunctions_cli#region_info">user-based namespaces</a> in platform instances. These auto-generated namespaces mirror the IBM Cloud organisation and space used to access the instance. Creating <a href="https://cloud.ibm.com/docs/account?topic=account-orgsspacesusers#cf-org-concepts">new spaces within an organisation</a> will provision extra namespaces.</p>
+
+<p>I'm using a custom organisation for the application with three different spaces: <strong>dev</strong>, <strong>test</strong> and <strong>prod</strong>.</p>
+
+<p><strong>dev</strong> is used as a test environment to deploy functions during development. <strong>test</strong> is used by the CI/CD pipeline to deploy a temporary instance of the application during acceptance tests. <strong>prod</strong> is the production environment hosting the external application actions.</p>
+
+<h3>Credentials</h3>
+
+<p>The <a href="https://cloud.ibm.com/docs/cli?topic=cloud-cli-install-ibmcloud-cli">IBM Cloud CLI</a> is used to handle IBM Cloud Functions credentials. <a href="https://cloud.ibm.com/docs/iam?topic=iam-manapikey">Platform API keys</a> will be used to log in the CLI from the CI/CD system.</p>
+
+<p>When Cloud Functions CLI commands are issued (after targeting a new region, organisation or space), API keys for that Cloud Functions instance are automatically retrieved and stored locally. The Serverless Framework knows how to use these local credentials when interacting with the platform.</p>
+
+<h3>High Availability?</h3>
+
+<p>The Apache OpenWhisk Release Verifier is not a critical cloud application which needs "<a href="https://en.wikipedia.org/wiki/Five_nines">five nines</a>" of availability. The application is idle most of the time. It does not need a <a href="https://en.wikipedia.org/wiki/High_availability">highly available</a> serverless architecture. This means the build pipeline does not have to...</p>
+
+<ul>
+<li><a href="https://cloud.ibm.com/docs/tutorials?topic=solution-tutorials-multi-region-serverless#multi-region-serverless">Deploy application instances in multiple cloud regions.</a></li>
+<li><a href="https://www.ibm.com/blogs/bluemix/2019/04/load-balancing-api-calls-across-regions-with-ibm-cloud-internet-services-and-cloud-api-gateway/">Set up a global load balancer between regional instances.</a></li>
+<li>Support "<a href="https://www.martinfowler.com/bliki/BlueGreenDeployment.html">zero downtime deploys</a>" to minimise downtime during deployments.</li>
+<li>Automatic roll-back to previous versions on production issues.</li>
+</ul>
+
+
+<p>New deployments will simply overwrite resources in the production namespace in a single region. If the production site is broken after a deployment, the smoke tests should catch this and email me to fix it!</p>
+
+<h2>Testing</h2>
+
+<p>Given this tool will be used to check release candidates for the open-source project, I wanted to ensure it worked properly! Incorrect validation results could lead to invalid source archives being published.</p>
+
+<p>I've chosen to rely heavily on unit tests to check the core business logic. These tests ensure all validation tasks work correctly, including PGP signature verification, cryptographic hash matching, LICENSE file contents and other ASF requirements for project releases.</p>
+
+<p>Additionally, I've used end-to-end acceptance tests to validate the HTTP APIs work as expected. HTTP requests are sent to the API GW endpoints, with responses compared against expected values. All available release candidates are run through the validation process to check no errors are returned.</p>
+
+<h3>Unit Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Unit_testing">Unit tests</a> are implemented with the <a href="https://github.com/avajs/ava">AVA testing framework</a>. Unit tests live in the <code>unit/test/</code> <a href="https://github.com/jthomas/openwhisk-release-verification/tree/master/test/unit">folder</a>.</p>
+
+<p>The <code>npm test</code> command alias runs the <code>ava test/unit/</code> command to execute all unit tests. This command can be executed locally, during development, or from the CI/CD pipeline.</p>
+
+<p>```bash
+$ npm test</p>
+
+<blockquote><p>release-verification@1.0.0 test ~/code/release-verification
+ava test/unit/</p></blockquote>
+
+<p> 27 tests passed
+```</p>
+
+<h3>Acceptance Tests</h3>
+
+<p><a href="https://en.wikipedia.org/wiki/Acceptance_testing">Acceptance tests</a> check API endpoints return the expected responses for valid (and invalid) requests. Acceptance tests are executed against the API Gateway endpoints for an application instance.</p>
+
+<p>The hostname used for HTTP requests is controlled using an environment variable (<code>HOST</code>). Since the same test suite test is used for acceptance and smoke tests, setting this environment variable is the only configuration needed to run tests against different environments.</p>
+
+<p>API endpoints in the test and production environments are exposed using different custom sub-domains (<code>apache-api.jamesthom.as</code> and <code>apache-api-test.jamesthom.as</code>). NPM <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L8-L9">scripts are used</a> to provide commands (<code>acceptance-test</code> &amp; <code>acceptance-prod</code>) which set the environment hostname before running the test suite.</p>
+
+<p>```javascript
+"scripts": {</p>
+
+<pre><code>"acceptance-test": "HOST=apache-api-test.jamesthom.as ava -v --fail-fast test/acceptance/",
+"acceptance-prod": "HOST=apache-api.jamesthom.as ava -v --fail-fast test/acceptance/"
+</code></pre>
+
+<p>  },
+```</p>
+
+<p>```
+$ npm run acceptance-prod</p>
+
+<blockquote><p>release-verification@1.0.0 acceptance-prod ~/code/release-verification
+HOST=apache-api.jamesthom.as ava -v --fail-fast  test/acceptance/</p></blockquote>
+
+<p>  ✔ should return list of release candidates (3.7s)</p>
+
+<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions
+</code></pre>
+
+<p>  ✔ should return 404 for file list when release candidate is invalid (2.1s)</p>
+
+<pre><code>ℹ running api testing against https://apache-api.jamesthom.as/api/versions/unknown
+</code></pre>
+
+<p>  ...</p>
+
+<p>  6 tests passed
+```</p>
+
+<p>Acceptance tests are also implemented with the AVA testing framework. All acceptance tests live in a single <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/test/acceptance/api.js">test file</a> (<code>unit/acceptance/api.js</code>).</p>
+
+<h2>CI/CD Pipeline</h2>
+
+<p>When new commits are pushed to the <code>master</code> branch on the project repository, the following steps needed to be kicked off by the build pipeline…</p>
+
+<ul>
+<li><em>Run project unit tests.</em></li>
+<li><em>Deploy application to test environment.</em></li>
+<li><em>Run acceptance tests against test environment.</em></li>
+<li><em>Deploy application to production environment.</em></li>
+<li><em>Run smoke tests against production environment.</em></li>
+</ul>
+
+
+<p>If any of the steps fail, the build pipeline should stop and send me a notification email.</p>
+
+<h3>Travis</h3>
+
+<p><a href="https://travis-ci.org/">Travis CI</a> is used to implement the CI/CD build pipeline. Travis CI uses a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml">custom file</a> (<code>.travis.yml</code>) in the project repository to configure the build pipeline. This YAML file defines commands to execute during each phase of build pipeline. If any of the commands fail, the build will stop at that phase without proceeding.</p>
+
+<p><em>Here is the completed <code>.travis.yml</code> file for this project: https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml</em></p>
+
+<p>I'm using the following Travis CI <a href="https://docs.travis-ci.com/user/job-lifecycle#the-job-lifecycle">build phases</a> to implement the pipeline: <strong>install</strong>, <strong>before_script</strong>, <strong>script</strong>, <strong>before_deploy</strong> and <strong>deploy</strong>. Commands will run in the Node.js 10 build environment, which pre-installs the language runtime and package manager.</p>
+
+<p><code>yaml
+language: node_js
+node_js:
+  - "10"
+</code></p>
+
+<h4>install</h4>
+
+<p>In the <code>install</code> <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L5-L9">phase</a>, I need to set up the build environment to deploy the application and run tests.</p>
+
+<p>This means installing the IBM Cloud CLI, <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions CLI plugin</a>, The Serverless Framework (with Apache OpenWhisk plugin), application test framework (AvaJS) and other project dependencies.</p>
+
+<p>The IBM Cloud CLI is installed using a shell script. Running a CLI sub-command installs the <a href="https://cloud.ibm.com/openwhisk/learn/cli">Cloud Functions plugin</a>.</p>
+
+<p>The Serverless Framework is installed as global NPM package (using <code>npm -g install</code>). The Apache OpenWhisk provider plugin is handled as <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/package.json#L13-L23">normal project dependency</a>, along with the test framework. Both those dependencies are installed using NPM.</p>
+
+<p><code>yaml
+install:
+  - curl -fsSL https://clis.cloud.ibm.com/install/linux | sh
+  - ibmcloud plugin install cloud-functions
+  - npm install serverless -g
+  - npm install
+</code></p>
+
+<h4>before_script</h4>
+
+<p>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/.travis.yml#L11-L16">phase</a> is used to run unit tests, catching errors in core business logic, before setting up credentials (used in the <code>script</code> phase) for the acceptance test environment. Unit test failures will halt the build immediately, skipping test and production deployments.</p>
+
+<p>Custom variables provide the API key, platform endpoint, organisation and space identifiers which are used for the test environment. The CLI is authenticated using these values, before running the <code>ibmcloud fn api list</code> command. This ensures Cloud Functions credentials are available locally, as used by The Serverless Framework.</p>
+
+<p><code>yaml
+before_script:
+  - npm test
+  - ibmcloud login --apikey $IBMCLOUD_API_KEY -a $IBMCLOUD_API_ENDPOINT
+  - ibmcloud target -o $IBMCLOUD_ORG -s $IBMCLOUD_TEST_SPACE
+  - ibmcloud fn api list &gt; /dev/null
+  - ibmcloud target
+</code></p>
+
+<h4>script</h4>
+
+<p>With the build system configured, the application can be deployed to test environment, followed by running acceptance tests. If either deployment or acceptance tests fail, the build will stop, skipping the production deployment.</p>
+
+<p>Acceptance tests use an environment variable to configure the hostname test cases are executed against. The <code>npm run acceptance-test</code> alias command sets this value to the test environment hostname (<code>apache-api-test.jamesthom.as</code>) before running the test suite.</p>
+
+<p><code>yaml
+script:
+  - sls deploy
+  - npm run acceptance-test
+</code></p>
+
+<h4>before_deploy</h4>
+
+<p>Before deploying to production, Cloud Functions credentials need to be updated. The IBM Cloud CLI is used to target the production environment, before running a Cloud Functions CLI command. This updates local credentials with the production environment credentials.</p>
+
+<p><code>yaml
+before_deploy:
+  - ibmcloud target -s $IBMCLOUD_PROD_SPACE
+  - ibmcloud fn api list &gt; /dev/null
+  - ibmcloud target
+</code></p>
+
+<h4>deploy</h4>
+
+<p>If all the proceeding stages have successfully finished, the application can be deployed to the production. Following this final deployment, smoke tests are used to check production APIs still work as expected.</p>
+
+<p>Smoke tests are just the same acceptance tests executed against the production environment. The <code>npm run acceptance-prod</code> alias command sets the hostname configuration value to the production environment  (<code>apache-api.jamesthom.as</code>) before running the test suite.</p>
+
+<p><code>yaml
+deploy:
+  provider: script
+  script: sls deploy &amp;&amp; npm run acceptance-prod
+  skip_cleanup: true
+</code></p>
+
+<p><em>Using the <code>skip_cleanup</code> parameter leaves installed artifacts from previous phases in the build environment. This means we don't have to re-install the IBM Cloud CLI, The Serverless Framework or NPM dependencies needed to run the production deployment and smoke tests.</em></p>
+
+<h3>success?</h3>
+
+<p>If all of the <a href="https://travis-ci.org/jthomas/openwhisk-release-verification">build phases</a> are successful, the latest project code should have been deployed to the production environment. 💯💯💯</p>
+
+<p><img src="/images/build-screenshot.png" alt="Build Screenshoot" /></p>
+
+<p>If the build failed due to unit test failures, the test suite can be ran locally to fix any errors. Deployment failures can be investigated using the console output logs from Travis CI. Acceptance test issues, against test or production environments, can be debugged by logging into those environments locally and running the test suite from my development machine.</p>
+
+<h2>Conclusion</h2>
+
+<p>Using Travis CI with The Serverless Framework and a JavaScript testing framework, I was able to set up a fully-automated CI/CD deployment pipeline for the Apache OpenWhisk release candidate verification tool.</p>
+
+<p>Using a CI/CD pipeline, rather than a manual approach, for deployments has the following advantages...</p>
+
+<ul>
+<li>No more manual and error-prone deploys relying on a human 👨‍💻 :)</li>
+<li>Automatic unit &amp; acceptance test execution catch errors before deployments.</li>
+<li>Production environment only accessed by CI/CD system, reducing accidental breakages.</li>
+<li>All cloud resources must be configured in code. No "<a href="https://martinfowler.com/bliki/SnowflakeServer.html">snowflake</a>" environments allowed.</li>
+</ul>
+
+
+<p>Having finished code for new project features or bug fixes, all I have to do is push changes to the GitHub repository. This fires the Travis CI build pipeline which will automatically deploy the updated application to the production environment. If there are any issues, due to failed tests or deployments, I'll be notified by email.</p>
+
+<p>This allows me to get back to adding new features to the tool (and fixing bugs) rather than wrestling with deployments, managing credentials for multiple environments and then trying to remember to run tests against the correct instances!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Automating Apache OpenWhisk Releases With Serverless]]></title>
+    <link href="http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless/"/>
+    <updated>2019-04-10T15:00:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2019/04/10/automating-apache-openwhisk-releases-with-serverless</id>
+    <content type="html"><![CDATA[<p>This blog post explains how I used <a href="https://github.com/jthomas/openwhisk-release-verification">serverless functions</a> to automate <a href="https://cwiki.apache.org/confluence/display/OPENWHISK/How+to+verify+the+release+checklist+and+vote+on+OpenWhisk+modules+under+Apache">release candidate verification</a> for the <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> project.</p>
+
+<p><img src="https://raw.githubusercontent.com/jthomas/openwhisk-release-verification/master/release-verification-tool.gif" alt="Apache OpenWhisk Release Verification Tool" /></p>
+
+<p><em>Automating this process has the following benefits...</em></p>
+
+<ul>
+<li><strong>Removes the chance of human errors compared to the previously manual validation process.</strong></li>
+<li><strong>Allows me to validate new releases without access to my dev machine.</strong></li>
+<li><strong>Usable by all committers by hosting as an <a href="http://apache.jamesthom.as/">external serverless web app</a>.</strong></li>
+</ul>
+
+
+<p>Automating release candidate validation makes it easier for project committers to participate in release voting. This should make it faster to get necessary release votes, allowing us to ship new versions sooner!</p>
+
+<h2>background</h2>
+
+<h3>apache software foundation</h3>
+
+<p>The <a href="http://www.apache.org/">Apache Software Foundation</a> has a well-established <a href="https://www.apache.org/dev/release-publishing.html">release process</a> for delivering new product releases from projects belonging to the foundation. According to their <a href="https://www.apache.org/dev/release-publishing.html#goal">documentation</a>...</p>
+
+<blockquote><p>An Apache release is a set of valid &amp; signed artifacts, voted on by the appropriate PMC and distributed on the ASF's official release infrastructure.</p>
+
+<p>https://www.apache.org/dev/release-publishing.html</p></blockquote>
+
+<p>Releasing a new software version requires the release manager to create a release candidate from the  project source files. Source archives must be cryptographically <a href="http://www.apache.org/legal/release-policy.html#release-signing">signed</a> by the release manager. All source archives for the release must be comply with <a href="http://www.apache.org/legal/release-policy.html">strict criteria</a> to be considered valid release candidates. This includes (but is not limited to) the following requirements:</p>
+
+<ul>
+<li><em>Checksums and PGP signatures for source archives are valid.</em></li>
+<li><em>LICENSE, NOTICE and DISCLAIMER files included and correct.</em></li>
+<li><em>All source files have license headers.</em></li>
+<li><em>No compiled archives bundled in source archives.</em></li>
+</ul>
+
+
+<p>Release candidates can then be proposed on the project mailing list for review by members of the <a href="https://apache.org/dev/pmc.html">Project Management Committee</a> (PMC). PMC members are <a href="http://www.apache.org/legal/release-policy.html#release-approval">eligible to vote</a> on all release candidates. Before casting their votes, PMC members are required to check release candidate meets the requirements above.</p>
+
+<p><strong>If a minimum of three positive votes is cast (with more positive than negative votes), the release passes!</strong> The release manager can then move the release candidate archives to the release <a href="https://dist.apache.org/repos/dist/release/incubator/openwhisk/">directory</a>.</p>
+
+<h3>apache openwhisk releases</h3>
+
+<p>As a committer and PMC member on the Apache OpenWhisk project, I'm eligible to vote on new releases.</p>
+
+<p>Apache OpenWhisk (currently) has 52 separate <a href="https://github.com/apache?q=openwhisk">source repositories</a> under the project on GitHub. With a fast-moving open-source project, new releases candidate are constantly <a href="https://lists.apache.org/list.html?dev@openwhisk.apache.org:lte=3y:%5BVOTE%5D">being proposed</a>, which all require the necessary number of binding PMC votes to pass.</p>
+
+<p>Manually validating release candidates can be a time-consuming process. This can make it challenging to get a quorum of binding votes from PMC members for the release to pass. I started thinking how I could improve my productivity around the validation process, enabling me to participate in more votes.</p>
+
+<p><strong>Would it be possible to automate some (or all) of the steps in release candidate verification? Could we even use a serverless application to do this?</strong></p>
+
+<h1>apache openwhisk release verifier</h1>
+
+<p><strong>Spoiler Alert: YES! I ended up building a serverless application to do this for me.</strong></p>
+
+<p>It is available at <a href="https://apache.jamesthom.as/">https://apache.jamesthom.as/</a></p>
+
+<p><img src="/images/ow_release_verifier/overview.png" alt="Apache OpenWhisk Release Verifier" /></p>
+
+<p>Source code for this project is available <a href="https://github.com/jthomas/openwhisk-release-verification">here</a>.</p>
+
+<p><a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is used to run the serverless backend for the web application. This means Apache OpenWhisk is being used to validate future releases of itself… which is awesome.</p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/ow_release_verifier/architecture.png" alt="Project Architecture" /></p>
+
+<p>HTML, JS and CSS files are served by Github Pages from the <a href="https://github.com/jthomas/openwhisk-release-verification">project repository</a>.</p>
+
+<p>Backend APIs are Apache OpenWhisk actions running on <a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a>.</p>
+
+<p>Both the front-page and API are served from a custom sub-domains of my <a href="http://jamesthom.as/">personal domain</a>.</p>
+
+<h3>available release candidates</h3>
+
+<p>When the user loads the page, the drop-down list needs to contain the current list of release candidates from the ASF development <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">distribution site</a>.</p>
+
+<p>This information is available to the web page via the <a href="https://apache-api.jamesthom.as/api/versions">https://apache-api.jamesthom.as/api/versions</a> endpoint. The <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">serverless function</a> powering this API parses that <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/">live HTML page</a> (extracting the current list of release candidates) each time it is invoked.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions
+HTTP/1.1 200 OK
+...
+{</p>
+
+<pre><code>"versions": [
+    "apache-openwhisk-0.11.0-incubating-rc1",
+    "apache-openwhisk-0.11.0-incubating-rc2",
+    "apache-openwhisk-1.13.0-incubating-rc1",
+    "apache-openwhisk-1.13.0-incubating-rc2",
+    "apache-openwhisk-2.0.0-incubating-rc2",
+    "apache-openwhisk-3.19.0-incubating-rc1"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release candidate version info</h3>
+
+<p>Release candidates may have <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">multiple source archives</a> being distributed in that release. Validation steps need to be executed for each of those archives within the release candidate.</p>
+
+<p>Once a user has selected a release candidate version, source archives to validate are shown in the table. This data is available from the <a href="https://apache-api.jamesthom.as/api/versions/VERSION">https://apache-api.jamesthom.as/api/versions/VERSION</a> endpoint. This information is parsed from the <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/apache-openwhisk-2.0.0-incubating-rc2/">HTML page</a> on the ASF site.</p>
+
+<p>```sh
+$ http get https://apache-api.jamesthom.as/api/versions/apache-openwhisk-2.0.0-incubating-rc2
+HTTP/1.1 200 OK
+...</p>
+
+<p>{</p>
+
+<pre><code>"files": [
+    "openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-cloudant-2.0.0-incubating-sources.tar.gz",
+    "openwhisk-package-kafka-2.0.0-incubating-sources.tar.gz"
+]
+</code></pre>
+
+<p>}
+```</p>
+
+<h3>release verification</h3>
+
+<p>Having selected a release candidate version, clicking the "<em>Validate</em>" button will start validation process. Triggering the <a href="https://apache-api.jamesthom.as/api/versions/VERSION/validate">https://apache-api.jamesthom.as/api/versions/VERSION/validate</a> endpoint will run the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L47-L64">serverless function</a> used to execute the validation steps.</p>
+
+<p><em>This serverless function will carry out the following verification steps...</em></p>
+
+<h4>checking download links</h4>
+
+<p>All the source archives for a release candidate are downloaded to temporary storage in the runtime environment. The function also downloads the associated SHA512 and PGP signature files for comparison. Multiple readable streams can be created from the same file path to allow the verification steps to happen in parallel, rather than having to re-download the archive for each task.</p>
+
+<h4>checking SHA512 hash values</h4>
+
+<p>SHA512 sums are distributed in a text file containing hex strings with the hash value.</p>
+
+<p><code>sh
+openwhisk-package-alarms-2.0.0-incubating-sources.tar.gz:
+3BF87306 D424955B B1B2813C 204CC086 6D27FA11 075F0B30 75F67782 5A0198F8 091E7D07
+ B7357A54 A72B2552 E9F8D097 50090E9F A0C7DBD1 D4424B05 B59EE44E
+</code></p>
+
+<p>The serverless function needs to dynamically compute the hash for the source archive and compare the hex bytes against the text file contents. Node.js comes with a <a href="https://nodejs.org/docs/latest-v10.x/api/crypto.html">built-in crypto library</a> making it easy to create hash values from input streams.</p>
+
+<p><em>This is the <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L18-L35">function</a> used to compute and compare the hash values.</em></p>
+
+<p>```javascript
+const hash = async (file_stream, hash_file, name) => {
+  return new Promise((resolve, reject) => {</p>
+
+<pre><code>const sha512 = parse_hash_from_file(hash_file)
+
+const hmac = crypto.createHash('sha512')
+file_stream.pipe(hmac)
+
+hmac.on('readable', () =&gt; {
+  const stream_hash = hmac.read().toString('hex')
+  const valid = stream_hash === sha512.signature
+  logger.log(`file (${name}) calculated hash: ${stream_hash}`)
+  logger.log(`file (${name}) hash from file:  ${sha512.signature}`)
+  resolve({valid})
+})
+
+hmac.on('error', err =&gt; reject(err))
+</code></pre>
+
+<p>  })
+}
+```</p>
+
+<h4>validating PGP signatures</h4>
+
+<p><strong>Node.js' crypto library does not support validating PGP signatures.</strong></p>
+
+<p>I've used the <a href="https://www.npmjs.com/package/openpgp">OpenPGP.js library</a> to handle this task. This is a Javascript implementation of the OpenPGP protocol (and the most popular PGP library for Node.js). Three input values are needed to <a href="https://github.com/openpgpjs/openpgpjs#create-and-verify-detached-signatures">validate PGP messages</a>.</p>
+
+<ul>
+<li><em>Message contents to check.</em></li>
+<li><em>PGP signature for the message.</em></li>
+<li><em>Public key for the private key used to sign the release.</em></li>
+</ul>
+
+
+<p>The "message" to check is the source archive. PGP signatures come from the <code>.asc</code> files located in the release candidate directory.</p>
+
+<p>```
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1</p>
+
+<p>iQIcBAABAgAGBQJcpO0FAAoJEHKvDMIsTPMgf0kP+wbtJ1ONZJQKjyDVx8uASMDQ
+...
+-----END PGP SIGNATURE-----
+```</p>
+
+<p>Public keys used to sign releases are <a href="https://dist.apache.org/repos/dist/dev/incubator/openwhisk/KEYS">stored in the root folder</a> of the release directory for that project.</p>
+
+<p><em>This <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/verify.js#L37-L58">function</a> is used to implement the signature checking process.</em></p>
+
+<p>```javascript
+const signature = async (file_stream, signature, public_keys, name) => {
+  const options = {</p>
+
+<pre><code>message: openpgp.message.fromBinary(file_stream),
+signature: await openpgp.signature.readArmored(signature),
+publicKeys: (await openpgp.key.readArmored(public_keys)).keys
+</code></pre>
+
+<p>  }</p>
+
+<p>  const verified = await openpgp.verify(options)
+  await openpgp.stream.readToEnd(verified.data)
+  const valid = await verified.signatures[0].verified</p>
+
+<p>  return { valid }
+}
+```</p>
+
+<h4>scanning archive files</h4>
+
+<p>Using the <a href="https://github.com/npm/node-tar">node-tar library</a>, downloaded source archives are extracted into the local runtime to allow scanning of individual files.</p>
+
+<p>LICENSE.txt, DISCLAIMER.txt and NOTICE.txt files are checked to ensure correctness. An <a href="https://www.npmjs.com/package/isbinaryfile">external NPM library</a> is used to check all files in the archive for binary contents. The code also scans for directory names that might contain third party libraries (<code>node_modules</code> or <code>.gradle</code>).</p>
+
+<h3>capturing validation logs</h3>
+
+<p>It is important to provide PMC members with verifiable logs on the validation steps performed. This allows them to sanity check the steps performed (including manual validation). This verification text can also be provided in the voting emails as evidence of release candidate validity.</p>
+
+<p>Using a <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/lib/logger.js">custom logging library</a>, all debug logs sent to the console <a href="https://github.com/jthomas/openwhisk-release-verification/blob/master/index.js#L63">are recorded in the action result</a> (and therefore returned in the API response).</p>
+
+<h3>showing results</h3>
+
+<p>Once all the validation tasks have been executed - the results are returned to the front-end as a JSON response. The client-side JS parses these results and updates the validation table. Validation logs are shown in a collapsible window.</p>
+
+<p><img src="/images/ow_release_verifier/emojis.png" alt="Verification Results" /></p>
+
+<p>Using visual emojis for pass and failure indicators for each step - the user can easily verify whether a release passes the validation checks. If any of the steps have failed, the validation logs provide an opportunity to understand why.</p>
+
+<p><img src="/images/ow_release_verifier/logs.png" alt="Verification Logs" /></p>
+
+<h2>other tools</h2>
+
+<p>This is not the only tool that can automate checks needed to validate Apache Software Foundation releases.</p>
+
+<p>Another <a href="https://twitter.com/rabbah">community member</a> has also built a bash script (<a href="https://gitbox.apache.org/repos/asf?p=incubator-openwhisk-release.git;a=blob_plain;f=tools/rcverify.sh;hb=HEAD">rcverify.sh</a>) that can verify releases on your local machine. This script will automatically download the release candidate files and run many of the same validation tasks as the remote tool locally.</p>
+
+<p>There is also an existing tool (<a href="https://creadur.apache.org/rat/">Apache Rat</a>) from another project that provides a Java-based application for auditing license headers in source files.</p>
+
+<h2>conclusion</h2>
+
+<p>Getting new product releases published for an open-source project under the ASF is not a simple task for developers used to pushing a button on Github! The ASF has a series of strict guidelines on what constitutes a release and the ratification process from PMC members. PMC members need to run a series of manual verification tasks before casting binding votes on proposed release candidates.</p>
+
+<p>This can be a time-consuming task for PMC members on a project like Apache OpenWhisk, with 52 different project repositories all being released at different intervals. In an effort to improve my own productivity around this process, I started looking for ways to automate the verification tasks. This would enable me to participate in more votes and be a "better" PMC member.</p>
+
+<p>This led to building a serverless web application to run all the verification tasks remotely, which is now hosted at <a href="https://apache.jamesthom.as">https://apache.jamesthom.as</a>. This tool uses Apache OpenWhisk (provided by IBM Cloud Functions), which means the project is being used to verify future releases of itself! I've also <a href="https://github.com/jthomas/openwhisk-release-verification">open-sourced</a> the code to provide an example of how to use the platform for automating tasks like this.</p>
+
+<p>With this tool and others listed above, verifying new <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> releases has never been easier!</p>
+]]></content>
+  </entry>
+  
+</feed>

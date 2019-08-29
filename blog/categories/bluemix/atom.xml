@@ -1,0 +1,1035 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: bluemix | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/bluemix/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Cognitive Bots With IBM Watson]]></title>
+    <link href="http://jamesthom.as/blog/2016/05/10/bots-with-ibm-watson/"/>
+    <updated>2016-05-10T16:29:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/05/10/bots-with-ibm-watson</id>
+    <content type="html"><![CDATA[<p>Later this month, I'm speaking at Twilio's conference about
+<a href="https://www.twilio.com/signal/schedule/6L9DFzeXKg0OOIQW42eik2/building-cognitive-bots-with-ibm-watson">building cognitive bots with IBM Watson</a>.
+Preparing for this presentation, I've been experimenting with the IBM Watson
+services to build sample bots that can understand, and act on, natural language.</p>
+
+<p>IBM's artificial intelligence system, <a href="https://en.wikipedia.org/wiki/Watson_(computer">Watson</a>, now provides a
+series of <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/services-catalog.html">"cognitive" services</a>
+available through <a href="https://bluemix.net">IBM's Bluemix cloud platform</a>.
+Developers can integrate everything from natural language processing, image and
+speech recognition, emotion analysis and more into their applications using
+RESTful APIs.</p>
+
+<p>The <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">Watson Developer Cloud</a>
+site has numerous
+<a href="https://github.com/watson-developer-cloud/dialog-nodejs">sample</a>
+<a href="https://github.com/watson-developer-cloud/conversational-agent-application-starter-kit">apps</a>
+to help you understand how to integrate the services together to build "cognitive" bots.</p>
+
+<p>In one of the samples, the <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">Dialog service</a>
+is used to develop a <a href="http://dialog-demo.mybluemix.net/">pizza ordering bot</a>.
+Users can order a pizza, specifying the size, toppings and delivery method,
+using natural language.</p>
+
+<p>After understanding how this sample worked, I had an idea to enhance it with
+the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">tone analysis service</a>...</p>
+
+<h2>Where the heck is my pizza?</h2>
+
+<p>Let's imagine the customer has ordered a delivery using pizza-bot and the
+driver is being (even) slower than normal.</p>
+
+<p>If the customer asks</p>
+
+<p><strong>"Where is my pizza?"</strong></p>
+
+<p>We return the standard message all pizza takeaways use when calling to
+inquire where the driver is....</p>
+
+<p><strong>"The driver has just left, he'll be ten minutes."</strong></p>
+
+<p><em>An hour later...</em></p>
+
+<p>When the driver still hasn't arrived, the customer would probably ask again and
+with a bit less civility...</p>
+
+<p><strong>"Where the heck is my pizza? I ordered an hour ago! This is ridiculous."</strong></p>
+
+<p>At this point, the "just ten minutes" reply is not going to be well received!</p>
+
+<p>Building bots that can understand conversation tone will mean we can script a
+suitable response, rather than infuriating our hungry customers.</p>
+
+<p>Using the tone analyser service, I wanted to enhance the sample to use
+conversation sentiment to affect the dialogue.
+Bot responses should be generated based upon both user
+input and conversation sentiment.</p>
+
+<p><img src="/images/pizza_rage.gif"></p>
+
+<p>Let's review both services before looking at how to combine them to create the
+improved pizza bot...</p>
+
+<h2>IBM Watson Dialog</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/dialog.html">IBM Watson Dialog service</a>
+enables a developer to automate scripting
+conversations, using natural language, between a virtual agent and a user.
+Developers build up a <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml">decision tree for dialogue</a>,
+using a markup language to define the conversation paths.</p>
+
+<p>Developers can then utilise the pre-defined linguistic model to converse with
+users. The system will keep track of the conversation state when processing
+user input to generate a suitable response. It can also store
+<a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilevar">conversation properties</a>, either extracted from user input or manually updated through the
+API.</p>
+
+<p>These conversation properties can be used to <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/tutorial_tutorials.shtml#tutorial_profilecheck">control the dialogue branching</a>.</p>
+
+<p>Documentation on the service is available <a href="https://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/">here</a>.</p>
+
+<h2>IBM Watson Tone Analyser</h2>
+
+<p>The <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer Service</a>
+uses linguistic analysis to detect three types of tones from text: emotion, social tendencies, and language style.</p>
+
+<p>Emotions identified include things like anger, fear, joy, sadness, and disgust.
+Identified social tendencies include things from the Big Five personality
+traits used by some psychologists. These include openness, conscientiousness,
+extroversion, agreeableness, and emotional range. Identified language styles
+include confident, analytical, and tentative.</p>
+
+<p>Documentation on the service is available <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/tone-analyzer/">here</a>.</p>
+
+<h2>Extending Pizza Bot </h2>
+
+<p>Enhancing pizza bot to support dialogue about delivery times, we can start by
+identifying when the user is asking about the pizza delivery. At this point,
+unless the user is angry, we can return the default response. When sentiment
+analysis indicates this user is angry, we should branch to returning a more
+sympathetic message.</p>
+
+<h2>Matching User Input </h2>
+
+<p>Matching user input about delivery times, there a few common questions we want to capture.</p>
+
+<ul>
+<li><em>Where's my order?</em></li>
+<li><em>How long will it be until my pizza arrives?</em></li>
+<li><em>When will my takeout get here?</em></li>
+</ul>
+
+
+<p>Creating our <a href="https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L179-L207">new conversation branch</a>
+within a folder element will allow us to
+group the necessary <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">input</a>,
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_grammar">grammar</a> and
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_output">output</a> elements as a logical section.</p>
+
+<p>``` xml Order Queries http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input
+<folder label="Order">
+  <input></p>
+
+<pre><code>&lt;grammar&gt;
+  ...
+&lt;/grammar&gt;
+&lt;output&gt;
+  &lt;prompt selectionType="RANDOM"&gt;
+    ...
+  &lt;/prompt&gt;
+&lt;/output&gt;
+</code></pre>
+
+<p>  </input>
+</folder>
+```</p>
+
+<p>This structure will process the output element, to generate the bot reply, only
+if the input grammar matches user input. Adding item nodes under the input's
+grammar element will let us define the dialogue matching criteria, shown here.</p>
+
+<p><code>xml Query Grammar https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L181-L188
+&lt;grammar&gt;
+  &lt;item&gt;$where* order&lt;/item&gt;
+  &lt;item&gt;$where* pizza&lt;/item&gt;
+  &lt;item&gt;$how long* order&lt;/item&gt;
+  &lt;item&gt;$how long* pizza&lt;/item&gt;
+  &lt;item&gt;$when * order * here&lt;/item&gt;
+  &lt;item&gt;$when * pizza * here&lt;/item&gt;
+&lt;/grammar&gt;
+</code></p>
+
+<p>Using <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_input">wildcard matching characters</a>,
+$ and *, means the grammar ("$where * order") will match questions including "Where is my pizza?" and "Where's my
+pizza?" rather than having to manually define every permutation.</p>
+
+<p>People often use synonyms in natural language. Rather than manually defining
+grammar rules for all alternative words for pizza and order, we can add
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_concept">concept elements</a>
+to automatically match these. The sample already has a concept element defined for the pizza term, we only have to add elements for order.</p>
+
+<p>``` xml Concept Entities https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L1647-L1654
+<concept>
+  <grammar></p>
+
+<pre><code>&lt;item&gt;Order&lt;/item&gt;
+&lt;item&gt;Takeaway&lt;/item&gt;
+&lt;item&gt;Takeout&lt;/item&gt;
+&lt;item&gt;Delivery&lt;/item&gt;
+</code></pre>
+
+<p>  </grammar>
+</concept>
+```</p>
+
+<p>Grammar rules which include the <em>order</em> term which automatically match takeaway, takeout or delivery.</p>
+
+<h2>Adding Default Response</h2>
+
+<p>Having matched the user input, we want to return the default response from a pre-specified list.</p>
+
+<p>``` xml Bot Replies https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L198-L205
+<output>
+  <prompt selectionType="RANDOM"></p>
+
+<pre><code>&lt;item&gt;I've just checked and the driver is ten minutes away, is there anything else I can help with?&lt;/item&gt;
+&lt;item&gt;Hmmm the driver's running a bit late, they'll be about ten minutes. Is there anything else I can help with?&lt;/item&gt;
+&lt;item&gt;They should be with you in ten minutes. Is there anything else I can help with?&lt;/item&gt;
+</code></pre>
+
+<p>  </prompt>
+  <goto ref="getUserInput_2442994"/>
+</output>
+```</p>
+
+<h2>Handling Angry Customers</h2>
+
+<p>Within the dialog markup, <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_variables">profile variables</a>
+can be defined to store conversation entities. These variables can be referenced by
+<a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/layout_layout.shtml#layout_if">conditional branches</a>
+in the markup to control responses.</p>
+
+<p>Defining a new profile variable for the anger score, this value can be updated
+manually before the current user input is processed to return the dialogue
+response.</p>
+
+<p>``` xml Profile Variable https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L2062
+<variables>
+  <var_folder name="Home"></p>
+
+<pre><code>...
+&lt;var name="anger" type="NUMBER" initValue="0" description="Anger emotion score for conversation."/&gt;
+</code></pre>
+
+<p>  </var_folder>
+</variables>
+```</p>
+
+<p>Adding a child branch, for the conditional response, after the input grammar
+will allow us to return a custom response if the profile variable for the anger
+emotion is above a threshold.</p>
+
+<p>``` xml Anger Branching https://github.com/jthomas/dialog-nodejs/blob/master/dialogs/pizza_sample_anger.xml#L189-L197
+<folder label="Order">
+  <input></p>
+
+<pre><code>&lt;grammar&gt;
+  &lt;item&gt;$where* order&lt;/item&gt;
+&lt;/grammar&gt;
+&lt;if matchType="ANY"&gt;
+  &lt;cond varName="anger" operator="GREATER_THEN"&gt;0.50&lt;/cond&gt;
+  &lt;output&gt;
+    &lt;prompt selectionType="RANDOM"&gt;
+      &lt;item&gt;Please accept our apologies for the delivery driver being very late. Could you call us on 0800 800 800 and we'll get this fixed?&lt;/item&gt;
+    &lt;/prompt&gt;
+  &lt;/output&gt;
+&lt;/if&gt;
+</code></pre>
+
+<p>```</p>
+
+<p>When we've detected the user is angry about the delivery delay, we direct
+them to ring the restaurant to find out what's happened to the driver.</p>
+
+<h2>Combining Watson Services</h2>
+
+<p>Modifying the backend service that calls the Watson services, we're now passing
+the user's input through the Tone Analyzer service and manually updating user's
+anger score in their profile, before calling the Dialog service.</p>
+
+<p>This anger score will be used to control the dialogue response in real-time.</p>
+
+<p>``` js Using Tone Analyser https://github.com/jthomas/dialog-nodejs/blob/master/app.js#L56-L85
+app.post('/conversation', function(req, res, next) {
+  tone_analyzer.tone({ text: req.body.input }, function(err, tone) {</p>
+
+<pre><code>var categories = tone.document_tone.tone_categories
+var emotion_tones = categories.find(function (tone) {
+  return tone.category_id === 'emotion_tone'
+})
+
+var anger_tone = emotion_tones.tones.find(function (tone) {
+  return tone.tone_id === 'anger'
+})
+
+var params = {client_id: req.body.client_id, dialog_id: dialog_id, name_values: [{name: 'anger', value: anger_tone.score}]}
+dialog.updateProfile(params, function (err, results) {
+  var params = extend({ dialog_id: dialog_id }, req.body);
+  dialog.conversation(params, function(err, results) {
+    else
+      res.json({ dialog_id: dialog_id, conversation: results});
+  });
+})
+</code></pre>
+
+<p>  });
+});
+```</p>
+
+<p>The <a href="https://github.com/jthomas/dialog-nodejs/commit/6d025040e005ef0d9aa976bfe20039db05f681fe">commit log</a>
+for the fork shows the full changes needed to integrate this feature.</p>
+
+<h2>Conclusion</h2>
+
+<p>Bots are a <a href="https://medium.com/chris-messina/2016-will-be-the-year-of-conversational-commerce-1586e85e3991#.524ovvaj8">huge trend for 2016</a>.
+One of the major challenges to developing your
+own bots is handling user input using natural language. How can you go beyond
+simple keyword matching and regular expressions to build solutions that
+actually understand what your user is asking?</p>
+
+<p>Using the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/doc/dialog/overview.shtml">IBM Watson Dialog service</a> users can script natural language
+conversations. Defining a linguistic model for their dialogue using markup
+language, the system can use this to process natural language and return the
+appropriate response. Conversation entities are recognised and stored in a user
+profile.</p>
+
+<p>Combining this service with the <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/tone-analyzer.html">IBM Watson Tone Analyzer</a>, users can script
+conversations that use the user's emotional tone to modify the response.</p>
+
+<p>Modifying the pizza sample, we incorporate the anger score to return a more
+appropriate response when the user is angry about their delivery being delayed.</p>
+
+<p>IBM Watson has <a href="http://www.ibm.com/smarterplanet/us/en/ibmwatson/developercloud/">many other services</a>
+that can be integrated with the Dialog
+service using the same pattern to build "cognitive" bots. Using these services
+takes the hard work out of building bots that actually understand and respond
+with emotion to input using natural language.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless APIs with OpenWhisk and API Connect]]></title>
+    <link href="http://jamesthom.as/blog/2016/04/26/serverless-apis-with-openwhisk-and-api-connect/"/>
+    <updated>2016-04-26T07:54:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/04/26/serverless-apis-with-openwhisk-and-api-connect</id>
+    <content type="html"><![CDATA[<p>"Serverless" cloud platforms are a
+<a href="http://redmonk.com/fryan/2016/04/28/serverless-volume-compute-for-a-new-generation/">major trend in 2016</a>.
+Following on from Amazon's <a href="https://aws.amazon.com/lambda/">Lambda service</a>,
+released eighteen months ago, this year has seen <a href="https://developer.ibm.com/openwhisk/">IBM</a>,
+<a href="https://azure.microsoft.com/en-us/documentation/articles/functions-reference/">Microsoft</a>
+and <a href="https://cloud.google.com/functions/">Google</a> all launch their own solutions.</p>
+
+<p>These platforms let you build stateless <a href="http://martinfowler.com/articles/microservices.html">microservices</a>,
+combining APIs with
+business logic, without servers. Microservices are executed on-demand, in
+milliseconds, rather than having to sit idle waiting for incoming requests.
+Users pay only for the raw computation time used.</p>
+
+<p>Combining serverless APIs with static file hosting for site resources, e.g.
+HTML, JavaScript and CSS, means we can build entire <a href="https://blog.hartleybrody.com/serverless-stack/">serverless web applications</a>.</p>
+
+<p>Playing with OpenWhisk recently to build simple microservices, I began to
+investigate using the platform to build the APIs for serverless applications.</p>
+
+<p><strong>How can we use OpenWhisk to define a new microservice and then expose that
+service as an API with a HTTP interface?</strong></p>
+
+<p><em>Let's start by looking at OpenWhisk...</em></p>
+
+<h2>OpenWhisk</h2>
+
+<p>Using the OpenWhisk platform, developers register small bits of code, known as
+<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md"><em>Actions</em></a>,
+that can be invoked on-demand. These functions can be written in
+Node.js, Swift or Docker images. Let's look at a simple Node.js Action that
+takes a parameter and returns a message with that value.</p>
+
+<p>``` javascript OpenWhisk Action
+function main(params) {
+  return {</p>
+
+<pre><code>payload: 'Hello ' + params.name
+</code></pre>
+
+<p>  };
+}
+```</p>
+
+<p><a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#creating-and-invoking-a-simple-javascript-action">Node.js actions</a> must include a function named <em>main</em>. OpenWhisk executes
+this function for each invocation, passing request parameters as arguments.
+Return values from the function will be included in the response.</p>
+
+<p>Using the OpenWhisk <a href="https://new-console.ng.bluemix.net/openwhisk/cli">command-line utility</a>,
+we turn this local JavaScript code into a remote action.</p>
+
+<p><code>sh
+[~/code/serverless]$ ls
+source.js
+[~/code/serverless]$ wsk action create hello_action source.js
+ok: created action hello_action
+[~/code/serverless]$ wsk action list
+actions
+/james.thomas@uk.ibm.com_dev/hello_action                         private
+</code></p>
+
+<p>With the action registered, we can test the service from the command-line.</p>
+
+<p>``` sh
+[~/code/serverless]$ wsk action invoke -b hello_action -p name "Bernie Sanders"
+ok: invoked hello_action with id 429b35c3e3ac494ea902390ca64afe32
+response:
+{</p>
+
+<pre><code>"result": {
+    "payload": "Hello Bernie Sanders"
+},
+"status": "success",
+"success": true
+</code></pre>
+
+<p>}
+```</p>
+
+<p>We can also update the action to use default parameter values.</p>
+
+<p>``` sh
+[~/code/serverless]$ wsk action update hello_action -p name "Donald Trump"
+ok: updated action hello_action
+[~/code/serverless]$ wsk action invoke -b hello_action
+ok: invoked hello_action with id 0299bf2baf9242b7a00a8095caaeb7a4
+response:
+{</p>
+
+<pre><code>"result": {
+    "payload": "Hello Donald Trump"
+},
+"status": "success",
+"success": true
+</code></pre>
+
+<p>}
+[~/code/serverless]$
+```</p>
+
+<p>Registered actions can be executed manually, using an authenticated API
+request, or automatically, hooking actions to triggers and feeds using rules.
+For more details on triggers, feeds and rules, please see the <a href="https://github.com/openwhisk/openwhisk/tree/master/docs">OpenWhisk documentation</a>.</p>
+
+<p>The command-line utility translates commands into HTTP requests to
+the OpenWhisk API.</p>
+
+<p><em>Pro-Tip: Adding the '-v' flag when using command-line utility will show HTTP
+traffic sent to the OpenWhisk API.</em></p>
+
+<h2>Serverless APIs With OpenWhisk</h2>
+
+<p>Building backend services for serverless web applications, there were two
+challenges to resolve before invoking these APIs from client-side JavaScript code.</p>
+
+<ul>
+<li><p><strong>Authentication.</strong> <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#rest-api">OpenWhisk API</a>
+requests require HTTP authentication, using the
+developer's credentials. Embedding these credentials within client-side files
+is a terrible idea...</p></li>
+<li><p><strong>Cross-Domain Requests.</strong> <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS">CORS support</a>
+is not enabled on the OpenWhisk platform.
+Calling services from a browser would mandate us having CNAME records
+configured with an external domain.</p></li>
+</ul>
+
+
+<p>Authentication needs to be resolved, while cross-domain support is an inconvenience.</p>
+
+<p>Using OpenWhisk on IBM Bluemix, we have access to a huge range of cloud
+services to help build applications. Reviewing the catalogue, there's a new
+service <a href="https://developer.ibm.com/apiconnect/">API Connect</a> which can help us
+resolve both issues with minimal effort.</p>
+
+<h2>API Connect</h2>
+
+<p>Announced in February, <a href="https://developer.ibm.com/apiconnect/">API Connect</a> is IBM's new "API Management-as-a-Service"
+solution. Developers can use the service for creating, running, managing and
+securing APIs in the cloud.</p>
+
+<p><em>Using this service, we can construct new public APIs, with CORS support, that
+proxy the authenticated OpenWhisk APIs used to trigger our services. Using these
+APIs from our serverless frontends will be possible without leaking
+credentials or having to configure DNS records.</em></p>
+
+<p>Once we've signed up for an account with API Connect, you need to install the
+developer toolbox locally. Using this tool will allow us to construct new APIs and
+publish them to the cloud.</p>
+
+<p><strong><em>TLDR: I've exported the sample flow configuration generated below
+<a href="https://gist.github.com/jthomas/5136d53028e53d0e3ab86cfc3fc29869">here</a>.
+Import this YAML file into the API Connect editor, replacing USERNAME, PASSWORD
+and NAMESPACE, before deploying this flow to IBM Bluemix.</em></strong></p>
+
+<h2>API Editor</h2>
+
+<p>Install the API Connect <a href="https://www.npmjs.com/package/apiconnect">Toolkit using NPM</a> and run the following command to open
+the editor.</p>
+
+<p><code>sh
+$ npm install -g apiconnect
+$ apic edit
+</code></p>
+
+<p>Using the APIs panel, select the <em>Add</em> button. Provide a title for your
+service.</p>
+
+<p><img src="/images/openwhisk_apis/API%20Wizard.png"></p>
+
+<p>Leave the <em>Add to a new product</em> checkbox selected and provide a
+title for the product.</p>
+
+<p><img src="/images/openwhisk_apis/API_Add.png"></p>
+
+<p>The editor now shows the Design panel, allowing you to define the external
+public API schema.</p>
+
+<p>We're going to define a single endpoint (<em>/hello-name</em>) which supports HTTP GET
+requests with a single query parameter.</p>
+
+<h2>Adding the endpoint</h2>
+
+<p><em>Disable the clientID definition under the "Security" panel and then scroll down
+to the Paths section.</em></p>
+
+<p>Add a new path for the endpoint <em>/hello-name</em>. Set a parameter for this path,
+using the identifier <em>name</em> from location as <em>query</em> and type as <em>string</em>.</p>
+
+<p><img src="/images/openwhisk_apis/paths.png"></p>
+
+<p>Move to the <em>Definitions</em> section to define the API response schema. We
+want to return a JSON object with a single property, result, that contains the
+JSON object returned from the Action response.</p>
+
+<p>Add a new Definition, named <em>whisk_response</em> and type as <em>object</em>, with a
+single object property, <em>result</em>.</p>
+
+<p><img src="/images/openwhisk_apis/definitions.png"></p>
+
+<p>Under the Paths panel, expand the GET operation.
+Set the schema for the 200 response to <em>whisk_response</em>.</p>
+
+<p><img src="/images/openwhisk_apis/path_response.png"></p>
+
+<p>CORS supported is already enabled by default (under the Lifecycle section).
+Click the <em>Save</em> icon in toolbar and then move to the "Assemble" tab.</p>
+
+<h2>Defining API operations</h2>
+
+<p>Having defined the public API schema, we need to implement the API operations.</p>
+
+<p>On the "Assemble" tab, the flow editor allows us to connect different backend
+operations to construct our service. IBM Bluemix only supports deploying flows
+constructed with the "DataPower Gateway policies" nodes. Microgateway nodes,
+e.g. Javascript, are not supported.</p>
+
+<h2>Invoking OpenWhisk Actions</h2>
+
+<p>The default flow contains a single invoke node. This node type makes HTTP
+requests, passing the result to the next node in the flow.</p>
+
+<p><img src="/images/openwhisk_apis/invoke.png"></p>
+
+<p>Use this node to execute your OpenWhisk Action by bringing up the editor and changing the URL to the correct endpoint, e.g.
+<em>https://openwhisk.ng.bluemix.net/api/v1/namespaces/YOUR_NAMESPACE/actions/ACTION_ID?blocking=true</em></p>
+
+<p>Make sure to include the query parameter, <em>blocking=true</em>. This makes OpenWhisk
+wait until the Action has completed execution before returning, rather than
+after invocation starts.</p>
+
+<p>Change the HTTP method from GET to POST and fill in the username and passwords fields.</p>
+
+<p>Add the value <em>invoke_result</em> to the <em>Response Object Variable</em> field. This
+will save the HTTP response into a context variable we can reference in the
+following map node definition.</p>
+
+<p><img src="/images/openwhisk_apis/invoke_details.png"></p>
+
+<h2>Passing Query Parameters</h2>
+
+<p>Invoking OpenWhisk Actions through the API uses a HTTP POST request, passing
+parameters within the JSON body. Our external API supports HTTP GET
+operations, with parameters through query string values in the URL.</p>
+
+<p>Using the <em>map</em> node in the flow will translate between these two methods.</p>
+
+<p>Drag a <em>map</em> node from the left-hand panel and drop it on the wire between the
+circle and the invoke node.</p>
+
+<p>Open the map node editor and add a new <em>input</em> parameter.
+Change the context variable to <em>request.parameters.name</em> with type <em>string</em>.
+This contains the query parameter value we're using to pass in action arguments.</p>
+
+<p><img src="/images/openwhisk_apis/query_parameter_source.png"></p>
+
+<p>Returning to the map node editor, add a new <em>output</em> parameter. Leave the
+Context variable as <em>message.body</em>. This variable will be used by the invoke
+node to populate the request body.</p>
+
+<p>Change the Content Type to <em>application/json</em>.
+Select the definition as <em>inline schema</em> to define the JSON schema for the HTTP POST body.
+Add the following JSON Schema definition to the editor form.</p>
+
+<p>``` javascript JSON Schema
+{
+  "properties": {</p>
+
+<pre><code>"name": {
+  "type": "string"
+}
+</code></pre>
+
+<p>  },
+  "type": "object"
+}
+```</p>
+
+<p><img src="/images/openwhisk_apis/query_parameter_output.png"></p>
+
+<p>With the input and output formats defined, we can wire the two parameters together.
+Under the <em>Map</em> panel, click the dot next to the input parameter and then click the second dot on the right, next to the <em>name:string</em> label.</p>
+
+<p><img src="/images/openwhisk_apis/query_parameter.png"></p>
+
+<p>Remember to click <em>Save</em> before proceeding.</p>
+
+<h2>Returning Action Result</h2>
+
+<p>OpenWhisk Action API invocation responses include both the action result
+payload and meta-data about the invocation event.</p>
+
+<p>``` javascript Sample Invocation Event
+{
+  "name": "hello_action",
+  "subject": "james.thomas@uk.ibm.com",
+  "activationId": "5388b29e9f134737baf57bd12257dfd7",
+  "publish": false,
+  "annotations": [],
+  "version": "0.0.1",
+  "response": {</p>
+
+<pre><code>"result": {
+  "payload": "Hello Bernie"
+},
+"success": true,
+"status": "success"
+</code></pre>
+
+<p>  },
+  "end": 1461667635975,
+  "logs": [],
+  "start": 1461667635970,
+  "namespace": "james.thomas@uk.ibm.com"
+}
+```</p>
+
+<p>Rather than returning the raw result, we only want to return the result payload
+property (<em>response.result</em>). Using another <em>map</em> node we can define a subset
+of the invoked API response to be the HTTP response body.</p>
+
+<p>Add a second <em>map</em> node to the flow, this time after the <em>invoke</em> node.</p>
+
+<p>Add a new <em>input</em> property. We previously set a
+context variable in the invoke definition that will contain the API response
+(<em>invoke_api</em>). The response body is available as the <em>body</em> property of this
+variable.</p>
+
+<p>Edit the <em>context variable</em> to be <em>invoke_api.body.response.result</em> to set the
+input property as the child property of the invoke result. Set the <em>content
+type</em> to <em>application/json</em> and schema to <em>object</em>.</p>
+
+<p><img src="/images/openwhisk_apis/map_response_source.png"></p>
+
+<p>Add a new <em>output</em> property. Leave the context variable as <em>message.body</em>.
+This context variable is used as the response body.</p>
+
+<p>Set <em>content type</em> to <em>application/json</em> and change the definition to <em>#/definitions/whisk_response</em>.
+This was the JSON schema we created during the external API definition.</p>
+
+<p><img src="/images/openwhisk_apis/map_response_output.png"></p>
+
+<p>Returning to the map overview, wire together the input property to the result
+attribute of the output property.</p>
+
+<p><img src="/images/openwhisk_apis/map_response.png"></p>
+
+<p>Click the <em>Save</em> icon before making any further changes.</p>
+
+<p>Using the invoke and map nodes, we've now implemented our external API.
+Making our API live requires us to deploy the flow definition to IBM Bluemix.</p>
+
+<h2>Deploying to IBM Bluemix</h2>
+
+<p>After saving your flow, click the <em>Publish</em> icon in the top-right hand corner.
+We're going to publish to the default <em>Sandbox</em> target. Follow the steps to
+find and add this target to the local editor.</p>
+
+<p><img src="/images/openwhisk_apis/publish.png"></p>
+
+<p>Once you've added <em>Sandbox</em> as the default
+target, select <em>Publish</em> and click the configured catalogue. On the dialog box,
+select the <em>Select Specific Products</em> option and choose the <em>openwhisk</em>
+product.</p>
+
+<p>Clicking the confirmation button will upload our API definition to
+the external API Connect platform.</p>
+
+<p>If everything has been configured and deploying correctly, your new API should
+now be live!</p>
+
+<p>Let's test it...</p>
+
+<h2>Testing </h2>
+
+<p>Opening the <a href="https://new-console.ng.bluemix.net/apis/apiconnect">API Connect dashboard</a>,
+the sandbox catalogue should now contain the <em>openwhisk</em> product with the public API we defined using the editor.</p>
+
+<p><img src="/images/openwhisk_apis/catalogue.png"></p>
+
+<p>We can now verify this API works by making the HTTP request to the endpoint.
+Under the <em>Settings</em> tab, the <em>API Endpoint</em> section contains the <em>Base URL</em>
+for our API catalogue. APIs deployed under this catalogue will use this
+path as the endpoint root.</p>
+
+<p>The API definition registered a relative URL path, <em>/hello-name</em>, which
+we can combine with the catalogue endpoint (e.g.
+<em>https://api.us.apiconnect.ibmcloud.com/USER_ORG_SPACE/sb</em>) to generate an
+public API endpoint.</p>
+
+<p>We can now test this API by sending a HTTP GET request to the URL, passing the
+name as a query parameter.</p>
+
+<p>``` sh
+[17:13:10 ~]$ http get https://api.us.apiconnect.ibmcloud.com/jamesthomasukibmcom-dev2/sb/hello-name?name="Bernie Sanders"
+HTTP/1.1 200 OK
+Content-Encoding: gzip
+Content-Type: application/json
+Date: Tue, 26 Apr 2016 16:24:36 GMT</p>
+
+<p>{</p>
+
+<pre><code>"result": {
+    "payload": "Hello Bernie Sanders"
+}
+</code></pre>
+
+<p>}</p>
+
+<p>[17:24:36 ~]$
+```</p>
+
+<p>It works! 😃</p>
+
+<p>We've successfully used API Connect to create an external API which proxies the
+OpenWhisk API. We now have a public endpoint we can use to invoke OpenWhisk
+Actions, without exposing our credentials and enabling CORS-support for
+cross-domain XHRs.</p>
+
+<h2>Conclusion</h2>
+
+<p>Serverless computing platforms give developers a rapid way to build APIs
+without servers. Combining this approach for building backend services with
+static file hosting provides an architecture for developing entire serverless
+web applications.</p>
+
+<p>Experimenting with OpenWhisk as the backend platform for building serverless
+web applications, there were two challenges, authentication and cross-domain
+support.</p>
+
+<p>Both issues were resolved using the API Connect service on IBM Bluemix.</p>
+
+<p>API Connect is an incredibly powerful tool for creating, running, managing and
+securing APIs. Using the editor application to construct a new API, the
+endpoint was implemented using the invoke and map nodes. Deploying the
+generated flow to IBM Bluemix exposed the API as a public endpoint.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Playing With OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2016/04/22/openwhisk/"/>
+    <updated>2016-04-22T15:36:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/04/22/openwhisk</id>
+    <content type="html"><![CDATA[<p>IBM recently launched <a href="https://developer.ibm.com/openwhisk/">OpenWhisk</a>,
+their new <a href="https://www.quora.com/What-is-Serverless-Computing">"serverless"</a>
+compute platform.</p>
+
+<p>This service allows developers to register small bits of
+code that are executed on-demand in response to external events. The
+"serverless" stack started in 2014, when Amazon launched
+<a href="https://aws.amazon.com/lambda/">Lambda</a>, but is now set to be a major
+technology trend in 2016 with IBM, Microsoft and Google all launching their own
+solutions.</p>
+
+<p>OpenWhisk is the first <a href="https://github.com/openwhisk/openwhisk">open-source "serverless" platform</a>. It supports running registered
+actions in Node.js, Swift and even executing custom Docker containers.</p>
+
+<p>Playing around with the technology recently, I've created two projects using the platform.</p>
+
+<h2>OpenWhisk Client Library</h2>
+
+<p>OpenWhisk exposes a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#rest-api">RESTful API</a>
+for interacting with the service. Wrapping this API with a
+<a href="https://github.com/openwhisk/openwhisk-client-js">small client library</a> makes it easy for developers to interact with the service from JavaScript.</p>
+
+<p>This library has been donated back to the OpenWhisk project and is <a href="https://www.npmjs.com/package/openwhisk">available through NPM</a>.</p>
+
+<p><code>javascript
+const openwhisk = require('openwhisk')
+const ow = openwhisk({api: 'https://openwhisk.ng.bluemix.net/api/v1/', api_key: '...', namespace: '...'})
+ow.actions.invoke({actionName: 'action'}).then(result =&gt; {
+  // result is service response
+})
+</code></p>
+
+<h2>Whiskify</h2>
+
+<p>This <a href="https://github.com/jthomas/whiskify">project</a>, available through <a href="https://www.npmjs.com/package/openwhisk">NPM</a>, makes it easy to run arbitary JavaScript
+functions as OpenWhisk actions.  Passing a reference to a JavaScript function
+into the module, an OpenWhisk action is created using the function source.  The
+module returns a new JavaScript function, that when executed, will call the
+remote action and returns a Promise with the service response.</p>
+
+<p>``` javascript
+const whiskify = require('whiskify')({api: 'https://', api_key: '...', namespace: '...'})
+const action = whiskify(function (item) { return item + 1; })</p>
+
+<p>action(1).then(function (result) {
+  // == 2
+})</p>
+
+<p>action.map([1, 2, 3, 4]).then(function (result) {
+ // == [2, 3, 4, 5]
+})</p>
+
+<p>action.delete()
+```</p>
+
+<p>This project uses the client library above.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Debugging Live Containers on IBM Bluemix]]></title>
+    <link href="http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix/"/>
+    <updated>2016-01-22T16:57:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2016/01/22/debugging-live-containers-on-ibm-bluemix</id>
+    <content type="html"><![CDATA[<p>For the last few months, I've been using the <a href="https://www.elastic.co/webinars/introduction-elk-stack">ELK stack</a> to <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">collect logs</a> from my
+Cloud Foundry applications. This service has been deployed on IBM Bluemix using
+a Docker container, previously detailed in <a href="jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">this blog post</a>, and running happily
+until it ran into issues this week.</p>
+
+<p>Trying to load the Kibana web application, the server was returning <em>connection
+refused</em> errors. Looking at the container in the <a href="http://bluemix.net">IBM Bluemix</a> dashboard showed
+no obvious signs of issues. Reviewing the <a href="https://www.ng.bluemix.net/docs/containers/container_ml_ov.html">container log output</a> uncovered nothing
+indicating what had failed.</p>
+
+<p>Hmmm...</p>
+
+<p><strong>Fixing this issue would require me to start debugging from within the live
+container, but how?</strong></p>
+
+<p>This container image had not included an SSH daemon that would allow remote
+access over SSH.</p>
+
+<p>Looking over the <a href="https://www.ng.bluemix.net/docs/containers/container_index.html">documentation</a> for the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html#container_cli_cfic">IBM Containers plugin</a> for the Cloud
+Foundry CLI, I noticed the <em>exec</em> command.</p>
+
+<p><blockquote><p>Docker exec allows a user to spawn a process inside their Docker container via<br/>the Docker API and CLI.</p></blockquote></p>
+
+<p>Since Docker 1.3, released in October 2014, the <a href="https://docs.docker.com/engine/reference/commandline/exec/"><em>exec</em> command</a> has allowed users to
+run new commands within existing containers.</p>
+
+<p>The IBM Containers implementation now <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">supports this Docker command</a>.</p>
+
+<p>Using the IBM Containers plugin for the Cloud Foundry CLI, I can find the
+container id for the instance I want to debug and then start a bash shell to
+start resolving my issue.</p>
+
+<p><code>sh
+$ cf ic ps
+$ cf ic exec -it &lt;container_id&gt; /bin/bash
+</code></p>
+
+<p>Having a live shell to my container allowed me to resolve the issue within a
+few minutes, without having to affect the running state of the container. This
+command also removes the need to keep an SSH daemon running on containers for
+remote access.</p>
+
+<p>For more information on the subset of Docker commands supported by IBM
+Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Cloud Foundry Application Monitoring Bot For Slack]]></title>
+    <link href="http://jamesthom.as/blog/2016/01/05/cfbot/"/>
+    <updated>2016-01-05T10:15:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2016/01/05/cfbot</id>
+    <content type="html"><![CDATA[<p>Cloud Foundry makes it so easy to build, deploy and manage applications that it
+can be a struggle just to keep up with development progress...</p>
+
+<p><blockquote><p>"Who is restarting this application?"<br/>"What is this new service instance?"<br/>"When did this application instance run out of memory?"</p></blockquote></p>
+
+<p>Development teams are increasingly using <a href="https://slack.com/">Slack</a> to
+collaborate on projects and using custom bots to manage and monitor
+applications, triggered through the channel messages. This approach,
+popularised by Github, has now become known as
+<a href="https://speakerdeck.com/jnewland/chatops-at-github">"ChatOps"</a>. Using group
+chat for development projects gives
+<a href="https://www.pagerduty.com/blog/what-is-chatops/">greater operational visibility to everyone in the team</a>.</p>
+
+<p>Slack has exploded in use over the past two years, recently signing up more
+than a <a href="http://fortune.com/2015/10/27/slack-one-million-connected/">million active users</a>.
+The platform <a href="https://api.slack.com">publishes an API</a> for writing <em>bots</em> that
+respond automatically to messages, allowing users to write custom integrations
+for external services.</p>
+
+<p>Users can register webhooks to receive channel messages, based upon keyword
+triggers, and allow bots to reply with new channel messages. The platform also
+provides a websocket channel with registered bots for real-time communication.</p>
+
+<p><strong><em>Could we write a custom bot for monitoring applications on the Cloud Foundry
+platform?</em></strong></p>
+
+<p>The bot would publish notifications about applications and services into group
+channels, helping keep teams updated with platform events in real-time.</p>
+
+<h2>Cloud Foundry Monitoring APIs</h2>
+
+<p>Cloud Foundry provides access to the platform through a series of <a href="https://apidocs.cloudfoundry.org">RESTful APIs</a>,
+exposed by the <a href="https://docs.cloudfoundry.org/concepts/architecture/cloud-controller.html">Cloud Controller</a>
+component.  User commands from the <a href="https://docs.cloudfoundry.org/devguide/installcf/">CF CLI tool</a> are translated into calls
+to these APIs.</p>
+
+<p><em>Tip: Setting the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/troubleshoot-app-health.html#trace"><em>CF_TRACE</em> environment parameter</a>
+to <strong>true</strong> will show the API calls generated by the CLI commands.</em></p>
+
+<p>Platform user account credentials are used to <a href="https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-Tokens.md">obtain OAuth2 tokens</a>
+for authenticating service calls.</p>
+
+<p>Looking at the documentation, there's an <a href="https://apidocs.cloudfoundry.org/226/events/list_all_events.html">endpoint for retrieving all platform events</a>.
+This API is used to retrieve events for an application when using the CF CLI
+<em>events</em> command. Events can be filtered by the application, event type and
+timestamps. Responses include events about changes to applications, services
+and service instances.</p>
+
+<p><em>Polling this API, with timestamp filtering to ignore old events, we can
+retrieve a continuous stream of new platform events.</em></p>
+
+<h2>Slack Integration</h2>
+
+<p>Setting up a <a href="https://my.slack.com/services/new/bot">new bot integration</a> for a Slack group provides you with a token
+you can use to authenticate with the <a href="https://api.slack.com/rtm">Real-Time Messaging API</a>.  Rather than
+having to implement the Websocket-based API handler ourselves, we can use one
+of the many existing <a href="https://api.slack.com/community">community libraries</a>.</p>
+
+<p>Using the <a href="https://github.com/slackhq/node-slack-client">Node.js client library</a>, passing in the authentication token, we just
+need to implement callback handlers for the API events.</p>
+
+<p>``` javascript Slack Client
+var Slack = require('slack-client')</p>
+
+<p>var slackToken = 'xoxb-YOUR-TOKEN-HERE' # Add a bot at https://my.slack.com/services/new/bot and copy the token here.
+var autoReconnect = true # Automatically reconnect after an error response from Slack.
+var autoMark = true # Automatically mark each message as read after it is processed.</p>
+
+<p>var slack = new Slack(slackToken, autoReconnect, autoMark)
+slack.on('message', function (message) {...})
+slack.on('error', function (err) {...})
+slack.on('open', function () {})</p>
+
+<p>slack.login()
+```</p>
+
+<p>When platform events occur, we forward these to any channels the bot is registered in.</p>
+
+<p><em>Plugging together the Cloud Foundry event monitoring code with the Slack bot integration, <a href="https://github.com/jthomas/cfbot">cfbot</a> was born...</em></p>
+
+<h2>cfbot </h2>
+
+<p><img src="/images/cfbot-events.png"></p>
+
+<p>This <a href="https://github.com/jthomas/cfbot">Cloud Foundry monitoring bot</a> can be deployed to... Cloud Foundry!</p>
+
+<p>You will need to register the bot with your Slack group to receive an
+authentication token. This token, along with login details for a platform
+account, need to be created as user-provided service credentials. The bot will
+read these service credentials on deployment and start monitoring for events.</p>
+
+<p>Full installation instructions available in the <a href="https://github.com/jthomas/cfbot">project README</a>.</p>
+
+<h2>usage</h2>
+
+<p>cfbot will monitor events from applications in all spaces and organisations that the user account has access to.</p>
+
+<p>Users can filter the applications and events being reported using the apps and
+events commands. Both commands take application or event identifiers that are
+used to match incoming events. The wildcard '*' identifier can be used to
+revert to matching all events.</p>
+
+<pre>
+@cf apps // show the currently application filter
+@cf apps app_name // add the 'app_name' to the filter list
+@cf apps * // reset to the filter to wildcard matching
+
+@cf events // show the currently event filter
+@cf events event_type // add the 'event_type' to the filter list
+@cf events * // reset to the filter to wildcard matching
+
+@cf status // show the current bot status message
+
+@cf polling_frequency // show the cf events api polling time in seconds
+@cf polling_frequency 10 // set the cf events api polling time in seconds
+</pre>
+
+
+<p>The following events are currently registered:</p>
+
+<ul>
+<li><em>App Creation and Deletion Events.</em></li>
+<li><em>App Lifecycle Events (start, stop, restart, restage)</em></li>
+<li><em>Instance Crash Events.</em></li>
+<li><em>Service Creation, Deleting and Binding.</em></li>
+<li><em>Scaling (memory, CPU, disk)</em></li>
+<li><em>Routes Changes (map, unmap)</em></li>
+</ul>
+
+
+<h2>Other bots</h2>
+
+<p>Other people have written Cloud Foundry bots before cfbot. Here are the other projects I discovered that might be useful...</p>
+
+<ul>
+<li><a href="https://github.com/18F/hubot-cf-notifications">Hubot-based Cloud Foundry monitoring bot by 18F</a></li>
+<li><a href="https://github.com/andypiper/hubot-cf">Hubot Scripts for Cloud Foundry</a></li>
+</ul>
+
+]]></content>
+  </entry>
+  
+</feed>

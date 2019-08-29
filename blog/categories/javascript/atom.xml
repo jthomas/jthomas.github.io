@@ -1,0 +1,1356 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: javascript | James Thomas]]></title>
+  <link href="http://jamesthom.as/blog/categories/javascript/atom.xml" rel="self"/>
+  <link href="http://jamesthom.as/"/>
+  <updated>2019-08-29T11:39:48+01:00</updated>
+  <id>http://jamesthom.as/</id>
+  <author>
+    <name><![CDATA[James Thomas]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Finding photos on Twitter using face recognition with TensorFlow.js]]></title>
+    <link href="http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition/"/>
+    <updated>2018-10-30T09:34:00+00:00</updated>
+    <id>http://jamesthom.as/blog/2018/10/30/finding-photos-on-twitter-using-face-recognition</id>
+    <content type="html"><![CDATA[<p>As a developer advocate, I spend a lot of time at developer conferences (talking about serverless 😎). Upon returning from each trip, I need to compile a "trip report" on the event for my bosses. This helps demonstrate the value in attending events and that I'm not just accruing air miles and hotel points for fun... 🛫🏨</p>
+
+<p>I always include any social media content people post about my talks in the trip report. This is usually tweets with photos of me on stage. If people are tweeting about your session, I assume they enjoyed it and wanted to share with their followers.</p>
+
+<blockquote class="twitter-tweet" data-lang="en"><p lang="en" dir="ltr">&quot;Servers kill your productivity&quot; <a href="https://twitter.com/thomasj?ref_src=twsrc%5Etfw">@thomasj</a> at <a href="https://twitter.com/hashtag/CodeMobileUK?src=hash&amp;ref_src=twsrc%5Etfw">#CodeMobileUK</a> <a href="https://t.co/Y4NsiBBSxT">pic.twitter.com/Y4NsiBBSxT</a></p>&mdash; Mihai Cîrlănaru (@MCirlanaru) <a href="https://twitter.com/MCirlanaru/status/981170555834441729?ref_src=twsrc%5Etfw">April 3, 2018</a></blockquote>
+
+
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+
+<p><strong>Finding tweets with photos about your talk from attendees is surprisingly challenging.</strong></p>
+
+<p>Attendees often forget to include your twitter username in their tweets. This means the only way to find those photos is to manually scroll through all the results from the conference hashtag. This is problematic at conferences with thousands of attendees all tweeting during the event. <em>#devrelproblems</em>.</p>
+
+<p>Having become bored of manually trawling through all the tweets for each conference, I had a thought...</p>
+
+<blockquote><p><em>"Can't I write some code to do this for me?"</em></p></blockquote>
+
+<p>This didn't seem like too ridiculous an idea. Twitter has <a href="https://developer.twitter.com/en/docs/tweets/search/overview">an API</a>, which would allow me to retrieve all tweets for a conference hashtag. Once I had all the tweet photos, couldn't I run some magic AI algorithm over the images to tell me if I was in them? 🤔</p>
+
+<p>After a couple of weeks of hacking around (and overcoming numerous challenges) I had (to my own amazement) managed to <a href="https://github.com/jthomas/findme">build a serverless application</a> which can find unlabelled photos of a person on twitter using machine learning with <a href="https://github.com/tensorflow/tfjs">TensorFlow.js</a>.</p>
+
+<p><img src="/images/face-recog/find-me-demo.gif" alt="FindMe Example" /></p>
+
+<p><em>If you just want to try this application yourself, follow the instructions in the Github repo: <a href="https://github.com/jthomas/findme">https://github.com/jthomas/findme</a></em></p>
+
+<h2>architecture</h2>
+
+<p><img src="/images/face-recog/architecture.png" alt="FindMe Architecture Diagram" /></p>
+
+<p>This application has four <a href="https://github.com/jthomas/findme/blob/master/serverless.yml">serverless functions</a> (two API handlers and two backend services) and a client-side application from a static web page. Users log into the <a href="https://github.com/jthomas/findme/tree/master/public">client-side application</a> using Auth0 with their Twitter account. This provides the backend application with the user's profile image and Twitter API credentials.</p>
+
+<p>When the user invokes a search query, the client-side application invokes the API endpoint for the <code>register_search</code> <a href="https://github.com/jthomas/findme/blob/master/schedule_search.js">function</a> with the query terms and twitter credentials. This function registers a new search job in Redis and fires a new <code>search_request</code> trigger event with the query and job id. This job identifier is returned to the client to poll for real-time status updates.</p>
+
+<p>The <code>twitter_search</code> <a href="https://github.com/jthomas/findme/blob/master/twitter_search.js">function</a> is connected to the <code>search_request</code> trigger and invoked for each event. It uses the Twitter Search API to retrieve all tweets for the search terms. If tweets retrieved from the API contain photos, those tweet ids (with photo urls) are fired as new <code>tweet_image</code> trigger events.</p>
+
+<p>The <code>compare_images</code> <a href="https://github.com/jthomas/findme/blob/master/compare_images.js">function</a> is connected to the <code>tweet_image</code> trigger. When invoked, it downloads the user's twitter profile image along with the tweet image and runs face detection against both images, using the <code>face-api.js</code> <a href="https://github.com/justadudewhohacks/face-api.js">library</a>. If any faces in the tweet photo match the face in the user's profile image, tweet ids are written to Redis before exiting.</p>
+
+<p>The client-side web page polls for real-time search results by polling the API endpoint for the <code>search_status</code>  <a href="https://github.com/jthomas/findme/blob/master/search_status.js">function</a> with the search job id. Tweets with matching faces are displayed on the web page using the <a href="https://developer.twitter.com/en/docs/twitter-for-websites/embedded-tweets/overview">Twitter JS library</a>.</p>
+
+<h2>challenges</h2>
+
+<p>Since I had found an <a href="https://github.com/justadudewhohacks/face-api.js">NPM library to handle face detection</a>, I could just use this on a serverless platform by including the library within the zip file used to create my serverless application? Sounds easy, right?!</p>
+
+<p><strong>ahem - not so faas-t.... ✋</strong></p>
+
+<p>As discussed in <a href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/">previous blog posts</a>, there are numerous challenges in using TF.js-based libraries on serverless platforms. Starting with making the packages available in the runtime and loading model files to converting images for classification, these libraries are not like using normal NPM modules.</p>
+
+<p><em>Here are the main challenges I had to overcome to make this serverless application work...</em></p>
+
+<h3>using tf.js libraries on a serverless platform</h3>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-node">Node.js backend drivers</a> for TensorFlow.js use a native shared C++ library  (<code>libtensorflow.so</code>) to execute models on the CPU or GPU. This native dependency is compiled for the platform during the <code>npm install</code> process. The shared library file is around 142MB, which is too large to include in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">deployment package</a> for most serverless platforms.</p>
+
+<p>Normal workarounds for this issue store large dependencies in an object store. These files are dynamically retrieved during cold starts and stored in the runtime filesystem, as shown in this pseudo-code. This workaround does add an additional delay to cold start invocations.</p>
+
+<p>```javascript
+let cold_start = false</p>
+
+<p>const library = 'libtensorflow.so'</p>
+
+<p>if (cold_start) {
+  const data = from_object_store(library)
+  write_to_fs(library, data)
+  cold_start = true
+}</p>
+
+<p>// rest of function code…
+```</p>
+
+<p><strong>Fortunately, I had a better solution using Apache OpenWhisk's support for custom Docker runtimes!</strong></p>
+
+<p>This feature allows serverless applications to use <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md#creating-native-actions">custom Docker images</a> as the runtime environment. Creating custom images with <a href="http://jamesthom.as/blog/2017/08/04/large-applications-on-openwhisk/">large libraries pre-installed</a> means they can be excluded from deployment packages. 💯</p>
+
+<p>Apache OpenWhisk publishes all existing <a href="https://hub.docker.com/r/openwhisk/">runtime images</a> on Docker Hub. Using existing runtime images as base images means Dockerfiles for custom runtimes are minimal. Here's the Dockerfile needed to build a custom runtime with the TensorFlow.js Node.js backend drivers pre-installed.</p>
+
+<p>```
+FROM openwhisk/action-nodejs-v8:latest</p>
+
+<p>RUN npm install @tensorflow/tfjs-node
+```</p>
+
+<p>Once this image has been built and published on Dockerhub, you can use it when creating new functions.</p>
+
+<p><em>I used this approach to build a <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/tags/">custom TensorFlow.js runtime</a> which is available on Docker Hub: <code>jamesthomas/action-nodejs-v8:tfjs-faceapi</code></em></p>
+
+<p>OpenWhisk actions created using the <code>wsk</code> command-line use a configuration flag (<code>--docker</code>) to specify custom runtime images.</p>
+
+<p><code>
+wsk action create classify source.js --docker jamesthomas/action-nodejs-v8:tfjs-faceapi
+</code></p>
+
+<p>The OpenWhisk provider plugin for The Serverless Framework also supports <a href="https://github.com/serverless/serverless-openwhisk#custom-runtime-images">custom runtime images</a> through a configuration parameter (<code>image</code>) under the function configuration.</p>
+
+<p>```yaml
+service: machine-learning</p>
+
+<p>provider:
+  name: openwhisk</p>
+
+<p>functions:
+  classify:</p>
+
+<pre><code>handler: source.main
+image: jamesthomas/action-nodejs-v8:tfjs-faceapi
+</code></pre>
+
+<p>```</p>
+
+<p>Having fixed the issue of library loading on serverless platforms, I could move onto the next problem, loading the pre-trained models... 💽</p>
+
+<h3>loading pre-trained models</h3>
+
+<p>Running the <a href="https://github.com/justadudewhohacks/face-api.js#usage-loading-models">example code</a> to load the pre-trained models for face recognition gave me this error:</p>
+
+<p><code>
+ReferenceError: fetch is not defined
+</code></p>
+
+<p>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I discovered how to manually load TensorFlow.js models from the filesystem using the <code>file://</code> URI prefix. Unfortunately, the <code>face-api.js</code> library doesn't support this feature. Models are <a href="https://github.com/justadudewhohacks/tfjs-image-recognition-base/blob/4a7d981dbb37e0d3dabc962e1cbfb6122e535263/src/dom/loadWeightMap.ts#L12">automatically loaded</a> using the <code>fetch</code> HTTP client. This HTTP client is available into modern browsers but not in the Node.js runtime.</p>
+
+<p>Overcoming this issue relies on providing an instance of a compatible HTTP client in the runtime. The <code>node-fetch</code> library is a <a href="https://www.npmjs.com/package/node-fetch">implementation of the fetch client</a> API for the Node.js runtime. By manually installing this module and exporting as a global variable, the library can then use the HTTP client as expected.</p>
+
+<p><code>javascript
+// Make HTTP client available in runtime
+global.fetch = require('node-fetch')
+</code></p>
+
+<p>Model configuration and weight files can then be loaded from the library's Github repository using this URL:</p>
+
+<p>https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/</p>
+
+<p><code>js
+faceapi.loadFaceDetectionModel('&lt;GITHUB_URL&gt;')
+</code></p>
+
+<h3>face detection in images</h3>
+
+<p>The <code>face-api.js</code> library has a <a href="https://github.com/justadudewhohacks/face-api.js#detecting-faces">utility function</a> (<code>models.allFaces</code>) to automatically detect and calculate descriptors for all faces found in an image. Descriptors are a feature vector (of 128 32-bit float values) which uniquely describes the characteristics of a persons face.</p>
+
+<p><code>javascript
+const results = await models.allFaces(input, minConfidence)
+</code></p>
+
+<p><em>The input to this function is the input tensor with the RGB values from an image. In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I explained how to convert an image from the filesystem in Node.js to the input tensor needed by the model.</em></p>
+
+<p>Finding a user by comparing their twitter profile against photos from tweets starts by running face detection against both images. By comparing computed descriptor values, a measure of similarity can be established between faces from the images.</p>
+
+<h3>face comparison</h3>
+
+<p>Once the face descriptors have been calculated the library provides a utility function to compute the euclidian distance between two descriptors vectors. If the difference between two face descriptors is less than a threshold value, this is used to identify the same person in both images.</p>
+
+<p>```javascript
+const distance = faceapi.euclideanDistance(descriptor1, descriptor2)</p>
+
+<p>if (distance &lt; 0.6)
+  console.log('match')
+else
+  console.log('no match')
+```</p>
+
+<p>I've no idea why 0.6 is chosen as the threshold value but this seemed to work for me! Even small changes to this value dramatically reduced the precision and recall rates for my test data. I'm calling it the Goldilocks value, just use it...</p>
+
+<h2>performance</h2>
+
+<p>Once I had the end to end application working, I wanted to make it was fast as possible. By optimising the performance, I could improve the application responsiveness and reduce compute costs for my backend. Time is literally money with serverless platforms.</p>
+
+<h3>baseline performance</h3>
+
+<p>Before attempting to optimise my application, I needed to understand the baseline performance. Setting up experiments to record invocation durations gave me the following average test results.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~5 seconds</li>
+<li><em>Cold invocations</em>: ~8 seconds</li>
+</ul>
+
+
+<p>Instrumenting the code with <code>console.time</code> statements revealed execution time was comprised of five main sections.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       3200 ms       </td>
+<td>       2000 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 8 seconds</strong>   </td>
+<td>   <strong>~ 5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p><em>Initialisation</em> was the delay during cold starts to create the runtime environment and load all the library files and application code. <em>Model Loading</em> recorded the time spent instantiating the TF.js models from the source files. <em>Image Loading</em> was the time spent converting the RGB values from images into input tensors, this happened twice, once for the twitter profile picture and again for the tweet photo. <em>Face Detection</em> is the elapsed time to execute the <code>models.allFaces</code> method and <code>faceapi.euclideanDistance</code> methods for all the detected faces. <em>Everything else</em> is well... everything else.</p>
+
+<p>Since model loading was the largest section, this seemed like an obvious place to start optimising. 📈📉</p>
+
+<h3>loading model files from disk</h3>
+
+<p>Overcoming the initial model loading issue relied on manually exposing the expected HTTP client in the Node.js runtime. This allowed models to be dynamically loaded (over HTTP) from the external Github repository. Models files were about 36MB.</p>
+
+<p>My first idea was to load these model files from the filesystem, which should be much faster than downloading from Github. Since I was already building a custom Docker runtime, it was a one-line change to include the model files within the runtime filesystem.</p>
+
+<p>```
+FROM openwhisk/action-nodejs-v8:latest</p>
+
+<p>RUN npm install @tensorflow/tfjs-node</p>
+
+<p>COPY weights weights
+```</p>
+
+<p>Having re-built the image and pushed to Docker Hub, the classification function's runtime environment now included models files in the filesystem.</p>
+
+<p><strong>But how do we make the <code>face-api.js</code> library load models files from the filesystem when it is using a HTTP client?</strong></p>
+
+<p>My solution was to write a <code>fetch</code> client that proxied calls to retrieve files from a HTTP endpoint to the local filesystem. 😱 I'd let you decide whether this is a brilliant or terrible idea!</p>
+
+<p>```javascript
+global.fetch = async (file) => {
+  return {</p>
+
+<pre><code>json: () =&gt; JSON.parse(fs.readFileSync(file, 'utf8')),
+arrayBuffer: () =&gt; fs.readFileSync(file)
+</code></pre>
+
+<p>  }
+}</p>
+
+<p>const model = await models.load('/weights')
+```</p>
+
+<p>The <code>face-api.js</code> library only used two methods (<code>json()</code> &amp; <code>arrayBuffer()</code>) from the HTTP client. Stubbing out these methods to proxy <code>fs.readFileSync</code> meant files paths were loaded from the filesystem. Amazingly, this seemed to just work, hurrah!</p>
+
+<p><strong>Implementing this feature and re-running performance tests revealed this optimisation saved about 500 ms from the Model Loading section.</strong></p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       1500 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 4.5 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>This was less of an improvement than I'd expected. Parsing all the model files and instantiating the internal objects was more computationally intensive than I realised. This performance improvement did improve both cold and warm invocations, which was a bonus.</p>
+
+<p><em>Despite this optimisation, model loading was still the largest section in the classification function...</em></p>
+
+<h3>caching loaded models</h3>
+
+<p>There's a good strategy to use when optimising serverless functions...</p>
+
+<p><img src="/images/face-recog/cache-all-the-things.jpg" alt="CACHE ALL THE THINGS" /></p>
+
+<p>Serverless runtimes re-use runtime containers for consecutive requests, known as warm environments. Using local state, like global variables or the runtime filesystem, to cache data between requests can be used to improve performance during those invocations.</p>
+
+<p>Since model loading was such an expensive process, I wanted to cache initialised models. Using a global variable, I could control whether to trigger model loading or return the pre-loaded models. Warm environments would re-use pre-loaded models and remove model loading delay.</p>
+
+<p>```javascript
+const faceapi = require('face-api.js')</p>
+
+<p>let LOADED = false</p>
+
+<p>exports.load = async location => {
+  if (!LOADED) {</p>
+
+<pre><code>await faceapi.loadFaceDetectionModel(location)
+await faceapi.loadFaceRecognitionModel(location)
+await faceapi.loadFaceLandmarkModel(location)
+
+LOADED = true
+</code></pre>
+
+<p>  }</p>
+
+<p>  return faceapi
+}
+```</p>
+
+<p><strong>This performance improvement had a significant impact of the performance for warm invocations. Model loading became "free".</strong> 👍</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms x 2      </td>
+<td>     500 ms x 2      </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms x 2 </td>
+<td> 700 ms - 900 ms x 2</td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>caching face descriptors</h3>
+
+<p>In the initial implementation, the face comparison function was executing face detection against both the user's twitter profile image and tweet photo for comparison. Since the twitter profile image was the same in each search request, running face detection against this image would always return the same results.</p>
+
+<p>Rather than having this work being redundantly computed in each function, caching the results of the computed face descriptor for the profile image meant it could re-used across invocations. This would reduce by 50% the work necessary in the Image &amp; Model Loading sections.</p>
+
+<p>The <code>face-api.js</code> library returns the face descriptor as a typed array with 128 32-bit float values. Encoding this values as a hex string allows them to be stored and retrieved from Redis. This code was used to convert float values to hex strings, whilst maintaining the exact precision of those float values.</p>
+
+<p>```javascript
+const encode = typearr => {
+  const encoded = Buffer.from(typearr.buffer).toString('hex')<br/>
+  return encoded
+}</p>
+
+<p>const decode = encoded => {
+  const decoded = Buffer.from(encoded, 'hex')
+  const uints = new Uint8Array(decoded)
+  const floats = new Float32Array(uints.buffer)
+  return floats
+}
+```</p>
+
+<p>This optimisation improves the performance of most cold invocations and all warm invocations, removing over 1200 ms of computation time to compute the results.</p>
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th>                    </th>
+<th align="center"> Cold Starts (Cached) </th>
+<th align="center">    Warm Starts    </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td> Initialisation     </td>
+<td align="center">       1200 ms        </td>
+<td align="center">       0 ms        |</td>
+</tr>
+<tr>
+<td></td>
+<td> Model Loading      </td>
+<td align="center">       2700 ms        </td>
+<td align="center">      1500 ms      |</td>
+</tr>
+<tr>
+<td></td>
+<td> Image Loading      </td>
+<td align="center">        500 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> Face Detection     </td>
+<td align="center">   700 ms - 900 ms    </td>
+<td align="center">  700 ms - 900 ms  |</td>
+</tr>
+<tr>
+<td></td>
+<td> Everything Else    </td>
+<td align="center">       1000 ms        </td>
+<td align="center">      500 ms       |</td>
+</tr>
+<tr>
+<td></td>
+<td> <strong>Total Duration</strong> </td>
+<td align="center">   <strong>~ 6 seconds</strong>    </td>
+<td align="center"> <strong>~ 2.5 seconds</strong> |</td>
+</tr>
+</tbody>
+</table>
+
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th> Cold Starts </th>
+<th> Warm Starts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Initialisation    </td>
+<td>       1200 ms       </td>
+<td>        0 ms</td>
+</tr>
+<tr>
+<td>Model Loading     </td>
+<td>       2700 ms       </td>
+<td>       0 ms       </td>
+</tr>
+<tr>
+<td>Image Loading     </td>
+<td>     500 ms      </td>
+<td>     500 ms       </td>
+</tr>
+<tr>
+<td>Face Detection    </td>
+<td> 700 ms - 900 ms  </td>
+<td> 700 ms - 900 ms </td>
+</tr>
+<tr>
+<td>Everything Else   </td>
+<td>       1000 ms       </td>
+<td>       500 ms        </td>
+</tr>
+<tr>
+<td><strong>Total Duration</strong></td>
+<td>   <strong>~ 7.5 seconds</strong>   </td>
+<td>   <strong>~ 3 seconds</strong>  </td>
+</tr>
+</tbody>
+</table>
+
+
+<h3>final results + cost</h3>
+
+<p>Application performance was massively improved with all these optimisations. As demonstrated in the video above, the application could process tweets in real-time, returning almost instant results. Average invocation durations were now.</p>
+
+<ul>
+<li><em>Warm invocations</em>: ~2.5 seconds</li>
+<li><em>Cold invocations (Cached)</em>: ~6 seconds</li>
+</ul>
+
+
+<p>Serverless platforms charge for compute time by the millisecond, so these improvements led to cost savings of 25% for cold invocations (apart the first classification for a user) and 50% for warm invocations.</p>
+
+<p>Classification functions used 512MB of RAM which meant IBM Cloud Functions would provide 320,000 "warm" classifications or 133,333 "cold" classifications within the free tier each month. Ignoring the free tier, 100,000 "warm" classifications would cost $5.10 and 100,000 "cold" classifications $2.13.</p>
+
+<h2>conclusion</h2>
+
+<p>Using TensorFlow.js with serverless cloud platforms makes it easy to build scalable machine learning applications in the cloud. Using the horizontal scaling capabilities of serverless platforms, thousands of model classifications can be ran in parallel. This can be more performant than having dedicated hardware with a GPU, especially with compute costs for serverless applications being so cheap.</p>
+
+<p>TensorFlow.js is ideally suited to serverless application due to the JS interface, (relatively) small library size and availability of pre-trained models. Despite having no prior experience in Machine Learning, I was able to use the library to build a face recognition pipeline, processing 100s of images in parallel, for real-time results. This amazing library opens up machine learning to a whole new audience!</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Serverless Machine Learning With TensorFlow.js]]></title>
+    <link href="http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js/"/>
+    <updated>2018-08-13T12:16:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2018/08/13/serverless-machine-learning-with-tensorflow-dot-js</id>
+    <content type="html"><![CDATA[<p>In a <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to use <a href="https://js.tensorflow.org/">TensorFlow.js</a> on Node.js to run <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d#file-script-js">visual recognition on images from the local filesystem</a>. TensorFlow.js is a JavaScript version of the open-source machine learning library from Google.</p>
+
+<p>Once I had this working with a local Node.js script, my next idea was to convert it into a serverless function. Running this function on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="https://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) would turn the script into my own visual recognition microservice.</p>
+
+<p><img src="/images/tfjs-serverless/tf-js-example.gif" title="Serverless TensorFlow.js Function" ></p>
+
+<p>Sounds easy, right? It's just a JavaScript library? So, zip it up and away we go... <strong><em>ahem</em></strong> 👊</p>
+
+<p><em>Converting the image classification script to run in a serverless environment had the following challenges...</em></p>
+
+<ul>
+<li><strong>TensorFlow.js libraries need to be available in the runtime.</strong></li>
+<li><strong>Native bindings for the library must be compiled against the platform architecture.</strong></li>
+<li><strong>Models files need to be loaded from the filesystem.</strong></li>
+</ul>
+
+
+<p>Some of these issues were more challenging than others to fix! Let's start by looking at the details of each issue, before explaining how <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">Docker support</a> in Apache OpenWhisk can be used to resolve them all.</p>
+
+<h2>Challenges</h2>
+
+<h3>TensorFlow.js Libraries</h3>
+
+<p>TensorFlow.js libraries are not included in the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js runtimes</a> provided by the Apache OpenWhisk.</p>
+
+<p>External libraries <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">can be imported</a> into the runtime by deploying applications from a zip file. Custom <code>node_modules</code> folders included in the zip file will be extracted in the runtime. Zip files are limited to a <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#actions">maximum size of 48MB</a>.</p>
+
+<h4>Library Size</h4>
+
+<p>Running <code>npm install</code> for the TensorFlow.js libraries used revealed the first problem... the resulting <code>node_modules</code> directory was 175MB. 😱</p>
+
+<p>Looking at the contents of this folder, the <code>tfjs-node</code> module compiles a <a href="https://github.com/tensorflow/tfjs-node/tree/master/src">native shared library</a> (<code>libtensorflow.so</code>) that is 135M. This means no amount of JavaScript minification is going to get those external dependencies under the magic 48 MB limit. 👎</p>
+
+<h4>Native Dependencies</h4>
+
+<p>The <code>libtensorflow.so</code> native shared library must be compiled using the platform runtime. Running <code>npm install</code>  locally automatically compiles native dependencies against the host platform. Local environments may use different CPU architectures (Mac vs Linux) or link against shared libraries not available in the serverless runtime.</p>
+
+<h3>MobileNet Model Files</h3>
+
+<p>TensorFlow models files <a href="https://js.tensorflow.org/tutorials/model-save-load.html">need loading from the filesystem</a> in Node.js. Serverless runtimes do provide a temporary filesystem inside the runtime environment. Files from deployment zip files are automatically extracted into this environment before invocations. There is no external access to this filesystem outside the lifecycle of the serverless function.</p>
+
+<p>Models files for the MobileNet model were 16MB. If these files are included in the deployment package, it leaves 32MB for the rest of the application source code. Although the model files are small enough to include in the zip file, what about the TensorFlow.js libraries? Is this the end of the blog post? Not so fast....</p>
+
+<p><strong>Apache OpenWhisk's support for custom runtimes provides a simple solution to all these issues!</strong></p>
+
+<h2>Custom Runtimes</h2>
+
+<p>Apache OpenWhisk uses Docker containers as the runtime environments for serverless functions (actions). All platform runtime images are <a href="https://hub.docker.com/r/openwhisk/">published on Docker Hub</a>, allowing developers to start these environments locally.</p>
+
+<p>Developers can also <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-docker.md">specify custom runtime images</a> when creating actions. These images must be publicly available on Docker Hub. Custom runtimes have to expose the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">same HTTP API</a> used by the platform for invoking actions.</p>
+
+<p>Using platform runtime images as <a href="https://docs.docker.com/glossary/?term=parent%20image">parent images</a> makes it simple to build custom runtimes. Users can run commands during the Docker build to install additional libraries and other dependencies. The parent image already contains source files with the HTTP API service handling platform requests.</p>
+
+<h3>TensorFlow.js Runtime</h3>
+
+<p>Here is the Docker build file for the Node.js action runtime with additional TensorFlow.js dependencies.</p>
+
+<p>```
+FROM openwhisk/action-nodejs-v8:latest</p>
+
+<p>RUN npm install @tensorflow/tfjs @tensorflow-models/mobilenet @tensorflow/tfjs-node jpeg-js</p>
+
+<p>COPY mobilenet mobilenet
+```</p>
+
+<p><code>openwhisk/action-nodejs-v8:latest</code> is the Node.js action runtime image <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">published by OpenWhisk</a>.</p>
+
+<p>TensorFlow libraries and other dependencies are installed using <code>npm install</code> in the build process. Native dependencies for the <code>@tensorflow/tfjs-node</code> library are automatically compiled for the correct platform by installing during the build process.</p>
+
+<p>Since I'm building a new runtime, I've also added the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model files</a> to the image. Whilst not strictly necessary, removing them from the action zip file reduces deployment times.</p>
+
+<p><strong><em>Want to skip the next step? Use this image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/"><code>jamesthomas/action-nodejs-v8:tfjs</code></a> rather than building your own.</em></strong></p>
+
+<h3>Building The Runtime</h3>
+
+<p><em>In the <a href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/">previous blog post</a>, I showed how to download model files from the public storage bucket.</em></p>
+
+<ul>
+<li>Download a version of the MobileNet model and place all files in the <code>mobilenet</code> directory.</li>
+<li>Copy the Docker build file from above to a local file named <code>Dockerfile</code>.</li>
+<li>Run the Docker <a href="https://docs.docker.com/engine/reference/commandline/build/">build command</a> to generate a local image.</li>
+</ul>
+
+
+<p><code>sh
+docker build -t tfjs .
+</code></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/tag/">Tag the local image</a> with a remote username and repository.</li>
+</ul>
+
+
+<p><code>sh
+docker tag tfjs &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</code></p>
+
+<p><em>Replace <code>&lt;USERNAME&gt;</code> with your Docker Hub username.</em></p>
+
+<ul>
+<li><a href="https://docs.docker.com/engine/reference/commandline/push/">Push the local image</a> to Docker Hub</li>
+</ul>
+
+
+<p><code>sh
+ docker push &lt;USERNAME&gt;/action-nodejs-v8:tfjs
+</code></p>
+
+<p>Once the image <a href="https://hub.docker.com/r/jamesthomas/action-nodejs-v8/">is available</a> on Docker Hub, actions can be created using that runtime image. 😎</p>
+
+<h2>Example Code</h2>
+
+<p>This source code implements image classification as an OpenWhisk action. Image files are provided as a Base64 encoded string using the <code>image</code> property on the event parameters. Classification results are returned as the <code>results</code> property in the response.</p>
+
+<script src="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5.js"></script>
+
+
+<h3>Caching Loaded Models</h3>
+
+<p>Serverless platforms initialise runtime environments on-demand to handle invocations. Once a runtime environment has been created, it will be <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">re-used for further invocations</a> with some limits. This improves performance by removing the initialisation delay ("cold start") from request processing.</p>
+
+<p>Applications can exploit this behaviour by using global variables to maintain state across requests. This is often use to <a href="https://blog.rowanudell.com/database-connections-in-lambda/">cache opened database connections</a> or store initialisation data loaded from external systems.</p>
+
+<p>I have used this pattern to <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L80-L82">cache the MobileNet model</a> used for classification. During cold invocations, the model is loaded from the filesystem and stored in a global variable. Warm invocations then use the existence of that global variable to skip the model loading process with further requests.</p>
+
+<p>Caching the model reduces the time (and therefore cost) for classifications on warm invocations.</p>
+
+<h3>Memory Leak</h3>
+
+<p>Running the Node.js script from blog post on IBM Cloud Functions was possible with minimal modifications. Unfortunately, performance testing revealed a memory leak in the handler function. 😢</p>
+
+<p><em>Reading more about <a href="https://js.tensorflow.org/tutorials/core-concepts.html">how TensorFlow.js works</a> on Node.js uncovered the issue...</em></p>
+
+<p>TensorFlow.js's Node.js extensions use a native C++ library to execute the Tensors on a CPU or GPU engine. Memory allocated for Tensor objects in the native library is retained until the application explicitly releases it or the process exits. TensorFlow.js provides a <code>dispose</code> method on the individual objects to free allocated memory. There is also a <code>tf.tidy</code> method to automatically clean up all allocated objects within a frame.</p>
+
+<p>Reviewing the code, tensors were being created as <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L51-L59">model input from images</a> on each request. These objects were not disposed before returning from the request handler. This meant native memory grew unbounded. Adding an explicit <code>dispose</code> call to free these objects before returning <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L91">fixed the issue</a>.</p>
+
+<h3>Profiling &amp; Performance</h3>
+
+<p>Action code records memory usage and elapsed time at different stages in classification process.</p>
+
+<p>Recording <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L12-L20">memory usage</a> allows me to modify the maximum memory allocated to the function for optimal performance and cost. Node.js provides a <a href="https://nodejs.org/docs/v0.4.11/api/all.html#process.memoryUsage">standard library API</a> to retrieve memory usage for the current process. Logging these values allows me to inspect memory usage at different stages.</p>
+
+<p>Timing <a href="https://gist.github.com/jthomas/e7c78bbfe4091ed6ace93d1b53cbf6e5#file-index-js-L71">different tasks</a> in the classification process, i.e. model loading, image classification, gives me an insight into how efficient classification is compared to other methods. Node.js has a <a href="https://nodejs.org/api/console.html#console_console_time_label">standard library API</a> for timers to record and print elapsed time to the console.</p>
+
+<h2>Demo</h2>
+
+<h3>Deploy Action</h3>
+
+<ul>
+<li>Run the following command with the <a href="https://console.bluemix.net/openwhisk/learn/cli">IBM Cloud CLI</a> to create the action.</li>
+</ul>
+
+
+<p><code>sh
+ibmcloud fn action create classify --docker &lt;IMAGE_NAME&gt; index.js
+</code></p>
+
+<p><em>Replace <code>&lt;IMAGE_NAME&gt;</code> with the public Docker Hub image identifier for the custom runtime. Use <code>jamesthomas/action-nodejs-v8:tfjs</code> if you haven't built this manually.</em></p>
+
+<h3>Testing It Out</h3>
+
+<ul>
+<li>Download <a href="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG">this image</a> of a Panda from Wikipedia.</li>
+</ul>
+
+
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p>
+
+<p><code>sh
+wget http://bit.ly/2JYSal9 -O panda.jpg
+</code></p>
+
+<ul>
+<li>Invoke the action with the Base64 encoded image as an input parameter.</li>
+</ul>
+
+
+<p><code>sh
+ ibmcloud fn action invoke classify -r -p image $(base64 panda.jpg)
+</code></p>
+
+<ul>
+<li>Returned JSON message contains classification probabilities. 🐼🐼🐼</li>
+</ul>
+
+
+<p>```json
+{
+  "results":  [{</p>
+
+<pre><code>className: 'giant panda, panda, panda bear, coon bear',
+probability: 0.9993536472320557
+</code></pre>
+
+<p>  }]
+}
+```</p>
+
+<h3>Activation Details</h3>
+
+<ul>
+<li>Retrieve logging output for the last activation to show performance data.</li>
+</ul>
+
+
+<p><code>sh
+ibmcloud fn activation logs --last
+</code></p>
+
+<p><strong><em>Profiling and memory usage details are logged to stdout</em></strong></p>
+
+<p><code>sh
+prediction function called.
+memory used: rss=150.46 MB, heapTotal=32.83 MB, heapUsed=20.29 MB, external=67.6 MB
+loading image and model...
+decodeImage: 74.233ms
+memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.05 MB, external=40.63 MB
+imageByteArray: 5.676ms
+memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.05 MB, external=45.51 MB
+imageToInput: 5.952ms
+memory used: rss=141.8 MB, heapTotal=24.33 MB, heapUsed=19.06 MB, external=45.51 MB
+mn_model.classify: 274.805ms
+memory used: rss=149.83 MB, heapTotal=24.33 MB, heapUsed=20.57 MB, external=45.51 MB
+classification results: [...]
+main: 356.639ms
+memory used: rss=144.37 MB, heapTotal=24.33 MB, heapUsed=20.58 MB, external=45.51 MB
+</code></p>
+
+<p><code>main</code> is the total elapsed time for the action handler. <code>mn_model.classify</code> is the elapsed time for the image classification. Cold start requests print an extra log message with model loading time, <code>loadModel: 394.547ms</code>.</p>
+
+<h2>Performance Results</h2>
+
+<p>Invoking the <code>classify</code> action 1000 times for both cold and warm activations (using 256MB memory) generated the following performance results.</p>
+
+<h3>warm invocations</h3>
+
+<p><img src="/images/tfjs-serverless/warm-activations.png" title="Warm Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>316 milliseconds to process when using warm environments</strong>. Looking at the timing data, converting the Base64 encoded JPEG into the input tensor took around 100 milliseconds. Running the model classification task was in the 200 - 250 milliseconds range.</p>
+
+<h3>cold invocations</h3>
+
+<p><img src="/images/tfjs-serverless/cold-activations.png" title="Cold Activation Performance Results" ></p>
+
+<p>Classifications took an average of <strong>1260 milliseconds to process when using cold environments</strong>. These requests incur penalties for initialising new runtime containers and loading models from the filesystem. Both of these tasks took around 400 milliseconds each.</p>
+
+<p><em>One disadvantage of using custom runtime images in Apache OpenWhisk is the lack of <a href="https://medium.com/openwhisk/squeezing-the-milliseconds-how-to-make-serverless-platforms-blazing-fast-aea0e9951bd0">pre-warmed containers</a>. Pre-warming is used to reduce cold start times by starting runtime containers before they are needed. This is not supported for non-standard runtime images.</em></p>
+
+<h3>classification cost</h3>
+
+<p>IBM Cloud Functions <a href="https://console.bluemix.net/openwhisk/learn/pricing">provides a free tier</a> of 400,000 GB/s per month. Each further second of execution is charged at $0.000017 per GB of memory allocated. Execution time is rounded up to the nearest 100ms.</p>
+
+<p>If all activations were warm, a user could execute <strong>more than 4,000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 600,000 further invocations would cost just over $1.</p>
+
+<p>If all activations were cold, a user could execute <strong>more than 1,2000,000 classifications per month in the free tier</strong> using an action with 256MB. Once outside the free tier, around 180,000 further invocations would cost just over $1.</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Getting a local script to run image classification was relatively simple, but converting to a serverless function came with more challenges! Apache OpenWhisk restricts the maximum application size to 50MB and native libraries dependencies were much larger than this limit.</p>
+
+<p>Fortunately, Apache OpenWhisk's custom runtime support allowed us to resolve all these issues. By building a custom runtime with native dependencies and models files, those libraries can be used on the platform without including them in the deployment package.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Machine Learning In Node.js With TensorFlow.js]]></title>
+    <link href="http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js/"/>
+    <updated>2018-08-07T09:52:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2018/08/07/machine-learning-in-node-dot-js-with-tensorflow-dot-js</id>
+    <content type="html"><![CDATA[<p><a href="https://js.tensorflow.org/">TensorFlow.js</a> is a new version of the popular open-source library which brings deep learning to JavaScript. Developers can now define, train, and run machine learning models using the <a href="https://js.tensorflow.org/api/0.12.0/">high-level library API</a>.</p>
+
+<p><a href="https://github.com/tensorflow/tfjs-models/">Pre-trained models</a> mean developers can now easily perform complex tasks like <a href="https://emojiscavengerhunt.withgoogle.com/">visual recognition</a>, <a href="https://magenta.tensorflow.org/demos/performance_rnn/index.html#2|2,0,1,0,1,1,0,1,0,1,0,1|1,1,1,1,1,1,1,1,1,1,1,1|1,1,1,1,1,1,1,1,1,1,1,1|false">generating music</a> or <a href="https://storage.googleapis.com/tfjs-models/demos/posenet/camera.html">detecting human poses</a> with just a few lines of JavaScript.</p>
+
+<p>Having started as a front-end library for web browsers, recent updates added <a href="https://github.com/tensorflow/tfjs-node">experimental support</a> for Node.js. This allows TensorFlow.js to be used in backend JavaScript applications without having to use Python.</p>
+
+<p><em>Reading about the library, I wanted to test it out with a simple task...</em> 🧐</p>
+
+<blockquote><p> <strong>Use TensorFlow.js to perform visual recognition on images using JavaScript from Node.js</strong></p></blockquote>
+
+<p>Unfortunately, most of the <a href="https://js.tensorflow.org/#getting-started">documentation</a> and <a href="https://js.tensorflow.org/tutorials/webcam-transfer-learning.html">example code</a> provided uses the library in a browser. <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">Project utilities</a> provided to simplify loading and using pre-trained models have not yet been extended with Node.js support. Getting this working did end up with me spending a lot of time reading the Typescript source files for the library. 👎</p>
+
+<p>However, after a few days' hacking, I managed to get <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d">this completed</a>! Hurrah! 🤩</p>
+
+<p><em>Before we dive into the code, let's start with an overview of the different TensorFlow libraries.</em></p>
+
+<h2>TensorFlow</h2>
+
+<p><a href="https://www.tensorflow.org/">TensorFlow</a> is an open-source software library for machine learning applications. TensorFlow can be used to implement neural networks and other deep learning algorithms.</p>
+
+<p>Released by Google in November 2015, TensorFlow was originally a <a href="https://www.tensorflow.org/api_docs/python/">Python library</a>. It used either CPU or GPU-based computation for training and evaluating machine learning models. The library was initially designed to run on high-performance servers with expensive GPUs.</p>
+
+<p>Recent updates have extended the software to run in resource-constrained environments like mobile devices and web browsers.</p>
+
+<h3>TensorFlow Lite</h3>
+
+<p><a href="https://www.tensorflow.org/mobile/tflite/">Tensorflow Lite</a>, a lightweight version of the library for mobile and embedded devices, was released in May 2017. This was accompanied by a new series of pre-trained deep learning models for vision recognition tasks, called <a href="https://ai.googleblog.com/2017/06/mobilenets-open-source-models-for.html">MobileNet</a>. MobileNet models were designed to work efficiently in resource-constrained environments like mobile devices.</p>
+
+<h3>TensorFlow.js</h3>
+
+<p>Following Tensorflow Lite, <a href="https://medium.com/tensorflow/introducing-tensorflow-js-machine-learning-in-javascript-bf3eab376db">TensorFlow.js</a> was announced in March 2018. This version of the library was designed to run in the browser, building on an earlier project called <a href="https://twitter.com/deeplearnjs">deeplearn.js</a>. WebGL provides GPU access to the library. Developers use a JavaScript API to train, load and run models.</p>
+
+<p>TensorFlow.js was recently extended to run on Node.js, using an <a href="https://github.com/tensorflow/tfjs-node">extension library</a> called <code>tfjs-node</code>.</p>
+
+<p><em>The Node.js extension is an alpha release and still under active development.</em></p>
+
+<h4>Importing Existing Models Into TensorFlow.js</h4>
+
+<p>Existing TensorFlow and Keras models can be executed using the TensorFlow.js library. Models need converting to a new format <a href="https://github.com/tensorflow/tfjs-converter">using this tool</a> before execution. Pre-trained and converted models for image classification, pose detection and k-nearest neighbours are <a href="https://github.com/tensorflow/tfjs-models">available on Github</a>.</p>
+
+<h2>Using TensorFlow.js in Node.js</h2>
+
+<h3>Installing TensorFlow Libraries</h3>
+
+<p>TensorFlow.js can be installed from the <a href="https://www.npmjs.com/">NPM registry</a>.</p>
+
+<ul>
+<li><code>@tensorflow/tfjs</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs">Core TensorFlow.js library</a></li>
+<li><code>@tensorflow/tfjs-node</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs-node">TensorFlow.js Node.js extension</a></li>
+<li><code>@tensorflow/tfjs-node-gpu</code> - <a href="https://www.npmjs.com/package/@tensorflow/tfjs-node-gpu">TensorFlow.js Node.js extension with GPU support</a></li>
+</ul>
+
+
+<p><code>
+npm install @tensorflow/tfjs @tensorflow/tfjs-node
+// or...
+npm install @tensorflow/tfjs @tensorflow/tfjs-node-gpu
+</code></p>
+
+<p>Both Node.js extensions use native dependencies which will be compiled on demand.</p>
+
+<h3>Loading TensorFlow Libraries</h3>
+
+<p>TensorFlow's <a href="https://js.tensorflow.org/api/0.12.0/">JavaScript API</a> is exposed from the core library. Extension modules to enable Node.js support do not expose additional APIs.</p>
+
+<p><code>javascript
+const tf = require('@tensorflow/tfjs')
+// Load the binding (CPU computation)
+require('@tensorflow/tfjs-node')
+// Or load the binding (GPU computation)
+require('@tensorflow/tfjs-node-gpu')
+</code></p>
+
+<h3>Loading TensorFlow Models</h3>
+
+<p>TensorFlow.js provides an <a href="https://github.com/tensorflow/tfjs-models">NPM library</a> (<code>tfjs-models</code>) to ease loading pre-trained &amp; converted models for <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">image classification</a>, <a href="https://github.com/tensorflow/tfjs-models/tree/master/posenet">pose detection</a> and <a href="https://github.com/tensorflow/tfjs-models/tree/master/knn-classifier">k-nearest neighbours</a>.</p>
+
+<p>The <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet">MobileNet model</a> used for image classification is a deep neural network trained to <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">identify 1000 different classes</a>.</p>
+
+<p>In the project's README, the <a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet#via-npm">following example code</a> is used to load the model.</p>
+
+<p>```javascript
+import * as mobilenet from '@tensorflow-models/mobilenet';</p>
+
+<p>// Load the model.
+const model = await mobilenet.load();
+```</p>
+
+<p><strong>One of the first challenges I encountered was that this does not work on Node.js.</strong></p>
+
+<p><code>
+Error: browserHTTPRequest is not supported outside the web browser.
+</code></p>
+
+<p>Looking at the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L27">source code</a>, the <code>mobilenet</code> library is a wrapper around the underlying <code>tf.Model</code> class. When the <code>load()</code> method is called, it automatically downloads the correct model files from an external HTTP address and instantiates the TensorFlow model.</p>
+
+<p>The Node.js extension does not yet support HTTP requests to dynamically retrieve models. Instead, models must be manually loaded from the filesystem.</p>
+
+<p><em>After reading the source code for the library, I managed to create a work-around...</em></p>
+
+<h4>Loading Models From a Filesystem</h4>
+
+<p>Rather than calling the module's <code>load</code> method, if the <code>MobileNet</code> class is created manually, the auto-generated <code>path</code> variable which contains the HTTP address of the model can be overwritten with a local filesystem path. Having done this, calling the <code>load</code> method on the class instance will trigger the <a href="https://js.tensorflow.org/tutorials/model-save-load.html">filesystem loader class</a>, rather than trying to use the browser-based HTTP loader.</p>
+
+<p><code>javascript
+const path = "mobilenet/model.json"
+const mn = new mobilenet.MobileNet(1, 1);
+mn.path = `file://${path}`
+await mn.load()
+</code></p>
+
+<p><strong>Awesome, it works!</strong></p>
+
+<p><em>But how where do the models files come from?</em></p>
+
+<h3>MobileNet Models</h3>
+
+<p>Models for TensorFlow.js consist of two file types, a model configuration file stored in JSON and model weights in a binary format. Model weights are often sharded into multiple files for better caching by browsers.</p>
+
+<p>Looking at the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L68-L76">automatic loading code</a> for MobileNet models, models configuration and weight shards are retrieved from a public storage bucket at this address.</p>
+
+<p><code>
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v${version}_${alpha}_${size}/
+</code></p>
+
+<p>The template parameters in the URL refer to the model versions listed <a href="https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md#pre-trained-models">here</a>. Classification accuracy results for each version are also shown on that page.</p>
+
+<p><em>According to the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L36">source code</a>, only MobileNet v1 models can be loaded using the <code>tensorflow-models/mobilenet</code> library.</em></p>
+
+<p>The HTTP retrieval code loads the <code>model.json</code> file from this location and then recursively fetches all referenced model weights shards. These files are in the format <code>groupX-shard1of1</code>.</p>
+
+<h4>Downloading Models Manually</h4>
+
+<p>Saving all model files to a filesystem can be achieved by retrieving the model configuration file, parsing out the referenced weight files and downloading each weight file manually.</p>
+
+<p><strong>I want to use the MobileNet V1 Module with 1.0 alpha value and image size of 224 pixels.</strong> This gives me the <a href="https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json">following URL</a> for the model configuration file.</p>
+
+<p><code>
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/model.json
+</code></p>
+
+<p>Once this file has been downloaded locally, I can use the <a href="https://stedolan.github.io/jq/"><code>jq</code> tool</a> to parse all the weight file names.</p>
+
+<p><code>
+$ cat model.json | jq -r ".weightsManifest[].paths[0]"
+group1-shard1of1
+group2-shard1of1
+group3-shard1of1
+...
+</code></p>
+
+<p>Using the <code>sed</code> tool, I can prefix these names with the HTTP URL to generate URLs for each weight file.</p>
+
+<p><code>
+$ cat model.json | jq -r ".weightsManifest[].paths[0]" | sed 's/^/https:\/\/storage.googleapis.com\/tfjs-models\/tfjs\/mobilenet_v1_1.0_224\//'
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group1-shard1of1
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group2-shard1of1
+https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_1.0_224/group3-shard1of1
+...
+</code></p>
+
+<p>Using the <code>parallel</code> and <code>curl</code> commands, I can then download all of these files to my local directory.</p>
+
+<p><code>
+cat model.json | jq -r ".weightsManifest[].paths[0]" | sed 's/^/https:\/\/storage.googleapis.com\/tfjs-models\/tfjs\/mobilenet_v1_1.0_224\//' |  parallel curl -O
+</code></p>
+
+<h3>Classifying Images</h3>
+
+<p><a href="https://github.com/tensorflow/tfjs-models/tree/master/mobilenet#via-npm">This example code</a> is provided by TensorFlow.js to demonstrate returning classifications for an image.</p>
+
+<p>```javascript
+const img = document.getElementById('img');</p>
+
+<p>// Classify the image.
+const predictions = await model.classify(img);
+```</p>
+
+<p><strong>This does not work on Node.js due to the lack of a DOM.</strong></p>
+
+<p>The <code>classify</code> <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L143-L155">method</a> accepts numerous DOM elements (<code>canvas</code>, <code>video</code>, <code>image</code>) and will automatically retrieve and convert image bytes from these elements into a <a href="https://js.tensorflow.org/api/latest/index.html#tensor3d"><code>tf.Tensor3D</code> class</a> which is used as the input to the model. Alternatively, the <code>tf.Tensor3D</code> input can be passed directly.</p>
+
+<p><strong>Rather than trying to use an external package to simulate a DOM element in Node.js, I found it easier to construct the <code>tf.Tensor3D</code> manually.</strong></p>
+
+<h4>Generating Tensor3D from an Image</h4>
+
+<p>Reading the <a href="https://github.com/tensorflow/tfjs-core/blob/master/src/kernels/backend_cpu.ts#L126-L140">source code</a> for the method used to turn DOM elements into Tensor3D classes, the following input parameters are used to generate the Tensor3D class.</p>
+
+<p><code>javascript
+const values = new Int32Array(image.height * image.width * numChannels);
+// fill pixels with pixel channel bytes from image
+const outShape = [image.height, image.width, numChannels];
+const input = tf.tensor3d(values, outShape, 'int32');
+</code></p>
+
+<p><code>pixels</code> is a 2D array of type (Int32Array) which contains a sequential list of channel values for each pixel. <code>numChannels</code> is the number of channel values per pixel.</p>
+
+<h4>Creating Input Values For JPEGs</h4>
+
+<p>The <a href="https://www.npmjs.com/package/jpeg-js"><code>jpeg-js</code> library</a> is a pure javascript JPEG encoder and decoder for Node.js. Using this library the RGB values for each pixel can be extracted.</p>
+
+<p><code>javascript
+const pixels = jpeg.decode(buffer, true);
+</code></p>
+
+<p>This will return a <code>Uint8Array</code> with four channel values (<code>RGBA</code>) for each pixel (<code>width * height</code>). The MobileNet model only uses the three colour channels (<code>RGB</code>) for classification, ignoring the alpha channel. This code converts the four channel array into the correct three channel version.</p>
+
+<p>```javascript
+const numChannels = 3;
+const numPixels = image.width * image.height;
+const values = new Int32Array(numPixels * numChannels);</p>
+
+<p>for (let i = 0; i &lt; numPixels; i++) {
+  for (let channel = 0; channel &lt; numChannels; ++channel) {</p>
+
+<pre><code>values[i * numChannels + channel] = pixels[i * 4 + channel];
+</code></pre>
+
+<p>  }
+}
+```</p>
+
+<h4>MobileNet Models Input Requirements</h4>
+
+<p>The <a href="https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md#mobilenet_v1">MobileNet model</a> being used classifies images of width and height 224 pixels. Input tensors must contain float values, between -1 and 1, for each of the three channels pixel values.</p>
+
+<p>Input values for images of different dimensions needs to be re-sized before classification. Additionally, pixels values from the JPEG decoder are in the range <em>0 - 255</em>, rather than <em>-1 to 1</em>. These values also need converting prior to classification.</p>
+
+<p><strong>TensorFlow.js has library methods to make this process easier but, fortunately for us, the <code>tfjs-models/mobilenet</code> library <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/index.ts#L103-L114">automatically handles</a> this issue!</strong> 👍</p>
+
+<p>Developers can pass in Tensor3D inputs of type <code>int32</code>  and different dimensions to the  <code>classify</code> method and it converts the input to the correct format prior to classification. Which means there's nothing to do... Super 🕺🕺🕺.</p>
+
+<h4>Obtaining Predictions</h4>
+
+<p>MobileNet models in Tensorflow are trained to recognise entities from the <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">top 1000 classes</a> in the <a href="http://image-net.org/">ImageNet</a> dataset. The models output the probabilities that each of those entities is in the image being classified.</p>
+
+<p><em>The full list of trained classes for the model being used can be found in <a href="https://github.com/tensorflow/tfjs-models/blob/master/mobilenet/src/imagenet_classes.ts">this file</a>.</em></p>
+
+<p>The <code>tfjs-models/mobilenet</code> library exposes a <code>classify</code> method on the <code>MobileNet</code> class to return the top X classes with highest probabilities from an image input.</p>
+
+<p><code>javascript
+const predictions = await mn_model.classify(input, 10);
+</code></p>
+
+<p><code>predictions</code> is an array of X classes and probabilities in the following format.</p>
+
+<p><code>javascript
+{
+  className: 'panda',
+  probability: 0.9993536472320557
+}
+</code></p>
+
+<h2>Example</h2>
+
+<p>Having worked how to use the TensorFlow.js library and MobileNet models on Node.js, <a href="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d">this script</a> will classify an image given as a command-line argument.</p>
+
+<h3>source code</h3>
+
+<ul>
+<li>Save this script file and package descriptor to local files.</li>
+</ul>
+
+
+<script src="https://gist.github.com/jthomas/145610bdeda2638d94fab9a397eb1f1d.js"></script>
+
+
+<h3>testing it out</h3>
+
+<ul>
+<li><p>Download the model files to a <code>mobilenet</code> directory using the instructions above.</p></li>
+<li><p>Install the project dependencies using NPM
+<code>
+npm install
+</code></p></li>
+<li><p>Download a sample JPEG file to classify
+<code>
+wget http://bit.ly/2JYSal9 -O panda.jpg
+</code>
+<img src="https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG"></p></li>
+<li><p>Run the script with the model file and input image as arguments.
+<code>
+node script.js mobilenet/model.json panda.jpg
+</code></p></li>
+</ul>
+
+
+<p><strong>If everything worked, the following output should be printed to the console.</strong></p>
+
+<p>```javascript
+classification results: [ {</p>
+
+<pre><code>className: 'giant panda, panda, panda bear, coon bear',
+probability: 0.9993536472320557 
+</code></pre>
+
+<p>} ]
+```</p>
+
+<p>The image is correctly classified as containing a Panda with 99.93% probability! 🐼🐼🐼</p>
+
+<h2>Conclusion</h2>
+
+<p>TensorFlow.js brings the power of deep learning to JavaScript developers. Using pre-trained models with the TensorFlow.js library makes it simple to extend JavaScript applications with complex machine learning tasks with minimal effort and code.</p>
+
+<p>Having been released as a browser-based library, TensorFlow.js has now been extended to work on Node.js, although not all of the tools and utilities support the new runtime. With a few days' hacking, I was able to use the library with the MobileNet models for visual recognition on images from a local file.</p>
+
+<p>Getting this working in the Node.js runtime means I now move on to my next idea... making this run inside a serverless function! Come back soon to read about my next adventure with TensorFlow.js. 👋</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Playing With OpenWhisk]]></title>
+    <link href="http://jamesthom.as/blog/2016/04/22/openwhisk/"/>
+    <updated>2016-04-22T15:36:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2016/04/22/openwhisk</id>
+    <content type="html"><![CDATA[<p>IBM recently launched <a href="https://developer.ibm.com/openwhisk/">OpenWhisk</a>,
+their new <a href="https://www.quora.com/What-is-Serverless-Computing">"serverless"</a>
+compute platform.</p>
+
+<p>This service allows developers to register small bits of
+code that are executed on-demand in response to external events. The
+"serverless" stack started in 2014, when Amazon launched
+<a href="https://aws.amazon.com/lambda/">Lambda</a>, but is now set to be a major
+technology trend in 2016 with IBM, Microsoft and Google all launching their own
+solutions.</p>
+
+<p>OpenWhisk is the first <a href="https://github.com/openwhisk/openwhisk">open-source "serverless" platform</a>. It supports running registered
+actions in Node.js, Swift and even executing custom Docker containers.</p>
+
+<p>Playing around with the technology recently, I've created two projects using the platform.</p>
+
+<h2>OpenWhisk Client Library</h2>
+
+<p>OpenWhisk exposes a <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#rest-api">RESTful API</a>
+for interacting with the service. Wrapping this API with a
+<a href="https://github.com/openwhisk/openwhisk-client-js">small client library</a> makes it easy for developers to interact with the service from JavaScript.</p>
+
+<p>This library has been donated back to the OpenWhisk project and is <a href="https://www.npmjs.com/package/openwhisk">available through NPM</a>.</p>
+
+<p><code>javascript
+const openwhisk = require('openwhisk')
+const ow = openwhisk({api: 'https://openwhisk.ng.bluemix.net/api/v1/', api_key: '...', namespace: '...'})
+ow.actions.invoke({actionName: 'action'}).then(result =&gt; {
+  // result is service response
+})
+</code></p>
+
+<h2>Whiskify</h2>
+
+<p>This <a href="https://github.com/jthomas/whiskify">project</a>, available through <a href="https://www.npmjs.com/package/openwhisk">NPM</a>, makes it easy to run arbitary JavaScript
+functions as OpenWhisk actions.  Passing a reference to a JavaScript function
+into the module, an OpenWhisk action is created using the function source.  The
+module returns a new JavaScript function, that when executed, will call the
+remote action and returns a Promise with the service response.</p>
+
+<p>``` javascript
+const whiskify = require('whiskify')({api: 'https://', api_key: '...', namespace: '...'})
+const action = whiskify(function (item) { return item + 1; })</p>
+
+<p>action(1).then(function (result) {
+  // == 2
+})</p>
+
+<p>action.map([1, 2, 3, 4]).then(function (result) {
+ // == [2, 3, 4, 5]
+})</p>
+
+<p>action.delete()
+```</p>
+
+<p>This project uses the client library above.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[GeoPix Live Photos]]></title>
+    <link href="http://jamesthom.as/blog/2015/07/16/geopix-live-photos/"/>
+    <updated>2015-07-16T13:26:00+01:00</updated>
+    <id>http://jamesthom.as/blog/2015/07/16/geopix-live-photos</id>
+    <content type="html"><![CDATA[<p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/376h2yjnf6Q" frameborder="0" allowfullscreen></iframe>
+
+
+<p><blockquote><p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.</p></p><p><p>Using a web application, the user can view their images over a map based upon their location when the photo was taken.</p><footer><strong>Andrew Trice</strong> <cite><a href='http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/'>www.tricedesigns.com/2015/03/27/&hellip;</a></cite></footer></blockquote></p>
+
+<p>I've been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement...</p>
+
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+
+<p>Adding support for live photos will require two new features...</p>
+
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+
+
+<h2>Change Notifications Using CouchDB</h2>
+
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: "now"</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+
+<p>``` javascript
+Cloudant({account:credentials.username, password:credentials.password}, function(err, cloudant) {</p>
+
+<pre><code>var geopix = cloudant.use(database);
+var feed = geopix.follow({include_docs: true, since: "now"});
+
+feed.on('change', function (change) {
+  // ....we can now send this data to the web pages
+});
+
+feed.follow();
+</code></pre>
+
+<p>})
+```</p>
+
+<p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+
+<h2>Real-time Web with Socket.IO</h2>
+
+<p>Introducing <a href="">Socket.IO</a>...</p>
+
+<p><blockquote><p>Socket.IO enables real-time bidirectional event-based communication.<br/>It works on every platform, browser or device, focusing equally on reliability and speed.</p></blockquote></p>
+
+<p>Sounds great!</p>
+
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+
+<p>``` javascript
+var express = require('express');
+var app = express();
+var server = require('http').Server(app);
+var io = require('socket.io')(server);</p>
+
+<p>// ...snipped out the app routes for express</p>
+
+<p>io.on('connection', function (socket) {</p>
+
+<pre><code>console.log('New Client WSS Connection.')
+</code></pre>
+
+<p>});</p>
+
+<p>var port = (process.env.VCAP_APP_PORT || 3000);
+server.listen(port);
+```</p>
+
+<p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+
+<p>``` javascript
+feed.on('change', function (change) {</p>
+
+<pre><code>io.sockets.emit('image', change);
+</code></pre>
+
+<p>});
+```</p>
+
+<p><strong>Now we're sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we've included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+
+<p>We're sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+
+<p>``` javascript
+var socket = io(); // TIP: io() with no args does auto-discovery
+socket.on('connect', function () {</p>
+
+<pre><code>console.log('WSS Connected');
+
+socket.on('image', function (image) { // TIP: you can avoid listening on `connect` and listen on events directly too!
+    var attachment = Object.keys(image.doc._attachments)[0]
+    var url = "/image/" + image.doc._id + "/" + attachment;
+    add_new_image(url, image.doc.clientDate, 'latitude: '
+        + image.doc.latitude + ', longitude: '
+        + image.doc.longitude + ', altitude: '
+        + image.doc.altitude);
+});
+</code></pre>
+
+<p>});
+```</p>
+
+<p>...and that's it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+
+<h2>CouchDB + Socket.IO = Real-time Awesome!</h2>
+
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+
+<p>CouchDB's <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+]]></content>
+  </entry>
+  
+</feed>

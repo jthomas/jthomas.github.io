@@ -1,0 +1,591 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Highly Available Serverless Apps With Cloudant's Cross-Region Replication - James Thomas</title>
+  <meta name="author" content="James Thomas">
+
+  
+  <meta name="description" content="Making serverless applications Highly Available using Cloudant's cross-region database replication on IBM Cloud. IBM Cloud Functions applications in &hellip;">
+  <meta name="keywords" content="serverless ibmcloud couchdb cloudant replication scaling highly available">
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="http://feeds.feedburner.com/JamesThomas" rel="alternate" title="James Thomas" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-26491341-1']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">James Thomas</a></h1>
+  
+    <h2>Notes on software.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="http://feeds.feedburner.com/JamesThomas" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:jamesthom.as" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+  <li><a href="http://about.me/j_thomas">About</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Highly Available Serverless Apps With Cloudant's Cross-Region Replication</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-01-10T11:23:00+00:00" pubdate data-updated="true">Jan 10<span>th</span>, 2019</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Building <a href="https://www.techrepublic.com/blog/the-enterprise-cloud/what-high-availability-for-cloud-services-means-in-the-real-world/">highly available</a> serverless applications relies on eliminating &#8221;<a href="https://en.wikipedia.org/wiki/Single_point_of_failure"><em>single points of failure</em></a>&#8221; from application architectures.</p>
+
+<p><a href="https://cloud.ibm.com/docs/tutorials/multi-region-serverless.html#deploy-serverless-apps-across-multiple-regions">Existing tutorials</a> showed how to deploy the same serverless application on IBM Cloud in different regions. Using the <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> from <a href="https://cloud.ibm.com/catalog/services/internet-svcs">IBM Cloud Internet Services</a>, traffic is distributed across multiple applications from the same hostname. The <a href="https://cloud.ibm.com/docs/infrastructure/cis/glb.html#global-load-balancer-glb-concepts">Global Load Balancer</a> automatically detects outages in the regional applications and redirects traffics as necessary.</p>
+
+<p><strong>But what if all instances rely on the same database service and that has issues?</strong> 😱🔥</p>
+
+<p>In addition to running multiple instances of the application, independent databases in different regions are also necessary for a highly available serverless application. Maintaining consistent application state across regions needs all database changes to be automatically synchronised between instances. 🤔</p>
+
+<p><strong>In this blog post, we&#8217;re going to look at using <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant&#8217;s</a> <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">replication service</a> to set up a &#8221;<a href="https://en.wikipedia.org/wiki/Multi-master_replication">multi-master</a>&#8221; replication between regional database instances.</strong></p>
+
+<p>Once this is enabled, database changes will automatically be synchronised in real-time between all database instances. Serverless applications can use their regional database instance and be confident application state will be consistent globally (for some definition of <a href="https://en.wikipedia.org/wiki/Eventual_consistency">consistent</a>&#8230;). 💯</p>
+
+<h2>example serverless application - todo backend</h2>
+
+<p>This <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">serverless application</a> implements a <a href="https://www.todobackend.com/">TODO backend</a> using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> and <a href="https://cloud.ibm.com/catalog/services/cloudant">IBM Cloudant</a>.</p>
+
+<p><img src="/images/ha-serverless-apps-todo/todo-frontpage.png"></p>
+
+<p>It provides an REST API for interacting with a TODO service. This can be used with the <a href="https://www.todobackend.com/client/index.html">front-end client</a> to add, complete and remove todos from a list.</p>
+
+<p><strong>Let&#8217;s make this <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">example serverless application</a> &#8220;highly available&#8221;. 👍</strong></p>
+
+<p>The application will be deployed to two different IBM Cloud regions (London and Dallas). Separate database instances will be provisioned in each region. Applications will use their regional database instance but share global state via replication.</p>
+
+<p><img src="/images/ha-serverless-apps-todo/architecture.png"></p>
+
+<h2>deploy serverless app to multiple regions</h2>
+
+<p>This Github <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis">repo</a> has an <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis/blob/master/deploy.sh">automatic deployment script</a> to deploy the serverless application (using <code>wskdeploy</code>) and application services (using <code>terraform</code>).</p>
+
+<p><strong><em>Install the prerequisites listed <a href="https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis#code-and-tools">here</a> before proceeding with these instructions.</em></strong></p>
+
+<h3>download example application</h3>
+
+<ul>
+<li>Clone the Git repository to a local directory.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>git clone https://github.com/IBM/ibm-cloud-functions-refarch-serverless-apis</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Enter the source code directory.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>cd ibm-cloud-functions-refarch-serverless-apis</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>create IAM key for serverless app</h3>
+
+<p><em>Have you already signed up for an <a href="https://cloud.ibm.com/registration">IBM Cloud account</a> and <a href="https://cloud.ibm.com/docs/cli/reference/ibmcloud/download_cli.html#install_use">installed the CLI</a>? If not, please do that before proceeding.</em></p>
+
+<ul>
+<li>Create an IAM key which will be used to deploy the serverless application.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>ibmcloud iam api-key-create serverless_api --file serverless_api.apikey</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>configure deployment variables</h3>
+
+<ul>
+<li>Create the <code>local.env</code> file in the current directory will the following contents.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>IBMCLOUD_API_KEY=&lt;IAM_API_KEY&gt;
+</span><span class='line'>IBMCLOUD_ORG=&lt;YOUR_ORG&gt;
+</span><span class='line'>IBMCLOUD_SPACE=&lt;REGION_SPACE&gt;
+</span><span class='line'>IBMCLOUD_REGION=
+</span><span class='line'>PROVISION_INFRASTRUCTURE=true
+</span><span class='line'>API_USE_APPID=false</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Replace the <code>&lt;IAM_API_KEY&gt;</code> value with the <code>apikey</code> value from the <code>serverless_api.apikey</code> file.</li>
+<li>Replace the <code>&lt;IBMCLOUD_ORG&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud organisation</a>.</li>
+<li>Replace the <code>&lt;IBMCLOUD_SPACE&gt;</code> value with an <a href="https://cloud.ibm.com/docs/account/orgs_spaces.html#orgsspacesusers">IBM Cloud space</a>.</li>
+</ul>
+
+
+<p>The <code>PROVISION_INFRASTRUCTURE</code> parameter makes the deployment script automatically provision all application resources using Terraform.</p>
+
+<p>Secured API endpoints are not required for this demonstration. Setting the <code>API_USE_APPID</code> parameter to <code>false</code> disables authentication on the endpoints and provisioning the AppID service.</p>
+
+<h3>deploy to london</h3>
+
+<ul>
+<li>Set the <code>IBMCLOUD_REGION</code> to <code>eu-gb</code> in the <code>local.env</code> file.</li>
+<li>Run the following command to deploy the application and provision all application resources.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>./deploy.sh --install</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If the deployment have succeed, the following message should be printed to the console.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>2019-01-08 10:51:51 All done.
+</span><span class='line'>ok: APIs
+</span><span class='line'>Action                                      Verb  API Name  URL
+</span><span class='line'>/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;UK_APIGW_URL&gt;/todo
+</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the London region.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/testing-app.gif"></p>
+
+<h3>deploy to dallas</h3>
+
+<ul>
+<li><p><strong>Rename the <code>terraform.tfstate</code> file in the <code>infra</code> folder to <code>terraform.tfstate.london</code></strong></p></li>
+<li><p>Set the <code>IBMCLOUD_REGION</code> to <code>us-south</code> in the <code>local.env</code> file.</p></li>
+<li>Run the following command to deploy the application and provision all application resources.</li>
+</ul>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>./deploy.sh --install</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If the deployment have succeed, the following message should be printed to the console.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>2019-01-08 10:51:51 All done.
+</span><span class='line'>ok: APIs
+</span><span class='line'>Action                                      Verb  API Name  URL
+</span><span class='line'>/&lt;ORG&gt;_&lt;SPACE&gt;/todo_package/todo/get_todo   get   todos     https://&lt;US_APIGW_URL&gt;/todo
+</span><span class='line'>...</span></code></pre></td></tr></table></div></figure>
+
+
+<ul>
+<li>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the <a href="https://cloud.ibm.com/openwhisk/apimanagement">APIGW URL</a> shown in the console to interact with the remote TODO service in the Dallas region.</li>
+</ul>
+
+
+<h2>configure cloudant cross-region replication</h2>
+
+<p>There are now multiple copies of the same serverless application in different regions. Each region has an independent instance of Cloudant provisioned.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/Cloudant/api/replication.html">Cloudant replication</a> is a one-way synchronisation from a source to a destination database. To set up a <a href="https://console.bluemix.net/docs/services/Cloudant/guides/active-active.html#configuring-ibm-cloudant-for-cross-region-disaster-recovery">bi-directional data synchronisation</a>, two different replications will need to be configured.</p>
+
+<h3>create api keys for replication access</h3>
+
+<p>Before configuring replication between the regional databases, API keys need to be created to allow remote access on both hosts. API keys need to be created per regional instance.</p>
+
+<ul>
+<li>From the <a href="https://cloud.ibm.com/resources">IBM Cloud Resource List</a>, find the cloudant instances provisioned in London and Dallas.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/resource-list.png"></p>
+
+<ul>
+<li>Open the Cloudant Dashboard for each service instance.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/opening-cloudant-dashboard.gif"></p>
+
+<p>Follow these instructions on both hosts to generate API keys for replication with the correct permissions.</p>
+
+<ul>
+<li>Click the &#8220;Databases&#8221; icon to show all the databases on this instance.</li>
+<li>Click the 🔒 icon in the &#8220;todos&#8221; database row in the table to open the permissions page.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/databases-list.png"></p>
+
+<p><em>Can&#8217;t find the &#8220;todos&#8221; database in the Cloudant dashboard? Make sure you interact with the TODO backend from the <a href="https://www.todobackend.com/client/index.html">front-end application</a>. This will automatically create the database if it doesn&#8217;t exist.</em></p>
+
+<ul>
+<li>Click &#8220;Generate API Key&#8221; on the permissions page.</li>
+<li>Make a note of the key identifier and password.</li>
+<li>Set the <code>_reader_</code>, <code>_writer</code> and <code>_replicator</code> permissions for the newly created key.</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/db-api-key.png"></p>
+
+<h3>set up cross-region replication</h3>
+
+<p>Replication jobs need to be configured on both database hosts. These can be created from the Cloudant dashboard. <strong>Repeat these instructions on both hosts.</strong></p>
+
+<ul>
+<li>Open the Cloudant Dashboard for each service instance.</li>
+<li>Click the &#8220;Replication&#8221; icon from the panel menu.</li>
+<li>Click the &#8220;New Replication&#8221; button.</li>
+<li>Set the following &#8220;Source&#8221; values in the &#8220;Job configuration&#8221; panel.
+
+<ul>
+<li>Type: <em>&#8220;Local Database&#8221;</em></li>
+<li>Name: <em>&#8220;todos&#8221;</em></li>
+<li>Authentication: <em>&#8220;Cloudant username or API Key&#8221;</em></li>
+<li>Fill in the API key and password for this local database host in the input fields.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/task-source.png"></p>
+
+<ul>
+<li>Set the following &#8220;Target&#8221; values in the &#8220;Job configuration&#8221; panel.
+
+<ul>
+<li>Type: <em>&#8220;Existing Remote Database&#8221;</em></li>
+<li>Name: <em>&#8220;https://<REMOTE_CLOUDANT_HOST>/todos&#8221;</em></li>
+<li>Authentication: <em>&#8220;Cloudant username or API Key&#8221;</em></li>
+<li>Fill in the API key and password for the remote database host in the input fields.</li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/task-target.png"></p>
+
+<p><em>Wondering what the REMOTE_CLOUDANT_HOST is? Use hostname from the Cloudant dashboard, e.g. XXXX-bluemix.cloudant.com</em></p>
+
+<ul>
+<li>Set the following &#8220;Options&#8221; values in the &#8220;Job configuration&#8221; panel.
+
+<ul>
+<li>Replication type: <em>&#8220;Continuous&#8221;</em></li>
+</ul>
+</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/task-options.png"></p>
+
+<ul>
+<li>Click &#8220;Start Replication&#8221;</li>
+<li>Verify the replication table shows the new replication task state as &#8221;<em>Running</em>&#8221;. 👍</li>
+</ul>
+
+
+<p><img src="/images/ha-serverless-apps-todo/replication-jobs-table.png"></p>
+
+<h2>test it out!</h2>
+
+<p>Use the <a href="https://www.todobackend.com/client/index.html">TODO front-end application</a> with the APIGW URLs for each region simultaneously. Interactions with the todo list in one region should automatically propagate to the other region.</p>
+
+<p><img src="/images/ha-serverless-apps-todo/todo-app.gif"></p>
+
+<p>The &#8220;Active Tasks&#8221; panel on the Cloudant Dashboard shows the documents replicated between instances and pending changes. If there are errors synchronising changes to the replication target, the host uses exponential backoff to re-try the replication tasks.</p>
+
+<p><a href="https://console.bluemix.net/docs/services/Cloudant/guides/conflicts.html#finding-conflicts">Conflicts</a> between document changes are handled using CouchDB&#8217;s <a href="http://guide.couchdb.org/draft/conflicts.html">conflict mechanism</a>. Applications are responsible for detecting and resolving document conflicts in the front-end.</p>
+
+<h2>conclusion</h2>
+
+<p>Running the same serverless application in multiple regions, using the GLB to proxy traffic, allows applications to manage regional outages. But what if all the application instances rely on the same database service? The &#8220;single point of failure&#8221; has shifted from the application runtime to the database host. 👎</p>
+
+<p>Provisioning independent databases in each application regions is one solution. Applications use their regional database instance and are protected from issues in other regions. This strategy relies on database changes being synchronised between instances to keep the application state consistent. 👍</p>
+
+<p>IBM Cloudant has a built-in replication service to synchronised changes between source and host databases. Setting up bi-directional replication tasks between all instances enables a  &#8220;multi-master&#8221; replication strategy. This allows applications to access any database instance and have the same state available globally. 🕺🕺🕺</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">James Thomas</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2019-01-10T11:23:00+00:00" pubdate data-updated="true">Jan 10<span>th</span>, 2019</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/cloudant/'>cloudant</a>, <a class='category' href='/blog/categories/ibmcloud/'>ibmcloud</a>, <a class='category' href='/blog/categories/scaling/'>scaling</a>, <a class='category' href='/blog/categories/serverless/'>serverless</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/" data-via="thomasj" data-counturl="http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/" >Tweet</a>
+  
+  
+  <div class="g-plusone" data-size="medium"></div>
+  
+  
+    <div class="fb-like" data-send="true" data-width="450" data-show-faces="false"></div>
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2018/12/03/custom-domains-with-ibm-cloud-functions/" title="Previous Post: Using Custom Domains With IBM Cloud Functions">&laquo; Using Custom Domains With IBM Cloud Functions</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2019/01/18/loosely-coupled-serverless-functions-with-openwhisk/" title="Next Post: Loosely-coupled Serverless Functions With Apache Openwhisk">Loosely-coupled Serverless Functions With Apache Openwhisk &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/08/28/faster-file-transfers-with-serverless/">Faster File Transfers With Serverless</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/08/06/serverless-and-webassembly-modules/">Serverless Functions with WebAssembly Modules</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/24/hosting-static-websites-on-ibm-cloud/">Hosting Static Websites on IBM Cloud</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/22/connecting-to-ibm-cloud-databases-for-redis-from-node-dot-js/">Connecting to IBM Cloud Databases for Redis from Node.js</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2019/07/02/serverless-max-models/">Serverless APIs for MAX models</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("thomasj", 4, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/thomasj" class="twitter-follow-button" data-show-count="false">Follow @thomasj</a>
+  
+</section>
+
+
+<section>
+  <h1>My Pinboard</h1>
+  <ul id="pinboard_linkroll">Fetching linkroll...</ul>
+  <p><a href="http://pinboard.in/u:jamesthomas">My Pinboard Bookmarks &raquo;</a></p>
+</section>
+<script type="text/javascript">
+  var linkroll = 'pinboard_linkroll'; //id target for pinboard list
+  var pinboard_user = "jamesthomas"; //id target for pinboard list
+  var pinboard_count = 3; //id target for pinboard list
+  (function(){
+    var pinboardInit = document.createElement('script');
+    pinboardInit.type = 'text/javascript';
+    pinboardInit.async = true;
+    pinboardInit.src = '/javascripts/pinboard.js';
+    document.getElementsByTagName('head')[0].appendChild(pinboardInit);
+  })();
+</script>
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - James Thomas -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'notesonjavascript';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/';
+        var disqus_url = 'http://jamesthom.as/blog/2019/01/10/highly-available-serverless-apps-with-cloudant-cross-region-replication/';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) {return;}
+  js = d.createElement(s); js.id = id;
+  js.src = "//connect.facebook.net/en_US/all.js#appId=212934732101925&xfbml=1";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+  <script type="text/javascript">
+    (function() {
+      var script = document.createElement('script'); script.type = 'text/javascript'; script.async = true;
+      script.src = 'https://apis.google.com/js/plusone.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(script, s);
+    })();
+  </script>
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
