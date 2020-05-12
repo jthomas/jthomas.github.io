@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>advanced openwhisk alarm schedules • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="advanced openwhisk alarm schedules"/>
+<meta name="twitter:description" content="Use OpenWhisk alarm trigger feed to handle advanced timer schedules like one-off events, firing events on an irregular schedule or creating dynamically ar runtime"/>
+
+<meta property="og:title" content="advanced openwhisk alarm schedules" />
+<meta property="og:description" content="Use OpenWhisk alarm trigger feed to handle advanced timer schedules like one-off events, firing events on an irregular schedule or creating dynamically ar runtime" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2017/10/advanced-openwhisk-alarm-schedules/" />
+<meta property="article:published_time" content="2017-10-31T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-10-31T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>advanced openwhisk alarm schedules</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Oct 31, 2017
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 10 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Apache OpenWhisk supports a <a href="https://github.com/apache/incubator-openwhisk-package-alarms">cron-based alarm package</a> for invoking serverless functions on a fixed schedule, e.g. every 5 minutes, every day at 5PM, once a week.</p>
+<p>Scheduled events allow functions to be invoked for background processes or batch operations, like processing logs generated in the past 24 hours.</p>
+<p><strong>Using a <a href="http://crontab.org/">cron-based schedule pattern</a>, running functions once a minute, every two hours or 5pm on Mondays is simple, but what about more complex schedule patterns?</strong> 🤔</p>
+<p>What if we need to…</p>
+<ul>
+<li>⏰ <em>Fire a <a href="https://stackoverflow.com/questions/45898048/can-i-schedule-a-one-shot-action-in-openwhisk">single one-off event</a> at a specific time in the future?</em></li>
+<li>⏰ <em>Fire events a fixed period of time from an action finishing?</em></li>
+<li>⏰ <em>Fire events on an irregular schedule?</em></li>
+</ul>
+<p>It is possible to implement all these examples with a few tricks… 🤹‍♂️🤹‍♂️🤹‍♂️.</p>
+<p><em>Before we dive into the details, let&rsquo;s review how the alarm feed provider works…</em></p>
+<h2 id="alarm-trigger-feeds">Alarm Trigger Feeds</h2>
+<p>OpenWhisk triggers are connected to external event sources <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#creating-and-using-trigger-feeds">using feed providers</a>.</p>
+<p>Feed providers listen to event sources, like message queues, <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md">firing triggers with event parameters</a> as external events occur.</p>
+<p>There are a number of <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/packages.md#browsing-packages">pre-installed feed providers</a> in the <code>whisk.system</code> namespace. This includes the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarms package</a> which includes a feed provider (<code>/whisk.system/alarms/alarm</code>).</p>
+<pre><code>$ wsk package get /whisk.system/alarms --summary
+package /whisk.system/alarms: Alarms and periodic utility
+   (parameters: *apihost, *cron, *trigger_payload)
+ feed   /whisk.system/alarms/alarm: Fire trigger when alarm occurs
+   (parameters: none defined)
+</code></pre><h3 id="feed-parameters">feed parameters</h3>
+<p>The following parameters are used to configure the feed provider.</p>
+<ul>
+<li><code>cron</code> - <em>crontab syntax used to configure timer schedule.</em></li>
+<li><code>trigger_payload</code> - <em>event parameters to fire trigger with.</em></li>
+<li><code>maxTriggers</code> - <em>maximum number of triggers to fire (-1 for no limit).</em></li>
+</ul>
+<p><code>cron</code> is the parameter which controls when triggers will be fired. It uses the <a href="http://crontab.org/">cron syntax</a> to specify the schedule expression.</p>
+<h3 id="cron-schedule-format">cron schedule format</h3>
+<p>Cron schedule values are a string containing sections for the following time fields. Field values can be integers or patterns including wild cards.</p>
+<pre><code># ┌────────────── second (0 - 59, optional &amp; defaults to 0)
+# │ ┌────────────── minute (0 - 59)
+# │ │ ┌────────────── hour (0 - 23)
+# │ │ │ ┌────────────── day of month (1 - 31)
+# │ │ │ │ ┌────────────── month (0 - 11)
+# │ │ │ │ │ ┌────────────── day of week (0 - 6) (Sunday to Saturday)
+# │ │ │ │ │ │
+# │ │ │ │ │ │
+# * * * * * *  
+</code></pre><p><em><strong>NOTE: Month field starts from 0 not 1, 0 is January with December being 11. Day of week also starts from 0. Sunday is first day of the week.</strong></em></p>
+<p>The second field is a non-standard cron field and does not need to be used. The Node.js module <a href="https://github.com/kelektiv/node-cron">used to parse the cron schedules</a> supports a value with five or six fields.</p>
+<h3 id="crontab-examples">crontab examples</h3>
+<p>Here are some example patterns…</p>
+<ul>
+<li><code>*/10 * * * * *</code> - run every 10 seconds</li>
+<li><code>* * * * *</code> - run every minute</li>
+<li><code>0 * * * *</code> - run every hour</li>
+<li><code>0 */2 * * *</code> - run every two hours</li>
+<li><code>30 11 * * 1-5</code>  - run Monday to Friday at 11:30AM</li>
+<li><code>0 0 1 * * </code> - run at midnight the first day of the month</li>
+</ul>
+<p><a href="https://crontab.guru/">https://crontab.guru/</a> is an online editor for generating cron schedule expressions.</p>
+<h2 id="creating-alarm-triggers">Creating Alarm Triggers</h2>
+<p>Using the <code>wsk</code> cli triggers can be created using the <code>alarm</code> feed. Schedule and event parameters are passed in using command-line arguments (<code>-p name value</code>).</p>
+<pre><code>$ wsk trigger create periodic --feed /whisk.system/alarms/alarm -p cron '* * * * * *' -p trigger_payload '{&quot;hello&quot;:&quot;world&quot;}'
+ok: invoked /whisk.system/alarms/alarm with id 42ca80fbe7cf47318a80fbe7cff73177
+...
+ok: created trigger feed periodic
+</code></pre><p>Trigger invocations are recorded in the activation records.</p>
+<pre><code>$ wsk activation list periodic
+activations
+d55d15297781474b9d15297781974b92 periodic
+...
+$ wsk activation get d55d15297781474b9d15297781974b92
+ok: got activation d55d15297781474b9d15297781974b92
+{
+    &quot;namespace&quot;: &quot;user@host.com_dev&quot;,
+    &quot;name&quot;: &quot;periodic&quot;,
+    ...
+}
+</code></pre><p>Deleting the trigger will automatically remove the trigger from the alarm scheduler.</p>
+<pre><code>$ wsk delete periodic
+ok: invoked /whisk.system/alarms/alarm with id 44e8fc5e76c64175a8fc5e76c6c175dd
+...
+ok: deleted trigger periodic
+</code></pre><h3 id="programmatic-creation">Programmatic Creation</h3>
+<p>The <a href="https://github.com/apache/incubator-openwhisk-client-js">OpenWhisk JavaScript library</a> can also register and remove triggers with feed providers.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">params</span> <span style="color:#f92672">=</span> {<span style="color:#a6e22e">cron</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;* * * * * *&#39;</span>, <span style="color:#a6e22e">trigger_payload</span><span style="color:#f92672">:</span> {<span style="color:#e6db74">&#34;hello&#34;</span><span style="color:#f92672">:</span><span style="color:#e6db74">&#34;world&#34;</span>}}
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">name</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;/whisk.system/alarms/alarm&#39;</span>
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">trigger</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;periodic&#39;</span>
+<span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">feeds</span>.<span style="color:#a6e22e">create</span>({<span style="color:#a6e22e">name</span>, <span style="color:#a6e22e">trigger</span>, <span style="color:#a6e22e">params</span>}).<span style="color:#a6e22e">then</span>(<span style="color:#66d9ef">package</span> =&gt; {
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;alarm trigger feed created&#39;</span>, <span style="color:#66d9ef">package</span>)
+}).<span style="color:#66d9ef">catch</span>(<span style="color:#a6e22e">err</span> =&gt; {
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">error</span>(<span style="color:#e6db74">&#39;failed to create alarm trigger&#39;</span>, <span style="color:#a6e22e">err</span>)
+})
+</code></pre></div><p><em>Triggers must already exist before registering with the feed provider using the client library.</em></p>
+<p>Using the client library provides a mechanism for actions to dynamically set up scheduled events.</p>
+<h2 id="advanced-examples">Advanced Examples</h2>
+<p>Having reviewed how the alarm feed works, let&rsquo;s look at some more advanced use-cases for the scheduler…</p>
+<h3 id="schedule-one-off-event-at-a-specific-time-in-the-future">Schedule one-off event at a specific time in the future</h3>
+<p>Creating one-off events, that fire at a specific date and time, is possible using the <code>cron</code> and <code>maxTriggers</code> parameters together.</p>
+<p>Using the minute, hour, day of the month and month fields in the cron parameter, the schedule can be configured to run once a year. The day of the week field will use the wildcard value.</p>
+<p>Setting the <code>maxTriggers</code> parameter to 1, the trigger is removed from the scheduler after firing.</p>
+<h4 id="happy-new-year-example">happy new year example</h4>
+<p><em>What if we want to fire an event when the New Year starts?</em></p>
+<p>Here&rsquo;s the cron schedule for 00:00 on January 1st.</p>
+<pre><code># ┌───────────── minute (0 - 59)
+# │ ┌───────────── hour (0 - 23)
+# │ │ ┌───────────── day of month (1 - 31)
+# │ │ │ ┌───────────── month (0 - 11)
+# │ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)
+# │ │ │ │ │
+# │ │ │ │ │
+# 0 0 1 0 *  
+</code></pre><p>Here are the cli commands to set up a trigger to run at 01/01/2018 @ 00:00 to celebrate the new year.</p>
+<pre><code>$ wsk trigger create new_year --feed /whisk.system/alarms/alarm -p cron '0 0 1 0 *' -p maxTriggers 1 -p trigger_payload '{&quot;message&quot;:&quot;Happy New Year!&quot;}'
+ok: invoked /whisk.system/alarms/alarm with id 754bec0a58b944a68bec0a58b9f4a6c1
+...
+ok: created trigger new_year
+</code></pre><h3 id="firing-events-a-fixed-period-of-time-from-an-action-finishing">Firing events a fixed period of time from an action finishing</h3>
+<p>Imagine you want to run an action on a loop, with a 60 second delay between invocations. Start times for future invocations are dependent on the finishing time of previous invocations. This means we can&rsquo;t use the alarm feed with a fixed schedule like &lsquo;<code>* * * * *</code>&rsquo;.</p>
+<p><em><strong>Instead we&rsquo;ll schedule the first invocation as a one-off event and then have the action re-schedule itself using the JavaScript client library!</strong></em></p>
+<h4 id="action-code">action code</h4>
+<p>Here&rsquo;s the sample JavaScript code for an action which does that….</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-js" data-lang="js"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">openwhisk</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;openwhisk&#39;</span>);
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">calculateSchedule</span>() {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">now</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> Date()
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">seconds</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">now</span>.<span style="color:#a6e22e">getSeconds</span>()
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">nextMinute</span> <span style="color:#f92672">=</span> (<span style="color:#a6e22e">now</span>.<span style="color:#a6e22e">getMinutes</span>() <span style="color:#f92672">+</span> <span style="color:#ae81ff">1</span>) <span style="color:#f92672">%</span> <span style="color:#ae81ff">60</span>
+  <span style="color:#66d9ef">return</span> <span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">seconds</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">nextMinute</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> * * * *`</span>
+}
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span>(<span style="color:#a6e22e">params</span>) {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">ow</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">openwhisk</span>();
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">params</span> <span style="color:#f92672">=</span> {<span style="color:#a6e22e">cron</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">calculateSchedule</span>(), <span style="color:#a6e22e">maxTriggers</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">1</span>}
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#a6e22e">params</span>)
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">feeds</span>.<span style="color:#66d9ef">delete</span>({<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;/whisk.system/alarms/alarm&#39;</span>, <span style="color:#a6e22e">trigger</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;delay&#39;</span>}).<span style="color:#a6e22e">then</span>(() =&gt; {
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;delay trigger feed deleted.&#39;</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">feeds</span>.<span style="color:#a6e22e">create</span>({<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;/whisk.system/alarms/alarm&#39;</span>, <span style="color:#a6e22e">trigger</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;delay&#39;</span>, <span style="color:#a6e22e">params</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">params</span>})
+    }).<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">result</span> =&gt; {
+     <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;delay trigger feed created.&#39;</span>)
+    })
+    .<span style="color:#66d9ef">catch</span>(<span style="color:#a6e22e">err</span> =&gt; {
+      <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">error</span>(<span style="color:#e6db74">&#39;failed to create/delete delay trigger&#39;</span>, <span style="color:#a6e22e">err</span>)
+      <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#34;ERROR&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">error</span>.<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">result</span>)
+    })
+}
+</code></pre></div><h4 id="setting-up">setting up</h4>
+<ul>
+<li>Create an action called <code>reschedule</code> with code from above.</li>
+</ul>
+<pre><code>$ wsk action create reschedule reschedule.js
+ok: created action reschedule
+</code></pre><ul>
+<li>Create a trigger (<code>delay</code>)  using the alarm feed, set to run in the next 60 seconds.</li>
+</ul>
+<pre><code>$ wsk trigger create delay --feed /whisk.system/alarms/alarm -p cron '* * * * * *'
+ok: invoked /whisk.system/alarms/alarm with id b3da4de5726b41679a4de5726b0167c8
+...
+ok: created trigger delay
+</code></pre><ul>
+<li>Connect the action (<code>reschedule</code>) to the trigger (<code>delay</code>) with a rule (<code>reschedule_delay</code>).</li>
+</ul>
+<pre><code>$ wsk rule create reschedule_delay delay reschedule
+ok: created rule reschedule_delay
+</code></pre><p><strong>This action will continue to re-schedule itself indefinitely.</strong></p>
+<p>Stop this infinite loop by disabling or removing the rule connecting the action to the trigger.</p>
+<pre><code>$ wsk rule disable reschedule_delay
+ok: disabled rule reschedule_delay
+</code></pre><h3 id="firing-events-on-an-irregular-schedule">Firing events on an irregular schedule</h3>
+<p>How can you schedule events to occur from a predictable but irregular pattern, e.g. sending a daily message to users at sunrise?</p>
+<p>Sunrise happens at a different time each morning. This schedule cannot be defined using a static cron-based pattern.</p>
+<p><em>Using the same approach as above, where actions re-schedule triggers at runtime, events can created to follow an irregular schedule.</em></p>
+<h4 id="sunrise-times">sunrise times</h4>
+<p>This <a href="https://sunrise-sunset.org/api">external API</a> provides the sunrise times for a location. Retrieving the sunrise times for tomorrow during execution will provide the date time used to re-schedule the action.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+    <span style="color:#f92672">&#34;results&#34;</span>: {
+        <span style="color:#f92672">&#34;astronomical_twilight_begin&#34;</span>: <span style="color:#e6db74">&#34;5:13:40 AM&#34;</span>,
+        <span style="color:#f92672">&#34;astronomical_twilight_end&#34;</span>: <span style="color:#e6db74">&#34;6:48:52 PM&#34;</span>,
+        <span style="color:#f92672">&#34;civil_twilight_begin&#34;</span>: <span style="color:#e6db74">&#34;6:14:23 AM&#34;</span>,
+        <span style="color:#f92672">&#34;civil_twilight_end&#34;</span>: <span style="color:#e6db74">&#34;5:48:09 PM&#34;</span>,
+        <span style="color:#f92672">&#34;day_length&#34;</span>: <span style="color:#e6db74">&#34;10:40:26&#34;</span>,
+        <span style="color:#f92672">&#34;nautical_twilight_begin&#34;</span>: <span style="color:#e6db74">&#34;5:43:50 AM&#34;</span>,
+        <span style="color:#f92672">&#34;nautical_twilight_end&#34;</span>: <span style="color:#e6db74">&#34;6:18:42 PM&#34;</span>,
+        <span style="color:#f92672">&#34;solar_noon&#34;</span>: <span style="color:#e6db74">&#34;12:01:16 PM&#34;</span>,
+        <span style="color:#f92672">&#34;sunrise&#34;</span>: <span style="color:#e6db74">&#34;6:41:03 AM&#34;</span>,
+        <span style="color:#f92672">&#34;sunset&#34;</span>: <span style="color:#e6db74">&#34;5:21:29 PM&#34;</span>
+    },
+    <span style="color:#f92672">&#34;status&#34;</span>: <span style="color:#e6db74">&#34;OK&#34;</span>
+}
+</code></pre></div><h4 id="action-code-1">action code</h4>
+<p>Here&rsquo;s the sample JavaScript action that will re-schedule itself at sunrise.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">openwhisk</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;openwhisk&#39;</span>);
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">request</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;request-promise&#39;</span>);
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">getNextSunrise</span>(<span style="color:#a6e22e">lat</span>, <span style="color:#a6e22e">lng</span>, <span style="color:#a6e22e">when</span>) {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">options</span> <span style="color:#f92672">=</span> {
+    <span style="color:#a6e22e">uri</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;https://api.sunrise-sunset.org/json&#39;</span>,
+    <span style="color:#a6e22e">qs</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">lat</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">lat</span>, <span style="color:#a6e22e">lng</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">lng</span>, <span style="color:#a6e22e">when</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">when</span> },
+    <span style="color:#a6e22e">json</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span>
+  }
+
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">request</span>(<span style="color:#a6e22e">options</span>)
+    .<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">result</span> =&gt; <span style="color:#a6e22e">result</span>.<span style="color:#a6e22e">results</span>.<span style="color:#a6e22e">sunrise</span>)
+}
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">calculateSchedule</span>(<span style="color:#a6e22e">sunrise</span>) {
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;Next sunrise:&#39;</span>, <span style="color:#a6e22e">sunrise</span>)
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">sections</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">sunrise</span>.<span style="color:#a6e22e">split</span>(<span style="color:#e6db74">&#39;:&#39;</span>)
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">hour</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">sections</span>[<span style="color:#ae81ff">0</span>], <span style="color:#a6e22e">minute</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">sections</span>[<span style="color:#ae81ff">1</span>]
+  <span style="color:#66d9ef">return</span> <span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">minute</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">hour</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> * * *`</span>
+}
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">scheduleSunriseEvent</span> (<span style="color:#a6e22e">sunrise</span>) {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">ow</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">openwhisk</span>();
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">params</span> <span style="color:#f92672">=</span> {<span style="color:#a6e22e">cron</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">sunrise</span>, <span style="color:#a6e22e">maxTriggers</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">1</span>}
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">feeds</span>.<span style="color:#66d9ef">delete</span>({<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;/whisk.system/alarms/alarm&#39;</span>, <span style="color:#a6e22e">trigger</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;sunrise&#39;</span>}).<span style="color:#a6e22e">then</span>(() =&gt; {
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;trigger feed deleted.&#39;</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">feeds</span>.<span style="color:#a6e22e">create</span>({<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;/whisk.system/alarms/alarm&#39;</span>, <span style="color:#a6e22e">trigger</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;sunrise&#39;</span>, <span style="color:#a6e22e">params</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">params</span>})
+  }).<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">result</span> =&gt; {
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;trigger feed created.&#39;</span>)
+  })
+  .<span style="color:#66d9ef">catch</span>(<span style="color:#a6e22e">err</span> =&gt; {
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">error</span>(<span style="color:#e6db74">&#39;failed to create/delete trigger&#39;</span>, <span style="color:#a6e22e">err</span>)
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#34;ERROR&#34;</span>, <span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">error</span>.<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">result</span>)
+  })
+}
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span>(<span style="color:#a6e22e">params</span>) {
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;GOOD MORNING!&#39;</span>)
+    
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">getNextSunrise</span>(<span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">lat</span>, <span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">lng</span>, <span style="color:#e6db74">&#39;tomorrow&#39;</span>)
+    .<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">calculateSchedule</span>)
+    .<span style="color:#a6e22e">then</span>(<span style="color:#a6e22e">scheduleSunriseEvent</span>)
+}
+</code></pre></div><h4 id="setting-up-1">setting up</h4>
+<ul>
+<li>Create an action called <code>wake_up</code> with code from above. <code>lat</code> and <code>lng</code> parameters define location for sunrise.</li>
+</ul>
+<pre><code>$ wsk action create wake_up wake_up.js -p lat 51.50 -p lng -0.076
+ok: created action wake_up
+</code></pre><ul>
+<li>Create a trigger (<code>sunrise</code>)  with the alarm feed, scheduled for the next sunrise.</li>
+</ul>
+<pre><code>$ wsk trigger create sunrise --feed /whisk.system/alarms/alarm -p cron '03 41 06 * * *'
+ok: invoked /whisk.system/alarms/alarm with id 606dafe276f24400adafe276f2240082
+...
+ok: created trigger sunrise
+</code></pre><ul>
+<li>Connect the action (<code>wake_up</code>) to the trigger (<code>sunrise</code>) with a rule (<code>wake_up_at_sunrise</code>).</li>
+</ul>
+<pre><code>$ wsk rule create wake_up_at_sunrise sunrise wake_up
+ok: created rule wake_up_at_sunrise
+</code></pre><p><em>Checking the activation logs the following morning will show the trigger being fired, which invokes the action, which re-schedules the one-off event!</em> 🌅🌅🌅</p>
+<h2 id="caveats">Caveats</h2>
+<p>Here&rsquo;s a few issues you might encounter using the alarm feed that I ran into….</p>
+<ul>
+<li>Month field in cron schedule starts from zero not one. January is 0, December is 11.</li>
+<li>Day of the week field starts from zero. First day of the week is Sunday, not Monday.</li>
+<li>Feeds <a href="https://github.com/apache/incubator-openwhisk/issues/1925">cannot be updated</a> with a new schedule once created. Feeds must be <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/feeds.md#implementing-feed-actions">deleted before being re-created</a> to use a different schedule.</li>
+</ul>
+<h2 id="future-plans">Future Plans</h2>
+<p>Extending the alarm feed to support even more features and improve the developer experience is in-progress. There are a number of Github issues in the official OpenWhisk repository around this work.</p>
+<ul>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/102">Enhancements for startDate, stopDate, fire once, interval (#102)</a></em></li>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/issues/89">Add fire once triggers (#89)</a></em></li>
+<li><em><a href="https://github.com/apache/incubator-openwhisk-package-alarms/pull/101">Support read and updating trigger details (#101)</a></em></li>
+</ul>
+<p>If you have feature requests, discover bugs with the feed or have other suggestions, please comment on the existing issues or open new ones.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Scheduled events are a necessary feature of serverless cloud platforms. Due to the ephemeral nature of runtime environments, scheduling background tasks must be managed by the platform.</p>
+<p>In Apache OpenWhisk, the alarm feed allows static events to be generated on a customisable schedule. Using a cron-based schedule pattern, running functions once a minute, every two hours or 5pm on Mondays, is simple but what about more complex schedule patterns?</p>
+<p>Using the <code>cron</code> and <code>maxTriggers</code> parameters with the OpenWhisk client library, much more advanced event schedules can be utilised within the platform. In the examples above, we looked at how to schedule one-off events, events using a predictable but irregular schedule and how actions can re-schedule events at runtime. 💯💯💯</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2017/08/large-applications-on-openwhisk/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Large Applications on OpenWhisk</span>
+    </a>
+    
+    
+    <a href="/2017/11/openwhisk-logstash-forwarder/" class="navigation-next">
+      <span class="navigation-tittle">Openwhisk Logstash Forwarder</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Large Applications on OpenWhisk • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Large Applications on OpenWhisk"/>
+<meta name="twitter:description" content="How to use large applications on OpenWhisk. Mechanism for running serverless functions with external packages, libraries or dependencies. Uses Docker to build custom runtime for the platform with shared dependencies built in."/>
+
+<meta property="og:title" content="Large Applications on OpenWhisk" />
+<meta property="og:description" content="How to use large applications on OpenWhisk. Mechanism for running serverless functions with external packages, libraries or dependencies. Uses Docker to build custom runtime for the platform with shared dependencies built in." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2017/08/large-applications-on-openwhisk/" />
+<meta property="article:published_time" content="2017-08-04T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-08-04T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Large Applications on OpenWhisk</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Aug 04, 2017
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/python">python</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 5 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">creating actions from archive files</a> containing source files and project dependencies.</p>
+<blockquote>
+<p>The maximum code size for the action is 48MB.
+OpenWhisk system details, <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb">https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb</a></p>
+</blockquote>
+<p>Applications with lots of third-party modules, native libraries or external tools may be soon find themselves running into this limit. Node.js libraries are <a href="https://medium.com/friendship-dot-js/i-peeked-into-my-node-modules-directory-and-you-wont-believe-what-happened-next-b89f63d21558">notorious for having large amounts of dependencies</a>.</p>
+<p><em>What if you need to deploy an application larger than this limit to OpenWhisk?</em></p>
+<p><a href="https://github.com/apache/incubator-openwhisk/tree/master/sdk/docker">Previous solutions</a> used Docker support in OpenWhisk to build a custom Docker image per action. Source files and dependencies are built into a public image hosted on Docker Hub.</p>
+<p>This approach overcomes the limit on deployment size but means application source files will be accessible on Docker Hub. This is not an issue for building samples or open-source projects but not realistic for most applications.</p>
+<p><em>So, using an application larger than this limit requires me to make my source files public?</em> 🤔</p>
+<p><strong>There&rsquo;s now a better solution!</strong> 👏👏👏</p>
+<p><strong>OpenWhisk supports creating actions from an archive file AND a custom Docker image.</strong></p>
+<p>If we build a custom Docker runtime which includes shared libraries, those dependencies don&rsquo;t need including in the archive file. Private source files will still be bundled in the archive and injected at runtime.</p>
+<p>Reducing archive file sizes also improves deployment times.</p>
+<p><em>Let&rsquo;s look at an example…</em></p>
+<h2 id="using-machine-learning-libraries-on-openwhisk">Using Machine Learning Libraries on OpenWhisk</h2>
+<p>Python is a popular language for machine learning and data science. Libraries like <a href="http://pandas.pydata.org/">pandas</a>, <a href="http://scikit-learn.org/stable/">scikit-learn</a> and <a href="http://www.numpy.org/">numpy</a> provide all the tools. Serverless computing is becoming a <a href="https://blog.alexcasalboni.com/serverless-computing-machine-learning-baf52b89e1b0">good choice for machine learning microservices</a>.</p>
+<p>OpenWhisk supports <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#creating-python-actions">Python 2 and 3 runtimes</a>.</p>
+<p>Popular libraries like flask, requests and beautifulsoup <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#python-actions">are available as global packages</a>. Additional packages can be imported using <code>virutalenv</code> during invocations.</p>
+<h3 id="python-machine-learning-libraries">Python Machine Learning Libraries</h3>
+<p>Python packages can be <a href="http://jamesthom.as/blog/2017/04/27/python-packages-in-openwhisk/">used in OpenWhisk using virtualenv</a>. Developers install the packages locally and include the <code>virutalenv</code> folder in the archive for deployment.</p>
+<p>Machine Learning libraries often use numerous shared libraries and compile native dependencies for performance. <strong>This can lead to hundreds of megabytes of dependencies.</strong></p>
+<p>Setting up a new <code>virtualenv</code> folder and installing <code>pandas</code> leads to an environment with nearly 100MB of dependencies.</p>
+<pre><code>$ virtualenv env
+$ source env/bin/activate
+$ pip install pandas
+...
+Installing collected packages: numpy, six, python-dateutil, pytz, pandas
+Successfully installed numpy-1.13.1 pandas-0.20.3 python-dateutil-2.6.1 pytz-2017.2 six-1.10.0
+$ du -h
+...
+84M	. &lt;-- FOLDER SIZE 😱
+</code></pre><p><strong>Bundling these libraries within an archive file will not be possible due to the file size limit.</strong></p>
+<h3 id="custom-openwhisk-runtime-images">Custom OpenWhisk Runtime Images</h3>
+<p>Overcoming this limit can be achieved using a custom runtime image. The runtime will pre-install additional libraries during the build process and make them available during invocations.</p>
+<p>OpenWhisk uses <a href="https://www.docker.com/">Docker</a> for the runtime containers. <a href="https://github.com/apache/incubator-openwhisk/tree/master/core">Source files for the images</a> are available on Github under the <code>core</code> folder. Here&rsquo;s the <code>Dockerfile</code> for the Python runtime: <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile">https://github.com/apache/incubator-openwhisk/blob/master/core/pythonAction/Dockerfile</a>.</p>
+<p>Images for OpenWhisk runtimes are also available on Docker Hub under the <a href="https://hub.docker.com/r/openwhisk/">OpenWhisk organisation</a>.</p>
+<p><em>Docker supports building new images from a parent image using the <code>FROM</code> directive. Inheriting from the existing runtime images means the <code>Dockerfile</code> for the new runtime only has to contain commands for installing extra dependencies.</em></p>
+<p>Let&rsquo;s build a new Python runtime which includes those libraries as shared packages.</p>
+<h3 id="building-runtimes">Building Runtimes</h3>
+<p>Let&rsquo;s create a new <code>Dockerfile</code> which installs additional packages into the OpenWhisk Python runtime.</p>
+<pre><code>FROM openwhisk/python3action
+
+# lapack-dev is available in community repo.
+RUN echo &quot;http://dl-4.alpinelinux.org/alpine/edge/community&quot; &gt;&gt; /etc/apk/repositories
+
+# add package build dependencies
+RUN apk add --no-cache \
+        g++ \
+        lapack-dev \
+        gfortran
+
+# add python packages
+RUN pip install \
+    numpy \
+    pandas \
+    scipy \
+    sklearn
+</code></pre><p>Running the <a href="https://docs.docker.com/engine/reference/commandline/build/">Docker build command</a> will create a new image with these extra dependencies.</p>
+<pre><code>$ docker build -t python_ml_runtime .
+Sending build context to Docker daemon  83.01MB
+Step 1/4 : FROM openwhisk/python3action
+ ---&gt; 46388e726fae
+...
+Successfully built cfc14a93863e
+Successfully tagged python_ml_runtime:latest
+</code></pre><p><em>Hosting images on Docker Hub requires registering a (free) account @ <a href="https://hub.docker.com/">https://hub.docker.com/</a></em></p>
+<p>Create a new tag from the <code>python_ml_runtime</code> image containing the Docker Hub username.</p>
+<pre><code>$ docker tag python_ml_runtime &lt;YOUR_USERNAME&gt;/python_ml_test
+</code></pre><p>Push the image to Docker Hub to make it available to OpenWhisk.</p>
+<pre><code>$ docker push &lt;YOUR_USERNAME&gt;/python_ml_test
+</code></pre><h3 id="testing-it-out">Testing It Out</h3>
+<p>Create a new Python file (<code>main.py</code>) with the following contents:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#f92672">import</span> numpy 
+<span style="color:#f92672">import</span> pandas 
+<span style="color:#f92672">import</span> sklearn
+<span style="color:#f92672">import</span> scipy
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">main</span>(params):
+    <span style="color:#66d9ef">return</span> {
+        <span style="color:#e6db74">&#34;numpy&#34;</span>: numpy<span style="color:#f92672">.</span>__version__,
+        <span style="color:#e6db74">&#34;pandas&#34;</span>: pandas<span style="color:#f92672">.</span>__version__,
+        <span style="color:#e6db74">&#34;sklearn&#34;</span>: sklearn<span style="color:#f92672">.</span>__version__,
+        <span style="color:#e6db74">&#34;scipy&#34;</span>: scipy<span style="color:#f92672">.</span>__version__
+    }
+</code></pre></div><p>Create a new OpenWhisk action using the Docker image from above and source file.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ wsk action create lib-versions --docker &lt;YOUR_USERNAME&gt;/openwhisk_python_ml main.py
+ok: created action lib-versions
+</code></pre></div><p>Invoke the action to verify the modules are available and return the versions.</p>
+<pre><code>$ wsk action invoke lib-versions --result
+{
+    &quot;numpy&quot;: &quot;1.13.1&quot;,
+    &quot;pandas&quot;: &quot;0.20.3&quot;,
+    &quot;scipy&quot;: &quot;0.19.1&quot;,
+    &quot;sklearn&quot;: &quot;0.18.2&quot;
+}
+</code></pre><p>Yass. It works. 💃🕺</p>
+<p>Serverless Machine Learning here we come…. 😉</p>
+<h2 id="conclusions">Conclusions</h2>
+<p>Using custom runtimes with private source files is an amazing feature of OpenWhisk. It enables developers to run larger applications on the platform but also enables lots of other use cases. <strong>Almost any runtime, library or tool can now be used from the platform.</strong></p>
+<p>Here are some examples of where this approach could be used…</p>
+<ul>
+<li><em>Installing global libraries to reduce archive file size under 48MB and speed up deployments.</em></li>
+<li><em>Upgrading language runtimes, i.e. using Node.js 8 instead of 6.</em></li>
+<li><em>Adding native dependencies or command-line tools to the environment, e.g. ffmpeg.</em></li>
+</ul>
+<p>Building new runtimes is really simple using pre-existing base images published on Dockerhub.</p>
+<p><strong>The possibilities are endless!</strong></p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2017/07/creating-swift-binaries-for-openwhisk/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Creating Swift Binaries for OpenWhisk</span>
+    </a>
+    
+    
+    <a href="/2017/10/advanced-openwhisk-alarm-schedules/" class="navigation-next">
+      <span class="navigation-tittle">advanced openwhisk alarm schedules</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Connecting to IBM Cloud Databases for Redis from Node.js • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Connecting to IBM Cloud Databases for Redis from Node.js"/>
+<meta name="twitter:description" content="How to use self-signed TLS certificates with the Redis library on Node.js with IBM Cloud Databases."/>
+
+<meta property="og:title" content="Connecting to IBM Cloud Databases for Redis from Node.js" />
+<meta property="og:description" content="How to use self-signed TLS certificates with the Redis library on Node.js with IBM Cloud Databases." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2019/07/connecting-to-ibm-cloud-databases-for-redis-from-node.js/" />
+<meta property="article:published_time" content="2019-07-22T00:00:00+00:00" />
+<meta property="article:modified_time" content="2019-07-22T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Connecting to IBM Cloud Databases for Redis from Node.js</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jul 22, 2019
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/node.js">node.js</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/redis">redis</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/tls">tls</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 4 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>This blog post explains how to connect to an <a href="https://www.ibm.com/cloud/databases-for-redis">IBM Cloud Databases for Redis</a> instance from a <a href="https://nodejs.org/en/">Node.js</a> application. There is a (small) difference between the connection details needed for an IBM Cloud Databases for Redis instance compared to a local instance of the open-source database. This is due to all IBM Cloud Databases using <a href="https://cloud.ibm.com/docs/services/databases-for-redis?topic=databases-for-redis-external-app#driver-tls-and-self-signed-certificate-support">secured TLS connections</a> with <a href="https://en.wikipedia.org/wiki/Self-signed_certificate">self-signed certificates</a>.</p>
+<p><em>I keep running into this issue (and forgetting how to fix it</em> 🤦‍♂️*), so I&rsquo;m documenting the solution here to help myself (and others) who might run into it…* 🦸‍♂️</p>
+<h2 id="connecting-to-redis-without-tls-connections">Connecting to Redis (without TLS connections)</h2>
+<p>Most Node.js application use the <code>redis</code> <a href="https://www.npmjs.com/package/redis">NPM library</a> to interact with an instance of the database. This library has a <code>createClient</code> <a href="">method</a> which returns an instance of the client. The Node.js application passes a connection string into the <code>createClient</code> method. This string contains the hostname, port, username and password for the database instance.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">redis</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#34;redis&#34;</span>),
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">url</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;redis://user:secret@localhost:6379/&#39;</span>
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">client</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">redis</span>.<span style="color:#a6e22e">createClient</span>(<span style="color:#a6e22e">url</span>);
+</code></pre></div><p>The client fires a <code>connect</code> event once the <a href="https://github.com/NodeRedis/node_redis#connection-and-other-events">connection is established</a> or an <code>error</code> event if <a href="https://github.com/NodeRedis/node_redis#connection-and-other-events">issues are encountered</a>.</p>
+<h2 id="ibm-cloud-databases-for-redis-service-credentials">IBM Cloud Databases for Redis Service Credentials</h2>
+<p>IBM Cloud Databases for Redis provide service credentials through the <a href="https://cloud.ibm.com/docs/services/databases-for-redis?topic=databases-for-redis-connection-strings#the-_service-credentials_-panel">instance management console</a>. Service credentials are JSON objects with connection properties for client libraries, the CLI and other tools. Connection strings for the Node.js client library are available in the <code>connection.rediss.composed</code> field.</p>
+<p><em><strong>So, I just copy this field value and use with the <code>redis.createClient</code> method? Not so fast&hellip;</strong></em></p>
+<p>IBM Cloud Databases for Redis uses TLS to secure all connections to the Redis instances. This is denoted by the connection string using the <code>rediss://</code> URL prefix, rather than <code>redis://</code>. Using that connection string (without further connection properties), will lead to the following error being thrown by the Node.js application.</p>
+<pre><code>Error: Redis connection to &lt;id&gt;.databases.appdomain.cloud:port failed - read ECONNRESET
+  at TCP.onread (net.js:657:25) errno: 'ECONNRESET', code: 'ECONNRESET', syscall: 'read'
+</code></pre><p>If the <code>createClient</code> forces a TLS connection to be used <code>createClient(url, { tls: {} })</code>, this error will be replaced with a different one about self-signed certificates.</p>
+<pre><code>Error: Redis connection to &lt;id&gt;.databases.appdomain.cloud:port failed failed - self signed certificate in certificate chain
+    at TLSSocket.onConnectSecure (_tls_wrap.js:1055:34)
+    at TLSSocket.emit (events.js:182:13)
+    at TLSSocket._finishInit (_tls_wrap.js:635:8) code: 'SELF_SIGNED_CERT_IN_CHAIN'
+</code></pre><p><em>Hmmmm, how to fix this?</em> 🤔</p>
+<h2 id="connecting-to-redis-with-tls-connections">Connecting to Redis (with TLS connections)</h2>
+<p>All connections to IBM Cloud Databases are secured with TLS using self-signed certificates. Public certificates for the signing authorities are provided as Base64 strings in the service credentials. These certificates can be provided in the client constructor to support self-signed TLS connections.</p>
+<p><em><strong>Here are the steps needed to use those self-signed certificates with the client library&hellip;</strong></em></p>
+<ul>
+<li>Extract the <code>connection.rediss.certificate.certificate_base64</code> value from the service credentials.</li>
+</ul>
+<p><img src="/images/redis-certificates.png" alt="Redis Service Credentials"></p>
+<ul>
+<li>Decode the Base64 string in Node.js to extract the PEM certificate string.</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">ca</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">Buffer</span>.<span style="color:#a6e22e">from</span>(<span style="color:#a6e22e">cert_base64</span>, <span style="color:#e6db74">&#39;base64&#39;</span>).<span style="color:#a6e22e">toString</span>(<span style="color:#e6db74">&#39;utf-8&#39;</span>)
+</code></pre></div><ul>
+<li>Provide the certificate file string as the <code>ca</code> property in the <code>tls</code> object for the client constructor.</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">tls</span> <span style="color:#f92672">=</span> { <span style="color:#a6e22e">ca</span> };
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">client</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">redis</span>.<span style="color:#a6e22e">createClient</span>(<span style="color:#a6e22e">url</span>, { <span style="color:#a6e22e">tls</span> });
+</code></pre></div><ul>
+<li>…Relax! 😎</li>
+</ul>
+<p><em>The <code>tls</code> property is passed through to the <code>tls.connect</code> <a href="https://nodejs.org/api/tls.html#tls_tls_connect_options_callback">method</a> in Node.js, which is used to setup the TLS connection. This method supports a <code>ca</code> parameter to extend the trusted CA certificates pre-installed in the system. By providing the self-signed certificate using this property, the errors above will not be seen.</em></p>
+<h2 id="conclusion">Conclusion</h2>
+<p>It took me a while to <a href="https://compose.com/articles/ssl-connections-arrive-for-redis-on-compose/">work out</a> how to connect to TLS-secured Redis instances from a Node.js application. <a href="https://stackoverflow.com/questions/10888610/ignore-invalid-self-signed-ssl-certificate-in-node-js-with-https-request/39099130#39099130">Providing the self-signed certificate</a> in the client constructor is a much better solution than having to <a href="https://stackoverflow.com/a/21961005/1427084">disable  all unauthorised TLS connections</a>!</p>
+<p>Since I don&rsquo;t write new Redis client code very often, I keep forgetting the correct constructor parameters to make this work. Turning this solution into a blog post will (hopefully) embed it in my brain (or at least provide a way to find the answer instead of having to grep through old project code). This might even be useful to others Googling for a solution to those error messages&hellip;</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2019/07/serverless-apis-for-max-models/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Serverless APIs for MAX models</span>
+    </a>
+    
+    
+    <a href="/2019/07/hosting-static-websites-on-ibm-cloud/" class="navigation-next">
+      <span class="navigation-tittle">Hosting Static Websites on IBM Cloud</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

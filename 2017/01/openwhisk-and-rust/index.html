@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>OpenWhisk and Rust • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="OpenWhisk and Rust"/>
+<meta name="twitter:description" content="Serverless functions using Rust language on OpenWhisk."/>
+
+<meta property="og:title" content="OpenWhisk and Rust" />
+<meta property="og:description" content="Serverless functions using Rust language on OpenWhisk." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2017/01/openwhisk-and-rust/" />
+<meta property="article:published_time" content="2017-01-18T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-01-18T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>OpenWhisk and Rust</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jan 18, 2017
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/rust">rust</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/docker">docker</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 5 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><em>This blog post is <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">one of</a> <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">a series</a> looking at using Docker Actions in OpenWhisk to support extra runtimes.</em></p>
+<p>Let&rsquo;s look at writing serverless functions for <a href="http://openwhisk.org/">OpenWhisk</a> using <a href="https://rust-lang.org">Rust</a>.</p>
+<blockquote>
+<p>Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety.</p>
+</blockquote>
+<p>Rust has been growing in popularity since it launched in 2010. Rust is a popular language for writing microservices due to the focus on the attention to safety and strong concurrency support.</p>
+<p>None of the major serverless platform natively support Rust at the moment. OpenWhisk does not include this as a default runtime. However, <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">recent updates</a> to OpenWhisk provide a path for writing serverless functions with Rust.</p>
+<p>Let&rsquo;s re-write <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">the example</a> from the previous post in Rust and see how to get it running using this new approach…</p>
+<p><strong><em>Have you seen <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">this post</a> explaining how Docker-based Actions work? This post assumes you have already read that first.</em></strong></p>
+<h2 id="rust-language-actions">Rust Language Actions</h2>
+<p>Rust has a <a href="http://doc.crates.io/guide.html">build system</a> that supports creating static binaries. These binaries contain the application source code and dependent libraries.</p>
+<p>Using the same approach as the <a href="http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/">Go-based example</a>, bundling this binary into a zip file allows us to overwrite the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">runtime stub</a> prior to invocation.</p>
+<p>Runtime binaries will be executed by the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">Python-based invoker</a> for each invocation. Request parameters will be passed as a JSON string using the first command-line argument. The invoker expects the Action result to be written to standard output as a JSON string.</p>
+<h3 id="action-source-code">Action Source Code</h3>
+<p>Here&rsquo;s a simple Rust function that returns a greeting string from an input parameter. It parses the JSON string provided on the command-line to look for a <code>name</code> parameter. If this isn&rsquo;t present, it defaults to <code>stranger</code>. It returns a JSON object with the greeting string (<code>msg</code>) by writing to the console.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-rust" data-lang="rust"><span style="color:#66d9ef">extern</span> <span style="color:#66d9ef">crate</span> rustc_serialize;
+<span style="color:#66d9ef">use</span> rustc_serialize::json;
+<span style="color:#66d9ef">use</span> rustc_serialize::json::Json;
+<span style="color:#66d9ef">use</span> std::env;
+
+<span style="color:#75715e">#[derive(RustcDecodable, RustcEncodable)]</span>
+<span style="color:#66d9ef">pub</span> <span style="color:#66d9ef">struct</span> <span style="color:#a6e22e">Greeting</span> {
+    message: String
+}
+
+<span style="color:#66d9ef">fn</span> <span style="color:#a6e22e">main</span>() {
+    <span style="color:#66d9ef">let</span> <span style="color:#66d9ef">mut</span> name <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;stranger&#34;</span>.to_string();
+
+    <span style="color:#75715e">// first arg contains JSON parameters
+</span><span style="color:#75715e"></span>    <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> Some(arg1) <span style="color:#f92672">=</span> env::args().nth(<span style="color:#ae81ff">1</span>) {
+        <span style="color:#75715e">// parse JSON and extract &#39;name&#39; field
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">let</span> params <span style="color:#f92672">=</span> Json::from_str(<span style="color:#f92672">&amp;</span>arg1).unwrap();
+        <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> Some(params_obj) <span style="color:#f92672">=</span> params.as_object() {
+            <span style="color:#66d9ef">if</span> <span style="color:#66d9ef">let</span> Some(params_name) <span style="color:#f92672">=</span> params_obj.get(<span style="color:#e6db74">&#34;name&#34;</span>) {
+                name <span style="color:#f92672">=</span> params_name.as_string().unwrap().to_string();
+            }
+        }
+    };
+
+    <span style="color:#66d9ef">let</span> greeting <span style="color:#f92672">=</span> Greeting {
+        message: <span style="color:#a6e22e">format</span><span style="color:#f92672">!</span>(<span style="color:#e6db74">&#34;Hello, {}!&#34;</span>, name),
+    };
+
+    println<span style="color:#f92672">!</span>(<span style="color:#e6db74">&#34;{}&#34;</span>, json::encode(<span style="color:#f92672">&amp;</span>greeting).unwrap());
+}
+</code></pre></div><h3 id="set-up-project">Set Up Project</h3>
+<p>Using Rust&rsquo;s package management tool, create a new project for our serverless function.</p>
+<p>Add the source code above into the <code>src/main.rs</code> file.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cargo new action; cd action
+     Created library <span style="color:#e6db74">`</span>action<span style="color:#e6db74">`</span> project
+$ mv src/lib.rs src/main.rs
+$ vim src/main.rs
+$ tree .
+.
+├── Cargo.toml
+└── src
+    └── main.rs
+
+<span style="color:#ae81ff">1</span> directory, <span style="color:#ae81ff">2</span> files
+</code></pre></div><p>This function uses the <code>rustc-serialize</code> crate to handle parsing and producing JSON.</p>
+<p>Add this identifier to the project&rsquo;s dependencies listed in <code>Cargo.toml</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>package<span style="color:#f92672">]</span>
+name <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;action&#34;</span>
+version <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;0.1.0&#34;</span>
+authors <span style="color:#f92672">=</span> <span style="color:#f92672">[</span><span style="color:#e6db74">&#34;Me &lt;me@email.com&gt;&#34;</span><span style="color:#f92672">]</span>
+
+<span style="color:#f92672">[</span>dependencies<span style="color:#f92672">]</span>
+rustc-serialize <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;0.3&#34;</span>
+</code></pre></div><p>Build and run the binary to test it works as expected.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">cargo</span> <span style="color:#a6e22e">run</span>
+    <span style="color:#a6e22e">Updating</span> <span style="color:#a6e22e">registry</span> <span style="color:#e6db74">`https://github.com/rust-lang/crates.io-index`</span>
+   <span style="color:#a6e22e">Compiling</span> <span style="color:#a6e22e">rustc</span><span style="color:#f92672">-</span><span style="color:#a6e22e">serialize</span> <span style="color:#a6e22e">v0</span><span style="color:#ae81ff">.3.22</span>
+   <span style="color:#a6e22e">Compiling</span> <span style="color:#a6e22e">action</span> <span style="color:#a6e22e">v0</span><span style="color:#ae81ff">.1.0</span> (<span style="color:#a6e22e">file</span>:<span style="color:#75715e">///private/tmp/test/action)
+</span><span style="color:#75715e"></span>    <span style="color:#a6e22e">Finished</span> <span style="color:#a6e22e">debug</span> [<span style="color:#a6e22e">unoptimized</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">debuginfo</span>] <span style="color:#a6e22e">target</span>(<span style="color:#a6e22e">s</span>) <span style="color:#a6e22e">in</span> <span style="color:#ae81ff">7.0</span> <span style="color:#a6e22e">secs</span>
+     <span style="color:#a6e22e">Running</span> <span style="color:#e6db74">`target/debug/action`</span>
+{<span style="color:#e6db74">&#34;message&#34;</span>:<span style="color:#e6db74">&#34;Hello, stranger!&#34;</span>}
+<span style="color:#960050;background-color:#1e0010">$</span> <span style="color:#a6e22e">cargo</span> <span style="color:#a6e22e">run</span> <span style="color:#960050;background-color:#1e0010">&#39;</span>{<span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;James&#34;</span>}<span style="color:#960050;background-color:#1e0010">&#39;</span>
+    <span style="color:#a6e22e">Finished</span> <span style="color:#a6e22e">debug</span> [<span style="color:#a6e22e">unoptimized</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">debuginfo</span>] <span style="color:#a6e22e">target</span>(<span style="color:#a6e22e">s</span>) <span style="color:#a6e22e">in</span> <span style="color:#ae81ff">0.0</span> <span style="color:#a6e22e">secs</span>
+     <span style="color:#a6e22e">Running</span> <span style="color:#e6db74">`target/debug/action {\&#34;name\&#34;:\ \&#34;James\&#34;}`</span>
+{<span style="color:#e6db74">&#34;message&#34;</span>:<span style="color:#e6db74">&#34;Hello, James!&#34;</span>}
+</code></pre></div><p><em>Before we can deploy this binary to OpenWhisk, it must be compiled for the platform architecture.</em></p>
+<h3 id="cross-compiling-locally">Cross-Compiling Locally</h3>
+<p>Rust&rsquo;s compiler uses LLVM under the covers, making it possible to generate machine code for different architectures. Cross-compiling for different platforms requires having the correct compiler, linker and libraries for that architecture installed.</p>
+<p>Rust <a href="https://blog.rust-lang.org/2016/05/13/rustup.html">recently released</a> a <a href="https://rustup.rs/">toolchain manager</a> to simplify this process.</p>
+<p>Install the Rust toolchain for the <code>x86_64-unknown-linux-musl</code> runtime.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ rustup target add x86_64-unknown-linux-musl
+info: downloading component <span style="color:#e6db74">&#39;rust-std&#39;</span> <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;x86_64-unknown-linux-musl&#39;</span>
+info: installing component <span style="color:#e6db74">&#39;rust-std&#39;</span> <span style="color:#66d9ef">for</span> <span style="color:#e6db74">&#39;x86_64-unknown-linux-musl&#39;</span>
+</code></pre></div><p>Install musl-based GCC cross-compilers.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ brew install filosottile/musl-cross/musl-cross
+</code></pre></div><p>Add the configuration file to set the correct linker for the runtime.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cat .cargo/config
+<span style="color:#f92672">[</span>target.x86_64-unknown-linux-musl<span style="color:#f92672">]</span>
+linker <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;x86_64-linux-musl-gcc&#34;</span>
+</code></pre></div><p>We can now cross-compile the binary for the correct environment.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cargo build --target<span style="color:#f92672">=</span>x86_64-unknown-linux-musl --release
+   Compiling rustc-serialize v0.3.22
+   Compiling action v0.1.0 <span style="color:#f92672">(</span>file:///Users/james/code/bluemix/openwhisk-languages/rust/action<span style="color:#f92672">)</span>
+    Finished release <span style="color:#f92672">[</span>optimized<span style="color:#f92672">]</span> target<span style="color:#f92672">(</span>s<span style="color:#f92672">)</span> in 9.30 secs
+</code></pre></div><p>Checking the file type demonstrates we have built a static binary for the Linux x86_64 platform.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ file target/x86_64-unknown-linux-musl/release/action
+target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>GNU/Linux<span style="color:#f92672">)</span>, statically linked, not stripped
+</code></pre></div><h3 id="cross-compiling-using-docker">Cross-Compiling Using Docker</h3>
+<p>If you don&rsquo;t want to install the Rust development toolchain, Docker can be used to start a container with the <a href="https://github.com/emk/rust-musl-builder">environment set up</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker pull ekidd/rust-musl-builder
+$ docker run -it -v <span style="color:#66d9ef">$(</span>pwd<span style="color:#66d9ef">)</span>:/home/rust/src ekidd/rust-musl-builder cargo build --release
+    Updating registry <span style="color:#e6db74">`</span>https://github.com/rust-lang/crates.io-index<span style="color:#e6db74">`</span>
+ Downloading rustc-serialize v0.3.22
+   Compiling action v0.1.0 <span style="color:#f92672">(</span>file:///home/rust/src<span style="color:#f92672">)</span>
+    Finished release <span style="color:#f92672">[</span>optimized<span style="color:#f92672">]</span> target<span style="color:#f92672">(</span>s<span style="color:#f92672">)</span> in 1.80 secs
+$ file target/x86_64-unknown-linux-musl/release/action
+target/x86_64-unknown-linux-musl/release/action: ELF 64-bit LSB executable, x86-64, version <span style="color:#ae81ff">1</span> <span style="color:#f92672">(</span>GNU/Linux<span style="color:#f92672">)</span>, statically linked, not stripped
+</code></pre></div><h3 id="create--deploy-archive">Create &amp; Deploy Archive</h3>
+<p>Add the binary to a zip file, ensuring the file is named <code>exec</code> in the archive.</p>
+<p>Use the <code>wsk</code> command-line to create a new Docker Action using this archive.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cp target/x86_64-unknown-linux-musl/release/action exec
+$ zip action.zip exec
+  adding: exec <span style="color:#f92672">(</span>deflated 64%<span style="color:#f92672">)</span>
+$ wsk action create rust_test action.zip --native
+ok: created action rust_test
+</code></pre></div><h3 id="invoking-action">Invoking Action</h3>
+<p>Test the action from the command-line to verify it works.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ wsk action invoke rust_test --result
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;msg&#34;</span>: <span style="color:#e6db74">&#34;Hello, Stranger!&#34;</span>
+<span style="color:#f92672">}</span> 
+$ wsk action invoke rust_test --result --param name James
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;msg&#34;</span>: <span style="color:#e6db74">&#34;Hello, James!&#34;</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>Success 😎.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2017/01/openwhisk-and-go/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Openwhisk and Go</span>
+    </a>
+    
+    
+    <a href="/2017/02/openwhisk-and-the-serverless-framework/" class="navigation-next">
+      <span class="navigation-tittle">Openwhisk and The Serverless Framework</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

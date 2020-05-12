@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Accessing Long-Running Apache OpenWhisk Actions Results • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Accessing Long-Running Apache OpenWhisk Actions Results"/>
+<meta name="twitter:description" content="Using activation identifiers to retrieve action results for long-running invocations using the Apache OpenWhisk platform API."/>
+
+<meta property="og:title" content="Accessing Long-Running Apache OpenWhisk Actions Results" />
+<meta property="og:description" content="Using activation identifiers to retrieve action results for long-running invocations using the Apache OpenWhisk platform API." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2019/05/accessing-long-running-apache-openwhisk-actions-results/" />
+<meta property="article:published_time" content="2019-05-14T00:00:00+00:00" />
+<meta property="article:modified_time" content="2019-05-14T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Accessing Long-Running Apache OpenWhisk Actions Results</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> May 14, 2019
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/apache">apache</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/node.js">node.js</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 4 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> actions are invoked by sending HTTP POST requests to the <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md">platform API</a>. Invocation requests have two <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/rest_api.md#actions">different modes</a>: <strong>blocking</strong> and <strong>non-blocking</strong>.</p>
+<p><strong>Blocking invocations</strong> mean the platform won&rsquo;t send the HTTP response until the action finishes. This allows it to include the action result in the response.  Blocking invocations are used when you want to invoke an action and wait for the result.</p>
+<pre><code>$ wsk action invoke my_action --blocking
+ok: invoked /_/my_action with id db70ef682fae4f8fb0ef682fae2f8fd5
+{
+    &quot;activationId&quot;: &quot;db70ef682fae4f8fb0ef682fae2f8fd5&quot;,
+    ...
+    &quot;response&quot;: {
+        &quot;result&quot;: { ... },
+        &quot;status&quot;: &quot;success&quot;,
+        &quot;success&quot;: true
+    },
+    ...
+}
+</code></pre><p><strong>Non-blocking invocations</strong> return as soon as the platform processes the invocation request. This is before the action has finished executing. HTTP responses from non-blocking invocations only include activation identifiers, as the action result is not available.</p>
+<pre><code>$ wsk action invoke my_action
+ok: invoked /_/my_action with id d2728aaa75394411b28aaa7539341195
+</code></pre><p><strong>HTTP responses from a blocking invocation will only wait for a limited amount of time before returning.</strong> This defaults to 65 seconds in the <a href="https://github.com/apache/incubator-openwhisk/blob/master/core/controller/src/main/resources/application.conf#L21">platform configuration file</a>. If an action invocation has not finished before this timeout limit, a HTTP 5xx status response is returned.</p>
+<p>Hmmm… 🤔</p>
+<p><em><strong>&ldquo;So, how can you invoke an action and wait for the result when actions take longer than this limit?&quot;</strong></em></p>
+<p>This question comes up regularly from developers building applications using the platform. I&rsquo;ve decided to turn my answer into a blog post to help others struggling with this issue (after answering this question again this week 😎).</p>
+<h3 id="solution">solution</h3>
+<ul>
+<li><em>Invoke the action using a <a href="https://github.com/apache/incubator-openwhisk-client-js#invoke-action">non-blocking invocation</a>.</em></li>
+<li><em>Use the returned activation identifier to poll the <a href="https://github.com/apache/incubator-openwhisk-client-js#retrieve-resource">activation result API</a>.</em></li>
+<li><em>The HTTP response for the activation result will return a HTTP 404 response until the action finishes.</em></li>
+</ul>
+<p>When polling for activation results from non-blocking invocations, you should enforce a limit on the maximum polling time allowed. This is because HTTP 404s can be returned due to other scenarios (e.g. invalid activation identifiers). Enforcing a time limit ensures that, in the event of issues in the application code or the platform, the polling loop with eventually stop!</p>
+<p><em>Setting the maximum polling time to the action timeout limit (plus a small offset) is a good approach.</em></p>
+<p>An action cannot run for longer than its timeout limit. If the activation record is not available after this duration has elapsed (plus a small offset to handle internal platform delays), something has gone wrong. Continuing to poll after this point runs the risk of turning the polling operation into an infinite loop&hellip;</p>
+<h3 id="example-code">example code</h3>
+<p>This example provides an implementation of this approach for Node.js using the <a href="https://github.com/apache/incubator-openwhisk-client-js">JavaScript Client SDK</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#e6db74">&#34;use strict&#34;</span>;
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">openwhisk</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;openwhisk&#39;</span>)
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">options</span> <span style="color:#f92672">=</span> { <span style="color:#a6e22e">apihost</span><span style="color:#f92672">:</span> <span style="color:#f92672">&lt;</span><span style="color:#a6e22e">API_HOST</span><span style="color:#f92672">&gt;</span>, <span style="color:#a6e22e">api_key</span><span style="color:#f92672">:</span> <span style="color:#f92672">&lt;</span><span style="color:#a6e22e">API_KEY</span><span style="color:#f92672">&gt;</span> }
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">ow</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">openwhisk</span>(<span style="color:#a6e22e">options</span>)
+
+<span style="color:#75715e">// action duration limit (+ small offset)
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">timeout_ms</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">85000</span>
+<span style="color:#75715e">// delay between polling requests
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">polling_delay</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">1000</span>
+<span style="color:#75715e">// action to invoke
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">action</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;delay&#39;</span>
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">now</span> <span style="color:#f92672">=</span> () =&gt; (<span style="color:#66d9ef">new</span> Date().<span style="color:#a6e22e">getTime</span>())
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">max_polling_time</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">now</span>() <span style="color:#f92672">+</span> <span style="color:#a6e22e">timeout_ms</span>
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">delay</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">async</span> <span style="color:#a6e22e">ms</span> =&gt; <span style="color:#66d9ef">new</span> Promise(<span style="color:#a6e22e">resolve</span> =&gt; <span style="color:#a6e22e">setTimeout</span>(<span style="color:#a6e22e">resolve</span>, <span style="color:#a6e22e">ms</span>))
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">activation</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">actions</span>.<span style="color:#a6e22e">invoke</span>({<span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">action</span>})
+<span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`new activation id: </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">activation</span>.<span style="color:#a6e22e">activationId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>)
+
+<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">null</span>
+
+<span style="color:#66d9ef">do</span> {
+  <span style="color:#66d9ef">try</span> {
+    <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">activations</span>.<span style="color:#a6e22e">get</span>({ <span style="color:#a6e22e">name</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">activation</span>.<span style="color:#a6e22e">activationId</span> })
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`activation result (</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">activation</span>.<span style="color:#a6e22e">activationId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">) now available!`</span>)
+  } <span style="color:#66d9ef">catch</span> (<span style="color:#a6e22e">err</span>) {
+    <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">err</span>.<span style="color:#a6e22e">statusCode</span> <span style="color:#f92672">!==</span> <span style="color:#ae81ff">404</span>) {
+      <span style="color:#66d9ef">throw</span> <span style="color:#a6e22e">err</span>
+    }
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`activation result (</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">activation</span>.<span style="color:#a6e22e">activationId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">) not available yet`</span>)
+  }
+
+  <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">delay</span>(<span style="color:#a6e22e">polling_delay</span>)
+} <span style="color:#66d9ef">while</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">result</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">now</span>() <span style="color:#f92672">&lt;</span> <span style="color:#a6e22e">max_polling_time</span>) 
+
+<span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`activation result (</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">activation</span>.<span style="color:#a6e22e">activationId</span><span style="color:#e6db74">}</span><span style="color:#e6db74">)`</span>, <span style="color:#a6e22e">result</span>)
+</code></pre></div><h3 id="testing-it-out">testing it out</h3>
+<p>Here is the source code for an action which will not return until 70 seconds have passed. Blocking invocations firing this action will result in a HTTP timeout before the response is returned.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">delay</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">async</span> <span style="color:#a6e22e">ms</span> =&gt; <span style="color:#66d9ef">new</span> Promise(<span style="color:#a6e22e">resolve</span> =&gt; <span style="color:#a6e22e">setTimeout</span>(<span style="color:#a6e22e">resolve</span>, <span style="color:#a6e22e">ms</span>))
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span>() {
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">delay</span>(<span style="color:#ae81ff">70</span><span style="color:#f92672">*</span><span style="color:#ae81ff">1000</span>)
+}
+</code></pre></div><p>Using the script above, the action result will be retrieved from a non-blocking invocation.</p>
+<ul>
+<li><em>Create an action from the source file in the example above.</em></li>
+</ul>
+<pre><code>wsk action create delay delay.js --timeout 80000 --kind nodejs:10
+</code></pre><ul>
+<li><em>Run the Node.js script to invoke this action and poll for the activation result.</em></li>
+</ul>
+<pre><code>node script.js
+</code></pre><p>If the script runs correctly, log messages will display the polling status and then the activation result.</p>
+<pre><code>$ node script.js
+new activation id: d4efc4641b544320afc4641b54132066
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+activation result (d4efc4641b544320afc4641b54132066) not available yet
+...
+activation result (d4efc4641b544320afc4641b54132066) now available!
+activation result (d4efc4641b544320afc4641b54132066) { ... }
+</code></pre>
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2019/05/saving-money-and-time-with-node.js-worker-threads-in-serverless-functions/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Saving Money and Time With Node.js Worker Threads in Serverless Functions</span>
+    </a>
+    
+    
+    <a href="/2019/07/serverless-apis-for-max-models/" class="navigation-next">
+      <span class="navigation-tittle">Serverless APIs for MAX models</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Creating Todo MVC in Dojo - Part 1: Models • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Creating Todo MVC in Dojo - Part 1: Models"/>
+<meta name="twitter:description" content="In this first article, we going to look at using DojoX MVC to define our application Models, showing the use of the new StatefulModel class. Later in the series, we&rsquo;ll look at binding our defined Model to a View template, rendering the HTML output and hooking into user events.
+Introducing StatefulModels DojoX MVC uses a specific class for representing Models in the MVC pattern, StatefulModel. By using or extending this class, applications have access to a native JavaScript data model that integrates with all the classes under the MVC package."/>
+
+<meta property="og:title" content="Creating Todo MVC in Dojo - Part 1: Models" />
+<meta property="og:description" content="In this first article, we going to look at using DojoX MVC to define our application Models, showing the use of the new StatefulModel class. Later in the series, we&rsquo;ll look at binding our defined Model to a View template, rendering the HTML output and hooking into user events.
+Introducing StatefulModels DojoX MVC uses a specific class for representing Models in the MVC pattern, StatefulModel. By using or extending this class, applications have access to a native JavaScript data model that integrates with all the classes under the MVC package." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2012/02/creating-todo-mvc-in-dojo-part-1-models/" />
+<meta property="article:published_time" content="2012-02-26T00:00:00+00:00" />
+<meta property="article:modified_time" content="2012-02-26T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Creating Todo MVC in Dojo - Part 1: Models</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Feb 26, 2012
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/dojo">dojo</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/javascript">javascript</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/mvc">mvc</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>In this first article, we going to look at using <a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> to define our
+application Models, showing the use of the new <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a> class. Later in
+the series, we&rsquo;ll look at binding our defined Model to a View template, rendering
+the HTML output and hooking into user events.</p>
+<h2 id="introducing-statefulmodels">Introducing StatefulModels</h2>
+<p><a href="http://dojotoolkit.org/reference-guide/dojox/mvc.html">DojoX MVC</a> uses a specific class for representing Models in the MVC pattern,
+<a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html">StatefulModel</a>. By using or extending this class, applications have access to a
+native JavaScript data model that integrates with all the classes under the MVC
+package. StatefulModel extends the <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html">Dojo Stateful</a> class, introduced in Dojo 1.6
+to provide a way to monitor widget property changes, to support more complex
+behaviour, such as binding to and updating View component, validating of model
+values and much more.</p>
+<p>StatefulModels are instantiated from a plain JavaScript object, representing the initial data structure
+for the model, or even from a Dojo Store (with support for both synchronous and asynchronous results). To assist the conversion of complex JavaScript objects, a factory function is provided
+that will traverse the source data, recursively converting all data properties to use the
+StatefulModel class.</p>
+<p>Further details on the StatefulModel class can be found <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/StatefulModel.html#dojox-mvc-statefulmodel">here</a>.</p>
+<h2 id="defining-a-model">Defining a Model</h2>
+<p>Reviewing the <a href="https://github.com/addyosmani/todomvc/wiki/Todo-Application-Specification">TodoMVC specification</a>,
+our application Model needs to contain a list of todo tasks, each one
+containing a description and that task&rsquo;s completed state. The task&rsquo;s
+description will be provided by the user and can later be modified. As the task
+is completed, the task&rsquo;s internal state must be updated. Representing the todo
+tasks as an array of objects will allow binding to a <a href="http://livedocs.dojotoolkit.org/dojox/mvc/Repeat">Repeat View</a>, having a HTML template
+rendered for each task in the Model.</p>
+<p>Looking at the application, there&rsquo;s two additional properties in the View that are derived from
+other Model attributes, counts for the completed and remaining tasks. To allow automatic binding of these
+values into our View template, we&rsquo;re going to represent these directly in our model. Later on, we&rsquo;ll
+set up binding between Model values to allow those composite values to be calculated automatically.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">data</span> <span style="color:#f92672">=</span> {
+    <span style="color:#a6e22e">todos</span><span style="color:#f92672">:</span> [
+        {
+            <span style="color:#a6e22e">text</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Must write this blog article&#34;</span>
+            <span style="color:#a6e22e">isDone</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">false</span>
+        }
+    ],
+    <span style="color:#a6e22e">remaining</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>,
+    <span style="color:#a6e22e">complete</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>
+}
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">model</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">dojox</span>.<span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">newStatefulModel</span>({<span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">data</span>})
+</code></pre></div><p>Once we&rsquo;ve defined our Model as a native JavaScript object, we can use the
+StatefulModel factory to perform the conversion to StatefulModel classes, as
+shown in the sample above. The result of this function is our application
+Model, which we can then bind to our View and interact with via the Controller.</p>
+<p>The StatefulModel class supports any native JavaScript type, we&rsquo;re using
+strings for the description, booleans for the completed state and numbers for
+the computed totals.</p>
+<h2 id="binding-to-model-changes">Binding to Model changes</h2>
+<p>Once you&rsquo;ve defined a model, you&rsquo;ll want to be notified of any attribute changes.
+Using Dojo Stateful&rsquo;s <a href="http://dojotoolkit.org/reference-guide/dojo/Stateful.html#watch">&ldquo;watch&rdquo;</a> method, we can register a function to be executed
+whenever that model&rsquo;s attributes are modified using the getter &amp; setter pattern.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">watch</span>(<span style="color:#e6db74">&#34;attribute&#34;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">attribute</span>, <span style="color:#a6e22e">new_value</span>, <span style="color:#a6e22e">old_value</span>) {
+});
+</code></pre></div><p>The <a href="http://dojotoolkit.org/reference-guide/dojox/mvc/Bind.html">dojox.mvc.Bind</a> module extends this functionality to cover two common patterns,
+listening to changes on a series of attributes and binding model properties together.
+The &ldquo;bindInputs&rdquo; function allows an array of model attributes to be passed in, executing a callback
+whenever any of the attributes change.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">bindInputs</span>([<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">first_attr</span>, <span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">second_attr</span>, ...], <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">attribute</span>, <span style="color:#a6e22e">new_value</span>, <span style="color:#a6e22e">old_value</span>) {
+});
+</code></pre></div><p>More usefully, the &ldquo;bind&rdquo; function sets up a one way coupling between a source and destination model attribute.
+Whenever the source attribute value changes, the destination model attribute will be automatically updated with
+the same result. If you want to transform the source value before it&rsquo;s updated in the destination model, an optional
+function callback can be passed in. This will be called with the new attribute
+value and the return value used to update the destination model.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">bind</span>(<span style="color:#a6e22e">source_model</span>, <span style="color:#e6db74">&#34;attr&#34;</span>, <span style="color:#a6e22e">dest_model</span>, <span style="color:#e6db74">&#34;attr&#34;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">attribute</span>, <span style="color:#a6e22e">new_value</span>, <span style="color:#a6e22e">old_value</span>) {
+    <span style="color:#75715e">// Return transformed value to update dest_model with
+</span><span style="color:#75715e"></span>});
+</code></pre></div><h2 id="creating-composite-model-values">Creating composite model values</h2>
+<p>In the TodoMVC application our model has two attributes, &ldquo;remaining&rdquo; &amp; &ldquo;completed&rdquo;, that need to computed
+automatically from other model values.</p>
+<p>Calculating the &ldquo;completed&rdquo; total is performed by looping through the &ldquo;todos&rdquo; array and counting
+the tasks which have an &ldquo;isDone&rdquo; attribute as true. Whenever a task&rsquo;s &ldquo;isDone&rdquo; value changes
+we want to re-calculate and update the &ldquo;completed&rdquo; total. Whenever a new task is added, we
+automatically bind the new item to our calculating function, which updates the composite value
+with the new count if any of our model tasks are modified.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">bindIsDone</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">item</span>) {
+    <span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">bindInputs</span>([<span style="color:#a6e22e">item</span>.<span style="color:#a6e22e">isDone</span>], <span style="color:#a6e22e">lang</span>.<span style="color:#a6e22e">hitch</span>(<span style="color:#66d9ef">this</span>, <span style="color:#e6db74">&#34;updateTotalItemsLeft&#34;</span>));
+},
+
+<span style="color:#a6e22e">updateTotalItemsLeft</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> () {
+    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">remaining</span>.<span style="color:#a6e22e">set</span>(<span style="color:#e6db74">&#34;value&#34;</span>, <span style="color:#a6e22e">array</span>.<span style="color:#a6e22e">filter</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">todos</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">item</span>) {
+        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">item</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span><span style="color:#a6e22e">item</span>.<span style="color:#a6e22e">isDone</span>.<span style="color:#a6e22e">value</span>;
+    }).<span style="color:#a6e22e">length</span>);
+}
+</code></pre></div><p>Once we have the &ldquo;completed&rdquo; total, the &ldquo;remaining&rdquo; attribute can be easily calculated
+if we know the total number of tasks. Using the &ldquo;bind&rdquo; method ensures this happens automatically,
+using optional transform function to create the new composite value.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">bind</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">remaining</span>, <span style="color:#e6db74">&#34;value&#34;</span>, <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">complete</span>, <span style="color:#e6db74">&#34;value&#34;</span>, <span style="color:#a6e22e">lang</span>.<span style="color:#a6e22e">hitch</span>(<span style="color:#66d9ef">this</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">value</span>) {
+    <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">get</span>(<span style="color:#e6db74">&#34;length&#34;</span>) <span style="color:#f92672">-</span> <span style="color:#a6e22e">value</span>;
+}));
+</code></pre></div><h2 id="extending-statefulmodel">Extending StatefulModel</h2>
+<p>Defining our Model requires application code to declare the composite (completed, remaining) attributes, bind to changes on the
+current (and future) todo tasks and deal with persisting data to local storage. Rather than having this code in the application
+controller, we can extend the StatefulModel class to encapsulate all this
+logic. Using Dojo&rsquo;s <a href="http://dojotoolkit.org/reference-guide/dojo/declare.html">Declare</a> module, we can create a new
+class which extends StatefulModel, allowing us to set the initial model properties as class attributes rather than having to call
+the dojox.mvc.newStatefulModel() factory manually. The skeleton outline for our StatefulModel extension is shown below, we&rsquo;ve removed
+some internal methods for brevity.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">define</span>([<span style="color:#e6db74">&#34;dojo/_base/declare&#34;</span>, <span style="color:#e6db74">&#34;dojox/mvc/StatefulModel&#34;</span>, <span style="color:#e6db74">&#34;todo/store/LocalStorage&#34;</span>, <span style="color:#e6db74">&#34;dojox/mvc&#34;</span>],
+    <span style="color:#66d9ef">function</span>(<span style="color:#a6e22e">declare</span>, <span style="color:#a6e22e">StatefulModel</span>, <span style="color:#a6e22e">LocalStorage</span>, <span style="color:#a6e22e">mvc</span>) {
+
+    <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">declare</span>([<span style="color:#a6e22e">StatefulModel</span>], {
+        <span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> {
+            <span style="color:#a6e22e">id</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;local_storage_todos&#34;</span>,
+            <span style="color:#a6e22e">todos</span> <span style="color:#f92672">:</span> [],
+            <span style="color:#a6e22e">remaining</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>,
+            <span style="color:#a6e22e">complete</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>
+        },
+
+        <span style="color:#a6e22e">store</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">LocalStorage</span>(),
+
+        <span style="color:#a6e22e">constructor</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> () {
+            <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">data</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">store</span>.<span style="color:#a6e22e">get</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">data</span>.<span style="color:#a6e22e">id</span>) <span style="color:#f92672">||</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">data</span>;
+            <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">_createModel</span>(<span style="color:#a6e22e">data</span>);
+
+            <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">setUpModelBinding</span>();
+            <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">updateTotalItemsLeft</span>();
+        },
+
+        <span style="color:#a6e22e">setUpModelBinding</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> () {
+            <span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">bind</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">incomplete</span>, <span style="color:#e6db74">&#34;value&#34;</span>, <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">complete</span>, <span style="color:#e6db74">&#34;value&#34;</span>, <span style="color:#a6e22e">lang</span>.<span style="color:#a6e22e">hitch</span>(<span style="color:#66d9ef">this</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">value</span>) {
+                <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">get</span>(<span style="color:#e6db74">&#34;length&#34;</span>) <span style="color:#f92672">-</span> <span style="color:#a6e22e">value</span>;
+            }));
+            <span style="color:#a6e22e">array</span>.<span style="color:#a6e22e">forEach</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">todos</span>, <span style="color:#a6e22e">lang</span>.<span style="color:#a6e22e">hitch</span>(<span style="color:#66d9ef">this</span>, <span style="color:#e6db74">&#34;bindIsDone&#34;</span>));
+            <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">watch</span>(<span style="color:#a6e22e">lang</span>.<span style="color:#a6e22e">hitch</span>(<span style="color:#66d9ef">this</span>, <span style="color:#e6db74">&#34;onTodosModelChange&#34;</span>));
+        },
+
+        <span style="color:#a6e22e">updateTotalItemsLeft</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> () {
+            <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">incomplete</span>.<span style="color:#a6e22e">set</span>(<span style="color:#e6db74">&#34;value&#34;</span>, <span style="color:#a6e22e">array</span>.<span style="color:#a6e22e">filter</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">todos</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">item</span>) {
+                <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">item</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#f92672">!</span><span style="color:#a6e22e">item</span>.<span style="color:#a6e22e">isDone</span>.<span style="color:#a6e22e">value</span>;
+            }).<span style="color:#a6e22e">length</span>);
+        }
+    });
+);
+</code></pre></div><p>The internal &ldquo;data&rdquo; and &ldquo;store&rdquo; attributes correspond to properties on the base
+StatefulModel class. StatefulModel&rsquo;s constructor will automatically transform raw
+JavaScript objects, set via the &ldquo;data&rdquo; property, into the corresponding
+StatefulModels.</p>
+<p>Unfortunately, it doesn&rsquo;t contain code for automatically
+populating the initial model from the &ldquo;store&rdquo; property, this is handled in the
+&ldquo;dojox.mvc.newStatefulModel&rdquo; factory. Therefore, we manually construct the
+initial model values from the store, if available, and re-call the &ldquo;_createModel&rdquo; function
+in our constructor.</p>
+<p>Once the model has been instantiated, we can declare and initialise our composite model bindings
+as well as binding to the initial todo tasks pulled from persistent storage.</p>
+<p>You can see the source code for the final version of the TodoModel class
+<a href="https://github.com/jthomas/todomvc/tree/master/todo-example/dojo/js/todo/model">here</a>.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>In this first article, we&rsquo;ve reviewed how to use DojoX MVC&rsquo;s StatefulModel
+class to create application Models that we can later bind to Views within the
+application. Using the StatefulModel class, we can bind to model properties,
+having callbacks executed when one or more attribute values changed.</p>
+<p>Taking this further, we can bind model properties together, creating dynamic
+models whose properties automatically update as others change. Combining this
+functionality, we defined composite model attributes for the &ldquo;completed&rdquo; and
+&ldquo;remaining&rdquo; properties that were automatically calculated as the todo tasks&rsquo;
+state changed, wrapping this code within an extension of the StatefulModel
+class.</p>
+<p>Next time, we&rsquo;ll be looking at another component of the MVC pattern, Views. Using the TodoMVC application
+as our example, we&rsquo;ll show how to define View templates, bind our Model with the View to generate the application&rsquo;s HTML and
+ensure user interactions with the todo tasks automatically update the Model.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2012/01/creating-todo-mvc-in-dojo-overview/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Creating Todo MVC in Dojo - Overview</span>
+    </a>
+    
+    
+    <a href="/2012/04/upcoming-talks/" class="navigation-next">
+      <span class="navigation-tittle">Upcoming Talks</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

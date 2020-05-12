@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Saving Money and Time With Node.js Worker Threads in Serverless Functions • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Saving Money and Time With Node.js Worker Threads in Serverless Functions"/>
+<meta name="twitter:description" content="Using Worker Threads in Node.js v12 to improve performance in serverless platforms. This leads to reduced execution time and costs in serverless functions. Example uses IBM Cloud Functions (Apache OpenWhisk)."/>
+
+<meta property="og:title" content="Saving Money and Time With Node.js Worker Threads in Serverless Functions" />
+<meta property="og:description" content="Using Worker Threads in Node.js v12 to improve performance in serverless platforms. This leads to reduced execution time and costs in serverless functions. Example uses IBM Cloud Functions (Apache OpenWhisk)." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2019/05/saving-money-and-time-with-node.js-worker-threads-in-serverless-functions/" />
+<meta property="article:published_time" content="2019-05-08T00:00:00+00:00" />
+<meta property="article:modified_time" content="2019-05-08T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Saving Money and Time With Node.js Worker Threads in Serverless Functions</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> May 08, 2019
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/apache">apache</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/node.js">node.js</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/performance">performance</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 10 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Node.js v12 was <a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">released last month</a>. This new version includes support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that are enabled by default. Node.js <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a> make it simple to execute JavaScript code in parallel using threads. 👏👏👏</p>
+<p>This is useful for Node.js applications with CPU-intensive workloads. Using Worker Threads, JavaScript code can be executed code concurrently using multiple CPU cores. This reduces execution time compared to a non-Worker Threads version.</p>
+<p>If serverless platforms provide Node.js v12 on multi-core environments, functions can use this feature to reduce execution time and, therefore, lower costs. Depending on the workload, functions can utilise all available CPU cores to parallelise work, rather than executing more functions concurrently. 💰💰💰</p>
+<p><strong>In this blog post, I&rsquo;ll explain how to use Worker Threads from a serverless function. I&rsquo;ll be using <a href="https://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) as the example platform but this approach is applicable for any serverless platform with Node.js v12 support and a multi-core CPU runtime environment.</strong></p>
+<h2 id="nodejs-v12-in-ibm-cloud-functions-apache-openwhisk">Node.js v12 in IBM Cloud Functions (Apache OpenWhisk)</h2>
+<p><em>This section of the blog post is specifically about using the new <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js v12 runtime</a> on IBM Cloud Functions (powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>). If you are using a different serverless platform, feel free to skip ahead to the next section…</em></p>
+<p>I&rsquo;ve recently <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">been working</a> on adding the Node.js v12 runtime to Apache OpenWhisk.</p>
+<p>Apache OpenWhisk uses <a href="https://hub.docker.com/u/openwhisk">Docker containers</a> as runtime environments for serverless functions. All runtime images are maintained in separate repositories for each supported language, e.g. <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">Node.js</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-java">Java</a>, <a href="https://github.com/apache/incubator-openwhisk-runtime-python">Python</a>, etc. Runtime images are automatically built and pushed to <a href="https://hub.docker.com/r/openwhisk/">Docker Hub</a> when the repository is updated.</p>
+<h3 id="nodejs-v12-runtime-image">node.js v12 runtime image</h3>
+<p>Here is <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/pull/126">the PR</a> used to add the new Node.js v12 runtime image to Apache OpenWhisk. This led to the following <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">runtime image</a> being exported to Docker Hub: <code>openwhisk/action-nodejs-v12</code>.</p>
+<p>Having this image available as a native runtime in Apache OpenWhisk requires <a href="https://github.com/apache/incubator-openwhisk/pull/4472">upstream changes</a> to the project&rsquo;s runtime manifest. After this happens, developers will be able to use the <code>--kind</code> CLI flag to select this runtime version.</p>
+<pre><code>ibmcloud wsk action create action_name action.js --kind nodejs:12
+</code></pre><p><a href="http://cloud.ibm.com/openwhisk">IBM Cloud Functions</a> is powered by <a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>. It will eventually pick up the upstream project changes to include this new runtime version. Until that happens, Docker support allows usage of this new runtime before it is built-in the platform.</p>
+<pre><code>ibmcloud wsk action create action_name action.js --docker openwhisk/action-nodejs-v12
+</code></pre><h3 id="example">example</h3>
+<p>This Apache OpenWhisk action returns the version of Node.js used in the runtime environment.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span> () {
+  <span style="color:#66d9ef">return</span> {
+    <span style="color:#a6e22e">version</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">version</span>
+  }
+}
+</code></pre></div><p>Running this code on IBM Cloud Functions, using the Node.js v12 runtime image, allows us to confirm the new Node.js version is available.</p>
+<pre><code>$ ibmcloud wsk action create nodejs-v12 action.js --docker openwhisk/action-nodejs-v12
+ok: created action nodejs-v12
+$ ibmcloud wsk action invoke nodejs-v12 --result
+{
+    &quot;version&quot;: &quot;v12.1.0&quot;
+}
+</code></pre><h2 id="worker-threads-in-serverless-functions">Worker Threads in Serverless Functions</h2>
+<p><a href="https://medium.com/@Trott/using-worker-threads-in-node-js-80494136dbb6">This is a great introdution blog post</a> to Workers Threads. It uses an example of generating prime numbers as the CPU intensive task to benchmark. Comparing the performance of the single-threaded version to multiple-threads - the performance is improved as a factor of the threads used (up to the number of CPU cores available).</p>
+<p>This code can be ported to run in a serverless function. Running with different input values and thread counts will allow benchmarking of the performance improvement.</p>
+<h3 id="non-workers-version">non-workers version</h3>
+<p>Here is the <a href="https://gist.github.com/jthomas/71c76d62ddfd146c4bf763f5b2f0eec1">sample code</a> for a serverless function to generate prime numbers. It does not use Worker Threads. It will run on the main <a href="https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/">event loop</a> for the Node.js process. This means it will only utilise a single thread (and therefore single CPU core).</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#e6db74">&#39;use strict&#39;</span>;
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">min</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span>(<span style="color:#a6e22e">params</span>) {
+  <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">start</span>, <span style="color:#a6e22e">end</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">params</span>
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#a6e22e">params</span>)
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">primes</span> <span style="color:#f92672">=</span> []
+  <span style="color:#66d9ef">let</span> <span style="color:#a6e22e">isPrime</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span>;
+  <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">i</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">start</span>; <span style="color:#a6e22e">i</span> <span style="color:#f92672">&lt;</span> <span style="color:#a6e22e">end</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span>) {
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">j</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">min</span>; <span style="color:#a6e22e">j</span> <span style="color:#f92672">&lt;</span> Math.<span style="color:#a6e22e">sqrt</span>(<span style="color:#a6e22e">end</span>); <span style="color:#a6e22e">j</span><span style="color:#f92672">++</span>) {
+      <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">i</span> <span style="color:#f92672">!==</span> <span style="color:#a6e22e">j</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">%</span><span style="color:#a6e22e">j</span> <span style="color:#f92672">===</span> <span style="color:#ae81ff">0</span>) {
+        <span style="color:#a6e22e">isPrime</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>;
+        <span style="color:#66d9ef">break</span>;
+      }
+    }
+    <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">isPrime</span>) {
+      <span style="color:#a6e22e">primes</span>.<span style="color:#a6e22e">push</span>(<span style="color:#a6e22e">i</span>);
+    }
+    <span style="color:#a6e22e">isPrime</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span>;
+  }
+
+  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">primes</span> }
+}
+</code></pre></div><h3 id="porting-the-code-to-use-worker-threads">porting the code to use worker threads</h3>
+<p>Here is the prime number calculation code which uses Worker Threads. Dividing the total input range by the number of Worker Threads generates individual thread input values. Worker Threads are spawned and passed chunked input ranges. Threads calculate primes and then send the result back to the parent thread.</p>
+<!-- raw HTML omitted -->
+<p>Reviewing the code to start converting it to a serverless function, I realised there were two issues running this code in serverless environment: <strong>worker thread initialisation</strong> and <strong>optimal worker thread counts</strong>.</p>
+<h4 id="how-to-initialise-worker-threads">How to initialise Worker Threads?</h4>
+<p>This is how the existing source code <a href="https://nodejs.org/dist/latest-v12.x/docs/api/worker_threads.html#worker_threads_new_worker_filename_options">initialises the Worker Threads</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"> <span style="color:#a6e22e">threads</span>.<span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Worker</span>(<span style="color:#a6e22e">__filename</span>, { <span style="color:#a6e22e">workerData</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">start</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">myStart</span>, <span style="color:#a6e22e">range</span> }}));
+</code></pre></div><p><em><code>__filename</code> is a special global variable in Node.js which contains the currently executing script file path.</em></p>
+<p>This means the Worker Thread will be initialised with a copy of the currently executing script. Node.js provides a special variable to indicate whether the script is executing in the parent or child thread. This can be used to branch script logic.</p>
+<p><strong>So, what&rsquo;s the issue with this?</strong></p>
+<p>In the Apache OpenWhisk Node.js runtime, action source files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61-L79">dynamically imported</a> into the runtime environment. The script used to start the Node.js runtime process is for the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js">platform handler</a>, not the action source files. This means the <code>__filename</code> variable does not point to the action source file.</p>
+<p>This issue is fixed by separating the serverless function handler and worker thread code into separate files. Worker Threads can be started with a reference to the worker thread script source file, rather than the currently executing script name.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"> <span style="color:#a6e22e">threads</span>.<span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Worker</span>(<span style="color:#e6db74">&#34;./worker.js&#34;</span>, { <span style="color:#a6e22e">workerData</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">start</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">myStart</span>, <span style="color:#a6e22e">range</span> }}));
+</code></pre></div><h4 id="how-many-worker-threads">How Many Worker Threads?</h4>
+<p>The next issue to resolve is how many Worker Threads to use. In order to maximise parallel processing capacity, there should be a Worker Thread for each CPU core. This is the maximum number of threads that can run concurrently.</p>
+<p>Node.js provides CPU information for the runtime environment using the <code>os.cpus()</code> <a href="https://nodejs.org/api/os.html#os_os_cpus">function</a>. The result is an array of objects (one per logical CPU core), with model information, processing speed and elapsed processing times. The length of this array will determine number of Worker Threads used. This ensures the number of Worker Threads will always match the CPU cores available.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">threadCount</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">os</span>.<span style="color:#a6e22e">cpus</span>().<span style="color:#a6e22e">length</span>
+</code></pre></div><h3 id="workers-threads-version">workers threads version</h3>
+<p>Here is the serverless version of the prime number generation algorithm which uses Worker Threads.</p>
+<p>The code is split over two files - <code>primes-with-workers.js</code> and <code>worker.js</code>.</p>
+<h4 id="primes-with-workersjs">primes-with-workers.js</h4>
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">This file</a> contains the serverless function handler used by the platform. Input ranges (based on the <code>min</code> and <code>max</code> action parameters) are divided into chunks, based upon the number of Worker Threads. The handler function creates a Worker Thread for each chunk and waits for the message with the result. Once all the results have been retrieved, it returns all those primes numbers as the invocation result.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#e6db74">&#39;use strict&#39;</span>;
+
+<span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">Worker</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;worker_threads&#39;</span>);
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">os</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;os&#39;</span>)
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">threadCount</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">os</span>.<span style="color:#a6e22e">cpus</span>().<span style="color:#a6e22e">length</span>
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">compute_primes</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">async</span> (<span style="color:#a6e22e">start</span>, <span style="color:#a6e22e">range</span>) =&gt; {
+  <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> Promise((<span style="color:#a6e22e">resolve</span>, <span style="color:#a6e22e">reject</span>) =&gt; {
+    <span style="color:#66d9ef">let</span> <span style="color:#a6e22e">primes</span> <span style="color:#f92672">=</span> []
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`adding worker (</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">start</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> =&gt; </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">start</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">range</span><span style="color:#e6db74">}</span><span style="color:#e6db74">)`</span>)
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">worker</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Worker</span>(<span style="color:#e6db74">&#39;./worker.js&#39;</span>, { <span style="color:#a6e22e">workerData</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">start</span>, <span style="color:#a6e22e">range</span> }})
+
+    <span style="color:#a6e22e">worker</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;error&#39;</span>, <span style="color:#a6e22e">reject</span>)
+    <span style="color:#a6e22e">worker</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;exit&#39;</span>, () =&gt; <span style="color:#a6e22e">resolve</span>(<span style="color:#a6e22e">primes</span>))
+    <span style="color:#a6e22e">worker</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;message&#39;</span>, <span style="color:#a6e22e">msg</span> =&gt; {
+      <span style="color:#a6e22e">primes</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">primes</span>.<span style="color:#a6e22e">concat</span>(<span style="color:#a6e22e">msg</span>)
+    })
+  })
+}
+
+<span style="color:#a6e22e">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span>(<span style="color:#a6e22e">params</span>) {
+  <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">min</span>, <span style="color:#a6e22e">max</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">params</span>
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">range</span> <span style="color:#f92672">=</span> Math.<span style="color:#a6e22e">ceil</span>((<span style="color:#a6e22e">max</span> <span style="color:#f92672">-</span> <span style="color:#a6e22e">min</span>) <span style="color:#f92672">/</span> <span style="color:#a6e22e">threadCount</span>)
+  <span style="color:#66d9ef">let</span> <span style="color:#a6e22e">start</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">min</span> <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">2</span> <span style="color:#f92672">?</span> <span style="color:#ae81ff">2</span> <span style="color:#f92672">:</span> <span style="color:#a6e22e">min</span>
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">workers</span> <span style="color:#f92672">=</span> []
+
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">`Calculating primes with </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">threadCount</span><span style="color:#e6db74">}</span><span style="color:#e6db74"> threads...`</span>);
+
+  <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">i</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>; <span style="color:#a6e22e">i</span> <span style="color:#f92672">&lt;</span> <span style="color:#a6e22e">threadCount</span> <span style="color:#f92672">-</span> <span style="color:#ae81ff">1</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span>) {
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">myStart</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">start</span>
+    <span style="color:#a6e22e">workers</span>.<span style="color:#a6e22e">push</span>(<span style="color:#a6e22e">compute_primes</span>(<span style="color:#a6e22e">myStart</span>, <span style="color:#a6e22e">range</span>))
+    <span style="color:#a6e22e">start</span> <span style="color:#f92672">+=</span> <span style="color:#a6e22e">range</span>
+  }
+
+  <span style="color:#a6e22e">workers</span>.<span style="color:#a6e22e">push</span>(<span style="color:#a6e22e">compute_primes</span>(<span style="color:#a6e22e">start</span>, <span style="color:#a6e22e">max</span> <span style="color:#f92672">-</span> <span style="color:#a6e22e">start</span>))
+
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">primes</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> Promise.<span style="color:#a6e22e">all</span>(<span style="color:#a6e22e">workers</span>)
+  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">primes</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">primes</span>.<span style="color:#a6e22e">flat</span>() }
+}
+
+<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">main</span>
+</code></pre></div><h4 id="workersjs">workers.js</h4>
+<p><a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43#file-workers-js">This is the script</a> used in the Worker Thread. The <code>workerData</code> value is used to receive number ranges to search for prime numbers. Primes numbers are sent back to the parent thread using the <code>postMessage</code> function. Since this script is only used in the Worker Thread, it does need to use the <code>isMainThread</code> value to check if it is a child or parent process.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#e6db74">&#39;use strict&#39;</span>;
+<span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">Worker</span>, <span style="color:#a6e22e">isMainThread</span>, <span style="color:#a6e22e">parentPort</span>, <span style="color:#a6e22e">workerData</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;worker_threads&#39;</span>);
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">min</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">2</span>
+
+<span style="color:#66d9ef">function</span> <span style="color:#a6e22e">generatePrimes</span>(<span style="color:#a6e22e">start</span>, <span style="color:#a6e22e">range</span>) {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">primes</span> <span style="color:#f92672">=</span> []
+  <span style="color:#66d9ef">let</span> <span style="color:#a6e22e">isPrime</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span>;
+  <span style="color:#66d9ef">let</span> <span style="color:#a6e22e">end</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">start</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">range</span>;
+  <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">i</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">start</span>; <span style="color:#a6e22e">i</span> <span style="color:#f92672">&lt;</span> <span style="color:#a6e22e">end</span>; <span style="color:#a6e22e">i</span><span style="color:#f92672">++</span>) {
+    <span style="color:#66d9ef">for</span> (<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">j</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">min</span>; <span style="color:#a6e22e">j</span> <span style="color:#f92672">&lt;</span> Math.<span style="color:#a6e22e">sqrt</span>(<span style="color:#a6e22e">end</span>); <span style="color:#a6e22e">j</span><span style="color:#f92672">++</span>) {
+      <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">i</span> <span style="color:#f92672">!==</span> <span style="color:#a6e22e">j</span> <span style="color:#f92672">&amp;&amp;</span> <span style="color:#a6e22e">i</span><span style="color:#f92672">%</span><span style="color:#a6e22e">j</span> <span style="color:#f92672">===</span> <span style="color:#ae81ff">0</span>) {
+        <span style="color:#a6e22e">isPrime</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>;
+        <span style="color:#66d9ef">break</span>;
+      }
+    }
+    <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">isPrime</span>) {
+      <span style="color:#a6e22e">primes</span>.<span style="color:#a6e22e">push</span>(<span style="color:#a6e22e">i</span>);
+    }
+    <span style="color:#a6e22e">isPrime</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span>;
+  }
+
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">primes</span>
+}
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">primes</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">generatePrimes</span>(<span style="color:#a6e22e">workerData</span>.<span style="color:#a6e22e">start</span>, <span style="color:#a6e22e">workerData</span>.<span style="color:#a6e22e">range</span>);
+<span style="color:#a6e22e">parentPort</span>.<span style="color:#a6e22e">postMessage</span>(<span style="color:#a6e22e">primes</span>)
+</code></pre></div><h4 id="packagejson">package.json</h4>
+<p>Source files deployed from a zip file also need to include a <code>package.json</code> file in the archive. The <code>main</code> property is used to determine the script to import as the exported package module.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;worker_threads&#34;</span>,
+  <span style="color:#f92672">&#34;version&#34;</span>: <span style="color:#e6db74">&#34;1.0.0&#34;</span>,
+  <span style="color:#f92672">&#34;main&#34;</span>: <span style="color:#e6db74">&#34;primes-with-workers.js&#34;</span>,
+}
+</code></pre></div><h2 id="performance-comparison">Performance Comparison</h2>
+<p>Running both functions with the same input parameters allows execution time comparison. The Worker Threads version should improve performance by a factor proportional to available CPU cores. Reducing execution time also means reduced costs in a serverless platform.</p>
+<h3 id="non-workers-performance">non-workers performance</h3>
+<p>Creating a new serverless function (<code>primes</code>) from the non-worker threads source code, using the Node.js v12 runtime, I can test with small values to check correctness.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ ibmcloud wsk action create primes primes.js --docker openwhisk/action-nodejs-v12
+ok: created action primes
+$ ibmcloud wsk action invoke primes --result -p start <span style="color:#ae81ff">2</span> -p end <span style="color:#ae81ff">10</span>
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;primes&#34;</span>: <span style="color:#f92672">[</span> 2, 3, 5, <span style="color:#ae81ff">7</span> <span style="color:#f92672">]</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>Playing with sample input values, 10,000,000 seems like a useful benchmark value. This takes long enough with the single-threaded version to benefit from parallelism.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ time ibmcloud wsk action invoke primes --result -p start <span style="color:#ae81ff">2</span> -p end <span style="color:#ae81ff">10000000</span> &gt; /dev/null
+
+real	0m35.151s
+user	0m0.840s
+sys	0m0.315s
+</code></pre></div><p><strong>Using the simple single-threaded algorithm it takes the serverless function around ~35 seconds to calculate primes up to ten million.</strong></p>
+<h3 id="workers-threads-performance">workers threads performance</h3>
+<p>Creating a new serverless function, from the worker threads-based source code using the Node.js v12 runtime, allows me to verify it works as expected for small input values.</p>
+<pre><code>$ ibmcloud wsk action create primes-workers action.zip --docker openwhisk/action-nodejs-v12
+ok: created action primes-workers
+$ ibmcloud wsk action invoke primes-workers --result -p min 2 -p max 10
+{
+    &quot;primes&quot;: [ 2, 3, 5, 7 ]
+}
+</code></pre><p>Hurrah, it works.</p>
+<p>Invoking the function with an <code>max</code> parameter of 10,000,000 allows us to benchmark against the non-workers version of the code.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ time ibmcloud wsk action invoke primes-workers --result -p min <span style="color:#ae81ff">2</span> -p max <span style="color:#ae81ff">10000000</span> --result &gt; /dev/null
+
+real	0m8.863s
+user	0m0.804s
+sys	0m0.302s
+</code></pre></div><p><strong>The workers versions only takes ~25% of the time of the single-threaded version!</strong></p>
+<p>This is because IBM Cloud Functions&rsquo; runtime environments provide access to four CPU cores. Unlike other platforms, CPU cores are not tied to memory allocations. Utilising all available CPU cores concurrently allows the algorithm to run 4x times as fast. Since serverless platforms charge based on execution time, reducing execution time also means reducing costs.</p>
+<p><strong>The worker threads version also costs 75% less than the single-threaded version!</strong></p>
+<h2 id="conclusion">Conclusion</h2>
+<p><a href="https://foundation.nodejs.org/announcements/2019/04/24/node-js-foundation-and-js-foundation-merge-to-form-openjs-foundation-2">Node.js v12</a> was released in April 2019. This version included support for <a href="https://nodejs.org/api/worker_threads.html">Worker Threads</a>, that were enabled by default (rather than needing an optional runtime flag). Using multiple CPU cores in Node.js applications has never been easier!</p>
+<p>Node.js applications with CPU-intensive workloads can utilise this feature to reduce execution time. Since serverless platforms charge based upon execution time, this is especially useful for Node.js serverless functions. Utilising multiple CPU cores leads, not only to improved performance, but also lower bills.</p>
+<p>PRs have been <a href="https://github.com/apache/incubator-openwhisk/pull/4472">opened</a> to enable Node.js v12 as a built-in runtime to the Apache OpenWhisk project. This Docker <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v12">image</a> for the new runtime version is already available on Docker Hub. This means it can be used with any Apache OpenWhisk instance straight away!</p>
+<p>Playing with Worker Threads on IBM Cloud Functions allowed me to demonstrate how to speed up performance for CPU-intensive workloads by utilising multiple cores concurrently. Using <a href="https://gist.github.com/jthomas/154a039d52b97d5ed19d4ddac3ff9f43">an example of prime number generation</a>, calculating all primes up to ten million took ~35 seconds with a single thread and ~8 seconds with four threads. This represents a reduction in execution time and cost of 75%!</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2019/04/apache-openwhisk-web-action-http-proxy/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Apache OpenWhisk Web Action HTTP Proxy</span>
+    </a>
+    
+    
+    <a href="/2019/05/accessing-long-running-apache-openwhisk-actions-results/" class="navigation-next">
+      <span class="navigation-tittle">Accessing Long-Running Apache OpenWhisk Actions Results</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

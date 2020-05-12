@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>running one-off tasks in cloud foundry • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="running one-off tasks in cloud foundry"/>
+<meta name="twitter:description" content="Running one-off administrative tasks for cloud foundry applications"/>
+
+<meta property="og:title" content="running one-off tasks in cloud foundry" />
+<meta property="og:description" content="Running one-off administrative tasks for cloud foundry applications" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2015/09/running-one-off-tasks-in-cloud-foundry/" />
+<meta property="article:published_time" content="2015-09-01T00:00:00+00:00" />
+<meta property="article:modified_time" content="2015-09-01T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>running one-off tasks in cloud foundry</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Sep 01, 2015
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/bluemix">bluemix</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/cloud-foundry">cloud foundry</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/nodejs">nodejs</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 7 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Whether making changes to a database schema, bulk importing data to initialise
+a database or setting up a connected service, there are often administrative
+tasks that needed to be carried out for an application to run correctly.</p>
+<p>These tasks usually need finishing before starting the application and should not be
+executed more than once.</p>
+<p>Previously, the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> provided commands, <em>tunnel</em> and <em>console</em>, to help running
+one-off tasks manually. These commands were
+<a href="http://stackoverflow.com/questions/32332319/exposing-ports-502-and-1002-from-nodejs-using-bluemix/32333386#32333386">deprecated</a>
+with the upgrade from <em>v5</em> to <em>v6</em>
+to discourage <a href="http://martinfowler.com/bliki/SnowflakeServer.html">snowflake environments</a>.</p>
+<p>It is still possible, with a bit of hacking, to run one-off tasks manually from the application
+container.</p>
+<p>A better way is to describe <em>tasks as code</em> and run them automatically during normal
+deployments. This results in applications that can be recreated without
+manual intervention.</p>
+<p>We&rsquo;ll look at both options before introducing a new library, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a>, that automates
+running administration tasks for Node.js applications.</p>
+<h2 id="running-tasks-manually">Running Tasks Manually</h2>
+<h2 id="local-environment">Local Environment</h2>
+<p>Rather than running administrative tasks from the application console, we can
+run them from a local development environment by remotely connecting to
+the bound services.</p>
+<p>This will be dependent on the provisioned services allowing remote access.
+Many &ldquo;built-in&rdquo; platform services, e.g. MySQL, Redis, do not allow this.</p>
+<p>Third-party services generally do.</p>
+<p>Using the <em>cf env</em> command we can list service credentials for an application.
+These authentication details can often be used locally by connecting through a client
+library running in a local development environment.</p>
+<p>For example, to access a provisioned Cloudant instance locally, we can grab the credentials
+and use with a Node.js client library.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>15:48:22 ~/code/sample<span style="color:#f92672">]</span>$ cf env sample-demo-app
+Getting env variables <span style="color:#66d9ef">for</span> app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK
+
+System-Provided:
+<span style="color:#f92672">{</span>
+ <span style="color:#e6db74">&#34;VCAP_SERVICES&#34;</span>: <span style="color:#f92672">{</span>
+  <span style="color:#e6db74">&#34;cloudantNoSQLDB&#34;</span>: <span style="color:#f92672">[</span>
+   <span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;credentials&#34;</span>: <span style="color:#f92672">{</span>
+     <span style="color:#e6db74">&#34;host&#34;</span>: <span style="color:#e6db74">&#34;1234-bluemix.cloudant.com&#34;</span>,
+     <span style="color:#e6db74">&#34;password&#34;</span>: <span style="color:#e6db74">&#34;sample_password&#34;</span>,
+     <span style="color:#e6db74">&#34;port&#34;</span>: 443,
+     <span style="color:#e6db74">&#34;url&#34;</span>: <span style="color:#e6db74">&#34;https://1234-bluemix:sample_password@1234-bluemix.cloudant.com&#34;</span>,
+     <span style="color:#e6db74">&#34;username&#34;</span>: <span style="color:#e6db74">&#34;1234-bluemix&#34;</span>
+    <span style="color:#f92672">}</span>
+....
+
+<span style="color:#f92672">[</span>15:48:22 ~/code/sample<span style="color:#f92672">]</span>$ cat connect.js
+var Cloudant <span style="color:#f92672">=</span> require<span style="color:#f92672">(</span><span style="color:#e6db74">&#39;cloudant&#39;</span><span style="color:#f92672">)</span>;
+ 
+var me <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;1234-bluemix&#39;</span>; 
+var password <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;sample_password&#39;</span>;
+ 
+// Initialize the library with my account. 
+var cloudant <span style="color:#f92672">=</span> Cloudant<span style="color:#f92672">({</span>account:me, password:password<span style="color:#f92672">})</span>;
+ 
+cloudant.db.list<span style="color:#f92672">(</span><span style="color:#66d9ef">function</span><span style="color:#f92672">(</span>err, allDbs<span style="color:#f92672">)</span> <span style="color:#f92672">{</span>
+  console.log<span style="color:#f92672">(</span><span style="color:#e6db74">&#39;All my databases: %s&#39;</span>, allDbs.join<span style="color:#f92672">(</span><span style="color:#e6db74">&#39;, &#39;</span><span style="color:#f92672">))</span>
+  // Run administrative tasks
+<span style="color:#f92672">})</span>;
+<span style="color:#f92672">[</span>15:48:22 ~/code/sample<span style="color:#f92672">]</span>$ node connect.js
+All my databases: example_db, jasons_stuff, scores
+</code></pre></div><h2 id="remote-environment">Remote Environment</h2>
+<p>When provisioned services don&rsquo;t allow external access, the
+<a href="https://github.com/cloudfoundry-community/cf-ssh">cf-ssh</a> project creates SSH
+access to application containers running within Cloud Foundry.</p>
+<p><strong>How does this work?!</strong></p>
+<blockquote>
+<p>cf-ssh deploys a new Cloud Foundry application, containing the same bits as your target application, with the same bound services.
+This new application&rsquo;s container does not start your web application as per normal. Instead, it starts an outbound reverse SSH tunnel to a public proxy.
+The local cf-ssh client then launches an interactive ssh connect to the public proxy, which tunnels through to the application container.
+Dr. Nic <a href="https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/">https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/</a></p>
+</blockquote>
+<p>See the explanation <a href="https://blog.starkandwayne.com/2014/10/28/how-does-cf-ssh-get-you-an-ssh-session-into-cloud-foundry/">here</a> for full details.</p>
+<p>This approach will let you connect to services from within the Cloud Foundry platform environment.</p>
+<p>This video from <a href="https://starkandwayne.com/">Stark &amp; Wayne&rsquo;s</a> <a href="http://drnicwilliams.com/">Dr. Nic</a> shows the command in action&hellip;</p>
+<!-- raw HTML omitted -->
+<h2 id="ibm-bluemix-console-java-and-nodejs">IBM Bluemix Console (Java and Node.js)</h2>
+<p><em>This technique is only for the IBM Bluemix platform.</em></p>
+<p>If you are deploying Node.js and Java applications on <a href="https://bluemix.net">IBM Bluemix</a>, the platform provides
+the following tools to assist with <a href="https://www.ng.bluemix.net/docs/#manageapps/app_management.html#appmanagement">application management</a>.</p>
+<ul>
+<li><em>proxy</em>: Minimal application management that serves as a proxy between your application and Bluemix.</li>
+<li><em>devconsole</em>: Enables the development console utility.</li>
+<li><em>shell</em>: Enables a web-based shell.</li>
+<li><em>trace</em>: (Node.js only) Dynamically set trace levels if your application is using log4js, ibmbluemix, or bunyan logging modules.</li>
+<li><em>inspector</em>: (Node.js only) Enables node inspector debugger.</li>
+<li><em>debug</em>: (Liberty only) Enables clients to establish a remote debugging session with the application.</li>
+<li><em>jmx</em>: (Liberty only) Enables the JMX REST Connector to allow connections from remote JMX clients</li>
+</ul>
+<p>The tools are enabled by setting the environment variable (<em>BLUEMIX_APP_MGMT_ENABLE</em>) with the
+desired utilities.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cf set-env myApp BLUEMIX_APP_MGMT_ENABLE devconsole+shell+trace
+</code></pre></div><p>Applications must be restarted for the changes to take effect.</p>
+<p>If we enable the <em>shell</em> utility, the following web-based console will be available at <a href="https://your-app-name.mybluemix.net/bluemix-debug/shell">https://your-app-name.mybluemix.net/bluemix-debug/shell</a>.</p>
+<p><img src="https://developer.ibm.com/bluemix/wp-content/uploads/sites/20/2015/06/shell.jpg" alt=""></p>
+<h2 id="cloud-foundry-diego-runtime">Cloud Foundry Diego Runtime</h2>
+<p><a href="http://www.activestate.com/blog/2014/09/cloud-foundry-diego-explained-onsi-fakhouri">Diego</a> is the next-generation
+runtime that will power upcoming versions of Cloud Foundry. Diego will provide many benefits
+over the existing runtime, e.g. Docker support, including enabling SSH access to containers without the workarounds needed above.</p>
+<p><strong>Yay!</strong></p>
+<p>Follow the instructions <a href="https://github.com/cloudfoundry-incubator/diego-design-notes/blob/master/ssh-access-and-policy.md">here</a>
+for details on SSH access to applications running on the new runtime.</p>
+<p><em>Access to this feature will be dependent on your Cloud Foundry provider migrating to the new runtime.</em></p>
+<h2 id="running-tasks-automatically">Running Tasks Automatically</h2>
+<p>Manually running one-off administrative tasks for Cloud Foundry applications is a <a href="http://martinfowler.com/bliki/SnowflakeServer.html">bad idea</a>.</p>
+<p>It affects your ability to do continuous delivery and encourages snowflake environments.</p>
+<p>Alternatively, defining <em>tasks as code</em> means they can run automatically during normal deployments.
+No more manual steps are required to deploy applications.</p>
+<p>There are <a href="http://flywaydb.org/">many</a> <a href="https://github.com/ruby/rake">different</a> <a href="https://github.com/seomoz/shovel">libraries</a>
+for <a href="https://phinx.org/">every</a> <a href="https://github.com/mattes/migrate">language</a> to help you programmatically define, manage and run tasks.</p>
+<p>With <em>tasks defined as code</em>, you need to configure your <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html">application manifest</a>
+to run these automatically during deployments.</p>
+<p>Cloud Foundry uses the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/manifest.html#start-commands"><em>command</em> parameter</a>,
+set in the manifest or through the
+command-line, to allow applications to specify a custom start command. We can
+use this parameter to execute the task library command during deployment.</p>
+<p>The Cloud Foundry documentation also details these approaches, with slightly different
+implementations <a href="https://docs.cloudfoundry.org/devguide/services/migrate-db.html">here</a>
+and specifically for Ruby developers <a href="https://docs.cloudfoundry.org/buildpacks/ruby/ruby-tips.html#rake">here</a>.</p>
+<h2 id="temporary-task-deploy">Temporary Task Deploy</h2>
+<p>For applications which only need occasional administrative tasks, it&rsquo;s often
+easier to push a temporary deploy with a custom start command. This deploy
+runs your tasks without then starting your application. Once the tasks have
+completed, redeploy your application normally, destroying the task instance.</p>
+<p>The following command will deploy a temporary instance for this purpose:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cf push -c <span style="color:#e6db74">&#39;YOUR_TASK_LIB_COMMAND &amp;&amp; sleep infinity&#39;</span> -i <span style="color:#ae81ff">1</span> --no-route 
+</code></pre></div><p>We&rsquo;re overriding the default start command, setting it to run the command for
+our task library, e.g. rake db:migrate.</p>
+<p>The <em>sleep infinity</em> command stops the application exiting once the task runner
+has finished. If this happens, the platform will assume that application has
+crashed and restart it.</p>
+<p>Also, the task runner will not be binding to a port so
+we need to use the <em>&ndash;no-route</em> argument to stop the platform assuming the
+deploy has timed out.</p>
+<p>Setting the deploy to a single instance stops the command being executed more than once.</p>
+<p>Checking the logs to verify the task runner has finished correctly, we can now
+redeploy our application. Using the <em>null</em> start command will force the platform to use the buildpack default
+rather than our previous option.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cf push -c <span style="color:#e6db74">&#39;null&#39;</span>
+</code></pre></div><h2 id="running-tasks-before-startup">Running Tasks Before Startup</h2>
+<p>If we&rsquo;re regularly running administrative tasks, we should incorporate the
+task execution into our normal application startup. Once the
+task command has finished successfully, we start the application as normal.</p>
+<p>Applications may have multiple instances running, we need to ensure
+the tasks are only executed by one instance.</p>
+<p>The following custom start command will execute tasks during startup,
+using the CF_INSTANCE_ID environment variable to enforce execution at most-once.</p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>With this approach, tasks will be automatically executed during regular deployments
+without any manual intervention.</p>
+<p><strong>Hurrah!</strong></p>
+<h2 id="managing-tasks-for-nodejs-applications">Managing tasks for Node.js applications</h2>
+<p>If you&rsquo;re running Node.js applications on Cloud Foundry, <a href="https://github.com/IBM-Bluemix/oneoff">oneoff</a> is a task library that helps
+you define <em>tasks as code</em> and integrates with the Cloud Foundry runtime. The module handles
+all the complexities with automating tasks during deployments across multi-instance applications.</p>
+<p>oneoff provides the following features&hellip;</p>
+<ul>
+<li>ensure tasks are completed before application startup</li>
+<li>coordinating app instances to ensure at-most once task execution</li>
+<li>automagically discovering tasks from the task directory</li>
+<li>dependency ordering, ensure task a completes before task b starts</li>
+<li>parallel task execution</li>
+<li>ignore completed tasks in future deployments</li>
+</ul>
+<p>Check it out to help make writing <em>tasks as code</em> for Node.js applications much easier!</p>
+<p>Full details on usage are available in the <a href="https://github.com/IBM-Bluemix/oneoff/blob/master/README.md">README</a>.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Running one-off tasks for application configuration is a normal part of any development project.</p>
+<p>Carrying out these tasks manually used to be the norm, but with the devops movement we now prefer
+automated configuration rather manual intervention. Relying on manual configuration steps to deploy applications restricts
+our ability to implement continuous delivery.</p>
+<p>Cloud Foundry is an opinionated platform, actively discouraging the creation of snowflake environments.</p>
+<p>Whilst it is still possible to manually run administrative tasks, either by connecting to bound services locally or using
+a remote console, it&rsquo;s preferable to describe our tasks as code and let the platform handle it.</p>
+<p>Using custom start commands, we can deploy applications which run tasks automatically during their normal startup procedure.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2015/07/geopix-live-photos/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">GeoPix Live Photos</span>
+    </a>
+    
+    
+    <a href="/2015/09/location-based-cloud-foundry-applications-using-nginx-and-docker/" class="navigation-next">
+      <span class="navigation-tittle">Location-Based Cloud Foundry Applications using Nginx and Docker</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

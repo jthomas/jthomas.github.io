@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Python Packages in OpenWhisk • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Python Packages in OpenWhisk"/>
+<meta name="twitter:description" content="Using extra Python libraries with serverless Python functions on OpenWhisk"/>
+
+<meta property="og:title" content="Python Packages in OpenWhisk" />
+<meta property="og:description" content="Using extra Python libraries with serverless Python functions on OpenWhisk" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2017/04/python-packages-in-openwhisk/" />
+<meta property="article:published_time" content="2017-04-27T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-04-27T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Python Packages in OpenWhisk</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Apr 27, 2017
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/python">python</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>OpenWhisk&rsquo;s Python runtime <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/reference.md#python-actions">includes popular third-party libraries</a> like requests, scrapy and simplejson. Developers don&rsquo;t have to manually install packages to use those libraries.</p>
+<p><em>Great, but what about using other libraries that aren&rsquo;t pre-installed?</em></p>
+<p>In a <a href="http://jamesthom.as/blog/2016/11/28/npm-modules-in-openwhisk/">previous blog post</a>, we showed how to deploy Node.js actions from zip files containing third-party modules. These modules are then made available in the Node.js runtime.</p>
+<p><strong><a href="https://github.com/openwhisk/openwhisk/pull/1940">Recent updates</a> to OpenWhisk allow us to use the same approach with the Python runtime!</strong></p>
+<h2 id="python-packages">Python Packages</h2>
+<p>Python packages can be installed using the <a href="https://pypi.python.org/pypi/pip">pip tool</a>. This can be used to install individual packages or a series of dependencies from an external file.</p>
+<pre><code>$ pip install blah
+$ pip install -r requirements.txt
+</code></pre><p>pip defaults to installing packages in a global location (<a href="http://stackoverflow.com/questions/31384639/what-is-pythons-site-packages-directory">site-packages</a>) which is shared between all users. This can cause issues when different projects require different versions of the same package.</p>
+<h3 id="virtualenv">virtualenv</h3>
+<p><a href="http://python-guide-pt-br.readthedocs.io/en/latest/dev/virtualenvs/">virtualenv</a> is a tool that solves this issue by creating virtual python environments for projects. The virtual environment includes a custom <code>site-packages</code> folder to install packages into.</p>
+<pre><code>$ virtualenv env
+Using base prefix '/Library/Frameworks/Python.framework/Versions/3.6'
+New python executable in /private/tmp/env/bin/python3.6
+Also creating executable in /private/tmp/env/bin/python
+Installing setuptools, pip, wheel...done.
+</code></pre><p>OpenWhisk <a href="https://github.com/openwhisk/openwhisk/pull/1940">recently added support</a> for using virtualenv in the Python runtime.</p>
+<h3 id="custom-packages-on-openwhisk">custom packages on openwhisk</h3>
+<p>OpenWhisk actions can be created from a zip file <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">containing source files and other resources</a>.</p>
+<p>If the archive includes a virtual Python environment folder, the platform runs the <code>./bin/activate_this.py</code> script before executing Python actions. This script modifies the module search path to include the local <code>site-packages</code> folder.</p>
+<p><em>This will only happen during &ldquo;cold&rdquo; activations.</em></p>
+<p><strong>This feature comes with the following restrictions.</strong></p>
+<ul>
+<li>Virtual Python environment must be in a folder called <code>virtualenv</code> under the top-level directory.</li>
+<li>Packages must be available for the Python runtime being used in OpenWhisk (2.7 or 3.6).</li>
+</ul>
+<p>Let&rsquo;s look at an example of building an OpenWhisk Python action which uses an external Python package.</p>
+<h3 id="python-package-example">Python Package Example</h3>
+<p>The <a href="https://pypi.python.org/pypi/pyjokes">pyjokes</a> package provides a library for generating (terrible) jokes for programmers. Let&rsquo;s turn this package into an API (Jokes-as-a-Service!) using the Python runtime on OpenWhisk.</p>
+<p>Start by creating a new directory for your project and set up the virtual Python environment.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ mkdir jokes; cd jokes
+$ virtualenv virtualenv
+Using base prefix <span style="color:#e6db74">&#39;/Library/Frameworks/Python.framework/Versions/3.6&#39;</span>
+New python executable in /tmp/jokes/virtualenv/bin/python3.6
+Also creating executable in /tmp/jokes/virtualenv/bin/python
+Installing setuptools, pip, wheel...done.
+$ source virtualenv/bin/activate
+<span style="color:#f92672">(</span>virtualenv<span style="color:#f92672">)</span> $ pip install pyjokes
+Collecting pyjokes
+  Using cached pyjokes-0.5.0-py2.py3-none-any.whl
+Installing collected packages: pyjokes
+Successfully installed pyjokes-0.5.0
+<span style="color:#f92672">(</span>virtualenv<span style="color:#f92672">)</span> $
+</code></pre></div><p>In the project directory, create a new file (<code>__main__.py</code>) and paste the following code.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#f92672">import</span> pyjokes
+
+<span style="color:#66d9ef">def</span> <span style="color:#a6e22e">joke</span>(params):
+    <span style="color:#66d9ef">return</span> {<span style="color:#e6db74">&#34;joke&#34;</span>: pyjokes<span style="color:#f92672">.</span>get_joke()}
+</code></pre></div><p>Check the script works with the Python intepreter.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">(</span>virtualenv<span style="color:#f92672">)</span> $ python -i .
+&gt;&gt;&gt; joke<span style="color:#f92672">({})</span>
+<span style="color:#f92672">{</span><span style="color:#e6db74">&#39;joke&#39;</span>: <span style="color:#e6db74">&#39;What do you call a programmer from Finland? Nerdic.&#39;</span><span style="color:#f92672">}</span>
+&gt;&gt;&gt;
+</code></pre></div><p>Add the <code>virtualenv</code> folder and Python script to a new zip file.</p>
+<pre><code>$ zip -r jokes.zip virtualenv __main__.py
+  adding: virtualenv/ (stored 0%)
+  adding: virtualenv/.Python (deflated 65%)
+  adding: virtualenv/bin/ (stored 0%)
+  adding: virtualenv/bin/activate (deflated 63%)
+  ...
+$ ls
+__main__.py  jokes.zip   virtualenv
+</code></pre><p>Create a new OpenWhisk action for the Python runtime using the <code>wsk</code> cli.</p>
+<pre><code>$ wsk action create jokes --kind python:3 --main joke jokes.zip
+ok: created action jokes
+</code></pre><p>Invoking our new action will return (bad) jokes on-demand using the third-party Python package.</p>
+<pre><code>$ wsk action invoke jokes --blocking --result
+{
+    &quot;joke&quot;: &quot;Software salesmen and used-car salesmen differ in that the latter know when they are lying.&quot;
+}
+</code></pre><h3 id="installing-packages-with-docker">Installing Packages With Docker</h3>
+<p>In the example above, the Python runtime used in development (v3.6) matched the OpenWhisk runtime environment. Packages installed using <code>virtualenv</code> must be for the same major and minor versions of the Python runtime used by OpenWhisk.</p>
+<p>OpenWhisk publishes the runtime environments as <a href="https://hub.docker.com/u/openwhisk/">Docker images on Docker Hub</a>.</p>
+<p>Running containers from <a href="https://hub.docker.com/r/openwhisk/python3action/">those runtime images</a> provides a way to download packages for the correct environment.</p>
+<pre><code>$ docker run --rm -v &quot;$PWD:/tmp&quot; openwhisk/python3action sh \
+  -c &quot;cd tmp; virtualenv virtualenv; source virtualenv/bin/activate; pip install pyjokes;&quot;
+Using base prefix '/usr/local'
+New python executable in /tmp/virtualenv/bin/python3.6
+Also creating executable in /tmp/virtualenv/bin/python
+Installing setuptools, pip, wheel...done.
+Collecting pyjokes
+  Downloading pyjokes-0.5.0-py2.py3-none-any.whl
+Installing collected packages: pyjokes
+Successfully installed pyjokes-0.5.0
+$
+</code></pre><p>This will leave you a <code>virtualenv</code> folder in the current directory with packages for the correct Python runtime.</p>
+<h3 id="speeding-up-deployments">Speeding Up Deployments</h3>
+<p>Peeking inside the <code>virtualenv</code> folder reveals a huge number of files to set up the virtual Python environment. If we just want to use a third-party package from the local <code>site-packages</code> folder, most of those files are unnecessary.</p>
+<p><em>Adding this entire folder to the zip archive will unnecessarily inflate the file size. This will slow down deployments and increase execution time for cold activations. OpenWhisk also has a maximum size for action source code of 48MB.</em></p>
+<p>Manually including individual <code>site-packages</code> folders, rather than the entire <code>virtualenv</code> directory, will ensure the archive file only contains packages being used. We must also add the Python script (<code>virtualenv/bin/activate_this.py</code>) executed by OpenWhisk to modify the module search path.</p>
+<pre><code>$ zip -r jokes_small.zip virtualenv/bin/activate_this.py virtualenv/lib/python3.6/site-packages/pyjokes __main__.py
+updating: virtualenv/bin/activate_this.py (deflated 54%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/ (stored 0%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/__init__.py (deflated 20%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_de.py (deflated 29%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_en.py (deflated 61%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/jokes_es.py (deflated 40%)
+updating: virtualenv/lib/python3.6/site-packages/pyjokes/pyjokes.py (deflated 68%)
+updating: __main__.py (deflated 18%)
+$ ls -lh
+total 40984
+-rw-r--r--  1 james  wheel    74B 21 Apr 11:01 __main__.py
+-rw-r--r--  1 james  wheel    20M 21 Apr 11:07 jokes.zip
+-rw-r--r--  1 james  wheel   9.3K 21 Apr 13:36 jokes_small.zip
+drwxr-xr-x  6 james  wheel   204B 21 Apr 11:25 virtualenv
+</code></pre><p>The archive file is now less than ten kilobytes! 🏃</p>
+<h4 id="with-the-serverless-framework">With The Serverless Framework</h4>
+<p><a href="https://serverless.com/">The Serverless Framework</a> is a popular open-source framework for building serverless applications. This framework handles the configuration, packaging and deployment of your serverless application.</p>
+<p>OpenWhisk is supported through a <a href="https://www.npmjs.com/package/serverless-openwhisk">provider plugin</a>. <a href="https://medium.com/openwhisk/serverless-framework-and-openwhisk-plugin-update-v0-6-1339cfdcd2d2">Recent versions</a> of the plugin added support for the Python runtime environment.</p>
+<p>Using the <a href="https://serverless.com/framework/docs/providers/openwhisk/guide/serverless.yml/">application configuration file</a> for the framework, users can add <code>include</code> and <code>exclude</code> parameters to control the contents of the archive file before deployment.</p>
+<p>Here&rsquo;s an example of the configuration needed to only include the necessary files for the application above.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">service</span>: pyjokes
+
+<span style="color:#66d9ef">provider</span>:
+  <span style="color:#66d9ef">name</span>: openwhisk
+  <span style="color:#66d9ef">runtime</span>: python:<span style="color:#ae81ff">3</span>
+
+<span style="color:#66d9ef">functions</span>:
+  <span style="color:#66d9ef">jokes</span>:
+    <span style="color:#66d9ef">handler</span>: handler.joke
+
+<span style="color:#66d9ef">plugins</span>:
+  - serverless-openwhisk
+
+<span style="color:#66d9ef">package</span>:
+  <span style="color:#66d9ef">exclude</span>:
+    - virtualenv/<span style="color:#75715e">**</span>
+    - <span style="color:#e6db74">&#39;!virtualenv/bin/activate_this.py&#39;</span>
+    - <span style="color:#e6db74">&#39;!virtualenv/lib/python3.6/site-packages/pyjokes/**&#39;</span>
+</code></pre></div><h3 id="conclusion">conclusion</h3>
+<p>Python has a huge community of third-party packages for everything from parsing JSON, making HTTP requests and even generating jokes. OpenWhisk already provided a number of the most popular packages within the Python runtime.</p>
+<p>Users can install additional packages locally using the <code>pip</code> and <code>virtualenv</code> tools. Bundling those files within the deployment archive means they are extracted into the OpenWhisk Python runtime environment.</p>
+<p>Recent changes to the Python runtime allows the platform to automatically add local package folders to the module search path.</p>
+<p><strong>This means Python functions running on OpenWhisk can now use any third-party library as if it was installed globally.</strong></p>
+<p>Hurrah 👌!</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2017/03/building-an-sms-bot-for-slack./" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Building an SMS Bot for Slack.</span>
+    </a>
+    
+    
+    <a href="/2017/06/serverless-swift-with-openwhisk/" class="navigation-next">
+      <span class="navigation-tittle">Serverless Swift with OpenWhisk</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

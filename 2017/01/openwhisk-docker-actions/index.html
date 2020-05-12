@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>OpenWhisk Docker Actions • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="OpenWhisk Docker Actions"/>
+<meta name="twitter:description" content="Using Docker to support non-standard runtimes as serverless functions on OpenWhisk."/>
+
+<meta property="og:title" content="OpenWhisk Docker Actions" />
+<meta property="og:description" content="Using Docker to support non-standard runtimes as serverless functions on OpenWhisk." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2017/01/openwhisk-docker-actions/" />
+<meta property="article:published_time" content="2017-01-16T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-01-16T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>OpenWhisk Docker Actions</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jan 16, 2017
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/docker">docker</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 4 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><a href="http://openwhisk.org/">OpenWhisk</a> recently announced the <a href="https://www.ibm.com/blogs/bluemix/2017/01/docker-bluemix-openwhisk/">following changes</a> to Docker-based Actions.</p>
+<p>Developers can now deploy runtime files to the Action environment prior to invocation.</p>
+<p>This makes it much easier to support (<em>almost</em>) any programming language in OpenWhisk. Awesome!</p>
+<p>Let&rsquo;s start by explaining how this new feature works&hellip;</p>
+<h2 id="docker-actions">Docker Actions</h2>
+<p>Docker Actions in OpenWhisk are <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/Dockerfile">built</a> from the following <a href="https://github.com/openwhisk/openwhisk/tree/master/core/actionProxy">repository</a> using the <a href="https://github.com/docker-library/python/blob/693a75332e8ae5ad3bfae6e8399c4d7cc3cb6181/2.7/alpine/Dockerfile">python:2.7.12-alpine</a> base image. This image is available on Docker Hub as <a href="https://hub.docker.com/r/openwhisk/dockerskeleton/"><code>openwhisk/dockerskeletion</code></a>.</p>
+<p>The image includes a Python application which <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py">implements the HTTP API</a> used to handle platform requests, e.g. <em>invoke the action with these parameters</em>.</p>
+<p>This service executes a file (<code>/action/exec</code>) for each invocation. Replacing this file allows us to control the runtime environment.</p>
+<p>Request parameters are passed, using a JSON string, as the first command-line argument. Response values are interpreted as JSON written to <code>stdout</code>.</p>
+<p>Developers can now include a zip file when creating Docker-based Actions. This archive will be extracted into the <code>/action</code> directory prior to invocations. If the archive contains a file named <code>exec</code> this will replace the exectuable file called by the invocation handler.</p>
+<h3 id="testing-it-out">Testing It Out</h3>
+<p>Using the <code>wsk</code> command-line, developers can create Actions using this Docker image.</p>
+<p>If the archive file is missing, the <code>/action/exec</code> path contains the the following <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/stub.sh">stub file</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ wsk action create skeleton --docker openwhisk/dockerskeleton
+ok: created action skeleton
+$ wsk action invoke skeleton --blocking --result
+<span style="color:#f92672">{</span> <span style="color:#e6db74">&#34;error&#34;</span>: <span style="color:#e6db74">&#34;This is a stub action. Replace it with custom logic.&#34;</span> <span style="color:#f92672">}</span>
+</code></pre></div><p>Let&rsquo;s update this stub file to return a custom greeting.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cat exec
+<span style="color:#75715e">#!/bin/bash</span>
+echo <span style="color:#e6db74">&#34;{ \&#34;hello\&#34;: \&#34;ran without a docker pull!\&#34; }&#34;</span>
+$ ./exec
+<span style="color:#f92672">{</span> <span style="color:#e6db74">&#34;hello&#34;</span>: <span style="color:#e6db74">&#34;ran without a docker pull!&#34;</span> <span style="color:#f92672">}</span>
+$ zip exec.zip exec
+  adding: exec <span style="color:#f92672">(</span>stored 0%<span style="color:#f92672">)</span>
+$ wsk action create custom_docker_action exec.zip --docker
+ok: created action custom_docker_action
+$ wsk action invoke custom_docker_action --blocking --result
+<span style="color:#f92672">{</span> <span style="color:#e6db74">&#34;hello&#34;</span>: <span style="color:#e6db74">&#34;ran without a docker pull!&#34;</span> <span style="color:#f92672">}</span>
+</code></pre></div><p>The archive file could include a static binary, or even a complete runtime, to replace the <code>exec</code> stub.</p>
+<p>All files in the archive file will be available under the <code>/action</code> directory.</p>
+<h2 id="running-locally">Running Locally</h2>
+<p>The <code>openwhisk/dockerskeleton</code> image exposes a Python-based HTTP server on port 8080.</p>
+<p>Pulling the <code>openwhisk/dockerskeleton</code> image from Docker Hub allows us to run it locally for development.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker pull openwhisk/dockerskeleton
+$ docker run -it -p 8080:8080 openwhisk/dockerskeleton
+</code></pre></div><p>The platform uses the following HTTP endpoints to initialise and invoke Actions.</p>
+<ul>
+<li><code>POST /init</code> -&gt; Set up Action source from JSON payload.</li>
+<li><code>POST /run</code> -&gt; Invoke Action</li>
+</ul>
+<h3 id="initialising-the-environment">Initialising The Environment</h3>
+<p>Before invoking Actions using this image, we need to deploy and unpack the archive file into the <code>/action</code> directory.</p>
+<p>Reviewing the <a href="https://github.com/openwhisk/openwhisk/blob/master/core/actionProxy/actionproxy.py#L47-L80">Python source code</a>, the platform triggers this by sending a HTTP POST with the following JSON to <code>/init</code> endpoint.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;value&#34;</span>: {
+    <span style="color:#f92672">&#34;binary&#34;</span>: <span style="color:#66d9ef">true</span>,
+    <span style="color:#f92672">&#34;code&#34;</span>: <span style="color:#e6db74">&#34;...&#34;</span>
+  }
+}
+</code></pre></div><p><code>code</code> contains the archive file as a base64 encoded string.</p>
+<p>Let&rsquo;s try this out using the action archive we created above.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ base64 exec.zip  | echo <span style="color:#e6db74">&#34;\&#34;</span><span style="color:#66d9ef">$(</span>cat<span style="color:#66d9ef">)</span><span style="color:#e6db74">\&#34;&#34;</span> | jq <span style="color:#e6db74">&#39;{value: {binary: true, code: .}}&#39;</span> &gt; init.json
+$ cat init.json
+<span style="color:#f92672">{</span>
+  <span style="color:#e6db74">&#34;value&#34;</span>: <span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;binary&#34;</span>: true,
+    <span style="color:#e6db74">&#34;code&#34;</span>: <span style="color:#e6db74">&#34;UEsDBAoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABwAZXhlY1VUCQADRcl8WFDJfFh1eAsAAQT1AQAABBQAAAAjIS9iaW4vYmFzaAplY2hvICJ7IFwiaGVsbG9cIjogXCJyYW4gd2l0aG91dCBhIGRvY2tlciBwdWxsIVwiIH0iClBLAQIeAwoAAAAAAOlqMEr1+JNAQQAAAEEAAAAEABgAAAAAAAEAAADtgQAAAABleGVjVVQFAANFyXxYdXgLAAEE9QEAAAQUAAAAUEsFBgAAAAABAAEASgAAAH8AAAAAAA==&#34;</span>
+  <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>Now we can issue the HTTP request to push this archive into the container.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ http post localhost:8080/init &lt; init.json
+HTTP/1.1 <span style="color:#ae81ff">200</span> OK
+Content-Length: <span style="color:#ae81ff">2</span>
+Content-Type: text/html; charset<span style="color:#f92672">=</span>utf-8
+Date: Mon, <span style="color:#ae81ff">16</span> Jan <span style="color:#ae81ff">2017</span> 14:11:04 GMT
+
+OK
+</code></pre></div><p>Accessing the container filesystem allows us to verify the archive has been extracted correctly.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker ps
+CONTAINER ID        IMAGE                         COMMAND                  CREATED             STATUS              PORTS                    NAMES
+b37a7dc1cab1        openwhisk/dockerskeleton      <span style="color:#e6db74">&#34;/bin/bash -c &#39;cd ...&#34;</span>   About an hour ago   Up About an hour    0.0.0.0:8080-&gt;8080/tcp   relaxed_davinci
+$ docker exec -it b37a7dc1cab1 /bin/sh
+/ <span style="color:#75715e"># cd /action</span>
+/action <span style="color:#75715e"># ls</span>
+exec
+/action <span style="color:#75715e"># cat exec</span>
+<span style="color:#75715e">#!/bin/bash</span>
+echo <span style="color:#e6db74">&#34;{ \&#34;hello\&#34;: \&#34;ran without a docker pull!\&#34; }&#34;</span>
+</code></pre></div><h3 id="invocation-requests">Invocation Requests</h3>
+<p>Action invocations are triggered by sending a HTTP POST to the <code>/run</code> endpoint.</p>
+<p>This endpoint expects the following JSON body.</p>
+<pre><code>{
+  &quot;value&quot;: {
+    &quot;foo&quot;: &quot;bar&quot;
+  }
+}
+</code></pre><p>The inner object parameters under the <code>value</code> property are passed, as a JSON string, to the executable as the first command-line argument.</p>
+<p>Sending this request to our container will trigger the shell script from our archive and return the JSON response.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ echo <span style="color:#e6db74">&#34;{}&#34;</span> | jq <span style="color:#e6db74">&#39;{value: .}&#39;</span> | http post localhost:8080/run
+HTTP/1.1 <span style="color:#ae81ff">200</span> OK
+Content-Length: <span style="color:#ae81ff">44</span>
+Content-Type: application/json
+Date: Mon, <span style="color:#ae81ff">16</span> Jan <span style="color:#ae81ff">2017</span> 14:17:15 GMT
+
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;hello&#34;</span>: <span style="color:#e6db74">&#34;ran without a docker pull!&#34;</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><h2 id="conclusion">Conclusion</h2>
+<p>Recent updates to Docker-based Actions in OpenWhisk make it much easier to customise the runtime environment.</p>
+<p>Being able to deploy arbitrary files into the runtime container, prior to invocation, simplifies the process of supporting new runtimes.</p>
+<p>Hopefully this blog post has shown you how to get started with this feature.</p>
+<p>Over the next few weeks, we&rsquo;re going to show you how to use this approach to run lots of new programming languages on the platform. Stay tuned for updates&hellip;</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2016/11/npm-modules-in-openwhisk/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">NPM Modules in OpenWhisk</span>
+    </a>
+    
+    
+    <a href="/2017/01/openwhisk-and-go/" class="navigation-next">
+      <span class="navigation-tittle">Openwhisk and Go</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

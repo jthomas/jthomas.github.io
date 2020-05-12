@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Serverless Logs With Elasticsearch • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Serverless Logs With Elasticsearch"/>
+<meta name="twitter:description" content="Managing Serverless application logs from OpenWhisk with Elasticsearch, Logstash and Kibana."/>
+
+<meta property="og:title" content="Serverless Logs With Elasticsearch" />
+<meta property="og:description" content="Managing Serverless application logs from OpenWhisk with Elasticsearch, Logstash and Kibana." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2016/10/serverless-logs-with-elasticsearch/" />
+<meta property="article:published_time" content="2016-10-31T00:00:00+00:00" />
+<meta property="article:modified_time" content="2016-10-31T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Serverless Logs With Elasticsearch</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Oct 31, 2016
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><a href="http://martinfowler.com/articles/serverless.html">Serverless platforms</a> can seem like magic.</p>
+<p>Taking your code and turning it into scalable microservices in the cloud without having to set up or manage any infrastructure.</p>
+<p><em>No provisioning VMs. No configuring Linux environments. No upgrading middleware packages.</em></p>
+<p>Which is wonderful until something goes wrong with your microservices in production…</p>
+<p><em>&ldquo;Let me just log into the machine.&quot;</em></p>
+<p><strong>Serverless platforms do not allow this.</strong></p>
+<p><em>No tracing system calls. No running top. No connecting a debugger to the process. You can&rsquo;t even grep through the logs!</em></p>
+<p>Many of the tools and techniques we use to diagnose bugs rely on having access to the environment.</p>
+<p><em>Fortunately, we do still have access to logging output generated by our serverless functions. Phew.</em></p>
+<p><strong>Storing, searching and analysing these logs is crucial to efficiently diagnosing and fixing issues on serverless platforms.</strong></p>
+<p>In this blog post, we&rsquo;re going to look at using a popular open-source solution to manage the logs being generated by our serverless functions. This solution is also known as &ldquo;<a href="https://www.oreilly.com/ideas/understanding-the-elk-stack">The ELK Stack</a>&quot;.</p>
+<p><strong><em>TLDR: There is now a Logstash input plugin for OpenWhisk. This will automatically index serverless application logs into Elasticsearch. See here for usage instructions: <a href="https://github.com/jthomas/logstash-input-openwhisk">https://github.com/jthomas/logstash-input-openwhisk</a></em></strong></p>
+<h2 id="elasticsearch-logstash-and-kibana">Elasticsearch, Logstash and Kibana</h2>
+<p>…are the three open-source projects that, when combined, are known as The ELK Stack. It provides a scalable search engine for indexed documents.</p>
+<p><a href="https://github.com/elastic/elasticsearch">Elasticsearch</a> <em>&ldquo;is a search engine based on Lucene. It provides a distributed, multitenant-capable full-text search engine with an HTTP web interface and schema-free JSON documents.&quot;</em></p>
+<p><a href="https://github.com/elastic/logstash">Logstash</a> is a tool for managing events and logs. You can use it to collect logs, parse them, and store them for later use (like, for searching). If you store them in Elasticsearch, you can view and analyze them with Kibana.</p>
+<p><a href="https://github.com/elastic/kibana">Kibana</a> is an open source analytics and visualization platform designed to work with Elasticsearch. You use Kibana to search, view, and interact with data stored in Elasticsearch.</p>
+<p>The ELK Stack is a perfect solution for managing logs from our serverless functions.</p>
+<p><strong>But how do we configure this solution to automatically index logs from our serverless platform?</strong></p>
+<p><em>Let&rsquo;s start by looking serverless platform we are using…</em></p>
+<h2 id="openwhisk">OpenWhisk</h2>
+<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a> is an open-source serverless platform developed by IBM. Developers <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">deploy functions</a> to execute in response to <a href="https://github.com/openwhisk/openwhisk/blob/master/docs/triggers_rules.md">external events</a>, e.g. database updates, messages on a queue or HTTP requests. The platform invokes these functions on-demand in milliseconds, rather than having services sat idle waiting for requests to arrive.</p>
+<p><em>Let&rsquo;s walk through an example.</em></p>
+<h3 id="serverless-functions">Serverless Functions</h3>
+<p>Here&rsquo;s a sample serverless function which returns a greeting to the user. The code logs the invocation parameters and response message.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">function</span> <span style="color:#a6e22e">main</span> (<span style="color:#a6e22e">params</span>) {
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;invoked with parameters:&#39;</span>, <span style="color:#a6e22e">params</span>)
+
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">user</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">user</span> <span style="color:#f92672">||</span> <span style="color:#e6db74">&#39;Donald Trump&#39;</span>
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> { <span style="color:#a6e22e">greeting</span><span style="color:#f92672">:</span> <span style="color:#e6db74">`Hello </span><span style="color:#e6db74">${</span><span style="color:#a6e22e">user</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span> }
+
+  <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;returns: &#39;</span>, <span style="color:#a6e22e">response</span>)
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">response</span>
+}
+</code></pre></div><p>Deploying this serverless function to OpenWhisk and invoking it generates an activation record.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ wsk action create logs logs.js
+ok: created action logs
+$ wsk action invoke logs -b -r -p user <span style="color:#e6db74">&#39;Bernie Sanders&#39;</span>
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;greeting&#34;</span>: <span style="color:#e6db74">&#34;Hello Bernie Sanders&#34;</span>
+<span style="color:#f92672">}</span>
+$ wsk activation list
+activations
+2adbbbcc0242457f80dc51944dcd2039                 logs
+...
+</code></pre></div><p>OpenWhisk activation records are available through the <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/whiskswagger.json">platform API</a>. Each record contains the stdout and stderr logs generated during the serverless function invocation.</p>
+<h3 id="serverless-logs">Serverless Logs</h3>
+<p>Retrieving the activation record for the previous invocation, we can see the output generated by the calls to <code>console.log</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ wsk activation get 2adbbbcc0242457f80dc51944dcd2039
+ok: got activation 2adbbbcc0242457f80dc51944dcd2039
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;namespace&#34;</span>: <span style="color:#e6db74">&#34;james.thomas@uk.ibm.com&#34;</span>,
+    <span style="color:#e6db74">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;logs&#34;</span>,
+    <span style="color:#e6db74">&#34;version&#34;</span>: <span style="color:#e6db74">&#34;0.0.3&#34;</span>,
+    <span style="color:#e6db74">&#34;publish&#34;</span>: false,
+    <span style="color:#e6db74">&#34;subject&#34;</span>: <span style="color:#e6db74">&#34;james.thomas@uk.ibm.com&#34;</span>,
+    <span style="color:#e6db74">&#34;activationId&#34;</span>: <span style="color:#e6db74">&#34;2adbbbcc0242457f80dc51944dcd2039&#34;</span>,
+    <span style="color:#e6db74">&#34;start&#34;</span>: 1477925373990,
+    <span style="color:#e6db74">&#34;end&#34;</span>: 1477925374063,
+    <span style="color:#e6db74">&#34;response&#34;</span>: <span style="color:#f92672">{</span>
+        <span style="color:#e6db74">&#34;status&#34;</span>: <span style="color:#e6db74">&#34;success&#34;</span>,
+        <span style="color:#e6db74">&#34;statusCode&#34;</span>: 0,
+        <span style="color:#e6db74">&#34;success&#34;</span>: true,
+        <span style="color:#e6db74">&#34;result&#34;</span>: <span style="color:#f92672">{</span>
+            <span style="color:#e6db74">&#34;greeting&#34;</span>: <span style="color:#e6db74">&#34;Hello Bernie Sanders&#34;</span>
+        <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>,
+    <span style="color:#e6db74">&#34;logs&#34;</span>: <span style="color:#f92672">[</span>
+        <span style="color:#e6db74">&#34;2016-10-31T14:49:34.059745626Z stdout: invoked with parameters: {}&#34;</span>,
+        <span style="color:#e6db74">&#34;2016-10-31T14:49:34.061228724Z stdout: returns:  { greeting: &#39;Hello Donald Trump&#39; }&#34;</span>
+    <span style="color:#f92672">]</span>,
+    ...
+<span style="color:#f92672">}</span>
+</code></pre></div><p>OpenWhisk stores these records indefinitely, making them available for <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/whiskswagger.json#!/Activations/getActivationById">retrieval by the activation id</a>.</p>
+<p>However, developers need more than being able to retrieve logs to be effective at diagnosing and resolving issues with serverless functions.</p>
+<p>Forwarding these logs to Elasticsearch will enable us to run full-text search across all logs generated, quickly retrieve all output for a particular serverless function, set up monitoring dashboards and much more…</p>
+<p>Using Logstash will allow us to ingest and transform OpenWhisk logs into Elasticsearch documents.</p>
+<h2 id="logstash-input-plugins">Logstash Input Plugins</h2>
+<p>Logstash supports a huge variety of event sources through the use of a <a href="https://www.elastic.co/guide/en/logstash/current/working-with-plugins.html">plugin mechanism</a>. These plugins handle retrieving the external events and converting them to Elasticsearch documents.</p>
+<p>Logstash has a huge repository of <a href="https://www.elastic.co/guide/en/logstash/current/input-plugins.html">official and community supported input plugins</a>. These plugins ingest everything from log files, syslog streams, databases, message queues, websockets and much more.</p>
+<h3 id="http-polling-input-plugin">HTTP Polling Input Plugin</h3>
+<p>Logstash already has an input plugin for <a href="https://github.com/logstash-plugins/logstash-input-http_poller">pulling events from a HTTP URL by polling</a>. Users provide the URL in the logstash configuration, along with the polling schedule. Logstash will automatically retrieve and ingest the JSON response as an event stream.</p>
+<pre><code>input {
+  http_poller {
+    urls =&gt; {
+      &quot;my_events&quot; =&gt; &quot;http://localhost:8000/events&quot;
+    }
+    # Poll site every 10s
+    interval =&gt; 10
+    request_timeout =&gt; 60
+    codec =&gt; &quot;json&quot;
+  }
+}
+</code></pre><p><em>Great, so we can configure this plugin to call OpenWhisk API for retrieving activation records and automatically ingest them into Elasticsearch?</em></p>
+<p>Unfortunately not&hellip;</p>
+<h3 id="polling-openwhisk-logs">Polling OpenWhisk Logs?</h3>
+<p>Each time the client calls the API to retrieve the activation records, we want to retrieve only those records that have occurred since the last poll. This ensures we are not ingesting the same records more than once.</p>
+<p>The <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/whiskswagger.json#!/Activations/getActivations">OpenWhisk API for retrieving activation records</a> supports a query parameter (<code>since</code>) which restricts results to those that occurred after the parameter value&rsquo;s timestamp.</p>
+<p>Using this parameter in the polling URL, updated to the value of the last polling time, will allow us to ensure we only retrieve new activation records.</p>
+<p><strong>Unfortunately, the HTTP input plugin does not support setting dynamic query string parameters.</strong></p>
+<p>This means we cannot use the existing plugin to efficiently ingest OpenWhisk logs into Elasticsearch.</p>
+<p><em>So we started work on a new plugin to support this behaviour…</em></p>
+<h3 id="openwhisk-input-plugin">OpenWhisk Input Plugin</h3>
+<p>This <a href="https://github.com/jthomas/logstash-input-openwhisk">input plugin</a> drains logs from OpenWhisk into Elasticsearch.</p>
+<p>Install the plugin with the following command.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ bin/logstash-plugin install logstash-input-openwhisk
+</code></pre></div><p>Once the plugin is installed, you need to configure Logstash with your platform endpoint and user credentials.</p>
+<p>This sample configuration will poll the OpenWhisk platform for new logs every fifteen minutes and index them into Elasticsearch. Each activation record will be a separate document.</p>
+<pre><code>input {
+  openwhisk {
+    # Mandatory Configuration Parameters
+    hostname =&gt; &quot;openwhisk.ng.bluemix.net&quot;
+    username =&gt; &quot;sample_user@email.com&quot;
+    password =&gt; &quot;some_password&quot;
+    # Supports &quot;cron&quot;, &quot;every&quot;, &quot;at&quot; and &quot;in&quot; schedules by rufus scheduler
+    schedule =&gt; { &quot;every&quot; =&gt; &quot;15m&quot;}
+  }
+}
+
+output {
+  elasticsearch {
+    hosts =&gt; [&quot;localhost:9200&quot;]
+  }
+}
+</code></pre><p>The plugin supports the same configuration values for the <code>schedule</code> parameter as the <a href="https://github.com/logstash-plugins/logstash-input-http_poller">HTTP input plugin</a>.</p>
+<p>More examples of using the plugin are available in the <a href="https://github.com/jthomas/logstash-input-openwhisk/tree/master/examples">examples</a> directory in the project repository.</p>
+<h2 id="demonstration">Demonstration</h2>
+<p>Here&rsquo;s a demonstration of the OpenWhisk input plugin being used in the ELK stack. As we invoke serverless functions in OpenWhisk, Kibana shows the activation records appearing in the dashboard. Logstash is polling the logs API and ingesting the records into Elasticsearch in real-time.</p>
+<!-- raw HTML omitted -->
+<h2 id="conclusion">Conclusion</h2>
+<p>Developers using serverless platforms have no access to the infrastructure environment running their code. Debugging production bugs relies on using logging output to diagnose and resolve issues.</p>
+<p>Elasticsearch, Logstash and Kibana has become the scalable open-source solution for log management and analysis.</p>
+<p>Using the <a href="https://github.com/jthomas/logstash-input-openwhisk">Logstash plugin for OpenWhisk</a>, serverless logs will be automatically indexed into Elasticsearch in real-time. Developers can use the Kibana frontend to easily diagnose and monitor issues in production.</p>
+<p>In the next post, we&rsquo;ll look at using Docker to set up Elasticsearch, Logstash and Kibana with our custom OpenWhisk plugin.</p>
+<p>Until then&hellip; 😎</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2016/10/openwhisk-workshop/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">OpenWhisk Workshop</span>
+    </a>
+    
+    
+    <a href="/2016/11/npm-modules-in-openwhisk/" class="navigation-next">
+      <span class="navigation-tittle">NPM Modules in OpenWhisk</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

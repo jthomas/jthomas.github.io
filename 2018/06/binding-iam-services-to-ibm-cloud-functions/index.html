@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Binding IAM Services To IBM Cloud Functions • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Binding IAM Services To IBM Cloud Functions"/>
+<meta name="twitter:description" content="How to bind IBM Cloud service IAM authentication credentials to serverless applications on IBM Cloud Functions"/>
+
+<meta property="og:title" content="Binding IAM Services To IBM Cloud Functions" />
+<meta property="og:description" content="How to bind IBM Cloud service IAM authentication credentials to serverless applications on IBM Cloud Functions" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2018/06/binding-iam-services-to-ibm-cloud-functions/" />
+<meta property="article:published_time" content="2018-06-05T00:00:00+00:00" />
+<meta property="article:modified_time" content="2018-06-05T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Binding IAM Services To IBM Cloud Functions</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jun 05, 2018
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/iam">iam</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/ibm-cloud-functions">ibm cloud functions</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 5 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Binding service credentials</a> to actions and packages is a much better approach to handling authentication credentials in <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>, than manually updating (and maintaining) <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> 🔐.</p>
+<p>IBM Cloud Functions supports binding credentials from <a href="https://console.bluemix.net/docs/iam/index.html#iamoverview">IAM-based</a> and <a href="https://console.bluemix.net/docs/iam/cfaccess.html#cfaccess">Cloud Foundry provisioned</a> services.</p>
+<p><a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">Documentation</a> and <a href="https://lornajane.net/posts/2018/bind-services-to-openwhisk-packages">blog posts</a> demonstrating service binding focuses on traditional platform services, created using the Cloud Foundry service broker. As IBM Cloud integrates IAM across the platform, more platform services will migrate to use the IAM service for managing authentication credentials.</p>
+<blockquote>
+<p>How do we bind credentials for IAM-based services to IBM Cloud Functions? 🤔</p>
+</blockquote>
+<p>Binding IAM-based services to IBM Cloud Functions works the same as traditional platform services, but has some differences in how to retrieve details needed for the <code>service bind</code> command.</p>
+<p><em>Let&rsquo;s look at how this works&hellip;</em></p>
+<h2 id="binding-iam-credentials">Binding IAM Credentials</h2>
+<h3 id="requirements">Requirements</h3>
+<p>Before binding an IAM-based service to IBM Cloud Functions, the following conditions must be met.</p>
+<ul>
+<li><a href="https://console.bluemix.net/docs/overview/ui.html">Service instance has been provisioned</a>.</li>
+<li><a href="https://console.bluemix.net/docs/resources/service_credentials.html#service_credentials">Service credentials have been created for that instance</a>.</li>
+</ul>
+<p>You will need the following information to bind a service credentials.</p>
+<ul>
+<li>Service name.</li>
+<li><em>(Optional)</em> Instance name.</li>
+<li><em>(Optional)</em> Credentials identifier.</li>
+</ul>
+<h3 id="using-the-cli">Using the CLI</h3>
+<p>Use the <code>ibmcloud wsk service bind</code> command to <a href="https://console.bluemix.net/docs/openwhisk/binding_services.html#binding_services">bind service credentials</a> to actions or packages.</p>
+<pre><code>bx wsk service bind &lt;SERVICE_NAME&gt; &lt;ACTION|PACKAGE&gt; --instance &lt;INSTANCE&gt; --keyname &lt;KEY&gt;
+</code></pre><p>This command supports the following (optional) flags: <code>--instance</code> and <code>--keyname</code>.</p>
+<p><em>If the instance and/or key names are not specified, the CLI uses the first instance and credentials returned from the system for the service identifier.</em></p>
+<h3 id="accessing-from-actions">Accessing from actions</h3>
+<p>Credentials are stored as <a href="https://console.bluemix.net/docs/openwhisk/parameters.html#default-params-action">default parameters</a> on the action or package.</p>
+<p>The command uses a special parameter name (<code>__bx_creds</code>) to store all credentials. Individual service credentials are indexed using the service name.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+   <span style="color:#f92672">&#34;__bx_creds&#34;</span>:{
+      <span style="color:#f92672">&#34;service-name&#34;</span>:{
+         <span style="color:#f92672">&#34;apikey&#34;</span>:<span style="color:#e6db74">&#34;&lt;API_KEY&gt;&#34;</span>,
+         <span style="color:#960050;background-color:#1e0010">...</span>
+      }
+   }
+}
+</code></pre></div><p>Default parameters are automatically merged into the request parameters during invocations.</p>
+<h2 id="common-questions">Common Questions</h2>
+<h4 id="how-can-i-tell-whether-a-service-instance-uses-iam-based-authentication">How can I tell whether a service instance uses IAM-based authentication?</h4>
+<p>Running the <code>ibmcloud resource service-instances</code> command will return the IAM-based service instances provisioned.</p>
+<p>Cloud Foundry provisioned services are available using a different command: <code>ibmcloud service list</code>.</p>
+<p><em>Both service types can be bound using the CLI but the commands to retrieve the necessary details are different.</em></p>
+<h4 id="how-can-i-find-the-service-name-for-an-iam-based-service-instance">How can I find the service name for an IAM-based service instance?</h4>
+<p>Run the <code> ibmcloud resource service-instance &lt;INSTANCE_NAME&gt;</code> command.</p>
+<p>Service names are shown as the <code>Service Name:</code> field value.</p>
+<h4 id="how-can-i-list-available-service-credentials-for-an-iam-based-service-instance">How can I list available service credentials for an IAM-based service instance?</h4>
+<p>Use the <code>ibmcloud resource service-keys --instance-name &lt;NAME&gt;  </code> command.</p>
+<p>Replace the <code>&lt;NAME&gt;</code> value with the service instance returned from the <code>ibmcloud service list</code> command.</p>
+<h4 id="how-can-i-manually-retrieve-iam-based-credentials-for-an-instance">How can I manually retrieve IAM-based credentials for an instance?</h4>
+<p>Use the <code>ibmcloud resource service-key &lt;CREDENTIALS_NAME&gt;</code> command.</p>
+<p>Replace the <code>&lt;CREDENTIALS_NAME&gt;</code> value with credential names returned from the <code>ibmcloud service service-keys</code> command.</p>
+<h4 id="how-can-i-create-new-service-credentials">How can I create new service credentials?</h4>
+<p>Credentials can be created through the service management page on <a href="https://console.bluemix.net">IBM Cloud</a>.</p>
+<p>You can also use the CLI to create credentials using the <code>ibmcloud resource service-key-create</code> command. This command needs a name for the credentials, IAM role and service instance identifier.</p>
+<h2 id="example---cloud-object-storage">Example - Cloud Object Storage</h2>
+<p><em>Having explained how to bind IAM-based services to IBM Cloud Functions, let&rsquo;s look at an example&hellip;.</em></p>
+<p><a href="https://console.bluemix.net/catalog/services/cloud-object-storage">Cloud Object Storage</a> is the service used to <a href="http://jamesthom.as/blog/2018/05/31/using-cloud-object-storage-from-ibm-cloud-functions-node-dot-js/">manage files for serverless applications</a> on IBM Cloud. This service supports the newer IAM-based authentication service.</p>
+<p><strong>Let&rsquo;s look at how to bind authentication credentials for an instance of this service to an action.</strong></p>
+<p>Using the CLI, we can check an instance of this service is available&hellip;</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ ibmcloud resource service-instances
+Retrieving service instances in resource group default..
+OK
+Name                     Location   State    Type               Tags
+my-cos-storage           global     active   service_instance
+</code></pre></div><p>In this example, we have a single instance of IBM Cloud Object Storage provisioned as <code>my-cos-storage</code>.</p>
+<p>Retrieving instance details will show us the service name to use in the service binding command.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ ibmcloud resource service-instance my-cos-storage
+Retrieving service instance my-cos-storage in resource group default..
+OK
+
+Name:                  my-cos-storage
+ID:                    crn:v1:bluemix:public:cloud-object-storage:global:&lt;GUID&gt;:
+GUID:                  &lt;GUID&gt;
+Location:              global
+Service Name:          cloud-object-storage
+Service Plan Name:     lite
+Resource Group Name:   default
+State:                 active
+Type:                  service_instance
+Tags:
+</code></pre></div><p>The IBM Cloud Object Storage service name is <code>cloud-object-storage</code>.</p>
+<p>Before we can bind service credentials, we need to verify service credentials are available for this instance.</p>
+<pre><code>$ ibmcloud resource service-keys --instance-name my-cos-storage
+Retrieving service keys in resource group default...
+OK
+Name                     State    Created At
+serverless-credentials   active   Tue Jun  5 09:11:06 UTC 2018
+</code></pre><p>This instance has a single service key available, named <code>serverless-credentials</code>.</p>
+<p>Retrieving the service key details shows us the API secret for this credential.</p>
+<pre><code>$ ibmcloud resource service-key serverless-credentials
+Retrieving service key serverless-credentials in resource group default...
+OK
+
+Name:          serverless-credentials
+ID:            &lt;ID&gt;
+Created At:    Tue Jun  5 09:11:06 UTC 2018
+State:         active
+Credentials:
+               ...
+               apikey:                   &lt;SECRET_API_KEY_VALUE&gt;
+</code></pre><p><em><code>apikey</code> denotes the secret API key used to authenticate calls to the service API.</em></p>
+<p>Having retrieved the service name, instance identifier and available credentials, we can use these values to bind credentials to an action.</p>
+<pre><code>$ bx wsk service bind cloud-object-storage params --instance my-cos-storage --keyname serverless-credentials
+Credentials 'serverless-credentials' from 'cloud-object-storage' service instance 'my-cos-storage' bound to 'params'.
+</code></pre><p>Retrieving action details shows default parameters bound to an action. These will now include the API key for the Cloud Object Storage service.</p>
+<pre><code>$ bx wsk action get params
+ok: got action params
+{
+  ...
+  &quot;parameters&quot;: [{
+    &quot;key&quot;: &quot;__bx_creds&quot;,
+    &quot;value&quot;: {
+      &quot;cloud-object-storage&quot;: {
+        &quot;apikey&quot;: &quot;&lt;API_KEY_SECRET&gt;&quot;,
+        ...
+      }
+    }
+  }]
+}
+</code></pre><p>Under the <code>__bx_creds</code> default parameter, there is a <code>cloud-object-storage</code> property with the API key amongst other service credential values.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2018/05/using-cloud-object-storage-from-ibm-cloud-functions-node.js/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Using Cloud Object Storage from IBM Cloud Functions (Node.js)</span>
+    </a>
+    
+    
+    <a href="/2018/07/debugging-node.js-openwhisk-actions/" class="navigation-next">
+      <span class="navigation-tittle">Debugging Node.js OpenWhisk Actions</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

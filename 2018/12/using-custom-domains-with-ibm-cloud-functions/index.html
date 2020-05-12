@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Using Custom Domains With IBM Cloud Functions • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Using Custom Domains With IBM Cloud Functions"/>
+<meta name="twitter:description" content="Setting up custom domains for HTTP APIs using serverless functions on IBM Cloud Functions. Let&#39;s Encrypt is used to generate SSL/TLS certificates for custom domain before registering with IBM Cloud."/>
+
+<meta property="og:title" content="Using Custom Domains With IBM Cloud Functions" />
+<meta property="og:description" content="Setting up custom domains for HTTP APIs using serverless functions on IBM Cloud Functions. Let&#39;s Encrypt is used to generate SSL/TLS certificates for custom domain before registering with IBM Cloud." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2018/12/using-custom-domains-with-ibm-cloud-functions/" />
+<meta property="article:published_time" content="2018-12-03T00:00:00+00:00" />
+<meta property="article:modified_time" content="2018-12-03T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Using Custom Domains With IBM Cloud Functions</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Dec 03, 2018
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/ibmcloud">ibmcloud</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/apis">apis</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>In this tutorial, I&rsquo;m going to show you how to use a <a href="https://console.bluemix.net/docs//api-management/manage_apis.html#custom_domains">custom domain for serverless functions</a> exposed as APIs on <a href="https://cloud.ibm.com/">IBM Cloud</a>. APIs endpoints use a random sub-domain on IBM Cloud by default. Importing your own domains means endpoints can be accessible through custom URLs.</p>
+<p><em>Registering a custom domain with IBM Cloud needs you to complete the following steps&hellip;</em></p>
+<ul>
+<li>Generate SSL/TLS certificates for your domain</li>
+<li>Register domain certificates with <a href="https://console.bluemix.net/catalog/services/certificate-manager">IBM Certificate Manager</a></li>
+<li>Bind a custom domain to <a href="https://cloud.ibm.com/openwhisk/apimanagement">Cloud Functions APIs</a> using the <a href="https://cloud.ibm.com/apis/">IBM Cloud APIs</a> console.</li>
+</ul>
+<p><strong>This tutorial assumes you already have actions on <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> exposed as HTTP APIs using the built-in <a href="https://console.bluemix.net/openwhisk/apimanagement">API service</a>.</strong> If you haven&rsquo;t done that yet, please see the documentation <a href="https://console.bluemix.net/docs/openwhisk/">here</a> before you proceed.</p>
+<p>The instructions below set up a sub-domain (<code>api.&lt;YOUR_DOMAIN&gt;</code>) to access serverless functions.</p>
+<h2 id="generating-ssltls-certificates-with-lets-encrypt">Generating SSL/TLS Certificates with Let&rsquo;s Encrypt</h2>
+<p>IBM Cloud APIs only supports HTTPS traffic with custom domains. Users needs to upload valid SSL/TLS certificates for those domains to IBM Cloud before being able to use them.</p>
+<p><a href="https://letsencrypt.org/">Let&rsquo;s Encrypt</a> is a Certificate Authority which provides free SSL/TLS certificates for domains. Let&rsquo;s Encrypt is trusted by all root identify providers. This means certificates generated by this provider will be trusted by all major operating systems, web browsers, and devices.</p>
+<p>Using this service, valid certificates can be generated to support custom domains on IBM Cloud.</p>
+<p>###domain validation</p>
+<p>Let&rsquo;s Encrypt needs to verify you <a href="https://letsencrypt.org/how-it-works/">control the domain</a> before generating certificates.</p>
+<p>During the verification process, the user makes an authentication token available through the domain. The service supports <a href="https://certbot.eff.org/docs/challenges.html">numerous methods</a> for exposing the authentication token, including HTTP endpoints, DNS TXT records or TLS SNI.</p>
+<p>There is an application (<a href="https://certbot.eff.org/">certbot</a>) which automates generating authentication tokens and certificates.</p>
+<p>I&rsquo;m going to use the <a href="https://en.wikipedia.org/wiki/TXT_record">DNS TXT record</a> as the challenge mechanism. Using this approach, certbot will provide a random authentication token I need to create as the TXT record value under the <code>_acme-challenge.&lt;YOUR_DOMAIN&gt;</code> sub-domain before validation.</p>
+<h3 id="using-certbot-with-dns-txt-validation">using certbot with dns txt validation</h3>
+<ul>
+<li>Install <a href="https://certbot.eff.org/">certbot</a> into your <a href="https://certbot.eff.org/docs/install.html">environment</a>, e.g. using <a href="https://brew.sh/">Homebrew</a>.</li>
+</ul>
+<pre><code>brew install certbot
+</code></pre><ul>
+<li>Run certbot in <a href="https://certbot.eff.org/docs/using.html#manual">manual mode</a> with the DNS <a href="https://certbot.eff.org/docs/challenges.html">challenge</a> method.</li>
+</ul>
+<pre><code>certbot certonly --manual --preferred-challenges=dns -d *.&lt;YOUR_DOMAIN&gt;
+</code></pre><p>I&rsquo;m generating a wildcard certificate for any sub-domains under <code>&lt;YOUR_DOMAIN&gt;</code>. This allows me to use the same certificate with different sub-domains on IBM Cloud, rather than generating a certificate per sub-domain.</p>
+<p>During the validation process, <code>certbot</code> should display the following message with the challenge token.</p>
+<pre><code>Please deploy a DNS TXT record under the name
+_acme-challenge.&lt;YOUR_DOMAIN&gt; with the following value:
+
+&lt;CHALLENGE_TOKEN&gt;
+
+Before continuing, verify the record is deployed.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Press Enter to Continue
+</code></pre><h3 id="setting-challenge-token">setting challenge token</h3>
+<ul>
+<li>
+<p>Take the challenge token from <code>certbot</code> and create a new TXT record with this value for the <code>_acme-challenge.&lt;YOUR_DOMAIN&gt;</code> sub-domain.</p>
+</li>
+<li>
+<p>Use the <code>dig</code> command to verify the TXT record is available.</p>
+</li>
+</ul>
+<pre><code>dig -t txt _acme-challenge.&lt;YOUR_DOMAIN&gt;
+</code></pre><p>The challenge token should be available in the DNS response shown by <code>dig</code>. 👍</p>
+<pre><code>;; ANSWER SECTION:
+_acme-challenge.&lt;YOUR_DOMAIN&gt;. 3599 IN	TXT	&quot;&lt;CHALLENGE_TOKEN&gt;&quot;
+</code></pre><ul>
+<li>Press <!-- raw HTML omitted -->Enter<!-- raw HTML omitted --> in the terminal session running <code>certbot</code> when the challenge token is available.</li>
+</ul>
+<h3 id="retrieving-domain-certificates">retrieving domain certificates</h3>
+<p><code>certbot</code> will now retrieve the TXT record for the sub-domain and verify it matches the challenge token. If the domain has been validated, <code>certbot</code> will show the directory containing the newly created certificates.</p>
+<pre><code>IMPORTANT NOTES:
+ - Congratulations! Your certificate and chain have been saved at:
+   /etc/letsencrypt/live/&lt;YOUR_DOMAIN&gt;/fullchain.pem
+   Your key file has been saved at:
+   /etc/letsencrypt/live/&lt;YOUR_DOMAIN&gt;/privkey.pem
+   Your cert will expire on 2019-03-03.
+...
+</code></pre><p><code>certbot</code>  creates the following files.</p>
+<ul>
+<li><code>cert.pem</code> - public domain certificate</li>
+<li><code>privkey.pem</code> - private key for domain certificate</li>
+<li><code>chain.pem</code> - intermediate domain certificates</li>
+<li><code>fullchain.pem</code> - public and intermediate domain certificates in a single file.</li>
+</ul>
+<p><em>Registering the domain with IBM Cloud will require the public, private and intermediate certificate files.</em></p>
+<h2 id="registering-custom-domain-with-ibm-cloud">Registering Custom Domain with IBM Cloud</h2>
+<p>Certificates for custom domains in IBM Cloud are managed by the <a href="https://console.bluemix.net/catalog/services/certificate-manager">Certificate Manager</a> service.</p>
+<ul>
+<li>Create a <a href="https://cloud.ibm.com/catalog/services/certificate-manager">new instance</a> of the service from the <a href="https://cloud.ibm.com/catalog/">IBM Cloud Catalog</a>.</li>
+<li>From the service homepage, click the &ldquo;<em>Import Certificate</em>&rdquo; button.</li>
+<li>Fill in the following fields in the import form. Use the generated certificate files in the upload fields.
+<ul>
+<li>Name</li>
+<li>Certificate File (<code>cert.pem</code>)</li>
+<li>Private key file (<code>privkey.pem</code>)</li>
+<li>Intermediate certificate file (<code>chain.pem</code>)</li>
+</ul>
+</li>
+</ul>
+<p>After importing the certificate, check the certificate properties match the expected values</p>
+<p><img src="/images/custom-domains/import-certs.gif" alt=""></p>
+<h2 id="binding-domain-to-ibm-cloud-functions-apis">Binding Domain to IBM Cloud Functions APIs</h2>
+<p><a href="https://console.bluemix.net/docs/api-management/manage_apis.html#custom_domains_bind">Custom domains</a> for APIs on IBM Cloud are managed through the IBM Cloud APIs <a href="https://console.bluemix.net/apis/">console</a>.</p>
+<ul>
+<li>Open the &ldquo;<a href="https://console.bluemix.net/apis/domains">Custom Domains</a>&rdquo; section on the <a href="https://console.bluemix.net/apis/">IBM Cloud APIs</a> console.</li>
+<li>Check the &ldquo;Region&rdquo; selector matches the region chosen for your actions and APIs.</li>
+<li>Click the <code>···</code> icon on the row where &ldquo;Organisation&rdquo; and &ldquo;Space&rdquo; values match your APIs.</li>
+<li>Click &ldquo;<em>Change Settings</em>&rdquo; from the pop-up menu.</li>
+</ul>
+<p><img src="/images/custom-domains/open-apis-settings.gif" alt=""></p>
+<h3 id="domain-validation">domain validation</h3>
+<p>IBM Cloud now <a href="https://console.bluemix.net/docs//api-management/manage_apis.html#custom_domains">needs to verify</a> you control the custom domain being used.</p>
+<p><em>Another DNS TXT record needs to be created <strong>before</strong> attempting to bind the domain.</em></p>
+<ul>
+<li>From the &ldquo;<em>Custom Domain Settings</em>&rdquo; menu, make a note of the &ldquo;<em>Default domain / alias</em>&rdquo; value. This should be in the format: <code>&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.appdomain.cloud</code>.</li>
+<li>Create a new TXT record for the custom sub-domain (<code>api.&lt;YOUR_DOMAIN&gt;</code>) with the default domain alias as the record value (<code>&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.appdomain.cloud</code>).</li>
+<li>Use the <code>dig</code> command to check the sub-domain TXT record exists and contains the correct value.</li>
+</ul>
+<pre><code>dig -t txt api.&lt;YOUR_DOMAIN&gt;
+</code></pre><p>The default domain alias value should be available in the DNS response shown by <code>dig</code>. 👍</p>
+<pre><code>;; ANSWER SECTION:
+api.&lt;YOUR_DOMAIN&gt;. 3599 IN	TXT	&quot;&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.appdomain.cloud&quot;
+</code></pre><p>Having created the TXT record, fill in the <em>Custom Domain Settings</em> form.</p>
+<h3 id="custom-domain-settings">custom domain settings</h3>
+<ul>
+<li>Select the &ldquo;<em>Assign custom domain</em>&rdquo; checkbox in the &ldquo;<em>Custom domain settings</em>&rdquo; form.</li>
+<li>Fill in the following form fields.
+<ul>
+<li><em>Domain Name:</em> use the custom sub-domain to bind  (<code>api.&lt;YOUR-DOMAIN&gt;</code>).</li>
+<li><em>Certificate Manager service</em>: select the certificate manger instance.</li>
+<li><em>Certificate:</em> select the domain certificate from the drop-down menu.</li>
+</ul>
+</li>
+<li>Click the &ldquo;<em>Save</em>&rdquo; button.</li>
+</ul>
+<p>Once the domain has been validated, the form will redirect to the custom domains overview. The &ldquo;Custom Domain&rdquo; field will now show the sub-domain bound to the correct default domain alias.</p>
+<p><img src="/images/custom-domains/bind-custom-domain.gif" alt=""></p>
+<h3 id="add-cname-record">add CNAME record</h3>
+<ul>
+<li>Remove the existing TXT record for the custom sub-domain  (<code>api.&lt;YOUR-DOMAIN&gt;</code>).</li>
+<li>Add a new CNAME record mapping the custom sub-domain (<code>api.&lt;YOUR-DOMAIN&gt;</code>) to the &ldquo;<em>Default domain  / alias</em>&rdquo; on IBM Cloud (<code>&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.appdomain.cloud</code>).</li>
+<li>Use the <code>dig</code> command to check the CNAME record is correct.</li>
+</ul>
+<pre><code>dig -t CNAME api.&lt;YOUR_DOMAIN&gt;
+</code></pre><p>The default domain alias value should be available in the DNS response shown by <code>dig</code>. 👍</p>
+<pre><code>;; ANSWER SECTION:
+api.&lt;YOUR_DOMAIN&gt;.	3599	IN	CNAME	&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.appdomain.cloud.
+</code></pre><h2 id="testing-it-out">Testing It Out</h2>
+<p>Functions should now be accessible through both the default domain alias and the new custom domain. 👏</p>
+<ul>
+<li>Invoke the default domain alias API URL for the function.</li>
+</ul>
+<pre><code>curl https://&lt;APP_ID&gt;.&lt;REGION&gt;.apiconnect.appdomain.cloud/&lt;BASE_PATH&gt;/&lt;SUB_PATH&gt; 
+</code></pre><p><em>Both the <code>BASE_PATH</code> and <code>SUB_PATH</code> values come from the API definitions configured by the user.</em></p>
+<ul>
+<li>Invoke the custom domain API URL for the function.</li>
+</ul>
+<pre><code>curl https://api.&lt;YOUR_DOMAIN&gt;/&lt;BASE_PATH&gt;/&lt;SUB_PATH&gt; 
+</code></pre><p><em>Make sure you use HTTPS protocol in the URL. IBM Cloud does not support HTTP traffic with custom domains.</em></p>
+<p>Both responses for these URLs should the same! Hurrah. 😎</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2018/10/finding-photos-on-twitter-using-face-recognition-with-tensorflow.js/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Finding photos on Twitter using face recognition with TensorFlow.js</span>
+    </a>
+    
+    
+    <a href="/2019/01/highly-available-serverless-apps-with-cloudants-cross-region-replication/" class="navigation-next">
+      <span class="navigation-tittle">Highly Available Serverless Apps With Cloudant&#39;s Cross-Region Replication</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

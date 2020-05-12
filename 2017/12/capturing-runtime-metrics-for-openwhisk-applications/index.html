@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Capturing Runtime Metrics For OpenWhisk Applications • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Capturing Runtime Metrics For OpenWhisk Applications"/>
+<meta name="twitter:description" content="Capturing runtime metrics for serverless applications with IBM Cloud Functions (OpenWhisk) using IBM Cloud Monitoring service."/>
+
+<meta property="og:title" content="Capturing Runtime Metrics For OpenWhisk Applications" />
+<meta property="og:description" content="Capturing runtime metrics for serverless applications with IBM Cloud Functions (OpenWhisk) using IBM Cloud Monitoring service." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2017/12/capturing-runtime-metrics-for-openwhisk-applications/" />
+<meta property="article:published_time" content="2017-12-18T00:00:00+00:00" />
+<meta property="article:modified_time" content="2017-12-18T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Capturing Runtime Metrics For OpenWhisk Applications</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Dec 18, 2017
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/metrics">metrics</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 8 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><em>This blog post is part one of a series on &ldquo;Monitoring Serverless Applications Metrics&rdquo;. See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+<p>Serverless platforms pose a unique challenge for collecting application metrics. Runtime environments are <a href="https://martinfowler.com/articles/serverless.html">ephemeral</a>, existing only to process requests.</p>
+<p>Using a background process to capture and export metrics to an external service is impossible. With such a restricted runtime environment, we have to look at other options… 🤔</p>
+<h2 id="exporting-serverless-runtime-metrics">exporting serverless runtime metrics</h2>
+<h3 id="console-logs-with-alarm-trigger">console logs with alarm trigger</h3>
+<p>Apache OpenWhisk captures console logs written to stdout or stderr by actions. Logs are available in <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#activation-record">activation records</a> through the <a href="http://petstore.swagger.io/?url=https://raw.githubusercontent.com/openwhisk/openwhisk/master/core/controller/src/main/resources/apiv1swagger.json">platform API</a>.</p>
+<p>Runtime metrics written to the console will be saved in the activation records.</p>
+<p>An additional action, triggered from the <a href="https://github.com/apache/incubator-openwhisk-package-alarms">alarm package</a>, can be scheduled to collect these values from the logs and forward to the metrics service.</p>
+<p><em>This approach is simple and does not interfere with request processing. However, it does add a delay to the metric values being available in the collection service. This delay is dependent on the schedule chosen for the alarm trigger feed.</em></p>
+<h3 id="send-before-returning">send before returning</h3>
+<p>Another option is to instrument the serverless functions to automatically collect and push metrics to the metric service before returning from the function.</p>
+<p>The function will have to wait for the external metrics service to respond before returning.</p>
+<p><em>This method pushes metric values into the collection service in real-time. There is no waiting for the background collection action to run. The disadvantage of this approach is that it adds a delay to each request. This delay is dependent on the response time from the collection service.</em></p>
+<h2 id="capturing-runtime-metrics">capturing runtime metrics</h2>
+<p>Metric values will have to be captured using a runtime library, due to the restrictions on running background processes.</p>
+<p>The library should automatically capture registered metrics during each invocation. Values will be forwarded to the collection service using the configured forwarding method.</p>
+<h3 id="openwhisk-metrics">openwhisk-metrics</h3>
+<p>There is a Node.js library to ease the process of capturing runtime metrics for OpenWhisk actions.</p>
+<p><a href="https://github.com/jthomas/openwhisk-metrics">https://github.com/jthomas/openwhisk-metrics</a></p>
+<p>Node.js actions are wrapped with a proxy to automate recording metrics during invocations.</p>
+<p>Metric values for <code>cpu</code>, <code>memory</code>, <code>time</code>, <code>error</code> and <code>coldstart</code> are collected by default. It supports adding custom metric collectors.</p>
+<h4 id="usage">usage</h4>
+<p>Wrap action handlers with the metrics library.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">metrics</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;openwhisk-metrics&#39;</span>)
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">params</span> =&gt; {
+  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">message</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Hello World&#34;</span> }
+}
+
+<span style="color:#a6e22e">module</span>.<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">metrics</span>(<span style="color:#a6e22e">main</span>) 
+</code></pre></div><p>Metrics values are logged to stdout for each invocation of the serverless function.</p>
+<pre><code>METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.rss 53018624 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.heapTotal 34463744 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.heapUsed 16955224 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.memory.external 987361 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.error 0 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.coldstart 0 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.cpu.user 177 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.cpu.system 2 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.start 1511605588388 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.end 1511605588468 1512489781
+METRIC &lt;workspace&gt;.&lt;action_name&gt;.&lt;activation&gt;.time.duration 80 1512489781
+</code></pre><p>Once you are collecting metrics, you need a monitoring service to forward them to…</p>
+<h2 id="monitoring-service">monitoring service</h2>
+<p>We&rsquo;re going to look at collecting and visualising metrics using the <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring Service</a>.</p>
+<blockquote>
+<p>Use the IBM® Cloud Monitoring service to expand your collection and retention capabilities when working with metrics, and to be able to define rules and alerts that notify you of conditions that require attention.</p>
+</blockquote>
+<p><a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">IBM Cloud Monitoring service</a> comes with a metric collection service, Grafana-based visualisation dashboard and an alerting system.</p>
+<p>Let&rsquo;s demonstrate how to use the approaches listed above for exporting metrics to the IBM Cloud Monitoring service.</p>
+<p>There&rsquo;s an <a href="https://github.com/jthomas/cloud-functions-metrics-service">additional Node.js library</a> to integrate the <a href="https://github.com/jthomas/openwhisk-metrics">OpenWhisk Metrics</a> library with the IBM Cloud Monitoring Service. This can forward metrics in real-time or batches (using a schedule action from a timer).</p>
+<h3 id="provisioning">provisioning</h3>
+<p>An instance of the service must be provisioned before being used.</p>
+<p><em>The service is available in <a href="https://console.bluemix.net/docs/services/cloud-monitoring/monitoring_ov.html#monitoring_ov">multiple regions</a>. Choose the same region as the IBM Cloud Functions instance for best performance.</em></p>
+<p>Instances can be provisioned through the <a href="https://console.bluemix.net">IBM Cloud dashboard</a> or the <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">IBM Cloud CLI</a> tool.</p>
+<pre><code> $ bx cf create-service Monitoring lite my_monitoring_svc
+</code></pre><p>For more details on provisioning instances of this service, please see the documentation: <a href="https://console.bluemix.net/docs/services/cloud-monitoring/how-to/provision.html#provision">https://console.bluemix.net/docs/services/cloud-monitoring/how-to/provision.html#provision</a></p>
+<h3 id="authentication">authentication</h3>
+<p>IBM Cloud Monitoring supports the following authentication methods: <em>API Key, UAA Token or IAM Token.</em></p>
+<p>An API key will be used to provide authentication credentials in the examples below.</p>
+<p>Keys can be created through the <a href="https://console.bluemix.net">IBM Cloud dashboard</a> or the <a href="https://console.bluemix.net/docs/cli/reference/bluemix_cli/get_started.html#getting-started">IBM Cloud CLI</a> tool.</p>
+<pre><code>$ bx iam api-key-create metrics-key -d &quot;API Key For Serverless Metrics&quot;
+</code></pre><p><strong>Note:</strong> <em>The API key is only shown at the time of creation. If the API key is lost, you must create a new API key.</em></p>
+<p>For more details on creating API keys, please see the documentation here: <a href="https://console.bluemix.net/docs/services/cloud-monitoring/security/auth_api_key.html#auth_api_key">https://console.bluemix.net/docs/services/cloud-monitoring/security/auth_api_key.html#auth_api_key</a></p>
+<h3 id="space-domain">space domain</h3>
+<p>The GUID of the <a href="https://console.bluemix.net/docs/admin/orgs_spaces.html#orgsspacesusers">account space</a> is also required to use the metrics service.</p>
+<p>Retrieve this value using the IBM Cloud CLI tool. Replace <code>SpaceName</code> with the name of the space.</p>
+<pre><code>bx iam space SpaceName --guid
+</code></pre><p>The GUID for the space is returned.</p>
+<pre><code>$ bx iam space dev --guid
+667fadfc-jhtg-1234-9f0e-cf4123451095
+</code></pre><p><strong>Note:</strong> <em>Space GUIDs must be prefixed with <code>s-</code> when being using with the monitoring service.</em></p>
+<pre><code>&quot;667fadfc-jhtg-1234-9f0e-cf4123451095&quot; =&gt; &quot;s-667fadfc-jhtg-1234-9f0e-cf4123451095&quot;
+</code></pre><h2 id="example-real-time-forwarding">example (real-time forwarding)</h2>
+<p>Let&rsquo;s start with an example of using real-time forwarding of metrics values. Metric values will be automatically collected by the runtime library. Before each invocation finishes, the library will send the values to the external collection service.</p>
+<p><em>This example assumes you already have the CLI tool for IBM Cloud Functions installed and configured. If you need to do this, please follow the instructions <a href="https://console.bluemix.net/openwhisk/learn/cli">here</a>.</em></p>
+<h3 id="create-new-directory">create new directory</h3>
+<pre><code>$ mkdir hello-world
+$ cd hello-world
+</code></pre><h3 id="initialise-npm-package">initialise npm package</h3>
+<pre><code>$ npm init -y
+</code></pre><h3 id="install-libraries">install libraries</h3>
+<pre><code>$ npm install openwhisk-metrics cloud-functions-metrics-service
+</code></pre><h3 id="update-action-handler-source">update action handler source</h3>
+<p>Create a file called <code>index.js</code> with following code.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">metrics</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;openwhisk-metrics&#39;</span>)
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">service</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;cloud-functions-metrics-service&#39;</span>)
+
+<span style="color:#a6e22e">metrics</span>.<span style="color:#a6e22e">service</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">service</span>.<span style="color:#a6e22e">client</span>({  
+  <span style="color:#a6e22e">host</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;metrics.&lt;???&gt;.bluemix.net&#39;</span>,
+  <span style="color:#a6e22e">scope</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;s-&lt;???&gt;&#39;</span>,
+  <span style="color:#a6e22e">api_key</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;&lt;???&gt;&#39;</span>
+})
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">params</span> =&gt; {
+	<span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">message</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Hello World&#34;</span> }
+}
+
+<span style="color:#a6e22e">module</span>.<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">metrics</span>(<span style="color:#a6e22e">main</span>)
+</code></pre></div><p>Replace the <code>host</code>, <code>scope</code> and <code>api_key</code> parameters custom values. Host names for the regional monitoring service endpoints are listed <a href="https://console.bluemix.net/docs/services/cloud-monitoring/send_retrieve_metrics_ov.html#endpoints">here</a>.</p>
+<p><em>Space GUIDs must be prefixed with <code>s-</code> to identify a space in the <code>scope</code> parameter.</em></p>
+<h3 id="create-new-action">create new action</h3>
+<pre><code>$ zip -r action.zip index.js package.json node_modules
+$ wsk action create hello-world --kind nodejs:8 action.zip
+</code></pre><h3 id="invoke-action">invoke action</h3>
+<pre><code>$ wsk action invoke hello-world -b
+ok: invoked /_/hello-world with id 74add543b3b94bbbadd543b3b9dbbb17
+</code></pre><h3 id="use-api-to-list-metrics">use api to list metrics</h3>
+<p>Use <code>curl</code> to manually list the ingested metric labels for IBM Cloud Functions.</p>
+<p><strong>Replace the <code>&lt;???&gt;</code> values in the command with configuration values from above.</strong></p>
+<pre><code>$ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.public.cloud-functions.*.*.*.*' --header 'x-auth-scope-id: s-&lt;???&gt;' --header 'X-Auth-User-Token: apikey &lt;???&gt;'
+[{
+  &quot;leaf&quot;: 0,
+  &quot;context&quot;: {},
+  &quot;text&quot;: &quot;72df4bc809c04fae9f4bc809c01fae77&quot;,
+  &quot;expandable&quot;: 1,
+  &quot;id&quot;: &quot;ibm.public.cloud-functions.*.*.*.72df4bc809c04fae9f4bc809c01fae77&quot;,
+  &quot;allowChildren&quot;: 1
+}]
+</code></pre><p>Each activation identifier should be listed as a label value in the metrics service.</p>
+<h2 id="example-batch-forwarding">example (batch forwarding)</h2>
+<p>If we don&rsquo;t want to add a (short) delay to each invocation, metric values can be forwarded asynchronously. An explicit action will be created to forward metric values from invocation logs. This action will be triggered on a periodic schedule using the alarm trigger feed.</p>
+<p><em>This example assumes you already have the CLI tool for IBM Cloud Functions installed and configured. If you need to do this, please follow the instructions <a href="https://console.bluemix.net/openwhisk/learn/cli">here</a>.</em></p>
+<h3 id="create-sample-action">create sample action</h3>
+<pre><code>$ mkdir hello-world
+$ cd hello-world
+$ npm init -y
+$ npm install openwhisk-metrics
+</code></pre><p>Create a file called <code>index.js</code> with the following code.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">metrics</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;openwhisk-metrics&#39;</span>)
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">params</span> =&gt; {
+  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">message</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;Hello World&#34;</span> }
+}
+
+<span style="color:#a6e22e">module</span>.<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">metrics</span>(<span style="color:#a6e22e">main</span>) 
+</code></pre></div><h3 id="deploy-and-test-sample-action">deploy and test sample action</h3>
+<p>Package and deploy <code>hello-world</code> action.</p>
+<pre><code>$ zip -r action.zip index.js package.json node_modules
+$ wsk action create hello-world --kind nodejs:8 action.zip
+</code></pre><p>Metric values are written to the console for each invocation.</p>
+<pre><code>$ wsk action invoke hello-world -b
+ok: invoked /_/hello-world with id 28da39d219df436a9a39d219df036a30
+$ wsk activation logs 28da39d219df436a9a39d219df036a30
+2017-12-18T14:38:50.751615113Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.cpu.user 0 1513607930
+2017-12-18T14:38:50.751672372Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.cpu.system 0 1513607930
+2017-12-18T14:38:50.751685034Z stdout: METRIC user@host_dev.hello-world.28da39d219df436a9a39d219df036a30.time.start 1513607930749 1513607930
+...
+</code></pre><h3 id="create-metric-forwarder-action">create metric-forwarder action</h3>
+<p>Clone the project repository and install NPM dependencies.</p>
+<pre><code>$ git clone https://github.com/jthomas/cloud-functions-metrics-service
+$ cd cloud-functions-metrics-service
+$ npm install
+</code></pre><p>Update action configuration file (<code>config.json</code>) with the following parameter values.</p>
+<pre><code>{
+  &quot;actions&quot;: [&quot;hello-world&quot;],
+  &quot;service&quot;: {
+    &quot;host&quot;: &quot;metrics.&lt;???&gt;.bluemix.net&quot;,
+    &quot;scope&quot;: &quot;s-&lt;???&gt;&quot;,
+    &quot;api_key&quot;: &quot;&lt;???&gt;&quot;          
+  }
+}
+</code></pre><p><strong>Replace the <code>&lt;???&gt;</code> fields in the configuration file from values from above.</strong></p>
+<p>Package <code>metric-forwarder</code> action.</p>
+<pre><code>$ zip -r action.zip index.js package.json lib node_modules
+</code></pre><h3 id="deploy-metric-forwarder-action">deploy metric-forwarder action</h3>
+<p>Create new <code>metric-forwarder</code> action from deployment package and configuration file.</p>
+<pre><code>$ wsk action create metric-forwarder --kind nodejs:8 action.zip --param-file config.json
+</code></pre><p>Create trigger feed for alarm package to run <code>metric-forwarder</code> on periodic schedule.</p>
+<pre><code>$ wsk trigger create interval \
+  --feed /whisk.system/alarms/interval \
+  --param minutes 1
+</code></pre><p>Bind trigger to action using rule.</p>
+<pre><code>$ wsk rule create forward-metrics-on-interval interval metric-forwarder
+</code></pre><h3 id="invoke-sample-action">invoke sample action</h3>
+<pre><code>$ wsk action invoke hello-world -b
+ok: invoked /_/hello-world with id 28da39d219df436a9a39d219df036a30
+</code></pre><p>This will generate activation records containing metric values. When the <code>interval</code> trigger is next fired, metric values from these records forwarded to the collection service.</p>
+<p>Logs from the <code>metric-forwarder</code> action will show the activation records that have been retrieved.</p>
+<pre><code>$ wsk activation poll metric-forwarder
+</code></pre><h3 id="use-api-to-list-metrics-1">use api to list metrics</h3>
+<p>Use <code>curl</code> to manually list the ingested metric labels for IBM Cloud Functions.</p>
+<p><strong>Replace the <code>&lt;???&gt;</code> values in the command with configuration values from above.</strong></p>
+<pre><code>$ curl --url 'https://metrics.&lt;???&gt;.bluemix.net/v1/metrics/list?query=ibm.public.cloud-functions.*.*.*.*' --header 'x-auth-scope-id: s-&lt;???&gt;' --header 'x-auth-user-token: apikey &lt;???&gt;'
+[{
+  &quot;leaf&quot;: 0,
+  &quot;context&quot;: {},
+  &quot;text&quot;: &quot;72df4bc809c04fae9f4bc809c01fae77&quot;,
+  &quot;expandable&quot;: 1,
+  &quot;id&quot;: &quot;ibm.public.cloud-functions.*.*.*.28da39d219df436a9a39d219df036a30&quot;,
+  &quot;allowChildren&quot;: 1
+}]
+</code></pre><p>Each activation identifier should be listed as a label value in the metrics service.</p>
+<h2 id="next-steps">next steps</h2>
+<p>Metric values from our serverless applications are now being collected by the IBM Cloud Monitoring service. 👏👏👏</p>
+<p>Applications metrics are automatically recorded by the runtime library for each invocation. Metric values are exported to the monitoring service in real-time or using a timed action to forward in batches.</p>
+<p>Setting up monitoring dashboards from the collected values will allow us to identify and resolve issues with our serverless applications. In the next blog post, we&rsquo;ll look using Grafana to visualise metric values being collected…</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2017/12/monitoring-serverless-applications-metrics/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Monitoring Serverless Applications Metrics</span>
+    </a>
+    
+    
+    <a href="/2018/01/visualising-serverless-metrics-with-grafana-dashboards/" class="navigation-next">
+      <span class="navigation-tittle">Visualising Serverless Metrics With Grafana Dashboards</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

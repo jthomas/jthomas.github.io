@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Serverless Functions with WebAssembly Modules • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Serverless Functions with WebAssembly Modules"/>
+<meta name="twitter:description" content="Improving performance in serverless functions using WebAssembly. Use C, C&#43;&#43; or Rust code compiled to Wasm modules from Node.js serverless functions."/>
+
+<meta property="og:title" content="Serverless Functions with WebAssembly Modules" />
+<meta property="og:description" content="Improving performance in serverless functions using WebAssembly. Use C, C&#43;&#43; or Rust code compiled to Wasm modules from Node.js serverless functions." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2019/08/serverless-functions-with-webassembly-modules/" />
+<meta property="article:published_time" content="2019-08-06T00:00:00+00:00" />
+<meta property="article:modified_time" content="2019-08-06T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Serverless Functions with WebAssembly Modules</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Aug 06, 2019
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/webassembly">webassembly</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 8 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Watching a <a href="https://london.serverlessdays.io/speakers/lin/">recent talk</a> by <a href="https://twitter.com/linclark">Lin Clark</a> and <a href="https://twitter.com/tschneidereit">Till Schneidereit</a> about <a href="https://webassembly.org/">WebAssembly</a> (Wasm) inspired me to start experimenting with using WebAssembly <a href="https://webassembly.org/docs/modules/">modules</a> from <a href="https://en.wikipedia.org/wiki/Serverless_computing">serverless functions</a>.</p>
+<p>This blog post demonstrates how to invoke functions written in C from Node.js serverless functions. Source code in C is compiled to Wasm modules and bundled in the deployment package. Node.js code implements the serverless platform handler and calls native functions upon invocations.</p>
+<p>The examples should work (with some modifications) on any serverless platform that supports deploying Node.js functions from a zip file. I&rsquo;ll be using <a href="https://cloud.ibm.com/functions/">IBM Cloud Functions</a> (<a href="https://openwhisk.apache.org/">Apache OpenWhisk</a>).</p>
+<h2 id="webassembly">WebAssembly</h2>
+<blockquote>
+<p>WebAssembly (abbreviated <em>Wasm</em>) is a binary instruction format for a stack-based virtual machine. Wasm is designed as a portable target for compilation of high-level languages like C/C++/Rust.</p>
+<p><a href="https://webassembly.org/">https://webassembly.org/</a></p>
+</blockquote>
+<p>Wasm started as a project to run low-level languages in the browser. This was envisioned as a way to execute computationally intensive tasks in the client, e.g. image manipulation, machine learning, graphics engines. This would improve performance for those tasks compared to using JavaScript.</p>
+<p>WebAssembly compiles languages like C, C++ and Rust to a portable instruction format, rather than platform-specific machine code. Compiled Wasm files are interpreted by a Wasm VM in the browser or other runtimes. <a href="https://developer.mozilla.org/en-US/docs/WebAssembly/Using_the_JavaScript_API">APIs have been defined</a> to support importing and executing Wasm modules from JavaScript runtimes. These APIs have been implemented in multiple browsers and recent Node.js versions (v8.0.0+).</p>
+<p><strong>This means Node.js serverless functions, using a runtime version above 8.0.0, can use WebAssembly!</strong></p>
+<h3 id="wasm-modules--serverless">Wasm Modules + Serverless</h3>
+<p><em>&ldquo;Why would we want to use WebAssembly Modules from Node.js Serverless Functions?&quot;</em> 🤔</p>
+<h4 id="performance">Performance</h4>
+<p>Time is literally money with serverless platforms. The faster the code executes, the less it will cost. Using C, C++ or Rust code, compiled to Wasm modules, for <a href="https://medium.com/@torch2424/webassembly-is-fast-a-real-world-benchmark-of-webassembly-vs-es6-d85a23f8e193">computationally intensive tasks</a> can be much faster than the same algorithms implemented in JavaScript.</p>
+<h4 id="easier-use-of-native-libraries">Easier use of native libraries</h4>
+<p>Node.js already <a href="https://github.com/nodejs/node-gyp">has a way</a> to use native libraries (in C or C++) from the runtime. This works by compiling the native code during the NPM installation process. Libraries bundled in deployment packages need to be compiled for the serverless platform runtime, not the development environment.</p>
+<p>Developers often resort to using <a href="https://github.com/apache/openwhisk/blob/master/docs/actions-nodejs.md#handling-npm-libraries-with-native-dependencies">specialised containers</a> or <a href="https://aws.amazon.com/blogs/compute/nodejs-packages-in-lambda/">VMs</a>, that try to match the runtime environments, for library compilation. This process is error-prone, difficult to debug and a source of problems for developers new to serverless.</p>
+<p>Wasm is deliberately platform independent. This means Wasm code compiled locally will work on any Wasm runtime. No more worrying about platform architectures and complex toolchains for native libraries!</p>
+<h4 id="additional-runtime-support">Additional runtime support</h4>
+<p><a href="https://github.com/appcypher/awesome-wasm-langs">Dozens of languages</a> now support compiling to WebAssembly.</p>
+<p>Want to write serverless functions in Rust, C, or Lua? No problem! By wrapping Wasm modules with a small Node.js handler function, developers can write their serverless applications in any language with &ldquo;compile to Wasm&rdquo; support.</p>
+<p>Developers don&rsquo;t have to be restricted to the runtimes provided by the platform.</p>
+<h3 id="js-apis-in-nodejs">JS APIs in Node.js</h3>
+<p>Here is the code needed to load a Wasm module from Node.js. Wasm modules are distributed in <code>.wasm</code> files. Loaded modules are instantiated into instances, by providing a configurable runtime environment. Functions exported from Wasm modules can then be invoked on these instances from Node.js.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">wasm_module</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;library.wasm&#39;</span>
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">bytes</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">fs</span>.<span style="color:#a6e22e">readFileSync</span>(<span style="color:#a6e22e">wasm_module</span>)
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">wasmModule</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">WebAssembly</span>.<span style="color:#a6e22e">Module</span>(<span style="color:#a6e22e">bytes</span>);
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">wasmMemory</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">WebAssembly</span>.<span style="color:#a6e22e">Memory</span>({<span style="color:#a6e22e">initial</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">512</span>});
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">wasmInstance</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">WebAssembly</span>.<span style="color:#a6e22e">Instance</span>(<span style="color:#a6e22e">wasmModule</span>, { <span style="color:#a6e22e">env</span><span style="color:#f92672">:</span> { <span style="color:#a6e22e">memory</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">wasmMemory</span> } }})
+</code></pre></div><h4 id="calling-functions">Calling Functions</h4>
+<p>Exported Wasm functions are available on the <code>exports</code> property of the <code>wasmInstance</code>. These properties can be invoked as normal functions.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">result</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">wasmInstance</span>.<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">add</span>(<span style="color:#ae81ff">2</span>, <span style="color:#ae81ff">2</span>)
+</code></pre></div><h4 id="passing--returning-values">Passing &amp; Returning Values</h4>
+<p>Exported Wasm functions can only receive and return <a href="https://webassembly.github.io/spec/core/syntax/types.html">native Wasm types</a>. This (<a href="https://github.com/WebAssembly/reference-types">currently</a>) means only integers.</p>
+<p>Values that can be represented as a series of numbers, e.g. strings or arrays, can be <a href="https://stackoverflow.com/questions/41875728/pass-a-javascript-array-as-argument-to-a-webassembly-function">written directly</a> to the Wasm instance memory heap from Node.js. Heap memory references can be passed as the function parameter values, allowing the Wasm code to read these values. More complex types (e.g. JS objects) are not supported.</p>
+<p>This process can also be <a href="https://stackoverflow.com/questions/41353389/how-can-i-return-a-javascript-string-from-a-webassembly-function">used in reverse</a>, with Wasm functions returning heap references to pass back strings or arrays with the function result.</p>
+<p>For more details on how memory works in Web Assembly, please see this <a href="https://hacks.mozilla.org/2017/07/memory-in-webassembly-and-why-its-safer-than-you-think/">page</a>.</p>
+<h2 id="examples">Examples</h2>
+<p>Having covered the basics, let&rsquo;s look at some examples&hellip;</p>
+<p>I&rsquo;ll start with calling a <a href="https://gist.github.com/jthomas/5de757fd36b3c6904e5c5f12c8264b41">simple C function from a Node.js serverless function</a>. This will demonstrate the complete steps needed to compile and use a small C program as a Wasm module. Then I&rsquo;ll look at a more real-world use-case, <a href="https://github.com/jthomas/openwhisk-image-resize-wasm">dynamic image resizing</a>. This will use a C library compiled to Wasm to improve performance.</p>
+<p>Examples will be deployed to <a href="https://cloud.ibm.com/functions">IBM Cloud Functions</a> (<a href="https://openwhisk.apache.org/">Apache OpenWhisk</a>). They should work on other serverless platforms (supporting the Node.js runtime) with small modifications to the handler function&rsquo;s interface.</p>
+<h3 id="simple-function-calls">Simple Function Calls</h3>
+<h4 id="create-source-files">Create Source Files</h4>
+<ul>
+<li>Create a file <code>add.c</code> with the following contents:</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#66d9ef">int</span> <span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">int</span> a, <span style="color:#66d9ef">int</span> b) {
+  <span style="color:#66d9ef">return</span> a <span style="color:#f92672">+</span> b;
+}
+</code></pre></div><ul>
+<li>Create a file (<code>index.js</code>) with the following contents:</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#e6db74">&#39;use strict&#39;</span>;
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">fs</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;fs&#39;</span>);
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">util</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;util&#39;</span>)
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">WASM_MODULE</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;add.wasm&#39;</span>
+<span style="color:#66d9ef">let</span> <span style="color:#a6e22e">wasm_instance</span> 
+
+<span style="color:#a6e22e">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">load_wasm</span>(<span style="color:#a6e22e">wasm_module</span>) {
+  <span style="color:#66d9ef">if</span> (<span style="color:#f92672">!</span><span style="color:#a6e22e">wasm_instance</span>) {
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">bytes</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">fs</span>.<span style="color:#a6e22e">readFileSync</span>(<span style="color:#a6e22e">wasm_module</span>);
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">memory</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">WebAssembly</span>.<span style="color:#a6e22e">Memory</span>({<span style="color:#a6e22e">initial</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">1</span>});
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">env</span> <span style="color:#f92672">=</span> {
+      <span style="color:#a6e22e">__memory_base</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">0</span>, <span style="color:#a6e22e">memory</span>
+    }
+
+    <span style="color:#66d9ef">const</span> { <span style="color:#a6e22e">instance</span>, <span style="color:#a6e22e">module</span> } <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">WebAssembly</span>.<span style="color:#a6e22e">instantiate</span>(<span style="color:#a6e22e">bytes</span>, { <span style="color:#a6e22e">env</span> });
+    <span style="color:#a6e22e">wasm_instance</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">instance</span>
+  }
+
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">wasm_instance</span>.<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">_add</span>
+}
+
+<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">main</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">async</span> <span style="color:#66d9ef">function</span> ({ <span style="color:#a6e22e">a</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>, <span style="color:#a6e22e">b</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span> }) {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">add</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">load_wasm</span>(<span style="color:#a6e22e">WASM_MODULE</span>)
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">sum</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">add</span>(<span style="color:#a6e22e">a</span>, <span style="color:#a6e22e">b</span>)
+  <span style="color:#66d9ef">return</span> { <span style="color:#a6e22e">sum</span> }
+}
+</code></pre></div><ul>
+<li>Create a file (<code>package.json</code>) with the following contents:</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;wasm&#34;</span>,
+  <span style="color:#f92672">&#34;version&#34;</span>: <span style="color:#e6db74">&#34;1.0.0&#34;</span>,
+  <span style="color:#f92672">&#34;main&#34;</span>: <span style="color:#e6db74">&#34;index.js&#34;</span>
+}
+</code></pre></div><h4 id="compile-wasm-module">Compile Wasm Module</h4>
+<p>This C source file needs compiling to a WebAssembly module. There are different projects to handle this. I will be using <a href="https://emscripten.org/">Emscripten</a>, which uses LLVM to compile C and C++ to WebAssembly.</p>
+<ul>
+<li>
+<p><a href="https://emscripten.org/docs/getting_started/downloads.html">Install</a> the <a href="https://emscripten.org/">Emscripten</a> toolchain.</p>
+</li>
+<li>
+<p>Run the following command to generate the Wasm module.</p>
+</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">emcc -s WASM<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> -s SIDE_MODULE<span style="color:#f92672">=</span><span style="color:#ae81ff">1</span> -s EXPORTED_FUNCTIONS<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;[&#39;_add&#39;]&#34;</span> -O1 add.c -o add.wasm
+</code></pre></div><p><em>The <code>SIDE_MODULE</code> option tells the compiler the Wasm module will be loaded manually using the JS APIs. This stops Emscripten generating a corresponding JS file to do this automatically. Functions exposed on the Wasm module are controlled by the <code>EXPORTED_FUNCTIONS</code> configuration parameter.</em></p>
+<h4 id="deploy-serverless-function">Deploy Serverless Function</h4>
+<ul>
+<li>Create deployment package with source files.</li>
+</ul>
+<pre><code>zip action.zip index.js add.wasm package.json
+</code></pre><ul>
+<li>Create serverless function from deployment package.</li>
+</ul>
+<pre><code>ibmcloud wsk action create wasm action.zip --kind nodejs:10
+</code></pre><ul>
+<li>Invoke serverless function to test Wasm module.</li>
+</ul>
+<pre><code>$ ibmcloud wsk action invoke wasm -r -p a 2 -p b 2
+{
+    &quot;sum&quot;: 4
+}
+</code></pre><p>It works! 🎉🎉🎉</p>
+<p>Whilst this is a trivial example, it demonstrates the workflow needed to compile C source files to Wasm modules and invoke exported functions from Node.js serverless functions. Let&rsquo;s move onto a more realistic example&hellip;</p>
+<h3 id="dynamic-image-resizing">Dynamic Image Resizing</h3>
+<p>This <a href="https://github.com/jthomas/openwhisk-image-resize-wasm">repository</a> contains a serverless function to resize images using a C library called via WebAssembly. It is a fork of the <a href="https://github.com/cloudflare/cloudflare-workers-wasm-demo">original code</a> created by Cloudflare for their Workers platform. See the original repository for details on what the repository contains and how the files work.</p>
+<h4 id="checkout-repository">Checkout Repository</h4>
+<ul>
+<li>Retrieve the source files by checking out this <a href="https://github.com/jthomas/openwhisk-image-resize-wasm">repository</a>.</li>
+</ul>
+<pre><code>git clone https://github.com/jthomas/openwhisk-image-resize-wasm
+</code></pre><p>This repository contains the pre-compiled Wasm module (<code>resize.wasm</code>) needed to resize images using the <a href="https://github.com/nothings/stb">stb library</a>. The module exposes two functions: <code>init</code> and <code>resize</code>.</p>
+<p>The <code>init</code> function <a href="https://github.com/jthomas/openwhisk-image-resize-wasm/blob/master/main.c#L29-L38">returns a heap reference</a> to write the image bytes for processing <a href="https://github.com/jthomas/openwhisk-image-resize-wasm/blob/master/worker.js#L59">into</a>. The <code>resize</code> <a href="https://github.com/jthomas/openwhisk-image-resize-wasm/blob/master/main.c#L49">function</a> is called with two values, the image byte array length and new width value. It uses these values to read the image bytes from the heap and calls the library functions to resize the image to the desired width. Resized image bytes are written back to the heap and the new byte array length is returned.</p>
+<h4 id="deploy-serverless-function-1">Deploy Serverless Function</h4>
+<ul>
+<li>Create deployment package from source files.</li>
+</ul>
+<pre><code>zip action.zip resizer.wasm package.json worker.js
+</code></pre><ul>
+<li>Create serverless function from deployment package.</li>
+</ul>
+<pre><code>ibmcloud wsk action update resizer action.zip --kind nodejs:10 --web true
+</code></pre><ul>
+<li>Retrieve HTTP URL for Web Action.</li>
+</ul>
+<pre><code>ibmcloud wsk action get resizer --url
+</code></pre><p><em>This should return a URL like:</em> <code>https://&lt;region&gt;.cloud.ibm.com/api/v1/web/&lt;ns&gt;/default/resizer</code></p>
+<ul>
+<li>Open the Web Action URL with the <code>.http</code> extension.</li>
+</ul>
+<pre><code>https://&lt;region&gt;.cloud.ibm.com/api/v1/web/&lt;ns&gt;/default/resizer.http
+</code></pre><p>This should return the following image resized to 250 pixels (from 900 pixels).</p>
+<p><img src="https://bit.ly/2ZlP838" alt="Pug with Ice-cream"></p>
+<p>URL query parameters (<code>url</code> and <code>width</code>) can be used to modify the image source or output width for the next image, e.g.</p>
+<pre><code>https://&lt;region&gt;.cloud.ibm.com/api/v1/web/&lt;ns&gt;/default/resizer.http?url=&lt;IMG_URL&gt;&amp;width=500
+</code></pre><h2 id="conclusion">Conclusion</h2>
+<p>WebAssembly may have started as a way to run native code in the browser, but soon expanded to server-side runtime environments like Node.js. WebAssembly modules are supported on any serverless platform with a Node.js v8.0.0+ runtime.</p>
+<p>Wasm provides a fast, safe and secure way to ship portable modules from compiled languages. Developers don&rsquo;t have to worry about whether the module is compiled for the correct platform architecture or linked against unavailable dynamic libraries. This is especially useful for serverless functions in Node.js, where compiling native libraries for production runtimes can be challenging.</p>
+<p>Wasm modules can be used to improve performance for computationally intensive calculations, which lowers invocation times and, therefore, costs less. It also provides an easy way to utilise additional runtimes on serverless platforms without any changes by the platform provider.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2019/07/hosting-static-websites-on-ibm-cloud/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Hosting Static Websites on IBM Cloud</span>
+    </a>
+    
+    
+    <a href="/2019/08/faster-file-transfers-with-serverless/" class="navigation-next">
+      <span class="navigation-tittle">Faster File Transfers With Serverless</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

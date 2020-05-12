@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Cloud Foundry Application Monitoring Bot For Slack • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Cloud Foundry Application Monitoring Bot For Slack"/>
+<meta name="twitter:description" content="Cloud Foundry Application Monitoring Bot For Slack"/>
+
+<meta property="og:title" content="Cloud Foundry Application Monitoring Bot For Slack" />
+<meta property="og:description" content="Cloud Foundry Application Monitoring Bot For Slack" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2016/01/cloud-foundry-application-monitoring-bot-for-slack/" />
+<meta property="article:published_time" content="2016-01-05T00:00:00+00:00" />
+<meta property="article:modified_time" content="2016-01-05T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Cloud Foundry Application Monitoring Bot For Slack</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jan 05, 2016
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/cloud-foundry">cloud foundry</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/bluemix">bluemix</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/slack">slack</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 4 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Cloud Foundry makes it so easy to build, deploy and manage applications that it
+can be a struggle just to keep up with development progress&hellip;</p>
+<blockquote>
+<p>&ldquo;Who is restarting this application?&rdquo;
+&ldquo;What is this new service instance?&rdquo;
+&ldquo;When did this application instance run out of memory?&rdquo;</p>
+</blockquote>
+<p>Development teams are increasingly using <a href="https://slack.com/">Slack</a> to
+collaborate on projects and using custom bots to manage and monitor
+applications, triggered through the channel messages. This approach,
+popularised by Github, has now become known as
+<a href="https://speakerdeck.com/jnewland/chatops-at-github">&ldquo;ChatOps&rdquo;</a>. Using group
+chat for development projects gives
+<a href="https://www.pagerduty.com/blog/what-is-chatops/">greater operational visibility to everyone in the team</a>.</p>
+<p>Slack has exploded in use over the past two years, recently signing up more
+than a <a href="http://fortune.com/2015/10/27/slack-one-million-connected/">million active users</a>.
+The platform <a href="https://api.slack.com">publishes an API</a> for writing <em>bots</em> that
+respond automatically to messages, allowing users to write custom integrations
+for external services.</p>
+<p>Users can register webhooks to receive channel messages, based upon keyword
+triggers, and allow bots to reply with new channel messages. The platform also
+provides a websocket channel with registered bots for real-time communication.</p>
+<p><strong><em>Could we write a custom bot for monitoring applications on the Cloud Foundry
+platform?</em></strong></p>
+<p>The bot would publish notifications about applications and services into group
+channels, helping keep teams updated with platform events in real-time.</p>
+<h2 id="cloud-foundry-monitoring-apis">Cloud Foundry Monitoring APIs</h2>
+<p>Cloud Foundry provides access to the platform through a series of <a href="https://apidocs.cloudfoundry.org">RESTful APIs</a>,
+exposed by the <a href="https://docs.cloudfoundry.org/concepts/architecture/cloud-controller.html">Cloud Controller</a>
+component.  User commands from the <a href="https://docs.cloudfoundry.org/devguide/installcf/">CF CLI tool</a> are translated into calls
+to these APIs.</p>
+<p><em>Tip: Setting the <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/troubleshoot-app-health.html#trace"><em>CF_TRACE</em> environment parameter</a>
+to <strong>true</strong> will show the API calls generated by the CLI commands.</em></p>
+<p>Platform user account credentials are used to <a href="https://github.com/cloudfoundry/uaa/blob/master/docs/UAA-Tokens.md">obtain OAuth2 tokens</a>
+for authenticating service calls.</p>
+<p>Looking at the documentation, there&rsquo;s an <a href="https://apidocs.cloudfoundry.org/226/events/list_all_events.html">endpoint for retrieving all platform events</a>.
+This API is used to retrieve events for an application when using the CF CLI
+<em>events</em> command. Events can be filtered by the application, event type and
+timestamps. Responses include events about changes to applications, services
+and service instances.</p>
+<p><em>Polling this API, with timestamp filtering to ignore old events, we can
+retrieve a continuous stream of new platform events.</em></p>
+<h2 id="slack-integration">Slack Integration</h2>
+<p>Setting up a <a href="https://my.slack.com/services/new/bot">new bot integration</a> for a Slack group provides you with a token
+you can use to authenticate with the <a href="https://api.slack.com/rtm">Real-Time Messaging API</a>.  Rather than
+having to implement the Websocket-based API handler ourselves, we can use one
+of the many existing <a href="https://api.slack.com/community">community libraries</a>.</p>
+<p>Using the <a href="https://github.com/slackhq/node-slack-client">Node.js client library</a>, passing in the authentication token, we just
+need to implement callback handlers for the API events.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">Slack</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;slack-client&#39;</span>)
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">slackToken</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;xoxb-YOUR-TOKEN-HERE&#39;</span> <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#a6e22e">Add</span> <span style="color:#a6e22e">a</span> <span style="color:#a6e22e">bot</span> <span style="color:#a6e22e">at</span> <span style="color:#a6e22e">https</span><span style="color:#f92672">:</span><span style="color:#75715e">//my.slack.com/services/new/bot and copy the token here.
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">autoReconnect</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span> <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#a6e22e">Automatically</span> <span style="color:#a6e22e">reconnect</span> <span style="color:#a6e22e">after</span> <span style="color:#a6e22e">an</span> <span style="color:#a6e22e">error</span> <span style="color:#a6e22e">response</span> <span style="color:#a6e22e">from</span> <span style="color:#a6e22e">Slack</span>.
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">autoMark</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">true</span> <span style="color:#960050;background-color:#1e0010">#</span> <span style="color:#a6e22e">Automatically</span> <span style="color:#a6e22e">mark</span> <span style="color:#a6e22e">each</span> <span style="color:#a6e22e">message</span> <span style="color:#a6e22e">as</span> <span style="color:#a6e22e">read</span> <span style="color:#a6e22e">after</span> <span style="color:#a6e22e">it</span> <span style="color:#a6e22e">is</span> <span style="color:#a6e22e">processed</span>.
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">slack</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Slack</span>(<span style="color:#a6e22e">slackToken</span>, <span style="color:#a6e22e">autoReconnect</span>, <span style="color:#a6e22e">autoMark</span>)
+<span style="color:#a6e22e">slack</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;message&#39;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">message</span>) {...})
+<span style="color:#a6e22e">slack</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;error&#39;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">err</span>) {...})
+<span style="color:#a6e22e">slack</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;open&#39;</span>, <span style="color:#66d9ef">function</span> () {})
+
+<span style="color:#a6e22e">slack</span>.<span style="color:#a6e22e">login</span>()
+</code></pre></div><p>When platform events occur, we forward these to any channels the bot is registered in.</p>
+<p><em>Plugging together the Cloud Foundry event monitoring code with the Slack bot integration, <a href="https://github.com/jthomas/cfbot">cfbot</a> was born&hellip;</em></p>
+<h2 id="cfbot">cfbot</h2>
+<p><img src="/images/cfbot-events.png" alt=""></p>
+<p>This <a href="https://github.com/jthomas/cfbot">Cloud Foundry monitoring bot</a> can be deployed to&hellip; Cloud Foundry!</p>
+<p>You will need to register the bot with your Slack group to receive an
+authentication token. This token, along with login details for a platform
+account, need to be created as user-provided service credentials. The bot will
+read these service credentials on deployment and start monitoring for events.</p>
+<p>Full installation instructions available in the <a href="https://github.com/jthomas/cfbot">project README</a>.</p>
+<h2 id="usage">usage</h2>
+<p>cfbot will monitor events from applications in all spaces and organisations that the user account has access to.</p>
+<p>Users can filter the applications and events being reported using the apps and
+events commands. Both commands take application or event identifiers that are
+used to match incoming events. The wildcard &lsquo;*&rsquo; identifier can be used to
+revert to matching all events.</p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>The following events are currently registered:</p>
+<ul>
+<li><em>App Creation and Deletion Events.</em></li>
+<li><em>App Lifecycle Events (start, stop, restart, restage)</em></li>
+<li><em>Instance Crash Events.</em></li>
+<li><em>Service Creation, Deleting and Binding.</em></li>
+<li><em>Scaling (memory, CPU, disk)</em></li>
+<li><em>Routes Changes (map, unmap)</em></li>
+</ul>
+<h2 id="other-bots">Other bots</h2>
+<p>Other people have written Cloud Foundry bots before cfbot. Here are the other projects I discovered that might be useful&hellip;</p>
+<ul>
+<li><a href="https://github.com/18F/hubot-cf-notifications">Hubot-based Cloud Foundry monitoring bot by 18F</a></li>
+<li><a href="https://github.com/andypiper/hubot-cf">Hubot Scripts for Cloud Foundry</a></li>
+</ul>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2016/01/npm-modules-in-node-red/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">NPM Modules in Node-RED</span>
+    </a>
+    
+    
+    <a href="/2016/01/debugging-live-containers-on-ibm-bluemix/" class="navigation-next">
+      <span class="navigation-tittle">Debugging Live Containers on IBM Bluemix</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Hosting Static Websites on IBM Cloud • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Hosting Static Websites on IBM Cloud"/>
+<meta name="twitter:description" content="Use Cloud Object Storage to host static websites on IBM Cloud. Cloud Internet Services (Page Rules and Edge Functions) are used to support serving traffic from custom domains."/>
+
+<meta property="og:title" content="Hosting Static Websites on IBM Cloud" />
+<meta property="og:description" content="Use Cloud Object Storage to host static websites on IBM Cloud. Cloud Internet Services (Page Rules and Edge Functions) are used to support serving traffic from custom domains." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2019/07/hosting-static-websites-on-ibm-cloud/" />
+<meta property="article:published_time" content="2019-07-24T00:00:00+00:00" />
+<meta property="article:modified_time" content="2019-07-24T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Hosting Static Websites on IBM Cloud</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jul 24, 2019
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/ibmcloud">ibmcloud</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/spa">spa</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/object-storage">object-storage</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 8 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>This blog post explains how to host a <a href="https://en.wikipedia.org/wiki/Static_web_page">static website</a> on <a href="https://cloud.ibm.com">IBM Cloud</a>. These websites are rendered client-side by the browser from static assets, like HTML, CSS and JS files. They do not need a server-side component to create pages dynamically at runtime. Static websites are often combined with backend APIs to create <a href="https://en.wikipedia.org/wiki/Single-page_application">Single Page Applications</a>.</p>
+<p>Hosting static websites on IBM Cloud uses <a href="https://www.ibm.com/cloud/object-storage">Cloud Object Storage</a> (COS) and <a href="https://www.ibm.com/cloud/cloud-internet-services">Cloud Internet Services</a> (CIS) (with <a href="https://cloud.ibm.com/docs/infrastructure/cis?topic=cis-use-page-rules">Page Rules</a> and <a href="https://cloud.ibm.com/docs/infrastructure/cis?topic=cis-edge-functions">Edge Function</a>s). These services provide the following features needed to serve static websites.</p>
+<ul>
+<li><strong>Auto-serving static assets from provider-managed HTTP service (Cloud Object Storage).</strong></li>
+<li><strong>Custom domain support to serve content from user-controlled domain name (CIS - Page Rules).</strong></li>
+<li><strong>Configurable Index and Error documents (CIS - Edge Functions).</strong></li>
+</ul>
+<p>Here are the steps needed to host a static website on IBM Cloud by combining those services.</p>
+<h1 id="serving-static-assets">Serving static assets</h1>
+<p>IBM Cloud Object Storage is a scalable storage solution for cloud applications. Files are managed through a <a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-compatibility-api">RESTful HTTP API</a> and stored in user-defined collections called &ldquo;buckets&rdquo;. Bucket files are returned as HTTP responses from <a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-compatibility-api#compatibility-api-object">HTTP GET requests</a>.</p>
+<p>COS supports an optional &ldquo;<em>anonymous read-only access</em>&rdquo; <a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-iam-public-access">setting for buckets</a>. This means all files in the bucket will be accessible using anonymous HTTP GET requests.</p>
+<p>Putting HTML, CSS and JS files in a public bucket allows static websites to be served directly by COS. Users are charged for bandwidth used and HTTP requests received for all bucket files.</p>
+<h3 id="create-ibm-cloud-object-storage-instance">Create IBM Cloud Object Storage instance</h3>
+<p><em>If you already have an instance of Cloud Object Storage you can skip this step&hellip;</em></p>
+<ul>
+<li>Provision <a href="https://cloud.ibm.com/catalog/services/cloud-object-storage">a new instance</a> of IBM Cloud Object Storage</li>
+</ul>
+<h3 id="create-ibm-cloud-object-storage-bucket">Create IBM Cloud Object Storage Bucket</h3>
+<ul>
+<li>Open the COS instance from the <a href="https://cloud.ibm.com/resources">Resource List</a>.</li>
+<li><a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-getting-started#gs-create-buckets">Create a new COS bucket</a> to host the static site files.
+<ul>
+<li>Choose a Bucket name</li>
+<li>Choose the <code>Resiliency, </code> <code>Location</code> and <code>Storage Class </code> options for the bucket.</li>
+</ul>
+</li>
+</ul>
+<p><em>Any choices for these options can be used - it does not affect the static site hosting capability. For more details on what they mean, please see this <a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-classes">documentation</a>.</em></p>
+<h3 id="upload-static-assets-to-bucket">Upload Static Assets To Bucket</h3>
+<ul>
+<li><a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-upload">Upload static file assets</a> to the new bucket.</li>
+</ul>
+<h3 id="enable-public-access-to-bucket-files">Enable Public Access to bucket files</h3>
+<ul>
+<li>Click the <em>&ldquo;Access Policies&rdquo;</em> menu item from the bucket level menu.</li>
+<li>Click the &ldquo;<em>Public Access</em>&rdquo; tab from the bucket access policy page.</li>
+<li>Check the Access Group drop-down has &ldquo;<em>Public Access</em>&rdquo; option selected.</li>
+<li>Click the &ldquo;<em>Create access policy</em>&rdquo; and then &ldquo;<em>Enable</em>&rdquo; on the pop menu.</li>
+</ul>
+<p><img src="/images/static-site-hosting/bucket-access-policy.png" alt="Bucket access policy"></p>
+<h3 id="check-bucket-files-are-accessible">Check bucket files are accessible</h3>
+<p>Bucket files should now be accessible using the service endpoint URL, bucket id and file names. COS supports providing the bucket name in the URL path or a sub-domain on the service endpoint.</p>
+<ul>
+<li>Open the &ldquo;<em>Configuration</em>&rdquo; panel on the bucket page.</li>
+<li>Retrieve the <strong>public endpoint</strong> shown, e.g. <code>s3.&lt;REGION&gt;.cloud-object-storage.appdomain.cloud</code></li>
+</ul>
+<p><img src="/images/static-site-hosting/public-endpoint-hostname.png" alt="Public endpoint hostname"></p>
+<p><strong>Bucket files (like <code>index.html</code>) should now be accessible by a web browser.</strong> COS supports both HTTP and HTTPS traffic. Bucket files are available using the following URLs.</p>
+<h4 id="vhost-addressing">vhost addressing</h4>
+<p><code>&lt;BUCKET_NANME&gt;.s3.eu-gb.cloud-object-storage.appdomain.cloud/index.html</code></p>
+<h4 id="url-path-addressing">url path addressing</h4>
+<p><code>s3.&lt;REGION&gt;.cloud-object-storage.appdomain.cloud/&lt;BUCKET_NANME&gt;/index.html</code></p>
+<p>Bucket files can now be referenced directly in external web applications. COS buckets are often used to store large application assets like videos or images. <strong>For hosting an entire website, it is often necessary to serve content from a custom domain name, rather than the COS bucket hostname.</strong></p>
+<h1 id="custom-domain-support">Custom domain support</h1>
+<p>Cloud Internet Services Page Rules can <a href="https://cloud.ibm.com/docs/infrastructure/cis?topic=cis-resolve-override-cos">automatically configure custom domain</a> support for COS buckets.</p>
+<p><a href="https://en.wikipedia.org/wiki/CNAME_recor">CNAME</a> DNS records are created to alias the custom domain to the COS bucket hostname. All traffic to the custom domain will then be forwarded to the COS service.</p>
+<p>When COS serves files from bucket sub-domains, the HTTP  <code>Host</code> <a href="https://stackoverflow.com/questions/43156023/what-is-http-host-header">request header value</a> to determine the bucket name. With CNAME DNS records, this header value will still refer to the custom domain, rather than the bucket sub-domain. This field needs to be dynamically updated with the correct value.</p>
+<h3 id="create-ibm-cloud-internet-services-instance">Create IBM Cloud Internet Services instance</h3>
+<ul>
+<li>Provision a new instance of <a href="https://cloud.ibm.com/catalog/services/internet-services">Cloud Internet Services</a>.</li>
+</ul>
+<h3 id="register-custom-domain-name-with-cloud-internet-services">Register Custom Domain name with Cloud Internet Services</h3>
+<ul>
+<li>Follow the <a href="https://cloud.ibm.com/docs/infrastructure/cis?topic=cis-getting-started#add-configure-your-domain">documentation</a> on how to register a custom domain with Cloud Internet Services.</li>
+</ul>
+<p><em>This process involves delegating name server control for the domain over to IBM Cloud Internet Services.</em></p>
+<h3 id="configure-page-rules-and-dns-records-automatic">Configure Page Rules and DNS records (automatic)</h3>
+<p>Cloud Internet Services <a href="https://cloud.ibm.com/docs/infrastructure/cis?topic=cis-resolve-override-cos">can automatically set up</a> Page Rules and DNS records needed to forward custom domain traffic to COS buckets. This automatically exposes the bucket as <code>bucket-name.your-domain.com</code>. If you want to change this default sub-domain name, follow the manual steps in the next section.</p>
+<ul>
+<li>Click the Performance drop-down menu and click the &ldquo;<em>Page Rules</em>&rdquo; link.</li>
+<li>Click the &ldquo;<em>Create rule</em>&rdquo; button from the table.</li>
+<li>Select the Rule Behaviour Setting as &ldquo;<em>Resolve Override with COS</em>&rdquo;</li>
+<li>Select the correct COS instance and bucket.</li>
+<li>Click the &ldquo;<em>Create</em>&rdquo; button.</li>
+</ul>
+<p><img src="/images/static-site-hosting/auto-page-rule.png" alt="Auto Page Rules"></p>
+<p><strong>Once DNS records have propagated, bucket files should be accessible using the custom domain</strong>:  <code>http(s)://&lt;CUSTOM_DOMAIN&gt;/index.html</code>.</p>
+<h3 id="configure-page-rules-and-dns-records-manual">Configure Page Rules and DNS records (manual)</h3>
+<p><em>These steps only need following if you haven&rsquo;t done the section above….</em></p>
+<p>Create the Page Rule to modify the HTTP host header.</p>
+<ul>
+<li>Click the Performance drop-down menu and select the &ldquo;<em>Page Rules</em>&rdquo; link.</li>
+<li>Click the &ldquo;<em>Create rule</em>&rdquo; button from the table.</li>
+<li>Set the URL match field to be <code>&lt;SUB_DOMAIN&gt;.&lt;CUSTOM_DOMAIN&gt;/*</code></li>
+<li>Select the Rule Behaviour Setting as &ldquo;<em>Host Header Override</em>&rdquo; as the custom bucket sub-domain:<code>&lt;BUCKET_NANME&gt;.&lt;REGION&gt;.eu-gb.cloud-object-storage.appdomain.cloud</code></li>
+</ul>
+<p>Create the DNS CNAME record to forward traffic to COS.</p>
+<ul>
+<li>Click the Reliability drop-down menu and click the &ldquo;<em>DNS</em>&rdquo; menu entry.</li>
+<li>Add a new DNS record with the following values.
+<ul>
+<li><strong>Type:</strong> <em>CNAME</em></li>
+<li><strong>Name:</strong> <em>&lt;custom subdomain host&gt;</em></li>
+<li><strong>TTL:</strong> <em>Automatic</em></li>
+<li><strong>Alias Domain Name:</strong> <em>&lt;COS bucket sub-domain&gt;</em></li>
+</ul>
+</li>
+</ul>
+<p><em>Name</em> is the sub-domain on the custom domain (e.g. <code>www</code>) through which the COS bucket will be accessible. <em>Alias Domain Name</em> is the COS bucket sub-domain from above, e.g. <code>&lt;BUCKET_NANME&gt;.&lt;REGION&gt;.eu-gb.cloud-object-storage.appdomain.cloud</code></p>
+<ul>
+<li>Once the record is added, set the <code>Proxy</code> field to true. This is necessary for the page rules to work.</li>
+</ul>
+<p><strong>Once DNS records have propagated, bucket files should be accessible using the custom domain.</strong></p>
+<h1 id="configurable-index-and-error-pages">Configurable Index and Error pages</h1>
+<p>COS will now serve static assets from a custom sub-domain, where file names are explicitly included in the URL, e.g. <code>http(s)://&lt;CUSTOM_DOMAIN&gt;/index.html</code>. This works fine for static websites with two exceptions, the default document for the web site and the error page.</p>
+<p>When a user visits the COS bucket sub-domain without an explicit file path (<code>http(s)://&lt;CUSTOM_DOMAIN&gt;</code>), the COS service will return the <a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-compatibility-api-bucket-operations#compatibility-api-list-objects-v2">bucket file list</a>, rather than the site index page. Additionally, if a user requests a missing file, COS returns an <a href="https://cloud.ibm.com/docs/services/cloud-object-storage?topic=cloud-object-storage-compatibility-common#compatibility-errors">XML error message</a> rather than a custom error page.</p>
+<p>Both issues can be resolved using <a href="https://www.ibm.com/cloud/blog/edge-computing-for-serverless-applications?mhsrc=ibmsearch_a&amp;mhq=edge%20functions">Edge Functions</a>, a new feature in Cloud Internet Services.</p>
+<h3 id="edge-functions">Edge Functions</h3>
+<p><a href="https://cloud.ibm.com/docs/infrastructure/cis?topic=cis-edge-functions">Edge functions</a> are JavaScript source files deployed to Cloudflare&rsquo;s Edge locations. They can dynamically modify HTTP traffic passing through Cloudflare&rsquo;s network (for domains you control). Custom edge functions are triggered on configurable URL routes. Functions are passed the incoming HTTP request and control the HTTP response returned.</p>
+<h3 id="add-edge-function-to-provide-index--error-documents">Add Edge Function to provide Index &amp; Error Documents</h3>
+<p>Using a custom edge function, HTTP traffic to the custom sub-domain can be modified to support Index and Error documents. Incoming HTTP requests without an explicit file name can be changed to use the index page location. HTTP 404 responses returned from COS can be replaced with a custom error page.</p>
+<ul>
+<li>Open the &ldquo;<em>Edge Functions</em>&rdquo; page from the Cloud Internet Services instance homepage.</li>
+<li>Click the &ldquo;<em>Create</em>&rdquo; icon on the &ldquo;<em>Actions</em>&rdquo; tab.</li>
+<li>Enter &ldquo;<em>route-index-and-errors</em>&rdquo; in the  action name field.</li>
+<li>Paste the following <a href="https://gist.github.com/jthomas/3c6c1db53e6f8ae7e70e2238b8c3374b">source code</a> into the action body section.</li>
+</ul>
+<p><em>The <code>INDEX_DOCUMENT</code> and <code>ERROR_DOCUMENT</code> values control the index and error pages used to redirect requests. Replace these values with the correct page locations for the static site being hosted.</em></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">INDEX_DOCUMENT</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;index.html&#39;</span>
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">ERROR_DOCUMENT</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#39;404.html&#39;</span>
+
+<span style="color:#a6e22e">addEventListener</span>(<span style="color:#e6db74">&#39;fetch&#39;</span>, <span style="color:#a6e22e">event</span> =&gt; {
+  <span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">respondWith</span>(<span style="color:#a6e22e">handleRequest</span>(<span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">request</span>))
+})
+
+<span style="color:#a6e22e">async</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">handleRequest</span>(<span style="color:#a6e22e">request</span>) {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">url</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">URL</span>(<span style="color:#a6e22e">request</span>.<span style="color:#a6e22e">url</span>)
+
+  <span style="color:#75715e">// if request is a directory path, append the index document.
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">url</span>.<span style="color:#a6e22e">pathname</span>.<span style="color:#a6e22e">endsWith</span>(<span style="color:#e6db74">&#39;/&#39;</span>)) {
+    <span style="color:#a6e22e">url</span>.<span style="color:#a6e22e">pathname</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">`</span><span style="color:#e6db74">${</span><span style="color:#a6e22e">url</span>.<span style="color:#a6e22e">pathname</span><span style="color:#e6db74">}${</span><span style="color:#a6e22e">INDEX_DOCUMENT</span><span style="color:#e6db74">}</span><span style="color:#e6db74">`</span>
+    <span style="color:#a6e22e">request</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Request</span>(<span style="color:#a6e22e">url</span>, <span style="color:#a6e22e">request</span>)
+  }
+
+  <span style="color:#66d9ef">let</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">fetch</span>(<span style="color:#a6e22e">request</span>)
+
+  <span style="color:#75715e">// if bucket file is missing, return error page.
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">status</span> <span style="color:#f92672">===</span> <span style="color:#ae81ff">404</span>) {    
+    <span style="color:#a6e22e">url</span>.<span style="color:#a6e22e">pathname</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">ERROR_DOCUMENT</span>
+    <span style="color:#a6e22e">request</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Request</span>(<span style="color:#a6e22e">url</span>, <span style="color:#a6e22e">request</span>)
+    <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">await</span> <span style="color:#a6e22e">fetch</span>(<span style="color:#a6e22e">request</span>)
+
+    <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">Response</span>(<span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">body</span>, {
+      <span style="color:#a6e22e">status</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">404</span>,
+      <span style="color:#a6e22e">statusText</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;Not Found&#39;</span>,
+      <span style="color:#a6e22e">headers</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">response</span>.<span style="color:#a6e22e">headers</span>
+    })      
+  } 
+
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">response</span>
+}
+</code></pre></div><ul>
+<li>Click the &ldquo;<em>Save</em>&rdquo; button.</li>
+</ul>
+<h3 id="set-up-triggers-for-edge-function">Set up Triggers for Edge Function</h3>
+<ul>
+<li>Select the &ldquo;<em>Triggers</em>&rdquo; panel from the Edge Functions page.</li>
+<li>Click the &ldquo;<em>Add trigger</em>&rdquo; icon.</li>
+<li>Set the Trigger URL to <code>http://&lt;SUB_DOMAIN&gt;.&lt;CUSTOM_DOMAIN&gt;/*</code>.</li>
+<li>Select the &ldquo;<em>route-index-and-errors</em>&rdquo; action from the drop-down menu.</li>
+<li>Click the &ldquo;<em>Save</em>&rdquo; button.</li>
+</ul>
+<h3 id="test-index-and-error-pages">Test Index and Error Pages</h3>
+<p>Having set up the trigger and edge function, HTTP requests to the root path on the custom sub-domain will return the index page. Accessing invalid bucket files will also return the error page, rather than the COS error response.</p>
+<ul>
+<li>Confirm that <code>http://&lt;SUB_DOMAIN&gt;.&lt;CUSTOM_DOMAIN&gt;/</code> returns the same page as <code>http://&lt;SUB_DOMAIN&gt;.&lt;CUSTOM_DOMAIN&gt;/index.html</code></li>
+<li>Confirm that <code>http://&lt;SUB_DOMAIN&gt;.&lt;CUSTOM_DOMAIN&gt;/missing-page.html</code> returns the error page. This should be different to the XML error response returned by visiting <code>&lt;BUCKET_NANME&gt;.s3.&lt;REGION&gt;.cloud-object-storage.appdomain.cloud/missing-page.html</code>.</li>
+</ul>
+<p><strong>If this all works - the site is working! IBM Cloud is now hosting a static website using Cloud Object Storage and Cloud Internet Services with Page Rules and Edge Functions.</strong> 🎉🎉🎉</p>
+<h2 id="summary">Summary</h2>
+<p>Static web sites can be hosted on IBM Cloud using Cloud Object Storage and Cloud Internet Services.</p>
+<p>Cloud Object stores page files needed to render the static website. Anonymous bucket file access means files are accessible as public HTTP endpoints, without having to run infrastructure to serve the assets.</p>
+<p>Cloud Internet Services forwards HTTP traffic from a custom domain to the bucket hostname. DNS CNAME records are used to resolve the sub-domain as the custom bucket hostname. Page Rules override HTTP request headers to make this work. Edge Functions are used to implement configurable Index and Error documents, by dynamically modifying in-flight requests with custom JavaScript.</p>
+<p>Hosting static web sites using this method can be much cheaper (and easier) than traditional infrastructure. Developers only get charged for actual site usage, based on bandwidth and HTTP requests.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2019/07/connecting-to-ibm-cloud-databases-for-redis-from-node.js/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Connecting to IBM Cloud Databases for Redis from Node.js</span>
+    </a>
+    
+    
+    <a href="/2019/08/serverless-functions-with-webassembly-modules/" class="navigation-next">
+      <span class="navigation-tittle">Serverless Functions with WebAssembly Modules</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

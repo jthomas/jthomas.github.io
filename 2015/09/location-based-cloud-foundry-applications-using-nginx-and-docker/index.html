@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Location-Based Cloud Foundry Applications using Nginx and Docker • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Location-Based Cloud Foundry Applications using Nginx and Docker"/>
+<meta name="twitter:description" content="Setting up a reverse proxy to route traffic based upon request locations for cloud foundry applications using nginx and docker"/>
+
+<meta property="og:title" content="Location-Based Cloud Foundry Applications using Nginx and Docker" />
+<meta property="og:description" content="Setting up a reverse proxy to route traffic based upon request locations for cloud foundry applications using nginx and docker" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2015/09/location-based-cloud-foundry-applications-using-nginx-and-docker/" />
+<meta property="article:published_time" content="2015-09-11T00:00:00+00:00" />
+<meta property="article:modified_time" content="2015-09-11T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Location-Based Cloud Foundry Applications using Nginx and Docker</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Sep 11, 2015
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/bluemix">bluemix</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/cloud-foundry">cloud foundry</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/docker">docker</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 7 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><img src="/images/geo_web_view.png" alt=""></p>
+<p>Routing application traffic based upon the geographic location of incoming requests can
+be used for a number of scenarios&hellip;</p>
+<ul>
+<li>Restricting access to your application outside defined geographic regions.</li>
+<li>Load-balancing traffic to the closest region for improved performance.</li>
+<li>Providing custom applications for different countries.</li>
+</ul>
+<p>IBM Bluemix allows deploying applications to different geographic regions through
+hosting instances of the <a href="https://www.cloudfoundry.org/">Cloud Foundry</a> platform in <a href="https://www.ibm.com/developerworks/community/blogs/enablingwithbluemix/entry/regions_in_bluemix?lang=en">multiple locations</a>.</p>
+<p>Cloud Foundry supports <a href="https://docs.cloudfoundry.org/devguide/deploy-apps/domains-routes.html">simple HTTP routing rules</a> for deployed applications.
+Organisations can register domains and routes for applications. Routes can be
+bound to one or more deployed applications. Incoming HTTP traffic is
+load-balanced, using the <a href="https://en.wikipedia.org/wiki/Round-robin_scheduling">Round-Robin</a> policy, between the application instances bound to a route.</p>
+<p><em>However, the platform does not currently support traffic routing based upon the
+geographic location of incoming requests or sharing domains and routes between regions.</em></p>
+<p><strong>So, say we want to deploy custom versions of an application to different regions and
+automatically forward users to the correct version based upon their location. How can we
+achieve this?</strong></p>
+<p>Let&rsquo;s find out&hellip;</p>
+<h2 id="deploying-application-to-different-regions">Deploying Application To Different Regions</h2>
+<p>IBM Bluemix currently provides Cloud Foundry in <a href="https://www.ng.bluemix.net/docs/overview/overview.html#ov_intro">two regions</a> for deploying applications.</p>
+<ul>
+<li><strong>US South</strong> (<em>api.ng.bluemix.net</em>)</li>
+<li><strong>Europe</strong> (<em>api.eu-gb.bluemix.net</em>)</li>
+</ul>
+<p>Moving between regions is as simple as providing the different region endpoint during the
+authentication command.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>16:25:47 ~<span style="color:#f92672">]</span>$ cf login -a api.ng.bluemix.net -u james.thomas@uk.ibm.com -s dev
+API endpoint: api.ng.bluemix.net
+
+Password&gt;
+Authenticating...
+OK
+
+Targeted org james.thomas@uk.ibm.com
+
+Targeted space dev
+
+API endpoint:   https://api.ng.bluemix.net <span style="color:#f92672">(</span>API version: 2.27.0<span style="color:#f92672">)</span>
+User:           james.thomas@uk.ibm.com
+Org:            james.thomas@uk.ibm.com
+Space:          dev
+<span style="color:#f92672">[</span>16:26:44 ~<span style="color:#f92672">]</span>$
+</code></pre></div><p>We&rsquo;re now authenticated against the US South region.</p>
+<p>Let&rsquo;s start by deploying our sample application, which displays a web
+page showing the application URL, to this region.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>16:44:24 ~/code/sample<span style="color:#f92672">]</span>$ cf api
+API endpoint: https://api.ng.bluemix.net <span style="color:#f92672">(</span>API version: 2.27.0<span style="color:#f92672">)</span>
+<span style="color:#f92672">[</span>16:44:32 ~/code/sample<span style="color:#f92672">]</span>$ cf push sample-demo-app
+Using manifest file /Users/james/code/sample/manifest.yml
+
+Updating app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK
+
+...
+
+Showing health and status <span style="color:#66d9ef">for</span> app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK
+
+requested state: started
+instances: 1/1
+usage: 256M x <span style="color:#ae81ff">1</span> instances
+urls: sample-demo-app.mybluemix.net
+last uploaded: Fri Sep <span style="color:#ae81ff">11</span> 15:45:04 UTC <span style="color:#ae81ff">2015</span>
+stack: lucid64
+buildpack: SDK <span style="color:#66d9ef">for</span> Node.js<span style="color:#f92672">(</span>TM<span style="color:#f92672">)</span> <span style="color:#f92672">(</span>node.js-4.0.0<span style="color:#f92672">)</span>
+
+     state     since                    cpu    memory          disk        details
+<span style="color:#75715e">#0   running   2015-09-11 04:46:00 PM   0.0%   67.1M of 256M   59M of 1G</span>
+<span style="color:#f92672">[</span>16:45:14 ~/code/sample<span style="color:#f92672">]</span>$ 
+</code></pre></div><p>Once that has finished, we can move over to the European region and deploy our application there.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>16:52:33 ~/code/sample<span style="color:#f92672">]</span>$ cf login -a api.eu-gb.bluemix.net -u james.thomas@uk.ibm.com -s dev
+<span style="color:#f92672">[</span>16:52:58 ~/code/sample<span style="color:#f92672">]</span>$ cf push sample-demo-app
+Using manifest file /Users/james/code/sample/manifest.yml
+
+Updating app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK
+
+...
+
+Showing health and status <span style="color:#66d9ef">for</span> app sample-demo-app in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+OK
+
+requested state: started
+instances: 1/1
+usage: 256M x <span style="color:#ae81ff">1</span> instances
+urls: sample-demo-app.eu-gb.mybluemix.net
+last uploaded: Fri Sep <span style="color:#ae81ff">11</span> 15:53:31 UTC <span style="color:#ae81ff">2015</span>
+stack: lucid64
+buildpack: SDK <span style="color:#66d9ef">for</span> Node.js<span style="color:#f92672">(</span>TM<span style="color:#f92672">)</span> <span style="color:#f92672">(</span>node.js-4.0.0<span style="color:#f92672">)</span>
+
+     state     since                    cpu    memory          disk        details
+<span style="color:#75715e">#0   running   2015-09-11 04:54:17 PM   0.0%   67.4M of 256M   59M of 1G</span>
+<span style="color:#f92672">[</span>16:54:25 ~/code/bluemix/sample<span style="color:#f92672">]</span>$
+</code></pre></div><p>With the second deployment completed, there are now instances of the same application running in separate regions.</p>
+<p>Each instance is available through a separate URL.</p>
+<ul>
+<li><a href="http://sample-demo-app.mybluemix.net">http://sample-demo-app.mybluemix.net</a></li>
+<li><a href="http://sample-demo-app.eu-gb.mybluemix.net">http://sample-demo-app.eu-gb.mybluemix.net</a></li>
+</ul>
+<p>Now we need to set up traffic forwarding from the relevant locations to the correct region.</p>
+<h2 id="reverse-proxy-with-region-traffic-forwarding">Reverse Proxy with Region Traffic Forwarding</h2>
+<p>Due to the platform not supporting multi-region traffic routing, we
+need to set up a custom reverse proxy. This server will receive
+requests from our external application domain and transparently forward
+them onto the correct region application.</p>
+<p><img src="/images/reverse_proxy.png" alt=""></p>
+<p>We&rsquo;re going to use <a href="http://nginx.org/">Nginx</a>.</p>
+<blockquote>
+<p>Nginx (pronounced engine-x) is a free, open-source, high-performance HTTP server and reverse proxy, as well as an IMAP/POP3 proxy server</p>
+</blockquote>
+<p>Nginx comes with a <a href="http://nginx.org/en/docs/http/ngx_http_geoip_module.html">module</a> for looking up locations associated with IP
+address using the <a href="http://dev.maxmind.com/geoip/">MaxMind GeoIP library</a>. The module can
+resolve incoming request addresses into continents, countries and even cities. Using the variables defined by the module, we
+can write traffic forwarding rules to send requests to the correct region.</p>
+<h2 id="nginx-configuration">Nginx Configuration</h2>
+<p>Nginx defines two configuration directives, <em>geoip_country</em> and <em>geoip_city</em>, to
+specify locations for the MaxMind GeoIP database files.</p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>When configured, Nginx will expose a series of variables for each request with
+geographical information.</p>
+<ul>
+<li><strong>$geoip_country_code</strong> - <em>two-letter country code, for example, “RU”, “US”.</em></li>
+<li><strong>$geoip_country_name</strong> - <em>country name, for example, “Russian Federation”, “United States”.</em></li>
+<li><strong>$geoip_city_continent_code</strong> - <em>two-letter continent code, for example, “EU”, “NA”.</em></li>
+<li><strong>$geoip_city</strong> - <em>city name, for example, “Moscow”, “Washington”.</em></li>
+</ul>
+<p>Starting with the <a href="http://wiki.nginx.org/FullExample">default nginx configuration</a>,
+there are only a few modifications needed to set up a reverse proxy based upon
+location.</p>
+<p>For each request, we check the <em>$geoip_city_continent_code</em> against our list of
+regions. If the request is valid, setting the <em>proxy_pass</em> directive forwards
+the request onto the correct region. We also overwrite the <em>Host:</em> HTTP
+header with the region URL. IBM Bluemix uses this header to internally route
+incoming requests to the correct application host.</p>
+<p>Requests coming from outside these locations will be sent to a custom error
+page.</p>
+<p><em>Due to a <a href="https://www.ng.bluemix.net/docs/containers/container_troubleshoot.html">known issue</a>
+with IBM Containers, we must use IP addresses rather than the host names with the proxy_pass directive.</em></p>
+<p>Here is the full configuration for the <em>enabled-site/default</em> file.</p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>With the reverse proxy server configured, we need to provision a new
+production server, install Linux and Nginx, configure networking, security updates
+and backup services&hellip;</p>
+<p><em>&hellip;or we can use Docker.</em></p>
+<h2 id="running-nginx-using-docker">Running Nginx using Docker</h2>
+<p>There are <a href="https://hub.docker.com/search/?q=nginx&amp;page=1&amp;isAutomated=0&amp;isOfficial=0&amp;starCount=0&amp;pullCount=0">thousands</a>
+of repositories on Docker Hub providing Nginx, including
+the official image. Unfortunately, the <a href="http://wiki.nginx.org/FullExample">official image</a> provides a version of Nginx
+that is not built with the <em>geo_ip</em> module.</p>
+<p>Ubuntu&rsquo;s default package repository for Nginx does provide a build including
+the <em>geo_ip</em> module. By modifying the Dockerfile for the official image, we can
+build a new image from Ubuntu with the required version of Nginx and include
+our custom configuration files.</p>
+<!-- raw HTML omitted -->
+<!-- raw HTML omitted -->
+<p>Building and running this container locally, we can test that Nginx is configured correctly. The repository containing the Dockerfile
+and build artificats is located <a href="https://github.com/jthomas/geo_ip">here</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>16:58:40 ~/code/final<span style="color:#f92672">]</span>$ docker build -t geo_ip .
+Sending build context to Docker daemon 15.88 MB
+Step <span style="color:#ae81ff">0</span> : FROM ubuntu
+ ---&gt; 91e54dfb1179
+...
+Step <span style="color:#ae81ff">9</span> : CMD nginx -g daemon off;
+ ---&gt; Using cache
+ ---&gt; 7bb6dbaafe3e
+Successfully built 7bb6dbaafe3e
+<span style="color:#f92672">[</span>16:58:50 ~/code/final<span style="color:#f92672">]</span>$ docker run -Pti geo_ip 
+</code></pre></div><p><em>With the custom image ready, we just need to deploy it somewhere&hellip;</em></p>
+<h2 id="running-nginx-on-ibm-containers">Running Nginx on IBM Containers</h2>
+<p>IBM Bluemix supports deploying Docker containers alongside Cloud Foundry
+applications, allowing us to use the same cloud platform for running our custom
+region applications as providing the reverse proxy</p>
+<p>Pushing pre-built images to the IBM Containers service is really as simple as creating a new tag and typing <em>docker push</em>.</p>
+<p><em>Please read and follow the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html">documentation</a>
+about installing the command-line container management tools and authenticating
+with the remote service before attempting the commands below.</em></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh"><span style="color:#f92672">[</span>14:10:52 ~<span style="color:#f92672">]</span>$ docker tag geo_ip registry.ng.bluemix.net/jthomas/geo_ip
+<span style="color:#f92672">[</span>14:10:59 ~<span style="color:#f92672">]</span>$ docker images
+REPOSITORY                               TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+geo_ip                                   latest              7bb6dbaafe3e        <span style="color:#ae81ff">3</span> days ago          222.3 MB
+registry.ng.bluemix.net/jthomas/geo_ip   latest              7bb6dbaafe3e        <span style="color:#ae81ff">3</span> days ago          222.3 MB
+<span style="color:#f92672">[</span>14:11:07 ~<span style="color:#f92672">]</span>$ cf ic login
+** Retrieving client certificates from IBM Containers
+** Storing client certificates in /Users/james/.ice/certs
+Successfully retrieved client certificates
+** Authenticating with registry at registry.eu-gb.bluemix.net
+Successfully authenticated with registry
+<span style="color:#f92672">[</span>14:24:25 ~<span style="color:#f92672">]</span>$ docker push registry.ng.bluemix.net/jthomas/geo_ip
+The push refers to a repository <span style="color:#f92672">[</span>registry.ng.bluemix.net/jthomas/geo_ip<span style="color:#f92672">]</span> <span style="color:#f92672">(</span>len: 1<span style="color:#f92672">)</span>
+Sending image list
+Pushing repository registry.ng.bluemix.net/jthomas/geo_ip <span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> tags<span style="color:#f92672">)</span>
+...
+Pushing tag <span style="color:#66d9ef">for</span> rev <span style="color:#f92672">[</span>7bb6dbaafe3e<span style="color:#f92672">]</span> on <span style="color:#f92672">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/geo_ip/tags/latest<span style="color:#f92672">}</span>
+<span style="color:#f92672">[</span>14:25:39 ~<span style="color:#f92672">]</span>$ cf ic images
+REPOSITORY                                        TAG                 IMAGE ID            CREATED              VIRTUAL SIZE
+registry.ng.bluemix.net/jthomas/geo_ip            latest              7b1865be-778        About a minute ago   <span style="color:#ae81ff">0</span> B
+registry.ng.bluemix.net/ibmliberty                latest              2209a9732f35        <span style="color:#ae81ff">3</span> weeks ago          263.6 MB
+registry.ng.bluemix.net/ibmnode                   latest              8f962f6afc9a        <span style="color:#ae81ff">3</span> weeks ago          178.9 MB
+registry.ng.bluemix.net/ibm-mobilefirst-starter   latest              97513e56aaa7        <span style="color:#ae81ff">3</span> weeks ago          464.9 MB
+<span style="color:#f92672">[</span>14:26:43 ~<span style="color:#f92672">]</span>$ 
+</code></pre></div><p>We can now use the IBM Bluemix dashboard to start a new container from our custom image,
+binding a public IP address and exposing ports.</p>
+<p><img src="/images/deploy_container.png" alt=""></p>
+<p>Once the container starts, accessing the bound IP address shows the
+web page coming back with the region-specific application route.</p>
+<p><img src="/images/container_ip_address.png" alt=""></p>
+<p>Using DNS <a href="https://en.wikipedia.org/wiki/List_of_DNS_record_types#A">A records</a>, we can now
+map our external URL to the IP address of the container. Users visiting this
+URL will be sent to the reverse proxy server which will then forward the
+request onto the correct region application.</p>
+<h2 id="testing-it-all-out">Testing it all out&hellip;</h2>
+<p>Testing out the forwarding rules requires us to send HTTP requests from multiple regions.
+<a href="http://geowebview.com">GeoWebView</a> will run web browsers located in different geographies and show you the rendered page output.</p>
+<p>Running the tool with our application&rsquo;s <a href="http://geo_ip.jamesthom.as">web address</a>, shows the following rendered page images.</p>
+<p><img src="/images/geo_web_view.png" alt=""></p>
+<p>We can see the browsers from the United States and Europe are sent to the correct region. The browser from South Africa is shown the custom error page.</p>
+<p><em>Using Nginx we&rsquo;ve configured a reverse proxy to route users, based upon their location, to applications running in different IBM Bluemix regions. We&rsquo;re hosting
+the service on the same platform as our applications, using Docker. Most importantly, the whole process is transparent to the user, they aren&rsquo;t forced to visit
+country-specific URLs.</em></p>
+<p><strong>Success!</strong></p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2015/09/running-one-off-tasks-in-cloud-foundry/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">running one-off tasks in cloud foundry</span>
+    </a>
+    
+    
+    <a href="/2015/09/node.js-v4-in-cloud-foundry/" class="navigation-next">
+      <span class="navigation-tittle">Node.js v4 in Cloud Foundry</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

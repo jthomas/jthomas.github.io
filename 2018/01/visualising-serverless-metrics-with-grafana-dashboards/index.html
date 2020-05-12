@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Visualising Serverless Metrics With Grafana Dashboards • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Visualising Serverless Metrics With Grafana Dashboards"/>
+<meta name="twitter:description" content="Visualising application metrics for serverless applications with Grafana for IBM Cloud Functions (OpenWhisk) using IBM Cloud Monitoring service."/>
+
+<meta property="og:title" content="Visualising Serverless Metrics With Grafana Dashboards" />
+<meta property="og:description" content="Visualising application metrics for serverless applications with Grafana for IBM Cloud Functions (OpenWhisk) using IBM Cloud Monitoring service." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2018/01/visualising-serverless-metrics-with-grafana-dashboards/" />
+<meta property="article:published_time" content="2018-01-05T00:00:00+00:00" />
+<meta property="article:modified_time" content="2018-01-05T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Visualising Serverless Metrics With Grafana Dashboards</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jan 05, 2018
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/metrics">metrics</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/grafana">grafana</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 11 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><img src="/images/grafana_dashboards/action-dashboard.gif" alt=""></p>
+<p><em>This blog post is part three of a series on &ldquo;Monitoring Serverless Applications Metrics&rdquo;. See the <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">introduction post</a> for details and links to other posts.</em></p>
+<p>Having <a href="/blog/2017/12/18/capturing-runtime-metrics-for-openwhisk-applications/">configured</a> collecting serverless metrics from <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.org">Apache OpenWhisk</a>)
+applications, monitoring incoming metric values will alert us to problems.</p>
+<p><em><a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring</a> provides a <a href="http://docs.grafana.org/">Grafana-based service</a> to help with this.</em></p>
+<blockquote>
+<p>Grafana is an open source metric analytics &amp; visualization
+suite. It is most commonly used for visualizing time series data for
+infrastructure and application analytics.</p>
+</blockquote>
+<p>Serverless metrics can be monitored in real-time using custom Grafana dashboards.</p>
+<p>Let&rsquo;s review a few <a href="http://docs.grafana.org/guides/basic_concepts/">Grafana basics</a>
+before we start setting up the serverless monitoring dashboards…</p>
+<h2 id="grafana-basics">Grafana Basics</h2>
+<h3 id="metric-data-values">Metric Data Values</h3>
+<p>Metrics data <a href="https://github.com/jthomas/cloud-functions-metrics-service">collected</a> through the IBM Cloud Monitoring Service uses the following label format.</p>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$action.$activation.$labels
+</code></pre><p>Templated variables (<em>$varname</em>) are replaced during collection by the monitoring library.</p>
+<ul>
+<li><strong>$region</strong> - <em>Geographic region for IBM Cloud Functions instance.</em></li>
+<li><strong>$namespace</strong> - <em>User namespace containing monitored actions.</em></li>
+<li><strong>$activation</strong> - <em>Activation identifier associated with metric values.</em></li>
+<li><strong>$labels</strong> - <em>One or more labels to identify metric data, e.g. <code>time.duration </code></em></li>
+</ul>
+<p><em>Metric values must be rational numbers. IBM Cloud Monitoring does not support other data types.</em></p>
+<h3 id="templates">Templates</h3>
+<p>When defining metric queries, hardcoding values for region, namespace or action names does not scale when monitoring multiple serverless applications. Developers would need to replicate and maintain the same dashboards for every application.</p>
+<p>Grafana uses <a href="http://docs.grafana.org/reference/templating/">template variables</a> to resolve this problem.</p>
+<p><img src="/images/grafana_dashboards/templating.png" alt=""></p>
+<p>Templates allow users to define a variable identifier with a user-defined value. Identifiers can be used in metric queries instead of hardcoded values. Changing template values automatically updates queries.</p>
+<h3 id="common-tasks">Common Tasks</h3>
+<h4 id="how-to-create-a-new-dashboard">How to create a new dashboard?</h4>
+<ul>
+<li>Open the dashboard menu by clicking the drop-down menu.</li>
+<li>Click the &ldquo;Create New&rdquo; button.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/new_dashboard.png" alt=""></p>
+<h4 id="how-to-set-the-dashboard-name">How to set the dashboard name?</h4>
+<ul>
+<li>Select the &ldquo;Manage Dashboard&rdquo; menu option.</li>
+<li>Click &ldquo;Settings&rdquo; to open the dashboard options panel.</li>
+<li>Change the &ldquo;General -&gt; Details -&gt; Name&rdquo; configuration value.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/dashboard_name.png" alt=""></p>
+<h4 id="how-to-set-dashboard-template-variables">How to set dashboard template variables?</h4>
+<ul>
+<li>Select the &ldquo;Manage Dashboard&rdquo; menu option.</li>
+<li>Click &ldquo;Templating&rdquo; to open the templating variables configuration panel.</li>
+<li>Click &ldquo;New&rdquo; button to define template variables.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/dashboard_template_menu.png" alt=""></p>
+<ul>
+<li>Fill in the name field with the template identifier.</li>
+<li>Select &ldquo;IBM Cloud Monitoring&rdquo; as the data source.</li>
+<li>Fill in the query field with chosen metric query.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/dashboard_template_details.png" alt=""></p>
+<h4 id="how-to-add-new-row-to-dashboard">How to add new row to dashboard?</h4>
+<ul>
+<li>Click the &ldquo;Add Row&rdquo; button beneath the last row.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/add_row.png" alt=""></p>
+<h4 id="how-to-add-new-chart-to-row">How to add new chart to row?</h4>
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the &ldquo;Add Panel&rdquo; menu item.</li>
+<li>Choose a chart type from the panel menu.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/add_row_panel.png" alt=""></p>
+<h4 id="how-to-set-and-display-row-name">How to set and display row name?</h4>
+<ul>
+<li>Hover over the options menu on the right-hand side of the row.</li>
+<li>Select the &ldquo;Row Options&rdquo; menu item.</li>
+<li>Fill in the &ldquo;Title&rdquo; field. Click the &ldquo;Show&rdquo; checkbox.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/add_row_panel.png" alt=""></p>
+<h4 id="how-to-edit-chart-parameters">How to edit chart parameters?</h4>
+<ul>
+<li>Click the panel title to open the panel options dialog.</li>
+<li>Select the &ldquo;Edit&rdquo; button.</li>
+<li>Graph options dialog opens below the chart panel.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/panel_details_more.png" alt=""></p>
+<h4 id="how-to-choose-time-range-for-metric-values">How to choose time range for metric values?</h4>
+<ul>
+<li>Click the clock icon on the right-hand side of the menu bar.</li>
+<li>Define time ranges manually or by selecting options from the &ldquo;Quick Ranges&rdquo; examples.</li>
+<li>Auto-update can be enabled using the &ldquo;Refresh&rdquo; drop-down menu.</li>
+</ul>
+<p><img src="/images/grafana_dashboards/time_range_menu.png" alt=""></p>
+<h2 id="dashboards">Dashboards</h2>
+<p>Having introduced some of the basics around using Grafana, we can now start to create dashboards.</p>
+<p><strong>tldr: want to set these dashboards up without following all the instructions?</strong></p>
+<p><em>Here are the <a href="https://gist.github.com/jthomas/47466693e88d0407c239535624222e6b">completed JSON configuration files</a>
+for the Grafana dashboards below. Remember to create the necessary template variables.</em></p>
+<h3 id="overview-dashboard">Overview Dashboard</h3>
+<p>This is an example of the first dashboard we want to create.</p>
+<p><img src="/images/grafana_dashboards/overview-dashboard.gif" alt=""></p>
+<p>The dashboard provides information on actions invocations, errors, durations and other high-level metrics. It gives an overview of the performance of serverless applications within a region and workspace.</p>
+<h4 id="setup">setup</h4>
+<ol>
+<li>Create a new dashboard named &ldquo;Overview&rdquo;.</li>
+<li>Set the following template variables.
+<ul>
+<li><strong>$region</strong> =&gt; <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> =&gt; <code>ibm.public.cloud-functions.$region.*</code></li>
+</ul>
+</li>
+</ol>
+<p>Once the dashboard is created, we can add the first row showing action invocation counts.</p>
+<h4 id="invocations-graph">invocations graph</h4>
+<p><img src="/images/grafana_dashboards/overview-invocations.png" alt=""></p>
+<p>This dashboard row will contain a single graph, using a bar chart of action invocation frequencies over time intervals. Stacking, rather than overlaying, chart values makes it easier to identify counts per action.</p>
+<p><em>How can we calculate total invocations from the metric values?</em></p>
+<p>One <a href="http://obfuscurity.com/2013/05/Graphite-Tip-Counting-Number-of-Metrics-Reported">approach</a> is to convert all metric values for a chosen label to a constant value of 1. This can be achieved using the <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.scale"><code>scale()</code></a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.offset"><code>offset()</code></a> functions. Adding these constant values will return a count of the invocations recorded.</p>
+<p><em>Let&rsquo;s implement this now…</em></p>
+<ul>
+<li>Set and display default row name as <em>&ldquo;Invocations&rdquo;</em>.</li>
+<li>Add new <em>&ldquo;Graph&rdquo;</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.error
+.scale(0).offset(1).groupByNode(5, sum)
+</code></pre><ul>
+<li>Set the following options to true.
+<ul>
+<li><em>Legend-&gt;Options-&gt;Show</em></li>
+<li><em>Display-&gt;Draw Modes-&gt;Bars</em></li>
+<li><em>Display-&gt;Stacking &amp; Null value-&gt;Stack</em></li>
+</ul>
+</li>
+</ul>
+<h4 id="invocation-types">invocation types</h4>
+<p><img src="/images/grafana_dashboards/overview-invocation-types.png" alt=""></p>
+<p>This next dashboard row will show counts for different invocation types. Counts will be shown for total, successful, failed and cold start invocations.</p>
+<p>Calculating the sum for all invocations recorded will use the same &ldquo;scale &amp; offset&rdquo; trick explained above. Cold start and error totals can be calculated by simply summing the individual metric values. Successful invocation counts can be created by offsetting and scaling error values by -1 before summing.</p>
+<p><strong><!-- raw HTML omitted -->all count<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>&ldquo;Invocation Types&rdquo;</em>.</li>
+<li>Add a new <em>&ldquo;Single Stat&rdquo;</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.error.scale(0).offset(1).sumSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = All</em></li>
+<li><em>Options -&gt; Value -&gt; Stat = total</em></li>
+<li><em>Options -&gt; Coloring -&gt; Background = true</em></li>
+<li><em>Options -&gt; Coloring -&gt; Thresholds = 0,100000</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->success count<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;All&rdquo;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace…error.offset(-1).scale(-1).sumSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Success</em></li>
+<li><em>Options -&gt; Coloring -&gt; Colors = Make green the last threshold colour.</em></li>
+<li><em>Options -&gt; Coloring -&gt; Thresholds = 0,0</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->errors count<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Success&rdquo;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.error.sumSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Errors</em></li>
+<li><em>Options-&gt; Coloring -&gt; Colors = Make red the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->cold start count<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Errors&rdquo;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.coldstart.sumSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Cold Start</em></li>
+<li><em>Options-&gt; Coloring -&gt; Colors = Make blue the last threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+<h4 id="invocation-durations">invocation durations</h4>
+<p><img src="/images/grafana_dashboards/overview-invocation-durations.png" alt=""></p>
+<p>This row will contain counts for the total, mean and range of all invocations.</p>
+<p>Duration is recorded as a metric value for each invocation. Grafana provides functions to calculate <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.averageSeries">mean</a> and <a href="https://graphite.readthedocs.io/en/latest/functions.html#graphite.render.functions.rangeOfSeries">range</a> values from existing data series.</p>
+<p><strong><!-- raw HTML omitted -->total duration<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Add a new row.</li>
+<li>Set and display default row name as <em>&ldquo;Invocation Durations&rdquo;</em>.</li>
+<li>Add a new <em>&ldquo;Single Stat&rdquo;</em> chart to row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.sumSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Total</em></li>
+<li><em>Options -&gt; Value -&gt; Stat = total</em></li>
+<li><em>Options -&gt; Value -&gt; Unit = milliseconds</em></li>
+<li><em>Options -&gt; Coloring -&gt; Background = true</em></li>
+<li><em>Options -&gt; Coloring -&gt; Thresholds = 100000000,100000000</em></li>
+<li><em>Options -&gt; Coloring -&gt; Colors = Make grey the first threshold colour.</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->average duration<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Total&rdquo;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.time.duration.averageSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Average</em></li>
+<li><em>Options -&gt; Value -&gt; Stat = avg</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->range duration<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Average&rdquo;</em> chart in the row.</li>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Range</em></li>
+<li><em>Options -&gt; Value -&gt; Stat = range</em></li>
+</ul>
+</li>
+</ul>
+<h4 id="invocation-details-table">invocation details table</h4>
+<p><img src="/images/grafana_dashboards/overview-tables.png" alt=""></p>
+<p>Tables will show invocation details per action in this row. Invocation counts, errors recorded and duration statistics are shown in separate tables.</p>
+<p><strong><!-- raw HTML omitted -->all invocations table<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>&ldquo;Invocations Per Action&rdquo;</em>.</li>
+<li>Add a <em>&ldquo;Table&rdquo;</em> panel to the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.error
+.scale(0).offset(1).groupByNode(5, sum)
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Invocations (All)</em></li>
+<li><em>Options -&gt; Data -&gt; Table Transform = Time series aggregations</em></li>
+<li><em>Options -&gt; Data -&gt; Columns = Total</em></li>
+<li><em>Options -&gt; Column Styles -&gt; Decimals = 0</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->error invocations table<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Invocations (All)&quot;</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, sum)
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Invocations (Errors)</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->duration statistics table<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Invocations (Errors)&quot;</em> chart in the row.</li>
+<li>Configure metric query for chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.*.*.error.groupByNode(5, avg)
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Invocations (Duration)</em></li>
+<li><em>Options -&gt; Data -&gt; Columns = Avg, Min, Max</em></li>
+<li><em>Options -&gt; Column Styles -&gt; Decimals = Milliseconds</em></li>
+<li><em>Options -&gt; Column Styles -&gt; Decimals = 2</em></li>
+</ul>
+</li>
+</ul>
+<p><strong>Having finished all the charts for the overview dashboard, it should look like the example above.</strong></p>
+<p><em>Let&rsquo;s move onto the second dashboard, which will give us more in-depth statistics for individual actions&hellip;</em></p>
+<h3 id="action-dashboard">Action Dashboard</h3>
+<p>This is an example of the second dashboard we want to create.</p>
+<p><img src="/images/grafana_dashboards/action-dashboard.gif" alt=""></p>
+<p>The dashboard provides information on specific action application metrics. It includes more detailed statistics including duration percentiles, memory and cpu usage. This provides more context to help diagnosing issues for individual actions.</p>
+<h4 id="setup-1">setup</h4>
+<ul>
+<li>Create a new dashboard named <em>&ldquo;Action Details&rdquo;</em>.</li>
+<li>Set the following template variables.
+<ul>
+<li><strong>$region</strong> =&gt; <code>ibm.public.cloud-functions.*</code></li>
+<li><strong>$namespace</strong> =&gt; <code>ibm.public.cloud-functions.$region.*</code></li>
+<li><strong>$actions</strong> =&gt; <code>ibm.public.cloud-functions.$region.$namespace.&lt;action&gt;</code></li>
+</ul>
+</li>
+</ul>
+<p><em>Replace &lt;action&gt; with the name of an action you are monitoring.</em></p>
+<h4 id="invocations">invocations</h4>
+<p><img src="/images/grafana_dashboards/action-invocations.png" alt=""></p>
+<p>Action invocations are shown this first dashboard row. Bar charts display
+successful versus failed invocations and cold versus warm starts.</p>
+<p>Failed invocations and cold starts are recorded as metric values. Using the
+<code>scale()</code> and <code>offset()</code> functions allows us to calculate successful invocations
+and warm starts from these properties.</p>
+<ul>
+<li>Set and display default row name as <em>&ldquo;Invocations&rdquo;</em>.</li>
+<li>Add new <em>&ldquo;Graph&rdquo;</em> chart to row.</li>
+<li>Configure two metric queries for the chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$action.*.error
+.scale(0).offset(1).groupByNode(5, sum).alias(success)
+</code></pre><pre><code>ibm.public.cloud-functions.$region.$namespace.$action.*.error
+.groupByNode(5, sum).alias(failure)
+</code></pre><ul>
+<li>Set the following options to true.
+<ul>
+<li><em>Legend-&gt;Options-&gt;Show</em></li>
+<li><em>Display-&gt;Draw Modes-&gt;Bars</em></li>
+</ul>
+</li>
+</ul>
+<h4 id="invocation-types-1">invocation types</h4>
+<p><img src="/images/grafana_dashboards/action-invocation-types.png" alt=""></p>
+<p>This row replicates the <em>&ldquo;Invocation Types&rdquo;</em> row from the <em>&ldquo;Overview&rdquo;</em> dashboard.</p>
+<p><strong>Repeat the instructions from the above to create this row here.</strong></p>
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+<h4 id="invocation-durations-1">invocation durations</h4>
+<p><img src="/images/grafana_dashboards/action-invocation-durations.png" alt=""></p>
+<p>This row uses an extended version of the durations row from the <em>&ldquo;Overview&rdquo;</em> dashboard. In addition to total and average durations, minimum and maximum are also included.</p>
+<p><strong>Repeat the instructions from above to add the <em>&ldquo;Total&rdquo;</em> and <em>&ldquo;Average&rdquo;</em> panels.</strong></p>
+<p><em>Metric query settings must use the action template identifier rather than a wildcard value.</em></p>
+<p><strong><!-- raw HTML omitted -->minimum duration<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Total&rdquo;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.minSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Min</em></li>
+<li><em>Options -&gt; Value -&gt; Stat = min</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->maximum duration<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Duplicate the <em>&ldquo;Minimum&rdquo;</em> chart in the row.</li>
+<li>Change the metric query for this chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration.maxSeries()
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Min</em></li>
+<li><em>Options -&gt; Value -&gt; Stat = max</em></li>
+</ul>
+</li>
+</ul>
+<p><strong><!-- raw HTML omitted -->percentiles graph<!-- raw HTML omitted --></strong></p>
+<ul>
+<li>Add a <em>&ldquo;Table&rdquo;</em> panel to the row.</li>
+<li>Configure this metric query for the chart:</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$action.*.time.duration
+.percentileOfSeries(50, false).aliasByNode(5).alias($actions 50th percentile)
+</code></pre><ul>
+<li>Duplicate this query three times, replacing <code>50</code> with <code>90</code>, <code>95</code> and <code>99</code>.</li>
+<li>Set the following options.
+<ul>
+<li><em>General -&gt; Info -&gt; Title = Durations (Percentiles)</em></li>
+<li><em>Axes -&gt; Left Y -&gt; Unit = Milliseconds</em></li>
+<li><em>Legend -&gt; Options -&gt; Show = True</em></li>
+<li><em>Legend -&gt; Values -&gt; Avg = True</em></li>
+<li><em>Display -&gt; Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -&gt; Stacking &amp; Null value -&gt; Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+<h4 id="cpu-usage">cpu usage</h4>
+<p><img src="/images/grafana_dashboards/action-cpu-usage.png" alt=""></p>
+<p><a href="https://nodejs.org/api/process.html#process_process_cpuusage_previousvalue">CPU usage for the Node.js process</a> is recorded with two metric values, user and system time.</p>
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>&ldquo;CPU Usage&rdquo;</em>.</li>
+<li>Add new <em>&ldquo;Graph&rdquo;</em> panel to row.</li>
+<li>Configure two metric queries for the chart.</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.user
+.groupByNode(5, avg).alias(user-time)
+</code></pre><pre><code>ibm.public.cloud-functions.$region.$namespace.$actions.cpu.system
+.groupByNode(5, avg).alias(system-time)
+</code></pre><ul>
+<li>Set the following options.
+<ul>
+<li><em>Axes -&gt; Left Y -&gt; Unit = Microseconds</em></li>
+<li><em>Legend -&gt; Values -&gt; Avg = true</em></li>
+<li><em>Display -&gt; Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -&gt; Stacking &amp; Null value -&gt; Stack = true</em></li>
+<li><em>Display -&gt; Stacking &amp; Null value -&gt; Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+<h4 id="memory-usage">memory usage</h4>
+<p><img src="/images/grafana_dashboards/action-memory-usage.png" alt=""></p>
+<p><a href="https://nodejs.org/api/process.html#process_process_memoryusage">Memory usage for the Node.js process</a> is recorded with multiple values, including heap used &amp; total, external and rss.</p>
+<ul>
+<li>Add a new row.</li>
+<li>Set and display row name as <em>&ldquo;Memory Usage&rdquo;</em>.</li>
+<li>Add new <em>&ldquo;Graph&rdquo;</em> panel to row.</li>
+<li>Configure four metric queries for the chart using this template.</li>
+</ul>
+<pre><code>ibm.public.cloud-functions.$region.$namespace.$actions.*.memory.&lt;label&gt;
+.groupByNode(5, avg).alias(&lt;label&gt;)
+</code></pre><p><strong>Replace &lt;label&gt; with following options: <code>external</code>, <code>rss</code>, <code>heapUsed</code> &amp; <code>heapTotal</code>.</strong></p>
+<ul>
+<li>Set the following options.
+<ul>
+<li><em>Axes -&gt; Left Y -&gt; Unit = bytes</em></li>
+<li><em>Legend -&gt; Values -&gt; Avg = true</em></li>
+<li><em>Display -&gt; Draw Modes = Lines &amp; Points</em></li>
+<li><em>Display -&gt; Stacking &amp; Null value -&gt; Stack = true</em></li>
+<li><em>Display -&gt; Stacking &amp; Null value -&gt; Null Value = connected</em></li>
+</ul>
+</li>
+</ul>
+<p><strong>Having finished all the charts for the action details example, you should now
+have dashboards which look like the examples above!</strong> 📈📊📉</p>
+<h2 id="conclusion">conclusion</h2>
+<p>Once you are <a href="https://github.com/jthomas/cloud-functions-metrics-service">collecting application metrics</a> for <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a> (<a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a>) applications, you need to be able to monitor metric values in real-time.</p>
+<p><a href="https://grafana.com/">Grafana</a> dashboards, hosted by the <a href="https://console.bluemix.net/catalog/services/monitoring">IBM Cloud Monitoring service</a>,
+are a perfect solution for this problem. Building custom dashboards allows us
+to monitor incoming data values live.</p>
+<p>In the next blog post, we&rsquo;re going to finish off <a href="/blog/2017/12/15/serverless-applications-metrics-and-monitoring/">this series</a> by looking at setting up automatic alerts based upon the metric values&hellip;</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2017/12/capturing-runtime-metrics-for-openwhisk-applications/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Capturing Runtime Metrics For OpenWhisk Applications</span>
+    </a>
+    
+    
+    <a href="/2018/01/starting-openwhisk-in-sixty-seconds/" class="navigation-next">
+      <span class="navigation-tittle">Starting OpenWhisk In Sixty Seconds</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>GeoPix Live Photos • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="GeoPix Live Photos"/>
+<meta name="twitter:description" content="Adding real-time support using CouchDB and Socket.IO"/>
+
+<meta property="og:title" content="GeoPix Live Photos" />
+<meta property="og:description" content="Adding real-time support using CouchDB and Socket.IO" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2015/07/geopix-live-photos/" />
+<meta property="article:published_time" content="2015-07-16T00:00:00+00:00" />
+<meta property="article:modified_time" content="2015-07-16T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>GeoPix Live Photos</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jul 16, 2015
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/bluemix">bluemix</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/couchdb">couchdb</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/javascript">javascript</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 4 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><a href="http://www.tricedesigns.com/about/">Andrew Trice</a> wrote a great sample
+application for <a href="bluemix.net">IBM Bluemix</a> called <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">GeoPix</a>.</p>
+<!-- raw HTML omitted -->
+<blockquote>
+<p>GeoPix uses the IBM MobileFirst services to provide a native iOS application which allows users to capture images from their mobile phones, storing them on the local device with automatic syncing to the cloud when online.
+Using a web application, the user can view their images over a map based upon their location when the photo was taken.
+Andrew Trice <a href="http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/">http://www.tricedesigns.com/2015/03/27/geopix-a-native-ios-app-powered-by-ibm-mobilefirst-for-bluemix/</a></p>
+</blockquote>
+<p>I&rsquo;ve been using the demonstration to highlight the <a href="https://console.ng.bluemix.net/solutions/mobilefirst">mobile capabilities</a> of IBM Bluemix and had an idea for an
+enhancement&hellip;</p>
+<p><strong><em>Could the web page update with new pictures without having to refresh the page?</em></strong></p>
+<p>Looking at the <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps">source code</a>, the web application
+is a Node.js application using the <a href="http://leafletjs.com/">Leaflet</a> JavaScript library to create interactive
+maps. Images captured from mobile devices are <a href="https://www.ng.bluemix.net/docs/services/data/index.html#replicate">synchronised</a>
+to a remote <a href="http://couchdb.apache.org/">CouchDB</a> database. When the user visits the <a href="http://geopix-web.mybluemix.net">GeoPix</a> site, the application queries this database
+for all mobile images and renders the HTML using the <a href="http://jade-lang.com/">Jade</a> templating language.</p>
+<p>Adding support for live photos will require two new features&hellip;</p>
+<ul>
+<li><em>Triggering backend events when new photos are available</em></li>
+<li><em>Sending these photos in real-time to the web page</em></li>
+</ul>
+<h2 id="change-notifications-using-couchdb">Change Notifications Using CouchDB</h2>
+<p>CouchDB comes with built-in support for listening to changes in a database, <a href="http://guide.couchdb.org/draft/notifications.html">change notifications</a>.
+The <a href="http://docs.couchdb.org/en/latest/api/database/changes.html"><em>_changes</em> feed</a> for a database is an activity stream publishing all document modifications.</p>
+<p>GeoPix uses the following CouchDB <a href="https://www.npmjs.com/package/cloudant">client library</a>, to interact with our database from NodeJS. This library provides an <a href="https://github.com/dscape/nano#nanodbfollowname-params-callback">API</a>
+to start following database changes and register callbacks for updates.</p>
+<p>Modifying our <a href="https://github.com/IBM-Bluemix/MobileFirst-Offline-Apps/blob/master/Node.js/app.js#L42-L51">application code</a>, upon connecting to the CouchDB database, we register a change notification
+handler. We follow all changes that occur in the future (<em>since: &ldquo;now&rdquo;</em>) and include the full document contents
+in the change event (<em>include_docs: true</em>).</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">Cloudant</span>({<span style="color:#a6e22e">account</span><span style="color:#f92672">:</span><span style="color:#a6e22e">credentials</span>.<span style="color:#a6e22e">username</span>, <span style="color:#a6e22e">password</span><span style="color:#f92672">:</span><span style="color:#a6e22e">credentials</span>.<span style="color:#a6e22e">password</span>}, <span style="color:#66d9ef">function</span>(<span style="color:#a6e22e">err</span>, <span style="color:#a6e22e">cloudant</span>) {
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">geopix</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">cloudant</span>.<span style="color:#a6e22e">use</span>(<span style="color:#a6e22e">database</span>);
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">feed</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">geopix</span>.<span style="color:#a6e22e">follow</span>({<span style="color:#a6e22e">include_docs</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span>, <span style="color:#a6e22e">since</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;now&#34;</span>});
+
+    <span style="color:#a6e22e">feed</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;change&#39;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">change</span>) {
+      <span style="color:#75715e">// ....we can now send this data to the web pages
+</span><span style="color:#75715e"></span>    });
+
+    <span style="color:#a6e22e">feed</span>.<span style="color:#a6e22e">follow</span>();
+})
+</code></pre></div><p><strong>Now, every time a user sync their local photos to the cloud, the registered callback will be executed.</strong></p>
+<p><em>How do we send new photos to the web page over a real-time stream?</em></p>
+<h2 id="real-time-web-with-socketio">Real-time Web with Socket.IO</h2>
+<p>Introducing <a href="">Socket.IO</a>&hellip;</p>
+<blockquote>
+<p>Socket.IO enables real-time bidirectional event-based communication.
+It works on every platform, browser or device, focusing equally on reliability and speed.</p>
+</blockquote>
+<p>Sounds great!</p>
+<p>By embedding this library into our application, we can open a real-time event stream between the server and client. This channel
+will be used by the client to listen for new images and then update the page.</p>
+<p>The library has great <a href="http://socket.io/docs/">documentation</a> and provides both <a href="http://socket.io/docs/server-api/">server</a> and <a href="http://socket.io/docs/client-api/">client</a> modules. It also integrates with <a href="http://expressjs.com">ExpressJS</a>, the web framework used in GeoPix.
+Socket.IO can use either WebSocket or long-polling transport protocols.</p>
+<p>Socket.IO supports running under ExpressJS with minimal configuration, here are the changes needed to start our real-time stream in GeoPix:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">express</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;express&#39;</span>);
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">app</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">express</span>();
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">server</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;http&#39;</span>).<span style="color:#a6e22e">Server</span>(<span style="color:#a6e22e">app</span>);
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">io</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;socket.io&#39;</span>)(<span style="color:#a6e22e">server</span>);
+
+<span style="color:#75715e">// ...snipped out the app routes for express
+</span><span style="color:#75715e"></span>
+<span style="color:#a6e22e">io</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;connection&#39;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">socket</span>) {
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;New Client WSS Connection.&#39;</span>)
+});
+
+<span style="color:#66d9ef">var</span> <span style="color:#a6e22e">port</span> <span style="color:#f92672">=</span> (<span style="color:#a6e22e">process</span>.<span style="color:#a6e22e">env</span>.<span style="color:#a6e22e">VCAP_APP_PORT</span> <span style="color:#f92672">||</span> <span style="color:#ae81ff">3000</span>);
+<span style="color:#a6e22e">server</span>.<span style="color:#a6e22e">listen</span>(<span style="color:#a6e22e">port</span>);
+</code></pre></div><p><em>When a document change event is fired, executing the handle we registered above, we want to send this data to all connected clients.</em></p>
+<p>Using the <a href="http://socket.io/docs/server-api/#server#emit"><em>emit</em> call</a> from the server-side API will do this for us.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">feed</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;change&#39;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">change</span>) {
+    <span style="color:#a6e22e">io</span>.<span style="color:#a6e22e">sockets</span>.<span style="color:#a6e22e">emit</span>(<span style="color:#e6db74">&#39;image&#39;</span>, <span style="color:#a6e22e">change</span>);
+});
+</code></pre></div><p><strong>Now we&rsquo;re sending changes to the clients, we need to modify the client-side to listen for events and update the page.</strong></p>
+<p>Socket.IO provides a <a href="http://socket.io/download/">JavaScript client library</a> that exposes a simple API for listening to events from the server-side stream.
+Once we&rsquo;ve included the script tag pointing to the client library, we can register a callback for <em>image</em> events and update the DOM
+with the new elements.</p>
+<p>We&rsquo;re sending the full database document associated with each photo to the client. The raw image bytes are stored as an
+<a href="https://wiki.apache.org/couchdb/HTTP_Document_API#Attachments">attachment</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">var</span> <span style="color:#a6e22e">socket</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">io</span>(); <span style="color:#75715e">// TIP: io() with no args does auto-discovery
+</span><span style="color:#75715e"></span><span style="color:#a6e22e">socket</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;connect&#39;</span>, <span style="color:#66d9ef">function</span> () { 
+    <span style="color:#a6e22e">console</span>.<span style="color:#a6e22e">log</span>(<span style="color:#e6db74">&#39;WSS Connected&#39;</span>);
+
+    <span style="color:#a6e22e">socket</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#39;image&#39;</span>, <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">image</span>) { <span style="color:#75715e">// TIP: you can avoid listening on `connect` and listen on events directly too!
+</span><span style="color:#75715e"></span>        <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">attachment</span> <span style="color:#f92672">=</span> Object.<span style="color:#a6e22e">keys</span>(<span style="color:#a6e22e">image</span>.<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">_attachments</span>)[<span style="color:#ae81ff">0</span>]
+        <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">url</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;/image/&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">image</span>.<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">_id</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34;/&#34;</span> <span style="color:#f92672">+</span> <span style="color:#a6e22e">attachment</span>;
+        <span style="color:#a6e22e">add_new_image</span>(<span style="color:#a6e22e">url</span>, <span style="color:#a6e22e">image</span>.<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">clientDate</span>, <span style="color:#e6db74">&#39;latitude: &#39;</span>
+            <span style="color:#f92672">+</span> <span style="color:#a6e22e">image</span>.<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">latitude</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39;, longitude: &#39;</span>
+            <span style="color:#f92672">+</span> <span style="color:#a6e22e">image</span>.<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">longitude</span> <span style="color:#f92672">+</span> <span style="color:#e6db74">&#39;, altitude: &#39;</span>
+            <span style="color:#f92672">+</span> <span style="color:#a6e22e">image</span>.<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">altitude</span>);
+    });
+});
+</code></pre></div><p>&hellip;and that&rsquo;s it! Now our web pages will automatically update with new photos whenever the mobile application syncs with the cloud.</p>
+<h2 id="couchdb--socketio--real-time-awesome">CouchDB + Socket.IO = Real-time Awesome!</h2>
+<p>Adding <em>real-time</em> photos to our application was amazingly simple by combining
+CouchDB with Socket.IO.</p>
+<p>CouchDB&rsquo;s <em>_changes</em> API provided an easy way to follow
+all modifications to database documents in real-time. Socket.IO made the
+configuration and management of real-time event streams between our server and
+client straightforward.</p>
+<p><em>With minimal code changes, we simply connected these two technologies to create
+a real-time photo stream for our GeoPix application. <strong>Awesome</strong></em>.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2015/07/alchemyapi-amp-updated-watson-nodes-for-node-red/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">AlchemyAPI &amp;amp; Updated Watson Nodes for Node-RED</span>
+    </a>
+    
+    
+    <a href="/2015/09/running-one-off-tasks-in-cloud-foundry/" class="navigation-next">
+      <span class="navigation-tittle">running one-off tasks in cloud foundry</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

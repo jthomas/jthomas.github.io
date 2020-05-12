@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Debugging Node.js OpenWhisk Actions • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Debugging Node.js OpenWhisk Actions"/>
+<meta name="twitter:description" content="Serverless debugging Node.js applications on IBM Cloud Functions (Apache OpenWhisk). Using Docker to connect Chrome Dev Tools and Visual Studio Code to remote debugging service."/>
+
+<meta property="og:title" content="Debugging Node.js OpenWhisk Actions" />
+<meta property="og:description" content="Serverless debugging Node.js applications on IBM Cloud Functions (Apache OpenWhisk). Using Docker to connect Chrome Dev Tools and Visual Studio Code to remote debugging service." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2018/07/debugging-node.js-openwhisk-actions/" />
+<meta property="article:published_time" content="2018-07-10T00:00:00+00:00" />
+<meta property="article:modified_time" content="2018-07-10T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Debugging Node.js OpenWhisk Actions</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jul 10, 2018
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/docker">docker</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/node.js">node.js</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/debugging">debugging</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 8 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Debugging serverless applications is one of the <a href="https://www.stackery.io/blog/the-serverless-learning-curve/">most challenging issues</a> developers face when using serverless platforms. How can you use debugging tools without any access to the runtime environment?</p>
+<p>Last week, I worked out <a href="https://twitter.com/thomasj/status/1013006648439443458">how to expose the Node.js debugger</a> in the Docker environment used for the application runtime in Apache OpenWhisk.</p>
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Want to use Node.js debugger for <a href="https://twitter.com/openwhisk?ref_src=twsrc%5Etfw">@openwhisk</a> actions? Start runtime container locally with this command to expose v8 inspector.<br>$ docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js<br>Then connect Chrome Dev Tools or <a href="https://twitter.com/code?ref_src=twsrc%5Etfw">@code</a>. 💯 <a href="https://t.co/X4i01QEOmg">pic.twitter.com/X4i01QEOmg</a></p>&mdash; James Thomas (@thomasj) <a href="https://twitter.com/thomasj/status/1013006648439443458?ref_src=twsrc%5Etfw">June 30, 2018</a></blockquote>
+<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+<p>Using the remote debugging service, we can set breakpoints and step through action handlers live, rather than just being reliant on logs and metrics to diagnose bugs.</p>
+<p><strong>So, how does this work?</strong></p>
+<p><em>Let&rsquo;s find out more about how Apache OpenWhisk executes serverless functions&hellip;</em></p>
+<h2 id="background">Background</h2>
+<p><a href="http://openwhisk.incubator.apache.org/">Apache OpenWhisk</a> is the open-source serverless platform which powers <a href="https://console.bluemix.net/openwhisk/">IBM Cloud Functions</a>. OpenWhisk <a href="https://medium.com/openwhisk/uncovering-the-magic-how-serverless-platforms-really-work-3cb127b05f71">uses Docker containers</a> to create isolated runtime environments for executing serverless functions.</p>
+<p>Containers are started on-demand as invocation requests arrive. Serverless function source files are dynamically injected into the runtime and executed for each invocation. Between invocations, containers are paused and kept in a cache for re-use with further invocations.</p>
+<p>The benefit of using an open-source serverless platform is that the <a href="https://github.com/search?q=incubator-openwhisk-runtime">build files</a> used to create runtime images are also open-source. OpenWhisk also automatically builds and publishes all <a href="https://hub.docker.com/r/openwhisk/">runtime images externally</a> on Docker Hub. Running containers using these images allows us to simulate the remote serverless runtime environment.</p>
+<h3 id="runtime-images">Runtime Images</h3>
+<p>All OpenWhisk runtime images are <a href="https://hub.docker.com/r/openwhisk/">published externally</a> on Docker Hub.</p>
+<p>Runtime images <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions-new.md#action-interface">start a HTTP server</a> which listens on port 8080. This HTTP server must implement two API endpoints (<code>/init</code> &amp; <code>/run</code>) accepting HTTP POST requests. The platform uses these endpoints to initialise the runtime with action code and then invoke the action with event parameters.</p>
+<p>More details on the API endpoints can be found in this <a href="http://jamesthom.as/blog/2017/01/16/openwhisk-docker-actions/">blog post</a> on creating Docker-based actions.</p>
+<h3 id="nodejs-runtime-image">Node.js Runtime Image</h3>
+<p>This repository contains the source code used to create <a href="https://hub.docker.com/r/openwhisk/action-nodejs-v8/">Node.js runtime environment image</a>.</p>
+<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs">https://github.com/apache/incubator-openwhisk-runtime-nodejs</a></p>
+<p>Both <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs8Action">Node.js 8</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejs6Action">6 runtimes</a>  are built from a <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/tree/master/core/nodejsActionBase">common base image</a>. This base image contains an <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/app.js">Express.js server</a> which handles the platform API requests. The <code>app.js</code> file containing the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">is executed</a> when the containers starts.</p>
+<p>JavaScript code is injected into the runtime using the <code>/init</code> API. Actions created from source code are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">dynamically evaluated</a> to instantiate the code in the runtime. Actions created from zip files are <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">extracted into a temporary directory</a> and <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">imported as a Node.js module</a>.</p>
+<p>Once instantiated, actions are executed using the <code>/run</code> API. Event parameters are come from the request body. Each time a new request is received, the server <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">calls the action handler with event parameters</a>. Returned values are serialised as the JSON body in the API response.</p>
+<h3 id="starting-nodejs-runtime-containers">Starting Node.js Runtime Containers</h3>
+<p><a href="https://docs.docker.com/engine/reference/commandline/run/">Use this command</a> to start the Node.js runtime container locally.</p>
+<pre><code>$ docker run -it -p 8080:8080 openwhisk/action-nodejs-v8
+</code></pre><p>Once the container has started, port 8080 on localhost will be mapped to the HTTP service exposed by the runtime environment. This can be used to inject serverless applications into the runtime environment and invoke the serverless function handler with event parameters.</p>
+<h2 id="nodejs-remote-debugging">Node.js Remote Debugging</h2>
+<p>Modern versions of the Node.js runtime have a command-line flag (<code>--inspect</code>) to expose a <a href="https://nodejs.org/api/debugger.html#debugger_advanced_usage">remote debugging service</a>. This service runs a WebSocket server on localhost which implements the <a href="https://chromedevtools.github.io/devtools-protocol/">Chrome DevTools Protocol</a>.</p>
+<pre><code>$ node --inspect index.js
+Debugger listening on 127.0.0.1:9229.
+</code></pre><p>External tools can connect to this port to provide debugging capabilities for Node.js code.</p>
+<p>Docker images for the OpenWhisk Node.js runtimes use the <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejs8Action/Dockerfile#L28">following command</a> to start the internal Node.js process. <strong>Remote debugging is not enabled by default.</strong></p>
+<pre><code>node --expose-gc app.js
+</code></pre><p>Docker allows containers to override the default image start command using a <a href="https://docs.docker.com/engine/reference/run/">command line argument</a>.</p>
+<p><strong>This command will start the OpenWhisk Node.js runtime container with the remote debugging service enabled.</strong> Binding the HTTP API and WebSocket ports to the host machine allows us to access those services remotely.</p>
+<pre><code>docker run -p 8080:8080 -p 9229:9229 -it openwhisk/action-nodejs-v8 node --inspect=0.0.0.0:9229 app.js
+</code></pre><p><em>Once a container from the runtime image has started, we can connect our favourite debugging tools&hellip;</em></p>
+<h3 id="chrome-dev-tools">Chrome Dev Tools</h3>
+<p>To connect <a href="https://developers.google.com/web/tools/chrome-devtools/">Chrome Dev Tools</a> to the remote Node.js debugging service, follow these steps.</p>
+<ul>
+<li>Open the following page in Chrome: <a href="chrome://inspect/#devices">chrome://inspect/#devices</a></li>
+</ul>
+<p><img src="/images/debugging/devtools.png" alt=" Chrome Dev Tools"></p>
+<p>Chrome Dev Tools is configured to open a connection on port 9229 on localhost. If the web socket connection succeeds, the debugging target should be listed in the &ldquo;Remote Target&rdquo; section.</p>
+<ul>
+<li>Click the &ldquo;<em>Open dedicated DevTools for Node</em>&rdquo; link.</li>
+</ul>
+<p>In the &ldquo;Sources&rdquo; panel the JavaScript files loaded by the Node.js process are available.</p>
+<p><img src="/images/debugging/devtools-debugging.png" alt=" Chrome Dev Tools Debugging"></p>
+<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
+<h3 id="vscode">VSCode</h3>
+<p><a href="https://code.visualstudio.com/">Visual Studio Code</a> supports remote debugging of Node.js code using the Chrome Dev Tools protocol. Follow these steps to connect the editor to the remote debugging service.</p>
+<ul>
+<li>Click the menu item &ldquo;<em>Debug -&gt; Add Configuration</em>&rdquo;</li>
+<li>Select the &ldquo;<em>Node.js: Attach to Remote Program</em>&rdquo; from the Intellisense menu.</li>
+<li>Edit the default configuration to have the following values.</li>
+</ul>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;type&#34;</span>: <span style="color:#e6db74">&#34;node&#34;</span>,
+  <span style="color:#f92672">&#34;request&#34;</span>: <span style="color:#e6db74">&#34;attach&#34;</span>,
+  <span style="color:#f92672">&#34;name&#34;</span>: <span style="color:#e6db74">&#34;Attach to Remote&#34;</span>,
+  <span style="color:#f92672">&#34;address&#34;</span>: <span style="color:#e6db74">&#34;127.0.0.1&#34;</span>,
+  <span style="color:#f92672">&#34;port&#34;</span>: <span style="color:#ae81ff">9229</span>,
+  <span style="color:#f92672">&#34;localRoot&#34;</span>: <span style="color:#e6db74">&#34;${workspaceFolder}&#34;</span>
+}
+</code></pre></div><p><img src="/images/debugging/vscode.png" alt=" Visual Studio Code"></p>
+<ul>
+<li>Choose the new &ldquo;<em>attach to remote</em>&rdquo; debugging profile and click the Run button.</li>
+</ul>
+<p>The &ldquo;<em>Loaded Scripts</em>&rdquo; window will show all the JavaScript files loaded by the Node.js process.</p>
+<p><img src="/images/debugging/vscode-debugging.png" alt=" Visual Studio Code Debugging"></p>
+<p>Setting breakpoints in the <code>runner.js</code> file will allow you to halt execution for debugging upon invocations.</p>
+<h3 id="breakpoint-locations">Breakpoint Locations</h3>
+<p>Here are some useful locations to set breakpoints to catch errors in your serverless functions for the OpenWhisk Node.js runtime environments.</p>
+<h4 id="initialisation-errors---source-actions">Initialisation Errors - Source Actions</h4>
+<p>If you are creating OpenWhisk actions from JavaScript source files, the code is dynamically evaluated during  the <code>/init</code> request at <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L76">this location</a>. Putting a breakpoint here will allow you to catch errors thrown during that <code>eval()</code> call.</p>
+<h4 id="initialisation-errors---binary-actions">Initialisation Errors - Binary Actions</h4>
+<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L54">this location</a> is where the archive is extracted in the runtime filesystem. Putting a breakpoint here will catch errors from the extraction call and runtime checks for a valid JavaScript module.</p>
+<p><a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L61">This code</a> is where the JavaScript module is imported once it has been extracted. Putting a breakpoint here will catch errors thrown importing the module into the Node.js environment.</p>
+<h4 id="action-handler-errors">Action Handler Errors</h4>
+<p>For both source file and zipped module actions, <a href="https://github.com/apache/incubator-openwhisk-runtime-nodejs/blob/master/core/nodejsActionBase/runner.js#L95">this location</a> is where the action handler is invoked on each <code>/run</code> request. Putting a breakpoint here will catch errors thrown from within action handlers.</p>
+<h2 id="invoking-openwhisk-actions">Invoking OpenWhisk Actions</h2>
+<p>Once you have attached the debugger to the remote Node.js process, you need to send the API requests to simulate the platform invocations. Runtime containers use separate HTTP endpoints to import the action source code into the runtime environment (<code>/init</code>)  and then fire the invocation requests (<code>/run</code>).</p>
+<h4 id="generating-init-request-body---source-files">Generating Init Request Body - Source Files</h4>
+<p>If you are creating OpenWhisk actions from JavaScript source files, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;value&#34;</span>: {
+    <span style="color:#f92672">&#34;main&#34;</span>: <span style="color:#e6db74">&#34;&lt;FUNCTION NAME IN SOURCE FILE&gt;&#34;</span>,
+    <span style="color:#f92672">&#34;code&#34;</span>: <span style="color:#e6db74">&#34;&lt;INSERT SOURCE HERE&gt;&#34;</span>
+  }
+}
+</code></pre></div><p><code>code</code> is the JavaScript source to be evaluated which contains the action handler. <code>main</code> is the function name in the source file used for the action handler.</p>
+<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the source code in <code>file.js</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cat file.js | jq -sR  <span style="color:#e6db74">&#39;{value: {main: &#34;main&#34;, code: .}}&#39;</span>
+</code></pre></div><h4 id="generating-init-request-body---zipped-modules">Generating Init Request Body - Zipped Modules</h4>
+<p>If you are creating OpenWhisk actions from a zip file containing JavaScript modules, send the following JSON body in the HTTP POST to the <code>/init</code> endpoint.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;value&#34;</span>: {
+    <span style="color:#f92672">&#34;main&#34;</span>: <span style="color:#e6db74">&#34;&lt;FUNCTION NAME ON JS MODULE&gt;&#34;</span>,
+    <span style="color:#f92672">&#34;code&#34;</span>: <span style="color:#e6db74">&#34;&lt;INSERT BASE64 ENCODED STRING FROM ZIP FILE HERE&gt;&#34;</span>,
+    <span style="color:#f92672">&#34;binary&#34;</span>: <span style="color:#66d9ef">true</span>
+  }
+}
+</code></pre></div><p><code>code</code> must be a Base64 encoded string for the zip file. <code>main</code> is the function name returned in the imported JavaScript module to call as the action handler.</p>
+<p>Using the <code>jq</code> <a href="https://stedolan.github.io/jq/">command-line tool</a>, we can create the JSON body for the zip file in <code>action.zip</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ base64 action.zip | tr -d <span style="color:#e6db74">&#39;\n&#39;</span> | jq -sR <span style="color:#e6db74">&#39;{value: {main: &#34;main&#34;, binary: true, code: .}}&#39;</span>
+</code></pre></div><h4 id="sending-init-request">Sending Init Request</h4>
+<p>The <a href="https://httpie.org/">HTTPie</a> tool makes it simple to send HTTP requests from the command-line.</p>
+<p>Using this tool, the following command will initialise the runtime container with an OpenWhisk action.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ http post localhost:8080/init &lt; init.json
+HTTP/1.1 <span style="color:#ae81ff">200</span> OK
+...
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;OK&#34;</span>: true
+<span style="color:#f92672">}</span>
+</code></pre></div><p>If this HTTP request returns without an error, the action is ready to be invoked.</p>
+<p><em>No further initialisation requests are needed unless you want to modify the action deployed.</em></p>
+<h4 id="generating-run-request-body">Generating Run Request Body</h4>
+<p>Invocations of the action handler functions are triggered from a HTTP POST to the <code>/run</code> API endpoint.</p>
+<p>Invocations parameters are sent in the JSON request body, using a JSON object with a <code>value</code> field.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;value&#34;</span>: {
+    <span style="color:#f92672">&#34;some-param-name&#34;</span>: <span style="color:#e6db74">&#34;some-param-value&#34;</span>,
+    <span style="color:#f92672">&#34;another-param-name&#34;</span>: <span style="color:#e6db74">&#34;another-param-value&#34;</span>,
+  }
+}
+</code></pre></div><h4 id="sending-run-request">Sending Run Request</h4>
+<p>Using the <a href="https://httpie.org/">HTTPie</a> tool, the following command will invoke the OpenWhisk action.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ http post localhost:8080/run &lt; run.json
+HTTP/1.1 <span style="color:#ae81ff">200</span> OK
+...
+<span style="color:#f92672">{</span>
+    <span style="color:#e6db74">&#34;msg&#34;</span>: <span style="color:#e6db74">&#34;Hello world&#34;</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>Returned values from the action handler are serialised as the JSON body in the HTTP response. Issuing further HTTP POST requests to the <code>/run</code> endpoint allows us to re-invoke the action.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Lack of debugging tools is one of the biggest complaints from developers migrating to serverless platforms.</p>
+<p>Using an open-source serverless platform helps with this problem, by making it simple to run the same containers locally that are used for the platform&rsquo;s runtime environments. Debugging tools can then be started from inside these local environments to simulate remote access.</p>
+<p>In this example, this approach was used to enable the remote debugging service from the OpenWhisk Node.js runtime environment. The same approach could be used for any language and debugging tool needing local access to the runtime environment.</p>
+<p>Having access to the Node.js debugger is huge improvement when debugging challenging issues, rather than just being reliant on logs and metrics collected by the platform.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2018/06/binding-iam-services-to-ibm-cloud-functions/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Binding IAM Services To IBM Cloud Functions</span>
+    </a>
+    
+    
+    <a href="/2018/07/monitoring-dashboards-with-kibana-for-ibm-cloud-functions/" class="navigation-next">
+      <span class="navigation-tittle">Monitoring Dashboards With Kibana For IBM Cloud Functions</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

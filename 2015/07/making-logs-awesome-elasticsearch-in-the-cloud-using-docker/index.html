@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Making Logs Awesome - Elasticsearch in the Cloud using Docker • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Making Logs Awesome - Elasticsearch in the Cloud using Docker"/>
+<meta name="twitter:description" content="Running Elasticsearch in the cloud with IBM Containers and Docker"/>
+
+<meta property="og:title" content="Making Logs Awesome - Elasticsearch in the Cloud using Docker" />
+<meta property="og:description" content="Running Elasticsearch in the cloud with IBM Containers and Docker" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2015/07/making-logs-awesome-elasticsearch-in-the-cloud-using-docker/" />
+<meta property="article:published_time" content="2015-07-08T00:00:00+00:00" />
+<meta property="article:modified_time" content="2015-07-08T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Making Logs Awesome - Elasticsearch in the Cloud using Docker</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jul 08, 2015
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/ibmcontainers">ibmcontainers</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/bluemix">bluemix</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/cloud-foundry">cloud foundry</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/elasticsearch">elasticsearch</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/docker">docker</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 12 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><img src="/images/Logs.png" alt=""></p>
+<h3 id="logs-are-boring"><strong>Logs are boring.</strong></h3>
+<p>It used to be the only time you&rsquo;d be looking at your application logs was when something went wrong.</p>
+<p>Logs filled up disk space until they rotated out of existence.</p>
+<p>&hellip;but now businesses are increasingly focused on using data to <a href="http://www.slideshare.net/mikebrittain/metrics-driven-engineering-at-etsy">drive decisions</a>.</p>
+<p><em>Which advert leads to the highest click-through rates?</em></p>
+<p><em>How did that last website change affect user retention?</em></p>
+<p><em>What customer devices should our website support?</em></p>
+<p>Guess where the answers lie?</p>
+<h4 id="logs"><strong>Logs.</strong></h4>
+<p>Storing, processing and querying logs effectively is <a href="http://www.slideshare.net/mikebrittain/take-my-logs-please">helping businesses succeed</a>.</p>
+<h2 id="introducing-the-elk-elasticsearch-logstash-kibana-stack">Introducing the ELK (Elasticsearch, Logstash, Kibana) stack&hellip;</h2>
+<p><img src="https://www.elastic.co/assets/blt48dcfa0db3efb772/BQIielHCAAAs2So.png" alt=""></p>
+<p>Five years ago, <a href="https://www.elastic.co/products/elasticsearch">Elasticsearch</a>, an open-source full-text search engine, was
+released. It&rsquo;s now the second most popular enterprise search engine.
+Complementing this project were <a href="https://www.elastic.co/products/logstash">Logstash</a> and <a href="https://www.elastic.co/products/kibana">Kibana</a>.
+Logstash was a log
+processing pipeline that could normalize streaming logs into a centralised
+Elasticsearch cluster. Kibana was an analytics and visualisation platform for
+turning those logs into actionable insights.</p>
+<p>These tools were commonly used together, now known as the ELK stack, to deliver&hellip;</p>
+<blockquote>
+<p>&ldquo;an end-to-end stack that delivers actionable insights in real time from almost any type of structured and unstructured data source.&rdquo;</p>
+</blockquote>
+<h4 id="elk-making-logs-awesome"><strong>ELK, making logs awesome!</strong></h4>
+<p><em><em>Manually installing and configuring Elasticsearch, Logstash and Kibana is not a <a href="https://gist.github.com/ashrithr/c5c03950ef631ac63c43">trivial task</a>.</em></em></p>
+<p>Luckily, there is a better way&hellip;</p>
+<h2 id="docker">Docker</h2>
+<p>{%img <a href="https://upload.wikimedia.org/wikipedia/commons/7/79/Docker_(container_engine)_logo.png">https://upload.wikimedia.org/wikipedia/commons/7/79/Docker_(container_engine)_logo.png</a> %}</p>
+<blockquote>
+<p>&ldquo;Docker allows you to pack, ship and run any application as a lightweight container&rdquo;.</p>
+</blockquote>
+<p><a href="https://www.docker.com/">Docker</a> <em>images</em> define pre-configured environments that containers
+are started from.  <a href="https://hub.docker.com/">Docker Hub</a> is the public image registry, where anyone can
+publish, search and retrieve new images.</p>
+<p>{%img /images/Docker%20Hub.png %}</p>
+<p>Rather than having to install and configure individual software packages, we
+can pull down one of the many existing Docker images for the <a href="https://registry.hub.docker.com/search?q=elk">ELK stack</a>.</p>
+<p><em>With one command, we can spin up an entire ELK instance on any platform with no extra configuration needed.</em></p>
+<p>Magic.</p>
+<h2 id="ibm-containers">IBM Containers</h2>
+<p>IBM recently announced <a href="https://developer.ibm.com/bluemix/2015/06/22/ibm-containers-on-bluemix/">Docker support</a> for their Platform-as-a-Service cloud service, <a href="https://console.ng.bluemix.net/">IBM Bluemix</a>. Developers can now deploy and manage Docker containers on a scalable cloud platform.</p>
+<p><a href="https://developer.ibm.com/bluemix/2015/06/22/ibm-containers-on-bluemix/">IBM Containers</a> provides the following services:</p>
+<ul>
+<li>Private image registry</li>
+<li>Elastic scaling and auto-recovery</li>
+<li>Persistent storage and advanced networking configuration</li>
+<li>Automated security scans</li>
+<li>Integration with the IBM Bluemix cloud services.</li>
+</ul>
+<p><em>Using this service, we can build and test a custom ELK container in our local
+development environment and &ldquo;web-scale&rdquo; it by pushing to the IBM Bluemix cloud platform.</em></p>
+<h2 id="manging-application-logs">Manging Application Logs</h2>
+<p>Once our ELK instance is running, we can then start to push application logs
+from other applications running on IBM Bluemix into the service. We&rsquo;ll look at
+automatically setting up a log drain to forward all applications logs into a
+centralised Elasticsearch service. We can then start to drive business
+decisions using data rather than intuition using Kibana, the visualisation
+dashboard.</p>
+<p><strong><em>This blog post will explain the technical details of using Docker to create a
+customised ELK service that can be hosted on a scalable cloud platform.</em></strong></p>
+<h2 id="running-elk-instances-using-docker">Running ELK instances Using Docker</h2>
+<p>Docker Hub has over forty five thousands public images available. There are multiple public images we can pull
+down with a pre-configured ELK stack. Looking at the options, we&rsquo;re going to use the <a href="https://registry.hub.docker.com/u/sebp/elk/">sebp/elk</a>
+repository because it&rsquo;s popular and easily modifiable with a custom configuration.</p>
+<p>We&rsquo;re going to start by pulling the image into our local machine and running a container to check it&rsquo;s working&hellip;</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker pull sebp/elk
+$ docker run -p 5601:5601 -p 9200:9200 -p 5000:5000 -it --name elk sebp/elk
+</code></pre></div><p>That last command will start a new container from the <em>sebp/elk</em> image,
+exposing the ports for Kibana (5601), Elasticsearch (9200) and Logstash (5000)
+for external access. The container has been started with the <em>-i</em> flag,
+interactive mode, allowing us to monitor the container logs in the console.
+When the instance has started, we can view the status output from command line.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                                                                              NAMES
+42d40d1fb59c        sebp/elk:latest     <span style="color:#e6db74">&#34;/usr/local/bin/star   27 seconds ago      Up 26 seconds       0.0.0.0:5000-&gt;5000/tcp, 0.0.0.0:5601-&gt;5601/tcp, 0.0.0.0:9200-&gt;9200/tcp, 9300/tcp   elk
+</span></code></pre></div><p>Using Mac OS X for local development, we&rsquo;re using the <a href="http://boot2docker.io/">Boot2Docker project</a> to host a Linux VM for deploying Docker containers locally.
+With the following command, we can discover the virtual IP address for the ELK container.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ boot2docker ip
+192.168.59.103
+</code></pre></div><p>Opening a web browser, we can now visit <em>http://192.168.59.103:5601</em> to show the Kibana application.
+For now, this isn&rsquo;t very useful because Elasticsearch has no logs!</p>
+<p>Let&rsquo;s fix that&hellip;</p>
+<h2 id="draining-logs-from-cloud-foundry">Draining Logs from Cloud Foundry</h2>
+<p><a href="https://www.cloudfoundry.org">Cloud Foundry</a>, the open-source project powering IBM Bluemix, supports <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">setting up a syslog drain</a>
+to forward all applications logs to a third-party logging service. Full details on configuring this will be <a href="#config">shown later</a>.</p>
+<p>Scott Frederick has already written an <a href="http://scottfrederick.cfapps.io/blog/2014/02/20/cloud-foundry-and-logstash">amazing blog post</a> about configuring Logstash
+to support the log format used by the Cloud Foundry. Logstash expects the older RFC3164 syslog formatting by default, whilst Cloud Foundry emits log lines that follow
+the newer RFC5424 standard.</p>
+<p>Scott provides the following configuration file that sets up the syslog input channels, running on port 5000, along with a custom filter that converts the incoming RFC5424 logs into
+an acceptable format.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">input <span style="color:#f92672">{</span>
+  tcp <span style="color:#f92672">{</span>
+    port <span style="color:#f92672">=</span>&gt; <span style="color:#ae81ff">5000</span>
+    type <span style="color:#f92672">=</span>&gt; syslog
+  <span style="color:#f92672">}</span>
+  udp <span style="color:#f92672">{</span>
+    port <span style="color:#f92672">=</span>&gt; <span style="color:#ae81ff">5000</span>
+    type <span style="color:#f92672">=</span>&gt; syslog
+  <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+filter <span style="color:#f92672">{</span>
+  <span style="color:#66d9ef">if</span> <span style="color:#f92672">[</span>type<span style="color:#f92672">]</span> <span style="color:#f92672">==</span> <span style="color:#e6db74">&#34;syslog&#34;</span> <span style="color:#f92672">{</span>
+    grok <span style="color:#f92672">{</span>
+      match <span style="color:#f92672">=</span>&gt; <span style="color:#f92672">{</span> <span style="color:#e6db74">&#34;message&#34;</span> <span style="color:#f92672">=</span>&gt; <span style="color:#e6db74">&#34;%{SYSLOG5424PRI}%{NONNEGINT:syslog5424_ver} +(?:%{TIMESTAMP_ISO8601:syslog5424_ts}|-) +(?:%{HOSTNAME:syslog5424_host}|-) +(?:%{NOTSPACE:syslog5424_app}|-) +(?:%{NOTSPACE:syslog5424_proc}|-) +(?:%{WORD:syslog5424_msgid}|-) +(?:%{SYSLOG5424SD:syslog5424_sd}|-|) +%{GREEDYDATA:syslog5424_msg}&#34;</span> <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+    syslog_pri <span style="color:#f92672">{</span> <span style="color:#f92672">}</span>
+    date <span style="color:#f92672">{</span>
+      match <span style="color:#f92672">=</span>&gt; <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;syslog_timestamp&#34;</span>, <span style="color:#e6db74">&#34;MMM  d HH:mm:ss&#34;</span>, <span style="color:#e6db74">&#34;MMM dd HH:mm:ss&#34;</span> <span style="color:#f92672">]</span>
+    <span style="color:#f92672">}</span>
+    <span style="color:#66d9ef">if</span> !<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;_grokparsefailure&#34;</span> in <span style="color:#f92672">[</span>tags<span style="color:#f92672">])</span> <span style="color:#f92672">{</span>
+      mutate <span style="color:#f92672">{</span>
+        replace <span style="color:#f92672">=</span>&gt; <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;@source_host&#34;</span>, <span style="color:#e6db74">&#34;%{syslog_hostname}&#34;</span> <span style="color:#f92672">]</span>
+        replace <span style="color:#f92672">=</span>&gt; <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;@message&#34;</span>, <span style="color:#e6db74">&#34;%{syslog_message}&#34;</span> <span style="color:#f92672">]</span>
+      <span style="color:#f92672">}</span>
+    <span style="color:#f92672">}</span>
+    mutate <span style="color:#f92672">{</span>
+      remove_field <span style="color:#f92672">=</span>&gt; <span style="color:#f92672">[</span> <span style="color:#e6db74">&#34;syslog_hostname&#34;</span>, <span style="color:#e6db74">&#34;syslog_message&#34;</span>, <span style="color:#e6db74">&#34;syslog_timestamp&#34;</span> <span style="color:#f92672">]</span>
+    <span style="color:#f92672">}</span>
+  <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+
+output <span style="color:#f92672">{</span>
+  elasticsearch <span style="color:#f92672">{</span> <span style="color:#f92672">}</span>
+<span style="color:#f92672">}</span>
+</code></pre></div><p>Using this configuration, Logstash will accept and index our application logs into Elasticsearch.</p>
+<p><em>Note: There is also a <a href="https://www.elastic.co/guide/en/logstash/current/plugins-outputs-syslog.html">custom plugin</a> to enable RFC5424 support.</em></p>
+<h2 id="building-custom-docker-images">Building Custom Docker Images</h2>
+<p>Using the custom Logstash configuration relies on building a new Docker image
+with this configuration baked in. We could download the Git repository
+containing the image <a href="https://github.com/spujadas/elk-docker">source files</a>, modify those and rebuild from scratch.
+However, an easier way uses the existing image as a <em>base</em>, applies our
+modifications on top and then generates a brand new image.</p>
+<p><strong>So, how do we build our own Docker images? Using a Dockerfile.</strong></p>
+<blockquote>
+<p>A Dockerfile is a text document that contains all the commands you would
+normally execute manually in order to build a Docker image.</p>
+</blockquote>
+<p>Reviewing the <a href="https://registry.hub.docker.com/u/sebp/elk/dockerfile/">Dockerfile</a> for the <em>sebp/elk</em> image, configuration for logstash is
+stored in the <em>/etc/logstash/conf.d/</em> directory. All we need to do is replace these files with our custom configuration.</p>
+<p>Creating the custom configuration locally, we define a Dockerfile with instructions for building our image.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ ls
+01-syslog-input.conf 10-syslog.conf       Dockerfile
+$ cat Dockerfile
+FROM sebp/elk
+RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+</code></pre></div><p>The Dockerfile starts with the &ldquo;sebp/elk&rdquo; image as a base layer. Using the RUN command, we execute a command to remove existing input configuration. After this
+the ADD command copies files from our local directory into the image.</p>
+<p>We can now run the Docker build system to generate our new image.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker build -t jthomas/elk .
+Sending build context to Docker daemon 4.608 kB
+Sending build context to Docker daemon
+Step <span style="color:#ae81ff">0</span> : FROM sebp/elk
+ ---&gt; 2b71e915297f
+Step <span style="color:#ae81ff">1</span> : RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+ ---&gt; Using cache
+ ---&gt; f196b6833121
+Step <span style="color:#ae81ff">2</span> : ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+ ---&gt; Using cache
+ ---&gt; 522ba2c76b00
+Step <span style="color:#ae81ff">3</span> : ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+ ---&gt; Using cache
+ ---&gt; 79256ffaac3b
+Successfully built 79256ffaac3b
+$ docker images jthomas/elk
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+jthomas/elk         latest              79256ffaac3b        <span style="color:#ae81ff">26</span> hours ago        1.027 GB
+</code></pre></div><p><em>&hellip;and that&rsquo;s it! We have a customised Docker image with our configuration changes ready for running.</em></p>
+<h2 id="testing-our-custom-image">Testing Our Custom Image</h2>
+<p>Before pushing this image to the cloud, we need to check it&rsquo;s working correctly.
+Let&rsquo;s start by starting a new container from our custom image locally.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker run -p 5601:5601 -p 9200:9200 -p 5000:5000 -it --name elk jthomas/elk
+</code></pre></div><p>Now, use the <a href="https://github.com/cloudfoundry/cli">CF CLI</a> to access recent logs for a sample application and paste the output into
+a telnet connection to port 5000 on our container.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cf logs APP_NAME --recent
+Connected, dumping recent logs <span style="color:#66d9ef">for</span> app debug-testing in org james.thomas@uk.ibm.com / space dev as james.thomas@uk.ibm.com...
+
+2015-07-02T17:14:47.58+0100 <span style="color:#f92672">[</span>RTR/1<span style="color:#f92672">]</span>      OUT nodered-app.mybluemix.net - <span style="color:#f92672">[</span>02/07/2015:16:14:47 +0000<span style="color:#f92672">]</span> <span style="color:#e6db74">&#34;GET / HTTP/1.1&#34;</span> <span style="color:#ae81ff">200</span> <span style="color:#ae81ff">0</span> <span style="color:#ae81ff">7720</span> <span style="color:#e6db74">&#34;-&#34;</span> <span style="color:#e6db74">&#34;Java/1.7.0&#34;</span> 75.126.70.42:56147 x_forwarded_for:<span style="color:#e6db74">&#34;-&#34;</span> vcap_request_id:1280fe18-e53a-4bd4-40a9-2aaf7c53cc54 response_time:0.003247100 app_id:f18c2dea-7649-4567-9532-473797b0818d
+2015-07-02T17:15:44.56+0100 <span style="color:#f92672">[</span>RTR/2<span style="color:#f92672">]</span>      OUT nodered-app.mybluemix.net - <span style="color:#f92672">[</span>02/07/2015:16:15:44 +0000<span style="color:#f92672">]</span> <span style="color:#e6db74">&#34;GET / HTTP/1.1&#34;</span> <span style="color:#ae81ff">200</span> <span style="color:#ae81ff">0</span> <span style="color:#ae81ff">7720</span> <span style="color:#e6db74">&#34;-&#34;</span> <span style="color:#e6db74">&#34;Java/1.7.0&#34;</span> 75.126.70.43:38807 x_forwarded_for:<span style="color:#e6db74">&#34;-&#34;</span> vcap_request_id:4dd96d84-c61d-45ec-772a-289ab2f37c67 response_time:0.003848360 app_id:f18c2dea-7649-4567-9532-473797b0818d
+2015-07-02T17:16:29.61+0100 <span style="color:#f92672">[</span>RTR/2<span style="color:#f92672">]</span>      OUT nodered-app.mybluemix.net - <span style="color:#f92672">[</span>02/07/2015:16:14:29 +0000<span style="color:#f92672">]</span> <span style="color:#e6db74">&#34;GET /red/comms HTTP/1.1&#34;</span> <span style="color:#ae81ff">101</span> <span style="color:#ae81ff">0</span> <span style="color:#ae81ff">0</span> <span style="color:#e6db74">&#34;-&#34;</span> <span style="color:#e6db74">&#34;Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.130 Safari/537.36&#34;</span> 75.126.70.42:54826 x_forwarded_for:<span style="color:#e6db74">&#34;75.126.70.42&#34;</span> vcap_request_id:15c2d4f8-e6ba-4a20-77b7-345aafd32e95 response_time:MissingFinishedAt app_id:f18c2dea-7649-4567-9532-473797b0818d
+$ telnet 192.168.59.103 <span style="color:#ae81ff">5000</span>
+Trying 192.168.59.103...
+Connected to 192.168.59.103.
+Escape character is <span style="color:#e6db74">&#39;^]&#39;</span>.
+// PASTE LOG LINES....
+</code></pre></div><p>Starting a web browser and opening the Kibana page, port 5601, the log lines are now available in the dashboard. Success!</p>
+<h2 id="pushing-docker-images-to-the-cloud">Pushing Docker Images To The Cloud</h2>
+<p>Having successfully built and tested our custom Docker image locally, we want
+to push this image to our cloud platform to allow us to start new containers
+based on this image.</p>
+<p>Docker supports pushing local images to the <a href="http://hub.docker.com">public registry</a> using the <em>docker push</em> command.
+We can choose to use a <a href="https://blog.docker.com/2013/07/how-to-use-your-own-registry/">private registry</a>
+by creating a new image tag which prefixes the repository location in the name.</p>
+<p><em>IBM Containers&rsquo; private registry is available at the following address, <strong>registry.ng.bluemix.net</strong>.</em></p>
+<p>Let&rsquo;s push our custom image to the IBM Containers private registry&hellip;</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker tag jthomas/elk registry.ng.bluemix.net/jthomas/elk
+$ docker images
+REPOSITORY                                     TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+jthomas/elk                                   latest              79256ffaac3b        <span style="color:#ae81ff">43</span> hours ago        1.027 GB
+registry.ng.bluemix.net/jthomas/elk           latest              79256ffaac3b        <span style="color:#ae81ff">43</span> hours ago        1.027 GB
+$ docker push registry.ng.bluemix.net/jthomas/elk
+The push refers to a repository <span style="color:#f92672">[</span>registry.ng.bluemix.net/jthomas/elk<span style="color:#f92672">]</span> <span style="color:#f92672">(</span>len: 1<span style="color:#f92672">)</span>
+Sending image list
+Pushing repository registry.ng.bluemix.net/jthomas/elk <span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> tags<span style="color:#f92672">)</span>
+511136ea3c5a Image successfully pushed
+...
+79256ffaac3b: Image successfully pushed
+Pushing tag <span style="color:#66d9ef">for</span> rev <span style="color:#f92672">[</span>79256ffaac3b<span style="color:#f92672">]</span> on <span style="color:#f92672">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/elk/tags/latest<span style="color:#f92672">}</span>
+</code></pre></div><p>Pushing custom images from a local environment can be a slow process. For the <em>elk</em> image, this means transferring over one gigabyte of data
+to the external registry.</p>
+<p><em>We can speed this up by using IBM Containers to create our image from the Dockerfile, rather than uploading the built image.</em></p>
+<p>Doing this from the command line requires the use of the IBM Containers command-line application.</p>
+<h2 id="managing-ibm-containers">Managing IBM Containers</h2>
+<p>IBM Containers enables you to manage your containers from the command-line with <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html">two options</a>&hellip;</p>
+<ul>
+<li><em><a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#installcontainercfplugin">IBM Containers Plug-in</a> for the Cloud Foundry CLI.</em></li>
+<li><em><a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov_ice.html">IBM Containers Extension</a>, standalone command-line application.</em></li>
+</ul>
+<p>Both approaches handle the interactions between the local and remote Docker hosts, while providing
+extra functionality not supported natively by Docker.</p>
+<p><em>Full details on the differences and installation procedures
+for the two applications are available <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html">here</a>.</em></p>
+<h2 id="building-images-using-ibm-containers">Building Images Using IBM Containers</h2>
+<p>Building our image using the IBM Containers service uses the same syntax as <a href="https://docs.docker.com/reference/commandline/build/">Docker build</a>. Local files
+from the current directory will be sent with the Dockerfile to the remote service. Once the image has
+been built, we can verify it&rsquo;s available in the remote repository.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ ice build -t registry.ng.bluemix.net/jthomas/elk .
+zipped tar size: <span style="color:#ae81ff">706</span>
+Posting <span style="color:#ae81ff">706</span> bytes... It may take a <span style="color:#66d9ef">while</span>...
+Step <span style="color:#ae81ff">0</span> : FROM sebp/elk
+ ---&gt; 2b71e915297f
+Step <span style="color:#ae81ff">1</span> : RUN rm /etc/logstash/conf.d/01-lumberjack-input.conf
+ ---&gt; Using cache
+ ---&gt; ed13d91e0197
+Step <span style="color:#ae81ff">2</span> : ADD ./01-syslog-input.conf /etc/logstash/conf.d/01-syslog-input.conf
+ ---&gt; Using cache
+ ---&gt; 808a4c7410c7
+Step <span style="color:#ae81ff">3</span> : ADD ./10-syslog.conf /etc/logstash/conf.d/10-syslog.conf
+ ---&gt; Using cache
+ ---&gt; 117e4454b015
+Successfully built 117e4454b015
+The push refers to a repository <span style="color:#f92672">[</span>registry.ng.bluemix.net/jthomas/elk<span style="color:#f92672">]</span> <span style="color:#f92672">(</span>len: 1<span style="color:#f92672">)</span>
+Sending image list
+Pushing repository registry.ng.bluemix.net/jthomas/elk <span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> tags<span style="color:#f92672">)</span>
+Image 117e4454b015 already pushed, skipping
+Pushing tag <span style="color:#66d9ef">for</span> rev <span style="color:#f92672">[</span>117e4454b015<span style="color:#f92672">]</span> on <span style="color:#f92672">{</span>https://registry.ng.bluemix.net/v1/repositories/jthomas/elk/tags/latest<span style="color:#f92672">}</span>
+$ ice images
+REPOSITORY                                TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+registry.ng.bluemix.net/jthomas/elk       latest              5454d3ec-0f3        <span style="color:#ae81ff">44</span> hours ago        <span style="color:#ae81ff">0</span> B
+registry.ng.bluemix.net/ibmliberty        latest              3724d2e0-06d        <span style="color:#ae81ff">9</span> days ago          <span style="color:#ae81ff">0</span> B
+registry.ng.bluemix.net/ibmnode           latest              9435349e-8b4        <span style="color:#ae81ff">9</span> days ago          <span style="color:#ae81ff">0</span> B
+</code></pre></div><p>All private repositories on IBM Bluemix have two official images for supported versions of <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#container_images_node">NodeJS</a> and <a href="https://www.ng.bluemix.net/docs/starters/container_cli_ov.html#container_images_liberty">Websphere Liberty</a>.</p>
+<p><em>We can now see the third image is the custom ELK stack that was built.</em></p>
+<h2 id="starting-elk-containers">Starting ELK Containers</h2>
+<p>Starting containers from images in the IBM Containers registry can be done using the command-line applications or through the <a href="http://bluemix.net">IBM Bluemix UI</a>.
+In this example, we&rsquo;ll be using the IBM Bluemix UI to start and configure a new ELK container from our pre-configured image.</p>
+<p>Logging into the IBM Bluemix, the <em>Catalogue</em> page shows the list of available images used to create new containers. We have both the official
+images from IBM Containers and our custom ELK service.</p>
+<p><img src="/images/Container%20Images.png" alt=""></p>
+<p>Selecting the <em>ELK</em> image, we can configure and run a new container from this
+image. Setting up a new container with a public IP address,
+memory limit to 1GB and expose the same ports as running locally (5000, 5601
+and 9200).</p>
+<p><img src="/images/Create%20Container.png" alt=""></p>
+<p>Clicking the <em>Create</em> button, IBM Bluemix will provision and start our
+new container.</p>
+<p>Once the container has started, we can view the <em>Dashboard</em> page for this instance. Here we can view
+details about the container instance, modify the running state and access monitoring and logs tools.</p>
+<p><img src="/images/Container%20Overview.png" alt="">
+<img src="/images/Container%20Monitoring.png" alt=""></p>
+<p><em>&hellip;and that&rsquo;s it! We now have our ELK service running using IBM Containers
+ready to start processing logs from our applications.</em></p>
+<p>Visiting the external IP address assigned to the container on the Kibana
+application port (5601) shows the Kibana web interface demonstrating our
+container has started correctly.</p>
+<h2 id="a-nameconfigadraining-cloud-foundry-logs"><!-- raw HTML omitted --><!-- raw HTML omitted -->Draining Cloud Foundry Logs</h2>
+<p>Cloud Foundry supports draining applications logs to a <a href="http://docs.cloudfoundry.org/devguide/services/log-management.html">third-party syslog service</a>.
+The ELK container has a syslog drain configured on port 5000 of the public IP address bound to the instance.</p>
+<p>Binding this custom syslog drain to Cloud Foundry applications uses a <a href="https://docs.cloudfoundry.org/devguide/services/user-provided.html">custom user-provided service</a>.
+Creating user-provided services using the CF CLI, there is a special flag, <em>-l</em>, that notifies the platform this service is a syslog drain. Binding this special syslog
+drain service to an application will automatically set up log forwarding. Once the application has been restarted, logs will start to flow into the external service.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cf cups logstash-drain -l syslog://<span style="color:#f92672">[</span>CONTAINER_IP<span style="color:#f92672">]</span>:5000
+$ cf bind-service <span style="color:#f92672">[</span>app-name<span style="color:#f92672">]</span> logstash-drain
+$ cf restart <span style="color:#f92672">[</span>app-name<span style="color:#f92672">]</span>
+</code></pre></div><p><em>Cloud Foundry supports multiple syslog drains for the same application.</em></p>
+<p>Testing this out is as simple as visiting our application to generate sample logs and then looking at the Kibana page to see they are showing up.
+Here is a screenshot of the expected output when our ELK container is successfully processing logs from a Cloud Foundry application.</p>
+<p><img src="/images/Kibana.png" alt=""></p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Elastic Search, Kibana and Logstash is the modern log processing framework.
+Using Docker, we&rsquo;ve been able to create a custom ELK service without manually
+installing and configuring a multitude of different software packages. Pushing
+this image to the IBM Containers platform means we can spin up new ELK
+containers on-demand within minutes!</p>
+<blockquote>
+<p>Elasticsearch, Docker and IBM Containers&hellip; Making Logs Awesome.</p>
+</blockquote>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2015/06/continuous-delivery-for-phonebot/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Continuous Delivery for Phonebot</span>
+    </a>
+    
+    
+    <a href="/2015/07/debugging-cloud-foundry-stack-issues/" class="navigation-next">
+      <span class="navigation-tittle">Debugging Cloud Foundry Stack Issues</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

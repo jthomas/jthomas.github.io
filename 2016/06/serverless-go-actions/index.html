@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Serverless Go Actions • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Serverless Go Actions"/>
+<meta name="twitter:description" content="Using OpenWhisk to run serverless Go functions"/>
+
+<meta property="og:title" content="Serverless Go Actions" />
+<meta property="og:description" content="Using OpenWhisk to run serverless Go functions" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2016/06/serverless-go-actions/" />
+<meta property="article:published_time" content="2016-06-21T00:00:00+00:00" />
+<meta property="article:modified_time" content="2016-06-21T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Serverless Go Actions</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jun 21, 2016
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/go">go</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><strong>There&rsquo;s now a better way to do this! See here: <a href="/blog/2017/01/17/openwhisk-and-go/">http://jamesthom.as/blog/2017/01/17/openwhisk-and-go/</a></strong></p>
+<p><a href="https://github.com/openwhisk/openwhisk">OpenWhisk</a>, the open-source serverless
+platform, provides the ability to invoke custom
+<a href="https://www.docker.com/">Docker</a> containers as serverless functions.</p>
+<p>Developers can create new
+<a href="https://github.com/openwhisk/openwhisk/blob/master/docs/actions.md">Actions</a>,
+referencing public images on <a href="https://dockerhub.com">Dockerhub</a>. OpenWhisk
+manages creating and executing containers using these images per invocation
+request.</p>
+<p>Using this feature, developers can write serverless functions using the
+<a href="https://golang.org/">Go language</a>. Compiled Go language binaries are embedded
+within custom Docker images and pushed into the platform.</p>
+<p><strong>So, how do we start?</strong></p>
+<p><em>This blog post will explain how to get your Go language functions running as
+&ldquo;serverless functions&rdquo; on OpenWhisk. If you&rsquo;re impatient to get to the code,
+this <a href="https://github.com/jthomas/openwhisk_go_action">repository</a> contains the
+examples for everything discussed below.</em></p>
+<p>OpenWhisk helps developers create custom Actions using Docker through an SDK&hellip;</p>
+<h2 id="openwhisk-docker-sdk">OpenWhisk Docker SDK</h2>
+<p>Using the
+<a href="https://new-console.ng.bluemix.net/docs/openwhisk/index.html"><em>wsk</em> command-line utility</a>,
+developers can install the
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> into the
+current directory.</p>
+<pre><code>$ wsk sdk install docker
+</code></pre><p>The SDK provides the <a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">source for a custom Docker image</a>, which executes a custom
+binary in response to invocation requests. The default SDK copies the
+executable file, located at the <em>client/action</em>, into the image during the
+build process. Users build the image locally before pushing this to Dockerhub.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ docker build -t &lt;dockerhub_user&gt;/docker_action .
+$ docker push &lt;dockerhub_user&gt;/docker_action
+</code></pre></div><p>Using the command-line utility, users can then create a new Action referencing
+this public Docker image. When this Action is invoked, the platform will spin
+up a new container from this custom image.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ wsk action create docker_action --docker &lt;dockerhub_user&gt;/docker_action
+$ wsk action invoke --blocking --result docker_action 
+</code></pre></div><h2 id="openwhisk-docker-action">OpenWhisk Docker Action</h2>
+<p>OpenWhisk SDK&rsquo;s Docker image uses a Node.js
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker/server">application</a>
+to handle the JSON invocation request from the platform and spawns a process to
+execute the binary. Invocation parameters are passed as a JSON string through a
+command-line argument to the binary. The executable must write the JSON
+response to stdout, the handler will return this to the platform.</p>
+<p>Containers used to run OpenWhisk Actions must be expose a HTTP API on port 8080
+with two paths, <em>/init</em> and <em>/run</em>. The platform sends HTTP POST requests to
+these paths to initialise the Action and schedule invocations.</p>
+<p>The <em>/init</em> path is used to provide the Action source for languages which
+support runtime evaluation. <strong>User-provided Docker images do not need to
+implement this method, other than returning a non-error HTTP response.</strong></p>
+<p>The <em>/run</em> path is called by the platform for each invocation request.
+Parameters for the invocation are passed as the <em>value</em> property of the JSON
+request body. Any non-empty JSON response will be interpreted as the invocation
+result.</p>
+<h2 id="go-actions-using-the-docker-sdk">Go Actions using the Docker SDK</h2>
+<p>Using Go binaries with the Docker SDK requires the developer to cross-compile
+the source for the platform architecture and copy the binary to the
+<em>client/action</em> path.</p>
+<pre><code>export GOARCH=386
+export GOOS=linux
+go build -o action
+mv action client/action
+</code></pre><p>The Go code must parse the invocation parameters as a JSON string from the
+command-line argument. Data written to <em>stdout</em> will be parsed as JSON and
+returned as the Action response.</p>
+<p>This sample Go source demonstrates using this method to implement a &ldquo;reverse
+string&rdquo; Action.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">main</span>
+
+<span style="color:#f92672">import</span> <span style="color:#e6db74">&#34;os&#34;</span>
+<span style="color:#f92672">import</span> <span style="color:#e6db74">&#34;encoding/json&#34;</span>
+<span style="color:#f92672">import</span> <span style="color:#e6db74">&#34;log&#34;</span>
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Params</span> <span style="color:#66d9ef">struct</span> {
+  <span style="color:#a6e22e">Payload</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">`json:&#34;payload&#34;`</span>
+}
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Result</span> <span style="color:#66d9ef">struct</span> {
+  <span style="color:#a6e22e">Reversed</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">`json:&#34;reversed&#34;`</span>
+}
+
+<span style="color:#75715e">// extract invocation parameters, passed as JSON string argument on command-line.
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">params</span>() <span style="color:#a6e22e">Params</span> {
+  <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">params</span> <span style="color:#a6e22e">Params</span>
+  <span style="color:#a6e22e">source</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">os</span>.<span style="color:#a6e22e">Args</span>[<span style="color:#ae81ff">1</span>]
+  <span style="color:#a6e22e">buf</span> <span style="color:#f92672">:=</span> []byte(<span style="color:#a6e22e">source</span>)
+  <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">Unmarshal</span>(<span style="color:#a6e22e">buf</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">params</span>); <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+    <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatal</span>(<span style="color:#a6e22e">err</span>)
+  }
+  <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">params</span>
+}
+
+<span style="color:#75715e">// convert struct back to JSON for response
+</span><span style="color:#75715e"></span><span style="color:#66d9ef">func</span> <span style="color:#a6e22e">return_result</span>(<span style="color:#a6e22e">result</span> <span style="color:#a6e22e">Result</span>) {
+  <span style="color:#a6e22e">buf</span>, <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">Marshal</span>(<span style="color:#a6e22e">result</span>)
+  <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+    <span style="color:#a6e22e">log</span>.<span style="color:#a6e22e">Fatal</span>(<span style="color:#a6e22e">err</span>)
+  }
+  <span style="color:#a6e22e">os</span>.<span style="color:#a6e22e">Stdout</span>.<span style="color:#a6e22e">Write</span>(<span style="color:#a6e22e">buf</span>)
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {
+  <span style="color:#a6e22e">input</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">params</span>()
+
+  <span style="color:#75715e">// reverse the string passed from invocation parameters
+</span><span style="color:#75715e"></span>  <span style="color:#a6e22e">chars</span> <span style="color:#f92672">:=</span> []rune(<span style="color:#a6e22e">input</span>.<span style="color:#a6e22e">Payload</span>)
+  <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span>, <span style="color:#a6e22e">j</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">0</span>, len(<span style="color:#a6e22e">chars</span>)<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>; <span style="color:#a6e22e">i</span> &lt; <span style="color:#a6e22e">j</span>; <span style="color:#a6e22e">i</span>, <span style="color:#a6e22e">j</span> = <span style="color:#a6e22e">i</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>, <span style="color:#a6e22e">j</span><span style="color:#f92672">-</span><span style="color:#ae81ff">1</span> {
+    <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">i</span>], <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">j</span>] = <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">j</span>], <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">i</span>]
+  }
+  <span style="color:#a6e22e">result</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">Result</span>{
+    <span style="color:#a6e22e">Reversed</span>: string(<span style="color:#a6e22e">chars</span>),
+  }
+
+  <span style="color:#a6e22e">return_result</span>(<span style="color:#a6e22e">result</span>)
+}
+</code></pre></div><h2 id="docker-sdk-base-image">Docker SDK Base Image</h2>
+<p>Building a base image from the OpenWhisk Docker SDK and publishing on Dockerhub
+simplifies the process of building a Docker-based Action. Developers can now
+use the following image
+(<a href="https://hub.docker.com/r/jamesthomas/openwhisk_docker_action/">jamesthomas/openwhisk_docker_action</a>),
+without having to install the SDK locally.</p>
+<pre><code>FROM jamesthomas/openwhisk_docker_action
+COPY action /blackbox/action
+</code></pre><p>This base image includes the Node.js handler to manage the platform HTTP
+requests. An executable file at <em>/blackbox/action</em> will be called for each
+invocation. JSON parameters and responses are still passed using command-line
+arguments and stdout.</p>
+<h2 id="custom-go-handler">Custom Go Handler</h2>
+<p>Using the Docker SDK for OpenWhisk relies on a Node.js application to handle
+the platform HTTP requests, spawning a process to execute the user binary file.</p>
+<p>Implementing the HTTP API, described above, in Go would allow us to remove the
+Node.js handler from the image. Compiling the Go Action source with the HTTP
+API handler into a single binary and using an Alpine Linux base image will
+dramatically reduce the image size.</p>
+<p>This should improve execution performance, by removing the Node.js VM process,
+and cold start-up time, through having a smaller Docker image.</p>
+<p><strong>Using this Go package, <a href="https://github.com/jthomas/ow">jthomas/ow</a>, users can
+automate the process of creating Go-based Actions.</strong></p>
+<pre><code>go get jthomas/ow
+</code></pre><p><em>The package provides a method for registering Action callbacks and implements
+the HTTP endpoints for handling platform requests.</em></p>
+<p><em>Invocation parameters are passed using a function parameter, rather than a raw
+JSON string. Returned interface values will be automatically serialised to JSON
+as the Action response.</em></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#a6e22e">openwhisk</span>.<span style="color:#a6e22e">RegisterAction</span>(<span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">value</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">RawMessage</span>) (<span style="color:#66d9ef">interface</span>{}, <span style="color:#66d9ef">error</span>) {
+   <span style="color:#f92672">...</span>  
+}
+</code></pre></div><p>Re-writing the &ldquo;reverse string&rdquo; Action above to use this package is shown here.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-go" data-lang="go"><span style="color:#f92672">package</span> <span style="color:#a6e22e">main</span>
+
+<span style="color:#f92672">import</span> (
+    <span style="color:#e6db74">&#34;encoding/json&#34;</span>
+    <span style="color:#e6db74">&#34;github.com/jthomas/ow&#34;</span>
+)
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Params</span> <span style="color:#66d9ef">struct</span> {
+    <span style="color:#a6e22e">Payload</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">`json:&#34;payload&#34;`</span>
+}
+
+<span style="color:#66d9ef">type</span> <span style="color:#a6e22e">Result</span> <span style="color:#66d9ef">struct</span> {
+    <span style="color:#a6e22e">Reversed</span> <span style="color:#66d9ef">string</span> <span style="color:#e6db74">`json:&#34;reversed&#34;`</span>
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">reverse_string</span>(<span style="color:#a6e22e">to_reverse</span> <span style="color:#66d9ef">string</span>) <span style="color:#66d9ef">string</span> {
+    <span style="color:#a6e22e">chars</span> <span style="color:#f92672">:=</span> []rune(<span style="color:#a6e22e">to_reverse</span>)
+    <span style="color:#66d9ef">for</span> <span style="color:#a6e22e">i</span>, <span style="color:#a6e22e">j</span> <span style="color:#f92672">:=</span> <span style="color:#ae81ff">0</span>, len(<span style="color:#a6e22e">chars</span>)<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>; <span style="color:#a6e22e">i</span> &lt; <span style="color:#a6e22e">j</span>; <span style="color:#a6e22e">i</span>, <span style="color:#a6e22e">j</span> = <span style="color:#a6e22e">i</span><span style="color:#f92672">+</span><span style="color:#ae81ff">1</span>, <span style="color:#a6e22e">j</span><span style="color:#f92672">-</span><span style="color:#ae81ff">1</span> {
+        <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">i</span>], <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">j</span>] = <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">j</span>], <span style="color:#a6e22e">chars</span>[<span style="color:#a6e22e">i</span>]
+    }
+    <span style="color:#66d9ef">return</span> string(<span style="color:#a6e22e">chars</span>)
+}
+
+<span style="color:#66d9ef">func</span> <span style="color:#a6e22e">main</span>() {
+    <span style="color:#a6e22e">ow</span>.<span style="color:#a6e22e">RegisterAction</span>(<span style="color:#66d9ef">func</span>(<span style="color:#a6e22e">value</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">RawMessage</span>) (<span style="color:#66d9ef">interface</span>{}, <span style="color:#66d9ef">error</span>) {
+        <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">params</span> <span style="color:#a6e22e">Params</span>
+        <span style="color:#a6e22e">err</span> <span style="color:#f92672">:=</span> <span style="color:#a6e22e">json</span>.<span style="color:#a6e22e">Unmarshal</span>(<span style="color:#a6e22e">value</span>, <span style="color:#f92672">&amp;</span><span style="color:#a6e22e">params</span>)
+        <span style="color:#66d9ef">if</span> <span style="color:#a6e22e">err</span> <span style="color:#f92672">!=</span> <span style="color:#66d9ef">nil</span> {
+            <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">nil</span>, <span style="color:#a6e22e">err</span>
+        }
+        <span style="color:#66d9ef">return</span> <span style="color:#a6e22e">Result</span>{<span style="color:#a6e22e">Reversed</span>: <span style="color:#a6e22e">reverse_string</span>(<span style="color:#a6e22e">params</span>.<span style="color:#a6e22e">Payload</span>)}, <span style="color:#66d9ef">nil</span>
+    })
+}
+</code></pre></div><p>Cross-compiling the Action source, bundling this package, creates a single
+lightweight binary.</p>
+<p>Embedding this file within a Docker image, using a minimal base image, creates
+a tiny image (&lt;10MB). Containers from these images only execute a single
+process to handle both the HTTP requests and running the Action source.</p>
+<pre><code>FROM alpine:3.4
+COPY action /action
+EXPOSE 8080
+CMD [&quot;./action&quot;]
+</code></pre><p>Pushing the local image to Dockerhub and then using it to create an Action
+follows the same instructions above.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Running OpenWhisk Actions from user-provided Docker images allows developers to
+execute &ldquo;serverless functions&rdquo; using any language. This is a fantastic feature
+not currently supported by many of the other serverless providers.</p>
+<p>OpenWhisk provides an
+<a href="https://github.com/openwhisk/openwhisk/tree/master/sdk/docker">SDK</a> letting
+users build a local Docker image which executes their Action and handles the
+HTTP requests from the platform. Using this with <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/docker_sdk">Go-based Actions</a> requires us
+to cross-compile our binary for the platform and handle passing JSON through
+command-line arguments and stdout.</p>
+<p>Re-writing the HTTP handler <a href="https://github.com/jthomas/openwhisk_go_action/tree/master/go_handler">natively in Go</a>
+means the Docker image can contain and execute a single binary for both tasks.
+Using this <a href="https://github.com/jthomas/ow">Go package</a> provides an interface for registering Actions and handles
+the HTTP requests automatically.</p>
+<p><strong>This <a href="https://github.com/jthomas/openwhisk_go_action">project</a> contains
+examples for the &ldquo;reverse string&rdquo; Action using both the Docker SDK and Go-based
+handler detailed above.</strong></p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2016/06/openwhisk-and-mqtt/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">OpenWhisk and MQTT</span>
+    </a>
+    
+    
+    <a href="/2016/07/node-red-docker-images/" class="navigation-next">
+      <span class="navigation-tittle">Node-RED Docker Images</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

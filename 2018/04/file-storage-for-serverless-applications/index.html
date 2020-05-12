@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>File Storage For Serverless Applications • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="File Storage For Serverless Applications"/>
+<meta name="twitter:description" content="How do you store files for serverless applications? Serverless runtimes do not provide a permanent file storage solution. Most users store data in object storage services provided by their cloud provider."/>
+
+<meta property="og:title" content="File Storage For Serverless Applications" />
+<meta property="og:description" content="How do you store files for serverless applications? Serverless runtimes do not provide a permanent file storage solution. Most users store data in object storage services provided by their cloud provider." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2018/04/file-storage-for-serverless-applications/" />
+<meta property="article:published_time" content="2018-04-27T00:00:00+00:00" />
+<meta property="article:modified_time" content="2018-04-27T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>File Storage For Serverless Applications</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Apr 27, 2018
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/openwhisk">openwhisk</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/object-storage">object-storage</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/stmm">stmm</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 5 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <blockquote>
+<p><em><strong>&ldquo;Where do you store files without a server?&quot;</strong></em></p>
+</blockquote>
+<p>…is the most common question I get asked during Q&amp;A after one of my &ldquo;<a href="http://bit.ly/james_thomas">Introduction to Serverless Platforms</a>&rdquo; conference talks. Searching for this question online, <a href="https://gigaom.com/2016/11/10/serverless-enabled-storage-its-a-big-deal/">this is the answer</a> you will often find.</p>
+<blockquote>
+<p><em><strong>&ldquo;Use an object store for file storage and access using the S3-compatible interface. Provide direct access to files by making buckets public and return pre-signed URLs for uploading content. Easy, right?&quot;</strong></em></p>
+</blockquote>
+<p>Responding to people with this information often leads to the following response:</p>
+<p>🤔🤔🤔</p>
+<p>Developers who are not familiar with cloud platforms, can often understand the benefits and concepts behind serverless, but don&rsquo;t know the other cloud services needed to replicate application services from traditional (or server-full) architectures.</p>
+<p><strong>In this blog post, I want to explain why we do not use the file system for files in serverless applications and introduce the cloud services used to handle this.</strong></p>
+<h2 id="serverless-runtime-file-systems">serverless runtime file systems</h2>
+<p>Serverless runtimes do provide access to a filesystem with a (small) amount of ephemeral storage.</p>
+<p>Serverless application <a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/actions.md#packaging-an-action-as-a-nodejs-module">deployment packages</a> are extracted into this filesystem prior to execution. Uploading files into the environment relies on them being included within the application package. Serverless functions can read, modify and create files within this local file system.</p>
+<p>These temporary file systems come with the following restrictions…</p>
+<ul>
+<li><a href="https://github.com/apache/incubator-openwhisk/blob/master/docs/reference.md#per-action-artifact-mb-fixed-48mb">Maximum application package size</a> limits additional files that can be uploaded.</li>
+<li>Serverless platforms usually limit total usable space to around 512MB.</li>
+<li>Modifications to the file system are lost once the environment is <a href="https://hackernoon.com/im-afraid-you-re-thinking-about-aws-lambda-cold-starts-all-wrong-7d907f278a4f">not used for further invocations</a>.</li>
+<li>Concurrent executions of the same function use independent runtime environments and do not share filesystem storage.</li>
+<li>There is no access to these temporary file systems outside the runtime environment.</li>
+</ul>
+<p><em>All these limitations make the file system provided by serverless platforms unsuitable as a scalable storage solution for serverless applications.</em></p>
+<p><em><strong>So, what is the alternative?</strong></em></p>
+<h2 id="object-stores">object stores</h2>
+<blockquote>
+<p>Object stores manage data as objects, as opposed to other storage architectures like <a href="https://en.wikipedia.org/wiki/File_systems">file systems</a> which manage data as a file hierarchy. Object-storage systems allow retention of massive amounts of <a href="https://en.wikipedia.org/wiki/Unstructured_data">unstructured data</a>, with simple retrieval and search capabilities.</p>
+<p><a href="https://en.wikipedia.org/wiki/Object_storage"><em>https://en.wikipedia.org/wiki/Object_storage</em></a></p>
+</blockquote>
+<p>Object stores provide &ldquo;storage-as-a-service&rdquo; solutions for cloud applications.</p>
+<p><strong>These services are used for file storage within serverless applications.</strong></p>
+<p>Unlike traditional block storage devices, data objects in object storage services are organised using flat hierarchies of containers, known as &ldquo;<em>buckets</em>&quot;. Objects within buckets are identified by unique identifiers, known as &ldquo;<em>keys</em>&quot;. Metadata can also be stored alongside data objects for additional context.</p>
+<p>Object stores provide simple access to files by applications, rather than users.</p>
+<h2 id="advantages-of-an-object-store">advantages of an object store</h2>
+<h3 id="scalable-and-elastic-storage">scalable and elastic storage</h3>
+<p>Rather than having a disk drive, with a fixed amount of storage, object stores provide scalable and elastic storage for data objects. Users are <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage">charged</a> based upon the amount of data stored, API requests and bandwidth used. Object stores are built to scale as storage needs grow towards the <a href="https://www.ibm.com/cloud/object-storage/faq">petabyte range</a>.</p>
+<h3 id="simple-http-access">simple http access</h3>
+<p>Object stores provide a <a href="https://console.bluemix.net/docs/services/cloud-object-storage/api-reference/about-compatibility-api.html#about-the-ibm-cloud-object-storage-api">HTTP-based API endpoint</a> to interact with the data objects.</p>
+<p>Rather than using a standard library methods to access the file system, which translates into system calls to the operating system, files are available over a standard HTTP endpoint.</p>
+<p><a href="https://console.bluemix.net/docs/services/cloud-object-storage/libraries/node.html#using-node-js">Client libraries</a> provide a simple interface for interacting with the remote endpoints.</p>
+<h3 id="expose-direct-access-to-files">expose direct access to files</h3>
+<p>Files stored in object storage can be made <a href="https://console.bluemix.net/docs/services/cloud-object-storage/iam/public-access.html#allowing-public-access">publicly accessible</a>. Client applications can access files directly without needing to use an application backend as a proxy.</p>
+<p>Special URLs can also be generated to provide <a href="https://console.bluemix.net/docs/services/cloud-object-storage/hmac/presigned-urls.html#create-a-presigned-url">temporary access to files</a> for external clients. Clients can even use these URLs to directly upload and modify files. URLs are set to expire after a fixed amount of time.</p>
+<h2 id="ibm-cloud-object-storage">ibm cloud object storage</h2>
+<p><a href="https://bluemix.net/">IBM Cloud</a> provides an object storage service called <a href="https://console.bluemix.net/docs/services/cloud-object-storage/about-cos.html">IBM Cloud Object Storage</a>. This service provides the following features concerning resiliency, reliability and cost.</p>
+<h3 id="data-resiliency">data resiliency</h3>
+<p>Buckets&rsquo; contents can be stored with the following automatic <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/endpoints.html#select-regions-and-endpoints">data resiliency choices</a>.</p>
+<ul>
+<li><em><strong>Cross Region.</strong></em> Store data across three regions within a geographic area.</li>
+<li><em><strong>Regional.</strong></em> Store data in multiple data centres within a single geographic region.</li>
+<li><em><strong>Single Data Centre.</strong></em> Store data across multiple devices in a single data centre.</li>
+</ul>
+<p>Cross Region is the best choice for &ldquo;<em>regional concurrent access and highest availability</em>&quot;. Regional is used for <em>&ldquo;high availability and performance&rdquo;</em>. Single Data Centre is appropriate when <em>&ldquo;when data locality matters most&rdquo;.</em></p>
+<h3 id="storage-classes">storage classes</h3>
+<p>Data access patterns can be used to save costs by choosing the appropriate <a href="https://console.bluemix.net/docs/services/cloud-object-storage/basics/classes.html#use-storage-classes">storage class for data storage</a>.</p>
+<p>IBM Cloud Object Storage offers the following storage classes: <em><strong>Standard, Vault, Cold Vault, Flex.</strong></em></p>
+<p><em>Standard class</em> is used for workloads with frequent data access. <em>Vault and Cold Vault</em> are used with infrequent data retrieval and data archiving workloads. <em>Flex</em> is a mixed storage class for workloads where access patterns are more difficult to predict.</p>
+<h3 id="costs">costs</h3>
+<p>Storage class and data resiliency options are used to <a href="https://www.ibm.com/cloud-computing/bluemix/pricing-object-storage#s3api">calculate the cost of service usage</a>.</p>
+<p>Storage is charged based upon the amount of data storage used, operational requests (GET, POST, PUT…) and outgoing public bandwidth.</p>
+<p>Storage classes affect the price of data retrieval operations and storage costs. Storage classes used for archiving, e.g. <em>cold vault</em>, charge less for data storage and more for operational requests. Storage classes used for frequency access, e.g. <em>standard</em>, charge more for data storage and less for operational requests.</p>
+<p>Higher resiliency data storage is more expensive than lower resiliency storage.</p>
+<h3 id="lite-plan">lite plan</h3>
+<p>IBM Cloud Object Storage provides a generous free tier (<em>25GB storage per month, 5GB public bandwidth</em>) for Lite account users. <a href="https://www.ibm.com/cloud/lite-account">IBM Cloud Lite accounts</a> provide perpetual access to a free set of IBM Cloud resources. Lite accounts do not expire after a time period or need a credit card to sign up.</p>
+<h2 id="conclusion">conclusion</h2>
+<p>Serving files from serverless runtimes is often accomplished using object storage services.</p>
+<p>Object stores provide a scalable and cost-effective service for managing files without using storage infrastructure directly. Storing files in an object store provides simple access from serverless runtimes and even allows the files to be made directly accessible to end users.</p>
+<p>In the next blog posts, I&rsquo;m going to show you how to set up IBM Cloud Object Storage and access files from serverless applications on IBM Cloud Functions. I&rsquo;ll be demonstrating this approach for both the Node.js and Swift runtimes.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2018/01/configuring-alert-notifications-using-serverless-metrics/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Configuring Alert Notifications Using Serverless Metrics</span>
+    </a>
+    
+    
+    <a href="/2018/05/using-cloud-object-storage-from-ibm-cloud-functions-node.js/" class="navigation-next">
+      <span class="navigation-tittle">Using Cloud Object Storage from IBM Cloud Functions (Node.js)</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

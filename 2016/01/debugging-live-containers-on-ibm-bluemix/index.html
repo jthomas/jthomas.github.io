@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Debugging Live Containers on IBM Bluemix • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Debugging Live Containers on IBM Bluemix"/>
+<meta name="twitter:description" content="Getting shell access by running remote commands on live docker containers on IBM Bluemix"/>
+
+<meta property="og:title" content="Debugging Live Containers on IBM Bluemix" />
+<meta property="og:description" content="Getting shell access by running remote commands on live docker containers on IBM Bluemix" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2016/01/debugging-live-containers-on-ibm-bluemix/" />
+<meta property="article:published_time" content="2016-01-22T00:00:00+00:00" />
+<meta property="article:modified_time" content="2016-01-22T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Debugging Live Containers on IBM Bluemix</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jan 22, 2016
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/bluemix">bluemix</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/docker">docker</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 2 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>For the last few months, I&rsquo;ve been using the <a href="https://www.elastic.co/webinars/introduction-elk-stack">ELK stack</a> to <a href="https://docs.cloudfoundry.org/devguide/services/log-management.html">collect logs</a> from my
+Cloud Foundry applications. This service has been deployed on IBM Bluemix using
+a Docker container, previously detailed in <a href="jamesthom.as/blog/2015/07/08/making-logs-awesome-with-elasticsearch-and-docker/">this blog post</a>, and running happily
+until it ran into issues this week.</p>
+<p>Trying to load the Kibana web application, the server was returning <em>connection
+refused</em> errors. Looking at the container in the <a href="http://bluemix.net">IBM Bluemix</a> dashboard showed
+no obvious signs of issues. Reviewing the <a href="https://www.ng.bluemix.net/docs/containers/container_ml_ov.html">container log output</a> uncovered nothing
+indicating what had failed.</p>
+<p>Hmmm&hellip;</p>
+<p><strong>Fixing this issue would require me to start debugging from within the live
+container, but how?</strong></p>
+<p>This container image had not included an SSH daemon that would allow remote
+access over SSH.</p>
+<p>Looking over the <a href="https://www.ng.bluemix.net/docs/containers/container_index.html">documentation</a> for the <a href="https://www.ng.bluemix.net/docs/containers/container_cli_ov.html#container_cli_cfic">IBM Containers plugin</a> for the Cloud
+Foundry CLI, I noticed the <em>exec</em> command.</p>
+<blockquote>
+<p>Docker exec allows a user to spawn a process inside their Docker container via
+the Docker API and CLI.</p>
+</blockquote>
+<p>Since Docker 1.3, released in October 2014, the <a href="https://docs.docker.com/engine/reference/commandline/exec/"><em>exec</em> command</a> has allowed users to
+run new commands within existing containers.</p>
+<p>The IBM Containers implementation now <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">supports this Docker command</a>.</p>
+<p>Using the IBM Containers plugin for the Cloud Foundry CLI, I can find the
+container id for the instance I want to debug and then start a bash shell to
+start resolving my issue.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-sh" data-lang="sh">$ cf ic ps
+$ cf ic exec -it &lt;container_id&gt; /bin/bash
+</code></pre></div><p>Having a live shell to my container allowed me to resolve the issue within a
+few minutes, without having to affect the running state of the container. This
+command also removes the need to keep an SSH daemon running on containers for
+remote access.</p>
+<p>For more information on the subset of Docker commands supported by IBM
+Containers, see the following <a href="https://www.ng.bluemix.net/docs/containers/container_cli_reference_native-docker.html">documentation</a>.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2016/01/cloud-foundry-application-monitoring-bot-for-slack/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Cloud Foundry Application Monitoring Bot For Slack</span>
+    </a>
+    
+    
+    <a href="/2016/04/playing-with-openwhisk/" class="navigation-next">
+      <span class="navigation-tittle">Playing With OpenWhisk</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.69.2" />
+
+    
+    
+    
+
+<title>Creating Todo MVC in Dojo - Part 3: Controllers • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more...">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Creating Todo MVC in Dojo - Part 3: Controllers"/>
+<meta name="twitter:description" content="Using Dojo&#39;s MVC package to generate a TodoMVC application. This article looks at creating MVC Controllers, following on from Views."/>
+
+<meta property="og:title" content="Creating Todo MVC in Dojo - Part 3: Controllers" />
+<meta property="og:description" content="Using Dojo&#39;s MVC package to generate a TodoMVC application. This article looks at creating MVC Controllers, following on from Views." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2012/05/creating-todo-mvc-in-dojo-part-3-controllers/" />
+<meta property="article:published_time" content="2012-05-26T00:00:00+00:00" />
+<meta property="article:modified_time" content="2012-05-26T00:00:00+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.asimg/me.jpg" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Creating Todo MVC in Dojo - Part 3: Controllers</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> May 26, 2012
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/dojo">dojo</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/javascript">javascript</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/mvc">mvc</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>In the final article of this series, we&rsquo;ll be looking at creating an MVC Controller for our sample todo
+application.</p>
+<p>We&rsquo;ve already shown how to <a href="http://jamesthom.as/blog/2012/02/26/dojomvc-models/">define our application model</a>,
+creating a domain-specific todo model
+backed by localStorage, along with <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">our view template</a>,
+using widget templating to render our tasks into the page.</p>
+<blockquote>
+<p>The controller translates user input into operations on the model.
+Model View Controller Pattern <a href="http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller">http://en.wikipedia.org/wiki/Model%E2%80%93view%E2%80%93controller</a> Wikipedia</p>
+</blockquote>
+<p>For our application, we need to handle the user actions to allow adding, removing and completing tasks. We already have a binding between a task&rsquo;s completed state
+and our View, using the <a href="https://github.com/jthomas/todomvc/blob/master/architecture-examples/dojo/js/todo/form/CheckBox.js">todo.form.CheckBox</a>, allowing changes to flow back to the model without explicitly needing logic in the controller.</p>
+<p>Let&rsquo;s look more closely at the remaining tasks&hellip;</p>
+<h2 id="adding-tasks">Adding Tasks</h2>
+<p>The View template, discussed in the <a href="http://jamesthom.as/blog/2012/04/13/dojomvc-views/">second article</a>,
+renders the HTML elements needed to allow the user to any new tasks. Once a user has finished
+typing in their new task, signalled by pressing the enter key, we need to retrieve their text and add it to the model.</p>
+<p>Using Dojo&rsquo;s <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_TemplatedMixin.html#dijit-templatedmixin">declarative programming model</a>,
+the View template includes the custom element attribute needed to connect the &ldquo;onkeypress&rdquo; DOM event to an event handler within our controller. When our
+widget is rendered in the page, by the Dojo parser, those connections are created automatically.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html">&lt;<span style="color:#f92672">input</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;new-todo&#34;</span> <span style="color:#a6e22e">data-dojo-attach-event</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;onkeypress:onKeyPress&#34;</span> 
+ <span style="color:#a6e22e">placeholder</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;What needs to be done?&#34;</span> <span style="color:#a6e22e">type</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;text&#34;</span> <span style="color:#a6e22e">autofocus</span>&gt;
+</code></pre></div><p>Inside our controller, each time an event is fired, the following function is executed:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">onKeyPress</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">event</span>) {
+    <span style="color:#66d9ef">if</span> (<span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">keyCode</span> <span style="color:#f92672">!==</span> <span style="color:#a6e22e">keys</span>.<span style="color:#a6e22e">ENTER</span>) <span style="color:#66d9ef">return</span>;
+    
+    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">addToModel</span>(<span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">target</span>.<span style="color:#a6e22e">value</span>, <span style="color:#66d9ef">false</span>);
+    <span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">target</span>.<span style="color:#a6e22e">value</span> <span style="color:#f92672">=</span> <span style="color:#e6db74">&#34;&#34;</span>;
+	<span style="color:#a6e22e">dojo_event</span>.<span style="color:#a6e22e">stop</span>(<span style="color:#a6e22e">event</span>);
+}
+</code></pre></div><p>Unless the user has pressed the enter key, we ignore the normal user input event. Once this happens, we extract the new
+task text from the event argument and call the following convenience function to create the new task in the model.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">addToModel</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">content</span>, <span style="color:#a6e22e">isDone</span>) {
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">insert</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">mvc</span>.<span style="color:#a6e22e">newStatefulModel</span>({
+        <span style="color:#a6e22e">data</span><span style="color:#f92672">:</span> {<span style="color:#a6e22e">todo_text</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">content</span>, <span style="color:#a6e22e">isDone</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">isDone</span>}
+    });
+
+    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">add</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">length</span>, <span style="color:#a6e22e">insert</span>);
+}
+</code></pre></div><p>This function creates a new Model node, containing the task text and its
+completed state, adding the result to the list of tasks. When inserting new
+entries into the <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/StatefulModel.html">DojoX MVC Model</a> array, the insertion position must be
+specified explicitly. By using the current length of the list as the position,
+we always add new items at the end.</p>
+<p>Once the model has been modified, the View will automatically update to display the new item. We don&rsquo;t need to manually
+update the rendered HTML template or even trigger re-loading of the View. By using widgets from the DojoX MVC package, changes to
+the Model are always reflected in our View in real-time.</p>
+<h2 id="removing-tasks">Removing Tasks</h2>
+<p>Removing tasks begins with the user clicking the destroy icon, displayed on the right-hand side of each task. Once this happens, the Controller
+needs to trap the event, figure out which task to remove and update the Model. As the tasks&rsquo; list
+can be updated during the application, having an individual event connection for each task would require handling the setting up and tearing down
+every time the list changed.</p>
+<p>Instead, we can use &ldquo;Event Delegation&rdquo;, introduced by the new Dojo event module, <a href="http://dojotoolkit.org/reference-guide/1.7/dojo/on.html">dojo/on</a>,
+to listen for any remove events with a single connection.</p>
+<p>Once the widget has been rendered, signalled by the <a href="http://dojotoolkit.org/reference-guide/1.7/dijit/_WidgetBase.html#lifecycle">&ldquo;postCreate&rdquo;</a>
+function being called, we start listening for all click events on the destroy icons. Any events captured are passed through to our event hander, &ldquo;onRemove&rdquo;, to delete the associated task from the Model.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">postCreate</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> () {
+    <span style="color:#a6e22e">on</span>(<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">domNode</span>, <span style="color:#e6db74">&#34;.destroy:click&#34;</span>, <span style="color:#a6e22e">lang</span>.<span style="color:#a6e22e">hitch</span>(<span style="color:#66d9ef">this</span>, <span style="color:#e6db74">&#34;onRemove&#34;</span>));
+    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">onItemStatusUpdate</span>();
+},
+
+<span style="color:#a6e22e">onRemove</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> (<span style="color:#a6e22e">event</span>) {
+    <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">remove</span>(<span style="color:#a6e22e">domAttr</span>.<span style="color:#a6e22e">get</span>(<span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">target</span>, <span style="color:#e6db74">&#34;data-model-id&#34;</span>));
+} 
+</code></pre></div><p>With one event handler for all the remove events, the Controller won&rsquo;t directly know which task within the Model the user
+has chosen to remove. To overcome this, the repeating View template for the task uses a HTML5 data attribute to store the unique task index
+on the rendered DOM element for the remove icon.</p>
+<p>During rendering of a <a href="http://dojotoolkit.org/reference-guide/1.7/dojox/mvc/Repeat.html">DojoX MVC Repeat widget</a>,
+the &ldquo;index&rdquo; attribute on the instance refers to the current
+position within the bound list. This index value can then easily be retrieved from the event generated and used to remove the correct task from the Model.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html">&lt;<span style="color:#f92672">button</span> <span style="color:#a6e22e">class</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;destroy&#34;</span> <span style="color:#a6e22e">data-model-id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;#{this.index}&#34;</span>&gt;
+&lt;/<span style="color:#f92672">button</span>&gt;
+</code></pre></div><p>Once again, when the Model is changed, the View automatically updates. There&rsquo;s no action needed from the Controller in modifying the rendering HTML template.</p>
+<h2 id="clearing-completed-tasks">Clearing Completed Tasks</h2>
+<p>Once a user has completed a series of tasks, they will eventually want to remove them. Rather than having to
+remove each task individually, the application provides the ability to clear all completed tasks from the list.</p>
+<p>Again, we&rsquo;ve used declarative programming in the View template to connect our event hander, removeCompletedItems, to the DOM event
+triggered when the user clicks the &ldquo;Clear Completed&rdquo; button.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-html" data-lang="html">&lt;<span style="color:#f92672">button</span> <span style="color:#a6e22e">id</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;clear-completed&#34;</span> <span style="color:#a6e22e">data-dojo-attach-event</span><span style="color:#f92672">=</span><span style="color:#e6db74">&#34;onclick:removeCompletedItems&#34;</span>&gt;
+&lt;/<span style="color:#f92672">button</span>&gt;
+</code></pre></div><p>When our handler is fired, we need to iterate over the existing tasks&rsquo;
+list, removing any with the correct completed state. Removing items from the Model will left-shift the remaining items, so we need to
+take care to iterate correctly over the remaining items.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#a6e22e">removeCompletedItems</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">function</span> () {
+    <span style="color:#66d9ef">var</span> <span style="color:#a6e22e">len</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">length</span>, <span style="color:#a6e22e">idx</span> <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>;
+  
+    <span style="color:#66d9ef">while</span> (<span style="color:#a6e22e">idx</span> <span style="color:#f92672">&lt;</span> <span style="color:#a6e22e">len</span>) {
+        <span style="color:#66d9ef">if</span> (<span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">todos</span>[<span style="color:#a6e22e">idx</span>].<span style="color:#a6e22e">isDone</span>.<span style="color:#a6e22e">value</span>) {
+            <span style="color:#66d9ef">this</span>.<span style="color:#a6e22e">model</span>.<span style="color:#a6e22e">todos</span>.<span style="color:#a6e22e">remove</span>(<span style="color:#a6e22e">idx</span>);
+            <span style="color:#a6e22e">len</span><span style="color:#f92672">--</span>;
+            <span style="color:#66d9ef">continue</span>;
+        }
+        <span style="color:#a6e22e">idx</span><span style="color:#f92672">++</span>;
+    }
+}
+</code></pre></div><p>When the event handler has finished executing, the View will be updated to clear out those completed tasks.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>In the final part of this series, we&rsquo;ve looked at how to define an MVC
+Controller, responsible for mediating between user actions and model
+operations. Using declarative Dojo programming in our View template, we set up
+bindings between DOM events and event handlers in our Controller.</p>
+<p>When user
+actions triggered those events, our handlers were responsible for adding and
+removing todo tasks from the MVC Model class, StatefulModel, we&rsquo;ve been using
+to store our application data. These changes then flowed back to the View,
+which automatically re-renders when it detects an updated Model.</p>
+<p>Dojo&rsquo;s new MVC package, dojox.mvc, offers great capabilities for building dynamic
+JavaScript applications using the MVC programming pattern. Although it&rsquo;s still maturing, hopefully this series
+has been able to demonstrate that for most applications it&rsquo;s more than capable of providing the features
+developers expect in a modern JavaScript MVC library.</p>
+<p>If you have any further questions, feel free to leave comments below, send me an email or a tweet. The source
+code for the application is available on Github, allowing you to run the examples above and compare it against other frameworks.</p>
+<h3 id="whats-next">What&rsquo;s Next?</h3>
+<p>This series of articles was based upon the version of DojoX MVC present in the 1.7.0 release of The Dojo Toolkit. My experiences, good and bad,
+building this application were <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-January/026434.html">fed back into the community</a> to
+help improve the package in the future. With the upcoming 1.8 release of The Dojo Toolkit,
+there has been some <a href="http://mail.dojotoolkit.org/pipermail/dojo-contributors/2012-February/026811.html">major improvements</a> to the MVC package, resolving many of the issues I raised.</p>
+<p>When that version of the toolkit is available, I&rsquo;ll re-visit the application and show how those changes would make writing this application even simpler.</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2012/05/ibm-impact-2012-session-materials-available/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">IBM IMPACT 2012 - Session Materials Available</span>
+    </a>
+    
+    
+    <a href="/2012/08/finding-nano-getting-dojo-under-4kb/" class="navigation-next">
+      <span class="navigation-tittle">Finding Nano - Getting Dojo under 4KB</span>
+      <i aria-hidden="true" class="fa fa-chevron-right"></i>
+    </a>
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+    
+    
+    <script type="text/javascript">
+        
+
+    </script>
+    
+
+
+
+
+    
+
+
+
+    </body>
+</html>
