@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.74.3" />
+
+    
+    
+    
+
+<title>Generating Serverless PDFs With AWS Lambda &amp; PDFKit • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more... Founder of JT Consulting Services.">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Generating Serverless PDFs With AWS Lambda &amp; PDFKit"/>
+<meta name="twitter:description" content="Creating dynamic PDFs with custom content from serverless functions. Using PDFKit library with a Node.js AWS Lambda function and HTTP APIs."/>
+
+<meta property="og:title" content="Generating Serverless PDFs With AWS Lambda &amp; PDFKit" />
+<meta property="og:description" content="Creating dynamic PDFs with custom content from serverless functions. Using PDFKit library with a Node.js AWS Lambda function and HTTP APIs." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2021/01/generating-serverless-pdfs-with-aws-lambda-pdfkit/" />
+<meta property="article:published_time" content="2021-01-25T17:33:17+00:00" />
+<meta property="article:modified_time" content="2021-01-25T17:33:17+00:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as/">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.as/profile_new.png" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="mailto:consultancy@jamesthom.as">
+						<span>Hire Me?</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Generating Serverless PDFs With AWS Lambda &amp; PDFKit</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Jan 25, 2021
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/lambda">lambda</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/apis">apis</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 4 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><strong>How can you return dynamically generated PDF documents as HTTP responses from serverless functions?</strong></p>
+<p>I recently had this exact use-case on a client project. Custom PDFs needed to be created in real-time with dynamic content from an internal data source. PDFs would be accessed via a HTML link from an internal web-app. API responses had to include the document&rsquo;s binary contents directly, rather than forwarding to an external storage service.</p>
+<p>I hadn&rsquo;t previously built anything that generated PDFs dynamically (let alone using serverless) but <strong>discovered</strong> <strong>how easy this was to do on AWS Lambda using PDFKit and HTTP APIs with API Gateway</strong>.</p>
+<p>Here&rsquo;s how I did it&hellip;</p>
+<h3 id="creating-custom-pdf-documents-in-nodejs">Creating custom PDF documents in Node.js</h3>
+<p>There are numerous Node.js libraries for generating PDFs including <a href="https://github.com/foliojs/pdfkit">PDFKit</a>, <a href="https://github.com/Hopding/pdf-lib">pdf-lib</a> and <a href="https://github.com/galkahana/HummusJS">HummusJS</a>.</p>
+<p>I used PDFKit in my project. It was a good choice for a serverless application for the following reasons:</p>
+<ul>
+<li><em>Pure JavaScript library. No native libraries to compile or external dependencies needed.</em></li>
+<li><em>Small package size. Less than 5 MB <a href="https://www.npmjs.com/package/pdfkit">according to NPM</a>.</em></li>
+<li><em>Easy to use API for <a href="http://pdfkit.org/docs/text.html">text layout</a>. Handles automatic line wrapping.</em></li>
+</ul>
+<p>The library had a really simple API for generating PDFs from dynamic content. Here is all the JavaScript you need to create <a href="./sample-document.pdf">this custom PDF</a>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#66d9ef">const</span> <span style="color:#a6e22e">PDFDocument</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#39;pdfkit&#39;</span>);
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">options</span> <span style="color:#f92672">=</span> { <span style="color:#a6e22e">size</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;A5&#39;</span>, <span style="color:#a6e22e">layout</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#39;landscape&#39;</span> };
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">doc</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">PDFDocument</span>(<span style="color:#a6e22e">options</span>).<span style="color:#a6e22e">font</span>(<span style="color:#e6db74">&#39;Helvetica&#39;</span>).<span style="color:#a6e22e">fontSize</span>(<span style="color:#ae81ff">24</span>);
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">text_lines</span> <span style="color:#f92672">=</span> [
+  <span style="color:#e6db74">&#34;Hello, this is the first line.&#34;</span>,
+  <span style="color:#e6db74">&#34;This is the second line.&#34;</span>,
+  <span style="color:#e6db74">&#34;Finally, this is the third line.&#34;</span>,
+]
+
+<span style="color:#66d9ef">for</span> (<span style="color:#a6e22e">text_line</span> <span style="color:#66d9ef">of</span> <span style="color:#a6e22e">text_lines</span>) {
+  <span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">text</span>(<span style="color:#a6e22e">text_line</span>);
+}
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">buffers</span> <span style="color:#f92672">=</span> []
+<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#34;data&#34;</span>, <span style="color:#a6e22e">buffers</span>.<span style="color:#a6e22e">push</span>.<span style="color:#a6e22e">bind</span>(<span style="color:#a6e22e">buffers</span>))
+<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#34;end&#34;</span>, () =&gt; {
+  <span style="color:#75715e">// Byte stream containing PDF contents
+</span><span style="color:#75715e"></span>  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">pdf</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">Buffer</span>.<span style="color:#a6e22e">concat</span>(<span style="color:#a6e22e">buffers</span>)
+})
+
+<span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">end</span>()
+</code></pre></div><h3 id="binary-content-with-http-apis-using-aws-api-gateway">Binary Content with HTTP APIs using AWS API Gateway</h3>
+<p><a href="https://docs.aws.amazon.com/apigateway/index.html">AWS&rsquo;s API Gateway</a> service <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-vs-rest.html">supports two types</a> of API endpoints - HTTP or REST APIs. <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api.html">HTTP APIs</a> (announced in 2019) are simpler, cheaper and faster than the older-style <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-rest-api.html">REST APIs</a>, but with a restricted set of features, e.g. no request validation, X-Ray support or private endpoints.</p>
+<p>Setting up a HTTP endpoint to return binary content is simpler using HTTP than REST APIs. REST APIs need <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-payload-encodings.html">manual configuration</a> for media types and content handling to support binary responses. HTTP APIs simply need to provide a <code>isBase64Encoded</code> flag in the <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-lambda.html#http-api-develop-integrations-lambda.response">API response</a>.</p>
+<h3 id="returning-pdfs-from-aws-lambda-functions">Returning PDFs from AWS Lambda Functions</h3>
+<p>AWS Lambda functions control API Gateway responses using a <a href="https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-lambda.html">custom JSON response format</a>.</p>
+<p>Here are the response values needed to return a PDF document from the Lambda runtime. The <code>body</code> field contains the PDF document encoded as a Base64 string. The <code>isBase64Encoded</code> flag tells the API Gateway service to render binary content. The PDF document will be served in the HTTP response from the HTTP API endpoint.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-json" data-lang="json">{
+  <span style="color:#f92672">&#34;statusCode&#34;</span>: <span style="color:#ae81ff">200</span>,
+  <span style="color:#f92672">&#34;headers&#34;</span>: { <span style="color:#f92672">&#34;Content-Type&#34;</span>: <span style="color:#e6db74">&#34;application/pdf&#34;</span> },
+  <span style="color:#f92672">&#34;body&#34;</span>: <span style="color:#e6db74">&#34;BASE64 ENCODED STRING OF PDF BYTES&#34;</span>,
+  <span style="color:#f92672">&#34;isBase64Encoded&#34;</span>: <span style="color:#66d9ef">true</span> 
+}
+</code></pre></div><h3 id="putting-it-all-together-using-the-serverless-framework">Putting it all together using The Serverless Framework</h3>
+<p>Creating Serverless HTTP APIs is easy with <a href="https://www.serverless.com/framework/docs/">The Serverless Framework</a>. Here are the steps needed to create a custom HTTP API endpoint which generates dynamic PDFs from an AWS Lambda Node.js function. The PDF contains custom content from the HTTP request.</p>
+<ol>
+<li>Create a new serverless project.</li>
+</ol>
+<pre><code>  sls create -t aws-nodejs -p pdf-generator &amp;&amp; cd pdf-generator
+</code></pre><ol start="2">
+<li>Install the PDFKit library.</li>
+</ol>
+<pre><code>  npm install pdfkit
+</code></pre><ol start="3">
+<li>Update the project configuration (<code>serverless.yml</code>) to define a HTTP API with a serverless function.</li>
+</ol>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">service</span>: pdf-generator
+
+<span style="color:#66d9ef">provider</span>:
+  <span style="color:#66d9ef">name</span>: aws
+  <span style="color:#66d9ef">runtime</span>: nodejs12.x
+  <span style="color:#66d9ef">httpApi</span>:
+    <span style="color:#66d9ef">cors</span>: <span style="color:#66d9ef">true</span>
+
+<span style="color:#66d9ef">functions</span>:
+  <span style="color:#66d9ef">generate-pdf</span>:
+    <span style="color:#66d9ef">handler</span>: handler.pdf
+    <span style="color:#66d9ef">events</span>:
+      - <span style="color:#66d9ef">httpApi</span>:
+          <span style="color:#66d9ef">path</span>: /api/pdf
+          <span style="color:#66d9ef">method</span>: get  
+</code></pre></div><p><em>Note: The Serverless Framework supports both API Gateway services using <a href="https://www.serverless.com/framework/docs/providers/aws/events/">different event types</a> (<code>http</code> - REST API versus <code>httpApi</code> HTTP API).</em></p>
+<ol start="4">
+<li>Replace the <code>handler.js</code> file contents with the following source code.</li>
+</ol>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-javascript" data-lang="javascript"><span style="color:#e6db74">&#39;use strict&#39;</span>;
+
+<span style="color:#66d9ef">const</span> <span style="color:#a6e22e">PDFKit</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">require</span>(<span style="color:#e6db74">&#34;pdfkit&#34;</span>)
+
+<span style="color:#a6e22e">module</span>.<span style="color:#a6e22e">exports</span>.<span style="color:#a6e22e">generate_pdf</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">async</span> (<span style="color:#a6e22e">event</span>) =&gt; {
+  <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">text</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">event</span>.<span style="color:#a6e22e">queryStringParameters</span>.<span style="color:#a6e22e">text</span> <span style="color:#f92672">||</span> <span style="color:#e6db74">&#39;Hello world&#39;</span>; 
+
+  <span style="color:#66d9ef">return</span> <span style="color:#66d9ef">new</span> Promise(<span style="color:#a6e22e">resolve</span> =&gt; {
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">doc</span> <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">PDFKit</span>()
+
+    <span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">text</span>(<span style="color:#a6e22e">text</span>)
+
+    <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">buffers</span> <span style="color:#f92672">=</span> []
+    <span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#34;data&#34;</span>, <span style="color:#a6e22e">buffers</span>.<span style="color:#a6e22e">push</span>.<span style="color:#a6e22e">bind</span>(<span style="color:#a6e22e">buffers</span>))
+    <span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">on</span>(<span style="color:#e6db74">&#34;end&#34;</span>, () =&gt; {
+      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">pdf</span> <span style="color:#f92672">=</span> <span style="color:#a6e22e">Buffer</span>.<span style="color:#a6e22e">concat</span>(<span style="color:#a6e22e">buffers</span>)
+      <span style="color:#66d9ef">const</span> <span style="color:#a6e22e">response</span> <span style="color:#f92672">=</span> {
+        <span style="color:#a6e22e">statusCode</span><span style="color:#f92672">:</span> <span style="color:#ae81ff">200</span>,
+        <span style="color:#a6e22e">headers</span><span style="color:#f92672">:</span> {
+          <span style="color:#e6db74">&#34;Content-Type&#34;</span><span style="color:#f92672">:</span> <span style="color:#e6db74">&#34;application/pdf&#34;</span>,
+        },
+        <span style="color:#a6e22e">body</span><span style="color:#f92672">:</span> <span style="color:#a6e22e">pdf</span>.<span style="color:#a6e22e">toString</span>(<span style="color:#e6db74">&#34;base64&#34;</span>),
+        <span style="color:#a6e22e">isBase64Encoded</span><span style="color:#f92672">:</span> <span style="color:#66d9ef">true</span>,
+      }
+      <span style="color:#a6e22e">resolve</span>(<span style="color:#a6e22e">response</span>);
+    })
+
+    <span style="color:#a6e22e">doc</span>.<span style="color:#a6e22e">end</span>()
+  });
+}
+</code></pre></div><ol start="5">
+<li>Deploy the project.</li>
+</ol>
+<pre><code>  sls deploy
+</code></pre><ol start="6">
+<li>Copy the HTTP API endpoint from the deployment output.</li>
+</ol>
+<pre><code>  endpoints:
+    GET - https://&lt;id&gt;.amazonaws.com/api/pdf
+</code></pre><ol start="7">
+<li>Open the URL with the <code>text</code> query parameter containing sample text in a web browser, e.g.  (<code>https://&lt;id&gt;.amazonaws.com/api/pdf?text=&quot;This is some sample text!&quot;</code>) .</li>
+</ol>
+<p><img src="sample-pdf-as-http-response.png" alt="Example PDF Document"></p>
+<p>You should have a PDF containing the sample text. Changing the sample text and refreshing the page will show a different PDF document. Not bad, huh?</p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2021/01/debugging-github-actions/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Debugging Github Actions</span>
+    </a>
+    
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+
+
+    
+
+
+
+    </body>
+</html>
