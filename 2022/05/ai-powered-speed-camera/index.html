@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.74.3" />
+
+    
+    
+    
+
+<title>AI-Powered Speed Camera • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more... Founder of JT Consulting Services.">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="AI-Powered Speed Camera"/>
+<meta name="twitter:description" content="Building an AI-powered virtual speed camera using Google Cloud Vision APIS and FFMPEG. Turns any video device into a virtual speed camera."/>
+
+<meta property="og:title" content="AI-Powered Speed Camera" />
+<meta property="og:description" content="Building an AI-powered virtual speed camera using Google Cloud Vision APIS and FFMPEG. Turns any video device into a virtual speed camera." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2022/05/ai-powered-speed-camera/" />
+<meta property="article:published_time" content="2022-05-31T13:56:24+01:00" />
+<meta property="article:modified_time" content="2022-05-31T13:56:24+01:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as/">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.as/profile_new.png" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="mailto:consultancy@jamesthom.as">
+						<span>Hire Me?</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>AI-Powered Speed Camera</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> May 31, 2022
+    
+    
+    
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 8 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p>Do you want to detect speeding cars without having an expensive radar gun? 🚗📸</p>
+<p>Me too - which is why I built an <a href="https://github.com/jthomas/ai-speed-camera">AI-powered virtual speed camera</a>. It processes video footage of a road to detect cars using an AI model and calculates their speeds. An annotated video file is produced (with the car speeds overlaid on the cars) as well as a spreadsheet with the full statistics. This project turns any webcam or camera phone into a virtual speed camera.</p>
+<p>Here&rsquo;s an example of the footage from the AI-Powered Speed Camera:</p>
+<p><img src="ai-speed-camera-example.gif" alt="AI Speed Camera In Action"></p>
+<p>From having an idea this might be possible - it only took me a few weeks and ~300 lines of Python to create (thanks to Machine Learning cloud APIs and open-source video processing libraries). In this blog post, I&rsquo;ll explain why I created it, how it works and how to use the software yourself.</p>
+<h2 id="background">Background</h2>
+<p>My Dad and Stepmother recently moved to a new house on a busy residential road in the Manchester suburbs. It soon became apparent that speeding was an issue in the local community. This particularly affected their road - which, despite being a 20 MPH, would regularly see people driving in excess of 50MPH.</p>
+<p>In discussing how to petition their local council to install traffic calming measures - one idea came up that if they did a community speed survey it would provide evidence to push their claim that the road suffered from dangerous speeding and was an accident waiting to happen.</p>
+<p>Looking into commercial radar guns (which can cost hundreds of pounds) - it was unfeasible to purchase one of these for a community speed watch project. Talking to my Dad I began to wonder if there was anything I do with machine learning to help - as I&rsquo;d previously built other image recognition ML <a href="https://github.com/jthomas/findme">projects</a>.</p>
+<p>As my Dad&rsquo;s house already had a CCTV system facing the road - I knew it would be simple to collect video footage of cars travelling along. As the camera viewpoint was fixed (and parallel to the road) - I could measure the road length in the frame to calculate distance travelled by cars. If I could then use an AI model to automatically detect and track cars throughout the footage - I could calculate vehicle speeds. The idea for an &ldquo;<a href="https://github.com/jthomas/ai-speed-camera">AI-Powered Speed Camera</a>&rdquo; was born!</p>
+<p><em><strong>2022 Update: The results of community speed survey using this software was used to successfully  persuade the council to install traffic calming measures on the road.</strong></em></p>
+<!-- raw HTML omitted -->
+<h2 id="how-it-works">How It Works</h2>
+<p>Here are the steps I used in making this project&hellip;</p>
+<ul>
+<li>Collect video footage of the road to capture speeding cars.</li>
+<li>Use <a href="https://cloud.google.com/video-intelligence/">Google Cloud Video Intelligence API</a> to track cars in video.</li>
+<li>Calculate speeds of detect cars using fixed road distance in frame.</li>
+<li>Produce annotated video with car speeds using <a href="https://ffmpeg.org">FFMPEG</a>.</li>
+<li>Generate spreadsheet with vehicle speed statistics in Python</li>
+<li><em><del>Upload results to Reaper Drone to dispatch speeding vehicles (coming soon&hellip;)</del></em></li>
+</ul>
+<p><em>If you&rsquo;re a nerd like me and want to learn more about the details of each step - here you go&hellip;</em></p>
+<h3 id="recording-video-footage-of-the-road">Recording Video Footage of the Road</h3>
+<p>This is the easy bit. Any webcam or camera phone will do. Record footage from a viewpoint parallel to the road for enough time to capture speeding vehicles. The video frame position needs to be fixed for the duration of the footage. I used HD quality footage - I&rsquo;m not sure what the accuracy will be like with lower video resolutions. Longer footage does need more Cloud API credits to process. Measure the distance along the middle of the road captured by the video frame.</p>
+<p><img src="road-in-frame.png" alt="Measure Real World Distance in Frame"></p>
+<h3 id="tracking-cars-in-video-footage">Tracking Cars in Video Footage</h3>
+<p>Conveniently, Google Cloud Video Intelligence API supports object tracking in video files. This saved me having to mess around with Tensorflow models on my local machine (and I could use the extensive processing power of GCP). The API returns a JSON file with classifications for objects detected and their positions in available frames.</p>
+<p>Here are the steps needed to process a video file with this API:</p>
+<ul>
+<li>
+<p>Upload the video file to a <a href="https://cloud.google.com/storage">Google Cloud Storage Bucket</a>.</p>
+</li>
+<li>
+<p>Create <code>request.json</code> file with JSON file containing video file bucket name.</p>
+<pre><code>{
+  &quot;inputUri&quot;: &quot;gs://&lt;BUCKET_NAME&gt;/&lt;VIDEO_FILE&gt;.mp4&quot;,
+  &quot;features&quot;: [&quot;OBJECT_TRACKING&quot;]
+}
+</code></pre></li>
+<li>
+<p>Send HTTP request to Google Cloud Video AI API.</p>
+<pre><code>curl -X POST \                                                                                                            
+-H &quot;Authorization: Bearer &quot;$(gcloud auth application-default print-access-token) \
+-H &quot;Content-Type: application/json; charset=utf-8&quot; \
+-d @request.json \
+https://videointelligence.googleapis.com/v1/videos:annotate
+</code></pre></li>
+<li>
+<p>HTTP response will contain a URL for the API results. Poll this URL until the results are ready.</p>
+<pre><code>https://videointelligence.googleapis.com/v1/projects/&lt;X&gt;/locations/REGION/operations/&lt;Y&gt;
+</code></pre></li>
+<li>
+<p>Save output from API result (when it is available) to a JSON file.</p>
+<pre><code>curl -X GET \                                                                                                              
+-H &quot;Authorization: Bearer &quot;$(gcloud auth application-default print-access-token) \
+https://videointelligence.googleapis.com/v1/projects/&lt;X&gt;/locations/REGION/operations/&lt;Y&gt; &gt; results.json
+</code></pre></li>
+</ul>
+<h3 id="calculating-speeds-from-cars-in-footage">Calculating Speeds From Cars in Footage</h3>
+<p>This is sample JSON returned from the API for object tracking with video files. Objects detected in the video footage are available under the <code>response.annotationResults.objectAnnotations</code> path. Each object has a classification for the type of object (<code>entity.entityId/description</code>) and its position in detected frames (<code>frames</code>). For each frame the object was detected in - the coordinates of a normalised bounding box covering the object in that frame are available.</p>
+<p><img src="detected-cars.png" alt="Car detected"></p>
+<pre><code class="language-json " data-lang="json ">{
+  ...
+  &quot;response&quot;: {
+    &quot;@type&quot;: &quot;type.googleapis.com/google.cloud.videointelligence.v1.AnnotateVideoResponse&quot;,
+    &quot;annotationResults&quot;: [
+      {
+        &quot;inputUri&quot;: &quot;/driving-speed/dene_road.mp4&quot;,
+        &quot;segment&quot;: {
+          &quot;startTimeOffset&quot;: &quot;0s&quot;,
+          &quot;endTimeOffset&quot;: &quot;10.366666s&quot;
+        },
+        &quot;objectAnnotations&quot;: [
+          {
+            &quot;entity&quot;: {
+              &quot;entityId&quot;: &quot;/m/0k4j&quot;,
+              &quot;description&quot;: &quot;car&quot;,
+              &quot;languageCode&quot;: &quot;en-US&quot;
+            },
+            &quot;frames&quot;: [
+              {
+                &quot;normalizedBoundingBox&quot;: {
+                  &quot;left&quot;: 0.7212495,
+                  &quot;top&quot;: 0.32746944,
+                  &quot;right&quot;: 0.9405163,
+                  &quot;bottom&quot;: 0.47839144
+                },
+                &quot;timeOffset&quot;: &quot;0s&quot;
+              },
+              {
+                &quot;normalizedBoundingBox&quot;: {
+                  &quot;left&quot;: 0.721354,
+                  &quot;top&quot;: 0.3287018,
+                  &quot;right&quot;: 0.94010484,
+                  &quot;bottom&quot;: 0.47870326
+                },
+                &quot;timeOffset&quot;: &quot;0.100s&quot;
+              }
+            ]
+          },
+          ...
+        ]
+      }
+    ]
+  }
+}
+</code></pre><p>To calculate the speed of those vehicles - I used the following algorithm (PATENT PENDING 😂):</p>
+<ul>
+<li>Calculate centroids (x,y) of the bounding boxes (l,r,t,b) in the first and last frames where a car was detected.</li>
+<li>Calculate time difference (T) between first and last frames where a car was detected.</li>
+<li>Calculate relative horizontal distance travelled (r) in frame by subtracting centroid X axis values (x1, x2).</li>
+<li>Multiply relative horizontal distance (r) by real-world road distance (R) measured to calculate actual distance travelled (D).</li>
+<li>Speed = D / T 😀</li>
+</ul>
+<p><img src="cars-in-frame.png" alt="Car in frames"></p>
+<p><em>Note: This calculation is obviously an approximation of the speed of the cars in the footage. The bounding boxes aren&rsquo;t fixed sizes between frames for the same cars. Despite this, I did some manually calculations and found the results from this automatic method to be fairly accurate.</em></p>
+<h3 id="producing-annotated-video-footage">Producing Annotated Video Footage</h3>
+<p>FFmpeg was used to produce an annotated version of the input video file - with cars labelled with their calculated speeds. Here is the Python code I used. It reads each frame from the input source video. If any cars were detected in that frame, it overlays a bounding box using the detected vehicle coordinates and a text label with the vehicle speed.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python"><span style="color:#66d9ef">def</span> <span style="color:#a6e22e">annotate_frames</span>(cars_frame_lookup, input_video, output_video, frame_rate, width, height):
+    src <span style="color:#f92672">=</span> cv2<span style="color:#f92672">.</span>VideoCapture(input_video)
+    length <span style="color:#f92672">=</span> int(src<span style="color:#f92672">.</span>get(cv2<span style="color:#f92672">.</span>CAP_PROP_FRAME_COUNT))
+    fourcc <span style="color:#f92672">=</span> cv2<span style="color:#f92672">.</span>VideoWriter_fourcc(<span style="color:#f92672">*</span><span style="color:#e6db74">&#39;mp4v&#39;</span>)
+    dest <span style="color:#f92672">=</span> cv2<span style="color:#f92672">.</span>VideoWriter(output_video, fourcc, frame_rate, (width, height))
+
+    <span style="color:#66d9ef">def</span> <span style="color:#a6e22e">frame_iter</span>():
+        <span style="color:#66d9ef">while</span> True:
+            ret, frame <span style="color:#f92672">=</span> src<span style="color:#f92672">.</span>read()
+            <span style="color:#66d9ef">if</span> ret <span style="color:#f92672">is</span> False: 
+                <span style="color:#66d9ef">break</span>
+            <span style="color:#66d9ef">yield</span> frame 
+
+    frame_number <span style="color:#f92672">=</span> <span style="color:#ae81ff">0</span>
+
+    <span style="color:#66d9ef">for</span> frame <span style="color:#f92672">in</span> tqdm(frame_iter(), total<span style="color:#f92672">=</span>length): 
+        <span style="color:#66d9ef">for</span> idx, car <span style="color:#f92672">in</span> enumerate(cars):
+            <span style="color:#66d9ef">if</span> frame_number <span style="color:#f92672">in</span> car:                
+                frame <span style="color:#f92672">=</span> cv2<span style="color:#f92672">.</span>rectangle(frame, box_start(car[frame_number], width, height), box_end(car[frame_number], width, height), color, thickness)
+                frame <span style="color:#f92672">=</span> cv2<span style="color:#f92672">.</span>putText(frame, <span style="color:#e6db74">&#34;car &#34;</span> <span style="color:#f92672">+</span> str(idx) <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34; speed: &#34;</span> <span style="color:#f92672">+</span> str(car[<span style="color:#e6db74">&#39;car_speed&#39;</span>]) <span style="color:#f92672">+</span> <span style="color:#e6db74">&#34;km/h&#34;</span>, box_start(car[frame_number], width, height), cv2<span style="color:#f92672">.</span>FONT_HERSHEY_SIMPLEX, <span style="color:#ae81ff">2.0</span>, (<span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">0</span>, <span style="color:#ae81ff">0</span>), <span style="color:#ae81ff">4</span>)
+                centroid <span style="color:#f92672">=</span> bb_centroid(car[frame_number])
+                coords <span style="color:#f92672">=</span> normalised_to_xy(centroid[<span style="color:#ae81ff">0</span>], centroid[<span style="color:#ae81ff">1</span>], width, height)
+                frame <span style="color:#f92672">=</span> cv2<span style="color:#f92672">.</span>circle(frame, coords, radius<span style="color:#f92672">=</span><span style="color:#ae81ff">10</span>, color<span style="color:#f92672">=</span>(<span style="color:#ae81ff">255</span>, <span style="color:#ae81ff">255</span>, <span style="color:#ae81ff">255</span>), thickness<span style="color:#f92672">=-</span><span style="color:#ae81ff">1</span>)
+
+        dest<span style="color:#f92672">.</span>write(frame)
+        frame_number <span style="color:#f92672">+=</span> <span style="color:#ae81ff">1</span>
+
+    src<span style="color:#f92672">.</span>release()
+    dest<span style="color:#f92672">.</span>release()
+</code></pre></div><p><img src="ai-speed-camera-example.gif" alt="AI Speed Camera In Action"></p>
+<h3 id="creating-statistics-spreadsheet">Creating Statistics Spreadsheet</h3>
+<p>Python comes with CSV file writing support in the standard library. This makes generating a spreadsheet with the detected vehicle statistics possible like this:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-python" data-lang="python">to_csv <span style="color:#f92672">=</span> csv<span style="color:#f92672">.</span>writer(<span style="color:#e6db74">&#34;statistics.csv&#34;</span>)
+to_csv<span style="color:#f92672">.</span>writerow([<span style="color:#e6db74">&#34;Car Detected #&#34;</span>, <span style="color:#e6db74">&#34;Entrance Time (s)&#34;</span>, <span style="color:#e6db74">&#34;Exit Time (s)&#34;</span>, <span style="color:#e6db74">&#34;Speed (km/h)&#34;</span>])
+<span style="color:#66d9ef">for</span> idx, car <span style="color:#f92672">in</span> enumerate(cars):
+    to_csv<span style="color:#f92672">.</span>writerow([idx, car[<span style="color:#e6db74">&#39;entrance_time&#39;</span>], car[<span style="color:#e6db74">&#39;exit_time&#39;</span>], car[<span style="color:#e6db74">&#39;car_speed&#39;</span>]])
+</code></pre></div><h2 id="how-to-use-software">How To Use Software</h2>
+<p>I&rsquo;ve open-source the code for this project here: <a href="https://github.com/jthomas/ai-speed-camera">https://github.com/jthomas/ai-speed-camera</a></p>
+<p>Once you have recorded a video and processed it using the Google Cloud API - run the Python script.</p>
+<pre><code>python3 init.py --video input.mp4 --output dest.mp4 --annotations results.json --distance 32
+</code></pre><p>The script takes the following parameters (mandatory parameters in bold).</p>
+<ul>
+<li><strong><code> --annotations</code>: Video AI API output results file</strong></li>
+<li><strong><code>--video</code>: Source video file (MP4 format)</strong></li>
+<li><strong><code>--output</code>: Annotated video destination file (MP4 format)</strong></li>
+<li><strong><code>--distance</code>: Real-world distance covered by video frame (metres)</strong></li>
+<li><code>--frame-rate</code>: Source video frame rate (default :15)</li>
+<li><code>--width</code>: Source video width (pixels - default: 1920)</li>
+<li><code>--height</code>: Source video height (pixels - default: 1080)</li>
+<li><code>--min-speed</code>: Ignore cars with speed lower than this  value. Used to ignore fixed vehicles in frame or anomolous cars detected (kmph - default: 1).</li>
+<li><code>--min-distance</code>: Ignore cars which travel less than this relative distance in the frame. Used to remove anomolous cars detected (relative distance between 0 &amp; 1 - default: 0).</li>
+<li><code>--export-to-csv</code>: Export car speed statistics to CSV file (output filename)</li>
+</ul>
+<p>The Python script will produce the output below whilst running. It  prints the number of cars detected in the API result set and the number of valid cars (in reference to minimum speeds and distances). A  progress bar will be shown during the video processing stage with estimated time left.</p>
+<pre><code>INFO:root:Discovered 50 total cars in annotation response
+INFO:root:Discovered 12 valid cars in annotation response: 6, 7, 11, 13, 14, 21, 24
+INFO:root:Exporting valid car statistics to csv file
+INFO:root:Processing source video file
+100%|█████████████████████████████████████████████████| 1/1 [00:00&lt;00:00, 26.71it/s]
+</code></pre><h2 id="future-ideas">Future Ideas</h2>
+<p>The next step for this project would be to make it real-time. Rather than having to record videos and process them offline, the video stream should be processed and annotated live. This could be wrapped up into a mobile application to allow anyone with a mobile phone to use it. There are <a href="https://nanonets.com/blog/object-tracking-deepsort/">numerous TF models</a> for real-time object detection which make this possible.</p>
+<p>It would also be interesting to take the same approach for running the software on a Raspberry PI with a web cam - to turn the &ldquo;virtual speed camera&rdquo; into a real hardware device.</p>
+<p><em><strong>2022 Update: There is now an application by a new startup which uses a similar approach to provide a virtual speed camera as a mobile application: <a href="https://speedcamanywhere.com/">https://speedcamanywhere.com/</a>.</strong></em></p>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2021/06/lessons-learnt-in-developer-relations/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">Lessons Learnt in Developer Relations</span>
+    </a>
+    
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+
+
+    
+
+
+
+    </body>
+</html>
