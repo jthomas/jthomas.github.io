@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+    
+
+
+    <head>
+    <link href="https://gmpg.org/xfn/11" rel="profile">
+    <meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="public" />
+<!-- Enable responsiveness on mobile devices -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="generator" content="Hugo 0.74.3" />
+
+    
+    
+    
+
+<title>Password Protection for Static Websites on AWS S3 • notes on software.</title>
+<meta name="description" content="James Thomas&#39; blog about software. Posts about serverless, cloud platforms, openwhisk, node.js and more... Founder of JT Consulting Services.">
+<meta name="keywords" content="blog,serverless,openwhisk,ibm,nodejs,tensorflow,serverless framework,open-source,conferences,developer advocacy,github">
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Password Protection for Static Websites on AWS S3"/>
+<meta name="twitter:description" content="Protecting static websites hosted on AWS S3 public buckets with a username and password. AWS CloudFront Functions used to add HTTP Basic Authentication."/>
+
+<meta property="og:title" content="Password Protection for Static Websites on AWS S3" />
+<meta property="og:description" content="Protecting static websites hosted on AWS S3 public buckets with a username and password. AWS CloudFront Functions used to add HTTP Basic Authentication." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jamesthom.as/2022/09/password-protection-for-static-websites-on-aws-s3/" />
+<meta property="article:published_time" content="2022-09-30T13:56:24+01:00" />
+<meta property="article:modified_time" content="2022-09-30T13:56:24+01:00" />
+
+
+    
+
+
+
+
+
+
+<link rel="stylesheet" href="/scss/hyde-hyde.3081c4981fb69a2783dd36ecfdd0e6ba7a158d4cbfdd290ebce8f78ba0469fc6.css" integrity="sha256-MIHEmB&#43;2mieD3Tbs/dDmunoVjUy/3SkOvOj3i6BGn8Y=">
+
+
+<link rel="stylesheet" href="/scss/print.2744dcbf8a0b2e74f8a50e4b34e5f441be7cf93cc7de27029121c6a09f9e77bc.css" integrity="sha256-J0Tcv4oLLnT4pQ5LNOX0Qb58&#43;TzH3icCkSHGoJ&#43;ed7w=" media="print">
+
+
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <!-- Icons -->
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+    <link rel="shortcut icon" href="/favicon.png">
+    
+    <style type="text/css">
+.content {
+  max-width: 48rem;
+}
+
+.sidebar .container {
+  padding-right: 0rem;
+  padding-left: 0rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+</style>
+
+</head>
+
+
+    <body class=" ">
+    
+<div class="sidebar">
+  <div class="container ">
+    <div class="sidebar-about">
+      <span class="site__title">
+        <a href="https://jamesthom.as/">notes on software.</a>
+      </span>
+      
+        
+        
+        
+        <div class="author-image">
+          <img src="https://jamesthom.as/profile_new.png" alt="Author Image" class="img--circle img--headshot element--center">
+        </div>
+        
+      
+      
+      <p class="site__description">
+         by james thomas serverless aficionado. 
+      </p>
+    </div>
+    <div class="collapsible-menu">
+      <input type="checkbox" id="menuToggle">
+      <label for="menuToggle">notes on software.</label>
+      <div class="menu-content">
+        <div>
+	<ul class="sidebar-nav">
+		 
+		 
+			 
+				<li>
+					<a href="/about/">
+						<span>About</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="/posts/">
+						<span>Posts</span>
+					</a>
+				</li>
+			 
+		 
+			 
+				<li>
+					<a href="mailto:consultancy@jamesthom.as">
+						<span>Hire Me?</span>
+					</a>
+				</li>
+			 
+		
+	</ul>
+</div>
+
+        <section class="social">
+	
+	<a href="https://twitter.com/thomasj" rel="me"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	<a href="https://github.com/jthomas" rel="me"><i class="fab fa-github fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+	
+	
+	<a href="https://stackoverflow.com/users/1427084" rel="me"><i class="fab fa-stack-overflow fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="https://medium.com/@jamesthom.as" rel="me"><i class="fab fa-medium fa-lg" aria-hidden="true"></i></a>
+	
+	
+	
+	
+	
+	
+        
+	<a href="https://www.youtube.com/user/jthomasuk" rel="me"><i class="fab fa-youtube fa-lg" aria-hidden="true"></i></a>
+	
+	
+	<a href="mailto:blog@jamesthom.as" rel="me"><i class="fas fa-at fa-lg" aria-hidden="true"></i></a>
+	
+</section>
+
+      </div>
+    </div>
+    
+
+
+  </div>
+</div>
+
+        <div class="content container">
+            
+    
+<article>
+  <header>
+    <h1>Password Protection for Static Websites on AWS S3</h1>
+    
+    
+<div class="post__meta">
+    
+    
+      <i class="fas fa-calendar-alt"></i> Sep 30, 2022
+    
+    
+    
+    
+    
+      
+      
+          <br/>
+           <i class="fas fa-tags"></i>
+          
+          <a class="badge badge-tag" href="/tags/aws">aws</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/serverless">serverless</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/s3">s3</a>
+           
+      
+          <a class="badge badge-tag" href="/tags/cf">cf</a>
+          
+      
+    
+    
+    <br/>
+    
+    <i class="fas fa-clock"></i> 6 min read
+    
+</div>
+
+
+  </header>
+  
+  
+  <div class="post">
+    <p><strong>PROOF READING.</strong></p>
+<p>I recently needed to share a static website with a third-party and secure the content against access by unauthorised users. The website should only be viewable with a username and password. Website files were only static content - so could be served from a CDN-like service. All content must be served over HTTPS.</p>
+<p>Here&rsquo;s how I accomplished this on AWS&hellip;</p>
+<p>![AWS Architecture](./aws architecture.png)</p>
+<p><strong>AWS&rsquo;s object store (S3) supports serving static web content directly from user buckets.</strong> If static web access is enabled - external users can access bucket files via a web browser. S3 handles index document routing and 404 responses. This works perfectly for serving public web content - but <strong>S3 does not support protecting bucket files behind a username and password</strong>. It also <strong>does not support HTTPS with custom domains</strong>.</p>
+<p>Luckily, <strong>AWS has a CDN service (CloudFront) which can fix all those issues</strong>. <strong>CloudFront supports custom domains (with HTTPS-only traffic enforced) and can proxy content directly from private S3 buckets</strong>. Buckets can be configured to be only accessed via CloudFront (rather than directly using the bucket hostname). But what about supporting Basic Auth for all content?</p>
+<p>CloudFront does not natively support HTTP basic authentication for CDN content. However, this can added using CloudFront Functions. CloudFront Functions allows user-provided serverless functions to inspect and modify HTTP request and responses for CDN content. <strong>Using a custom CloudFront function we can manually enforce HTTP authentication for all requests</strong>.</p>
+<p><em>Here is the <a href="./example.cf.yaml">complete CloudFormation template</a> for this approach.</em></p>
+<p>Read on for an explanation of the Cloud Formation resources and configuration used&hellip;</p>
+<h3 id="private-s3-bucket">Private S3 Bucket</h3>
+<p>This snippet creates the <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html">private S3 bucket</a> which will contain the static website files.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">SiteBucket</span>:
+  <span style="color:#66d9ef">Type</span>: AWS::S3::Bucket
+  <span style="color:#66d9ef">Properties</span>:    
+    <span style="color:#66d9ef">AccessControl</span>: Private
+</code></pre></div><p>Ensure <code>AccessControl</code> is <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket.html#cfn-s3-bucket-accesscontrol">set to</a> <code>private</code>. Bucket contents will only be accessible via the CDN. S3 will not directly expose the contents as a static website with public access.</p>
+<h3 id="bucket-access-policy">Bucket Access Policy</h3>
+<p>This <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-policy.html">bucket policy</a> allows read-only access to all files in the private S3 bucket from a CloudFront distribution.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">SiteBucketPolicy</span>:
+  <span style="color:#66d9ef">Type</span>: <span style="color:#e6db74">&#34;AWS::S3::BucketPolicy&#34;</span>
+  <span style="color:#66d9ef">Properties</span>:
+    <span style="color:#66d9ef">Bucket</span>: !Ref SiteBucket
+    <span style="color:#66d9ef">PolicyDocument</span>:
+      <span style="color:#66d9ef">Version</span>: <span style="color:#e6db74">&#34;2012-10-17&#34;</span>
+      <span style="color:#66d9ef">Statement</span>:
+        - <span style="color:#66d9ef">Effect</span>: Allow
+          <span style="color:#66d9ef">Principal</span>:
+            <span style="color:#66d9ef">Service</span>: <span style="color:#e6db74">&#34;cloudfront.amazonaws.com&#34;</span>
+          <span style="color:#66d9ef">Action</span>: <span style="color:#e6db74">&#39;s3:GetObject&#39;</span>
+          <span style="color:#66d9ef">Resource</span>: !Sub <span style="color:#e6db74">&#34;${SiteBucket.Arn}/*&#34;</span>
+          <span style="color:#66d9ef">Condition</span>:
+            <span style="color:#66d9ef">StringEquals</span>:
+              <span style="color:#75715e"># CF distribution ARNs have to be manually constructed</span>
+              <span style="color:#66d9ef">AWS:SourceArn</span>: !Sub <span style="color:#e6db74">&#34;arn:aws:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}&#34;</span>
+</code></pre></div><p>The <code>SiteDistribution</code> reference is the logical ID for the CloudFront distribution defined later on. There is no attribute for this property - it must be constructed manually.</p>
+<h3 id="cloudfront-distribution">CloudFront Distribution</h3>
+<p>The <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-distribution.html">CloudFront Distribution</a> is configured to serve content from the private S3 bucket. The <code>Origins</code> list has a single item - which uses the domain name for the private S3 bucket. It attaches the access control policy (defined afterwards) to provide access to the bucket (<code>OriginAccessControlId</code>).</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">SiteDistribution</span>:
+  <span style="color:#66d9ef">Type</span>: <span style="color:#e6db74">&#34;AWS::CloudFront::Distribution&#34;</span>
+  <span style="color:#66d9ef">Properties</span>:
+    <span style="color:#66d9ef">DistributionConfig</span>:
+      <span style="color:#66d9ef">Origins</span>:
+          <span style="color:#75715e"># Use regional, rather than global, domain for S3 bucket.</span>
+        - <span style="color:#66d9ef">DomainName</span>: !GetAtt SiteBucket.RegionalDomainName
+          <span style="color:#66d9ef">Id</span>: SiteBucketWebsite                    
+          <span style="color:#66d9ef">S3OriginConfig</span>:
+          	<span style="color:#75715e"># This empty property is necessary 🤷</span>
+            <span style="color:#66d9ef">OriginAccessIdentity</span>: <span style="color:#e6db74">&#34;&#34;</span>
+          <span style="color:#66d9ef">OriginAccessControlId</span>: !GetAtt SiteOriginAccessControl.Id
+      <span style="color:#66d9ef">Enabled</span>: <span style="color:#66d9ef">true</span>
+      <span style="color:#66d9ef">DefaultRootObject</span>: index.html
+      <span style="color:#66d9ef">DefaultCacheBehavior</span>:
+        <span style="color:#75715e"># Default cache policy to disable caching.</span>
+        <span style="color:#66d9ef">CachePolicyId</span>: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        <span style="color:#66d9ef">TargetOriginId</span>: SiteBucketWebsite
+        <span style="color:#66d9ef">AllowedMethods</span>:
+          - HEAD
+          - GET
+          - OPTIONS
+        <span style="color:#66d9ef">Compress</span>: <span style="color:#66d9ef">true</span>
+        <span style="color:#75715e"># Enforce HTTPS only</span>
+        <span style="color:#66d9ef">ViewerProtocolPolicy</span>: redirect-to-https
+        <span style="color:#66d9ef">FunctionAssociations</span>:
+          - <span style="color:#66d9ef">EventType</span>: viewer-request
+            <span style="color:#66d9ef">FunctionARN</span>: !GetAtt SiteAuthFn.FunctionMetadata.FunctionARN
+      <span style="color:#66d9ef">PriceClass</span>: PriceClass_100
+</code></pre></div><p>The distribution <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cloudfront-distribution-origin.html">origin configuration</a> uses the regional, rather than global, S3 bucket hostnames. This makes the site work immediately - rather than waiting (up to 24 hours) for bucket names to propagate across AWS regions. See <a href="https://aws.amazon.com/premiumsupport/knowledge-center/s3-http-307-response/">here</a> for more details.</p>
+<p>The <code>ViewerProtocolPolicy: redirect-to-https</code> property <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cloudfront-distribution-defaultcachebehavior.html#cfn-cloudfront-distribution-defaultcachebehavior-viewerprotocolpolicy">enforces HTTPS-only access</a> to the CDN content.</p>
+<p>CloudFront Functions are <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-cloudfront-distribution-functionassociation.html">attached to a distribution</a> using the <code>FunctionAssociations</code> property. There is a single function attached (<code>SiteAuthFn</code>) which is executed with all incoming HTTP requests.</p>
+<h3 id="cloudfront-origin-access-control">CloudFront Origin Access Control</h3>
+<p>This <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-originaccesscontrol.html">resource</a> allows CloudFront to send signed requests to the S3 bucket - which allows the S3 bucket policy to provide access to private resources.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">SiteOriginAccessControl</span>:
+  <span style="color:#66d9ef">Type</span>: AWS::CloudFront::OriginAccessControl
+  <span style="color:#66d9ef">Properties</span>:
+    <span style="color:#66d9ef">OriginAccessControlConfig</span>:
+      <span style="color:#66d9ef">Name</span>: <span style="color:#e6db74">&#34;Site Bucket Access Control&#34;</span>
+      <span style="color:#66d9ef">OriginAccessControlOriginType</span>: s3
+      <span style="color:#66d9ef">SigningBehavior</span>: always
+      <span style="color:#66d9ef">SigningProtocol</span>: sigv4
+</code></pre></div><h3 id="cloudfront-function-to-enforce-http-auth">CloudFront Function To Enforce HTTP Auth</h3>
+<p>The <a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-cloudfront-function.html">CloudFront Function</a> source code is included directly in the Cloud Formation file.</p>
+<p>The function implements <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication#basic_authentication_scheme">HTTP Basic Authentication</a> by checking requests have the correct auth header value. CloudFront Functions have runtime restrictions (<em>must complete in &lt; 1 ms, no access to AWS services or external network</em>) which forces us to include the static authentication string within the function source code.</p>
+<p>The Base64-encoded version of the authentication string (in the format: <code>username:password</code>) is passed via a Cloud Formation parameter (<code>Base64UserPass</code>).</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml"><span style="color:#66d9ef">SiteAuthFn</span>:
+  <span style="color:#66d9ef">Type</span>: AWS::CloudFront::Function
+  <span style="color:#66d9ef">Properties</span>:
+    <span style="color:#66d9ef">AutoPublish</span>: <span style="color:#66d9ef">true</span>
+    <span style="color:#66d9ef">FunctionCode</span>: !Sub <span style="color:#e6db74">&#34;
+</span><span style="color:#e6db74">      function handler(event) {
+</span><span style="color:#e6db74">        var authHeaders = event.request.headers.authorization;
+</span><span style="color:#e6db74">        var expected = &#39;Basic ${Base64UserPass}&#39;;
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        if (authHeaders &amp;&amp; authHeaders.value === expected) {
+</span><span style="color:#e6db74">          return event.request;
+</span><span style="color:#e6db74">        }
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        var response = {
+</span><span style="color:#e6db74">          statusCode: 401,
+</span><span style="color:#e6db74">          statusDescription: &#39;Unauthorized&#39;,
+</span><span style="color:#e6db74">          headers: {
+</span><span style="color:#e6db74">            &#39;www-authenticate&#39;: {
+</span><span style="color:#e6db74">              value: &#39;Basic realm=\&#34;Enter credentials for this super secure site\&#34;&#39;,
+</span><span style="color:#e6db74">            },
+</span><span style="color:#e6db74">          },
+</span><span style="color:#e6db74">        };
+</span><span style="color:#e6db74">
+</span><span style="color:#e6db74">        return response;
+</span><span style="color:#e6db74">      }&#34;</span>
+    <span style="color:#66d9ef">FunctionConfig</span>:
+      <span style="color:#66d9ef">Comment</span>: <span style="color:#e6db74">&#34;Add HTTP Basic authentication to CloudFront&#34;</span>
+      <span style="color:#66d9ef">Runtime</span>: cloudfront-js<span style="color:#ae81ff">-1.0</span>
+    <span style="color:#66d9ef">Name</span>: BasicAuthFn
+</code></pre></div><p>Requests with the correct header value are passed along without modification. If the username or password are incorrect - a custom HTTP response is returned (which forces the authentication pop-up in the browser). This stops the original request from being forwarded to the private S3 bucket.</p>
+<h3 id="deploy--test">Deploy &amp; Test</h3>
+<p>Here is the <a href="./example.cf.yaml">complete CloudFormation template</a> for this feature.</p>
+<p>If you deploy this stack template and fill the S3 bucket with static web content, it will be available at the CloudFront distribution hostname (over HTTPS) when you authenticate using the chosen username and password.</p>
+<h5 id="aws-cli-commands">AWS CLI Commands</h5>
+<ul>
+<li>Deploy the Cloud Formation stack to AWS.</li>
+</ul>
+<pre><code>aws cloudformation deploy --template-file example.cf.yaml --stack-name secure-static-website --parameter-overrides Base64UserPass=$B64_USER_PASS
+</code></pre><p><em>The Base64UserPass parameter must be a Base64-encoded string from the source template: <code>username:password</code> as per the <a href="https://datatracker.ietf.org/doc/html/rfc7617">HTTP Basic Authentication RFC</a>.</em></p>
+<ul>
+<li>
+<p>Add some static web content to the bucket (like an <code>index.html</code> file).</p>
+</li>
+<li>
+<p>Retrieve the CloudFront distribution hostname from the Stack Outputs:</p>
+</li>
+</ul>
+<pre><code>aws cloudformation describe-stacks --stack-name secure-static-website --query &quot;Stacks[0].Outputs[?OutputKey=='StaticWebsiteHostname'].OutputValue&quot; --output text
+</code></pre><ul>
+<li>Open this hostname in a web browser to serve the static content. This should prompt for the username and password details as specified above. This will only be accessible using HTTPS (requests using HTTP will be redirected).</li>
+</ul>
+<h3 id="alternative-approaches">Alternative Approaches</h3>
+<p>AWS often has multiple solutions for the same problem - here are two different approaches&hellip;</p>
+<ul>
+<li>AWS has a newer service called <a href="https://aws.amazon.com/amplify/">Amplify</a> which can serve <a href="https://aws.amazon.com/amplify/hosting/">static web content</a> from a CDN. It supports <a href="https://docs.aws.amazon.com/amplify/latest/userguide/access-control.html">password-protection</a> for public content (without using custom CloudFront functions).</li>
+<li><a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-edge.html">Lambda@Edge</a> is the previous-iteration of serverless functions for CloudFront. It has less restrictive runtime requirements - allowing us to access other AWS services. This could be used to dynamically retrieve the username and password at runtime, rather than hardcoding.</li>
+</ul>
+
+  </div>
+  
+
+<div class="navigation navigation-single">
+    
+    <a href="/2022/05/ai-powered-speed-camera/" class="navigation-prev">
+      <i aria-hidden="true" class="fa fa-chevron-left"></i>
+      <span class="navigation-tittle">AI-Powered Speed Camera</span>
+    </a>
+    
+    
+</div>
+
+
+  
+
+  
+    
+
+
+</article>
+
+
+        </div>
+        
+    
+
+<script defer src="https://use.fontawesome.com/releases/v5.11.2/js/all.js" integrity="sha384-b3ua1l97aVGAPEIe48b4TC60WUQbQaGi2jqAWM90y0OZXZeyaTCWtBTKtjW2GXG1" crossorigin="anonymous"></script>
+<script data-goatcounter="https://jamesthomas.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+
+
+
+
+    
+
+
+
+    </body>
+</html>
